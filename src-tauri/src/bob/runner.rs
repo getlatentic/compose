@@ -569,6 +569,21 @@ pub fn harness_install(harness_id: String, on_event: Channel<InstallEvent>) -> R
     harness.install(callback)
 }
 
+/// `harness_login` — stream a harness's interactive sign-in (its CLI's
+/// own OAuth) over a Tauri `Channel`, mirroring `harness_install`. The
+/// flow opens the user's browser; `Done { ok }` reports success so the
+/// picker can re-probe readiness. `(async)` so the blocking login wait
+/// runs on a worker thread, never the UI thread (see ipc-guide.md).
+#[tauri::command(async)]
+pub fn harness_login(harness_id: String, on_event: Channel<InstallEvent>) -> Result<(), String> {
+    let harness =
+        harness_by_id(&harness_id).ok_or_else(|| format!("Unknown harness: {harness_id}"))?;
+    let callback: InstallCallback = std::sync::Arc::new(move |event| {
+        let _ = on_event.send(event);
+    });
+    harness.login(callback)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

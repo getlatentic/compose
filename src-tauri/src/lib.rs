@@ -43,6 +43,7 @@ pub fn run() {
             bob::runner::harness_list,
             bob::runner::harness_readiness,
             bob::runner::harness_install,
+            bob::runner::harness_login,
             settings::settings_check_bob_install,
             settings::settings_get_bob_auth_status,
             settings::settings_install_bob,

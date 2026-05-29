@@ -34,13 +34,13 @@
 //!   one shape regardless of which harness produced it.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
 
 use serde::{Deserialize, Serialize};
 
 use bob_core::{
-    get_readiness, install_bob, spawn_bob, BobApprovalMode, BobChatMode, BobRunHandle, InstallEvent,
-    RunBobOptions, KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE,
+    get_readiness, install_bob, spawn_bob, spawn_streaming, BobApprovalMode, BobChatMode,
+    BobRunEvent, BobRunHandle, InstallEvent, RunBobOptions, KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE,
 };
 
 pub mod claude;
@@ -242,6 +242,11 @@ pub struct HarnessCapabilities {
     pub supports_effort: bool,
     /// Honors [`RunTuning::max_turns`] (claude turn cap).
     pub supports_max_turns: bool,
+    /// Supports an interactive [`Harness::login`] flow (the CLI's own
+    /// OAuth, e.g. `claude auth login` / `codex login`). Drives the
+    /// picker's "Sign in" affordance when installed-but-not-signed-in.
+    /// `false` for harnesses Compose authenticates itself (bob).
+    pub supports_login: bool,
 }
 
 /// Static metadata for the harness picker.
@@ -281,6 +286,74 @@ pub trait Harness: Send + Sync {
 
     /// The credential this harness needs.
     fn credential(&self) -> CredentialSpec;
+
+    /// Trigger the harness's own interactive sign-in (its CLI's OAuth),
+    /// streaming progress as [`InstallEvent`]s — the same subprocess
+    /// stream shape as [`install`](Harness::install). The flow opens the
+    /// user's browser; this blocks until the login process exits, then
+    /// `Done { ok }` reports success. Default: unsupported — harnesses
+    /// that Compose authenticates itself (bob, via its API key) keep it.
+    fn login(&self, _on_event: InstallCallback) -> Result<(), String> {
+        Err("This harness does not support interactive sign-in.".to_owned())
+    }
+}
+
+/// Run a harness's interactive sign-in command, streaming its output as
+/// [`InstallEvent`]s and blocking until it exits. Reuses
+/// [`bob_core::spawn_streaming`] (PATH augmentation + reader threads, so
+/// a packaged `.app` finds the CLI), mapping its process events onto the
+/// install-stream shape (Step / Stdout / Stderr / Done). The login CLI
+/// opens the user's browser for OAuth; we surface its output (incl. any
+/// device-code URL) so the UI can show progress. Blocks on a condvar
+/// until the process exits — the caller is a Tauri `(async)` command on
+/// a worker thread, so the UI never blocks.
+pub(crate) fn run_login_command(
+    program: &str,
+    args: &[&str],
+    on_event: InstallCallback,
+) -> Result<(), String> {
+    (*on_event)(InstallEvent::Step {
+        text: "Opening your browser to sign in…".to_owned(),
+    });
+    let done = Arc::new((Mutex::new(false), Condvar::new()));
+    let done_cb = Arc::clone(&done);
+    let events_cb = Arc::clone(&on_event);
+    // Bound, not `_`, so the handle outlives the wait (dropping it could
+    // signal the child); by the time we return, the process has exited.
+    let _handle = spawn_streaming(
+        PathBuf::from(program),
+        args.iter().map(|s| (*s).to_owned()).collect(),
+        Vec::new(),
+        std::env::current_dir().unwrap_or_default(),
+        format!("login-{program}"),
+        move |event| match event {
+            BobRunEvent::Started { .. } => {}
+            BobRunEvent::Stdout { line, .. } => {
+                (*events_cb)(InstallEvent::Stdout { text: line });
+            }
+            BobRunEvent::Stderr { line, .. } => {
+                (*events_cb)(InstallEvent::Stderr { text: line });
+            }
+            BobRunEvent::Error { message, .. } => {
+                (*events_cb)(InstallEvent::Stderr { text: message });
+            }
+            BobRunEvent::Exited { exit_code, .. } => {
+                (*events_cb)(InstallEvent::Done {
+                    exit_code,
+                    ok: exit_code == Some(0),
+                });
+                let (lock, cvar) = &*done_cb;
+                *lock.lock().unwrap() = true;
+                cvar.notify_all();
+            }
+        },
+    )?;
+    let (lock, cvar) = &*done;
+    let mut finished = lock.lock().unwrap();
+    while !*finished {
+        finished = cvar.wait(finished).unwrap();
+    }
+    Ok(())
 }
 
 // --- bob adapter ----------------------------------------------------
@@ -313,6 +386,7 @@ impl Harness for BobHarness {
                 allows_custom_model: false,
                 supports_effort: false,
                 supports_max_turns: false,
+                supports_login: false,
             },
         }
     }
@@ -476,5 +550,16 @@ mod tests {
         assert!(!codex.credential_required && !codex.previews_edits);
         assert!(codex.allows_custom_model && codex.supports_effort);
         assert!(!codex.supports_max_turns);
+
+        // supports_login: claude/codex own an interactive OAuth sign-in;
+        // bob authenticates via its stored API key, so it does not.
+        assert!(claude.supports_login && codex.supports_login);
+        assert!(!bob.supports_login);
+    }
+
+    #[test]
+    fn bob_default_login_is_unsupported() {
+        let cb: InstallCallback = std::sync::Arc::new(|_| {});
+        assert!(BobHarness::new().login(cb).is_err());
     }
 }

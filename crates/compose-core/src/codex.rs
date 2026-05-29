@@ -62,22 +62,14 @@ impl Harness for CodexHarness {
                 allows_custom_model: true,
                 supports_effort: true,
                 supports_max_turns: false,
+                supports_login: true,
             },
         }
     }
 
     fn readiness(&self) -> HarnessReadiness {
-        match probe_version("codex") {
-            Some(version) => HarnessReadiness {
-                harness_id: CODEX_HARNESS_ID.to_owned(),
-                ready: true,
-                installed: true,
-                version: Some(version),
-                auth_configured: true,
-                error: None,
-                details: Value::Null,
-            },
-            None => HarnessReadiness {
+        let Some(version) = probe_version("codex") else {
+            return HarnessReadiness {
                 harness_id: CODEX_HARNESS_ID.to_owned(),
                 ready: false,
                 installed: false,
@@ -85,7 +77,26 @@ impl Harness for CodexHarness {
                 auth_configured: false,
                 error: Some("Codex (`codex`) is not installed or not on PATH.".to_owned()),
                 details: Value::Null,
+            };
+        };
+        // Installed — distinguish signed-in from not so the picker can
+        // offer "Sign in" instead of failing the first run.
+        let signed_in = probe_codex_signed_in();
+        HarnessReadiness {
+            harness_id: CODEX_HARNESS_ID.to_owned(),
+            ready: signed_in,
+            installed: true,
+            version: Some(version),
+            auth_configured: signed_in,
+            error: if signed_in {
+                None
+            } else {
+                Some(
+                    "Codex is installed but not signed in. Click Sign in to connect your ChatGPT/OpenAI account."
+                        .to_owned(),
+                )
             },
+            details: Value::Null,
         }
     }
 
@@ -146,6 +157,11 @@ impl Harness for CodexHarness {
             required: false,
         }
     }
+
+    fn login(&self, on_event: InstallCallback) -> Result<(), String> {
+        // `codex login` runs the CLI's OAuth flow (opens the browser).
+        crate::run_login_command("codex", &["login"], on_event)
+    }
 }
 
 fn probe_version(program: &str) -> Option<String> {
@@ -166,6 +182,18 @@ fn probe_version(program: &str) -> Option<String> {
     } else {
         Some(text)
     }
+}
+
+/// Probe Codex's auth: `codex login status` exits 0 when signed in.
+/// Lets [`readiness`] distinguish installed from signed-in (so the
+/// picker can offer "Sign in").
+fn probe_codex_signed_in() -> bool {
+    Command::new("codex")
+        .args(["login", "status"])
+        .env("PATH", bob_core::augmented_node_path())
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 /// Build the argv for a `codex exec --json` headless run. Kept pure

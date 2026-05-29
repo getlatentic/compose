@@ -66,25 +66,14 @@ impl Harness for ClaudeHarness {
                 allows_custom_model: false,
                 supports_effort: false,
                 supports_max_turns: true,
+                supports_login: true,
             },
         }
     }
 
     fn readiness(&self) -> HarnessReadiness {
-        match probe_version("claude") {
-            Some(version) => HarnessReadiness {
-                harness_id: CLAUDE_HARNESS_ID.to_owned(),
-                ready: true,
-                installed: true,
-                version: Some(version),
-                // Claude Code owns its auth; if it's installed we
-                // treat it as usable and let a missing login surface
-                // as a run error rather than block here.
-                auth_configured: true,
-                error: None,
-                details: Value::Null,
-            },
-            None => HarnessReadiness {
+        let Some(version) = probe_version("claude") else {
+            return HarnessReadiness {
                 harness_id: CLAUDE_HARNESS_ID.to_owned(),
                 ready: false,
                 installed: false,
@@ -92,7 +81,26 @@ impl Harness for ClaudeHarness {
                 auth_configured: false,
                 error: Some("Claude Code (`claude`) is not installed or not on PATH.".to_owned()),
                 details: Value::Null,
+            };
+        };
+        // Installed — now distinguish signed-in from not, so the picker
+        // can offer "Sign in" instead of failing the first run.
+        let signed_in = probe_claude_signed_in();
+        HarnessReadiness {
+            harness_id: CLAUDE_HARNESS_ID.to_owned(),
+            ready: signed_in,
+            installed: true,
+            version: Some(version),
+            auth_configured: signed_in,
+            error: if signed_in {
+                None
+            } else {
+                Some(
+                    "Claude Code is installed but not signed in. Click Sign in to connect your Anthropic account."
+                        .to_owned(),
+                )
             },
+            details: Value::Null,
         }
     }
 
@@ -158,6 +166,34 @@ impl Harness for ClaudeHarness {
             required: false,
         }
     }
+
+    fn login(&self, on_event: InstallCallback) -> Result<(), String> {
+        // `claude auth login` runs the CLI's OAuth flow (opens the
+        // browser); streamed + blocked-until-exit by the shared helper.
+        crate::run_login_command("claude", &["auth", "login"], on_event)
+    }
+}
+
+/// Probe Claude Code's auth: `claude auth status` prints JSON with a
+/// `loggedIn` boolean (exit 0 when signed in). Returns true only when
+/// signed in; defensively falls back to the exit code if the JSON is
+/// unexpected. Lets [`readiness`] distinguish installed from signed-in.
+fn probe_claude_signed_in() -> bool {
+    let Ok(output) = Command::new("claude")
+        .args(["auth", "status"])
+        .env("PATH", bob_core::augmented_node_path())
+        .output()
+    else {
+        return false;
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(stdout.trim()) {
+        if let Some(logged_in) = map.get("loggedIn").and_then(Value::as_bool) {
+            return logged_in;
+        }
+    }
+    // Fallback: exit 0 with non-empty output ≈ signed in.
+    output.status.success() && !stdout.trim().is_empty()
 }
 
 /// Build the argv for a `claude -p` headless run. Kept pure (no
