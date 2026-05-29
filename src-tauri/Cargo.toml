@@ -1,0 +1,47 @@
+[package]
+name = "compose"
+version = "0.1.0"
+description = "Compose — local-first AI writing workspace"
+authors = ["Compose contributors"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "compose_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+# Shared bob CLI integration (readiness check, install streaming,
+# OS keychain). Same crate consumed by `crates/bob-api` for the
+# browser-preview dev server — guarantees the two transports
+# (Tauri IPC and HTTP) run identical logic.
+bob-core = { path = "../crates/bob-core" }
+# Compose's neutral harness layer. Tauri commands resolve the active
+# harness through this registry (H2+); `bob` is the default adapter.
+compose-core = { path = "../crates/compose-core" }
+# Pure markdown index/search core, shared with the browser (WASM). The
+# Tauri command scans the disk and calls this; `db::SourceRange` is
+# re-exported from it so there is one coordinate type.
+workspace-index = { path = "../crates/workspace-index" }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+keyring = { version = "3.6.3", features = ["apple-native"] }
+notify = "6"
+walkdir = "2"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+# Used by settings::settings_install_bob to spool the embedded
+# install-bob.sh to disk for `bash -l` to exec. Also reused in
+# dev-only tests, but the production code path needs it too.
+tempfile = "3"

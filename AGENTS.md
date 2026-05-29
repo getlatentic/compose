@@ -1,0 +1,111 @@
+# Agent guide — Compose
+
+This file is the durable contract between agents and this project. It is
+loaded on every session. Keep it lean; deeper, domain-specific guidance
+lives in `docs/*-guide.md` files referenced at the bottom.
+
+## Default behavior
+
+When you accept a task in this repo, you are committing to a
+production-grade implementation. Not a demo, not a prototype, not an
+MVP. Specifically:
+
+- **Do the hard version, not the quick patch.** When there are two
+  paths — a shortcut that lands today and a correct rewrite that lands
+  this week — take the rewrite. The bar is *long-term scalable,
+  performant, elegant, extensible*. Pay the engineering cost up front
+  rather than paying it forever as interest. If a "small fix" would
+  layer new code onto a structurally wrong abstraction, the small fix
+  is the wrong answer.
+- **Delete bad code; do not retrofit it.** If the existing shape is
+  wrong, replace it. Do not wrap it in adapters, do not pile new
+  helpers on top, do not leave commented-out fragments "in case." The
+  history is in git; the repo is for the code that should exist
+  *today*.
+- **Modularise.** A file is not a junk drawer. The moment an
+  abstraction has a separable identity — a coordinate mapper, a
+  workspace store, a renderer — it belongs in its own module, with
+  its own tests, with imports that read like a dependency graph and
+  not like a tour of the filesystem. If a file is growing past ~400
+  lines and spanning multiple responsibilities, that is a refactor
+  signal, not a "we'll split it later" signal.
+- **Follow SOLID.** Single responsibility per module. Open for
+  extension, closed for modification. Depend on abstractions, not
+  concrete imports. Apply it to TypeScript types as much as to
+  classes — a type that does five jobs is the same code smell as a
+  class that does five jobs.
+- **Own every defect you touch.** If you read code in service of your
+  task and notice a bug — perf, correctness, security, a wrong type,
+  a misleading name — you own it. Fix it inline if it is in scope, or
+  spin it into its own task. Do not ship past a known defect because
+  "someone else wrote it." There is no "someone else" on the file you
+  just edited.
+- **Verify before declaring done.** Tests pass, typecheck clean, perf
+  gates met (see *Verification* below). "It compiles" is not done.
+  "It works on my one example" is not done.
+
+## The one perf principle
+
+Anything that runs inside a *data-sized loop* — per-character,
+per-line, per-frame, per-edit, per-comment, per-row — must be either
+inline arithmetic or work that has been pre-built once and reused.
+Every perf bug we have hit so far has the same shape: an innocent
+helper called inside a loop, allocating a small object per iteration,
+fine in tests, lethal at scale.
+
+Concrete corollaries:
+
+- No `new Foo()` / `something.encode(x)` / `text.slice(0, i)` inside a
+  hot loop where `i` ranges over the data. Hoist the allocation out,
+  or replace it with arithmetic.
+- One owner per derived index (coordinate maps, search indexes,
+  presentation caches). If the codebase already has an owner for a
+  conversion or lookup, route through it; do not re-derive in a
+  caller.
+- "It finishes eventually" is not a perf claim. The relevant question
+  is *does the user wait for it.*
+
+The editor is where this principle bites hardest, but it is not
+editor-specific — the same rule applies to LLM context packet
+building, IPC payload assembly, file-tree scans, suggestion drafting,
+and anything else that touches user-scale data.
+
+## Verification gates
+
+Before declaring a change done:
+
+```sh
+pnpm typecheck       # tsc clean across both tsconfigs
+pnpm test            # vitest, all suites
+pnpm test:rust       # cargo tests: Tauri side + Rust crates (incl. workspace-index)
+pnpm bench:baseline  # lag benchmark; diff docs/benchmarks/baseline.json
+```
+
+If any of these regress, the change is not ready. If your change is
+expected to *improve* a benchmark number, land the updated
+`baseline.json` in the same PR with a one-line note in the commit body
+on what improved and why.
+
+For changes that are observable in the running app (UI, command flow,
+IPC behavior visible to the user), the verification floor is "I drove
+it in the app and confirmed the behavior." Not "the unit test passes."
+A passing test suite proves code correctness; only running the app
+proves feature correctness.
+
+## Domain guides
+
+Areas of the codebase with enough internal discipline to warrant a
+deeper document. Read the relevant one *before* touching that area —
+they encode hard-won constraints that are not obvious from the code.
+
+- **Editor, text & commenting** (Tiptap editor; coordinate conversion
+  via `PositionMapper`; the comment layer; the shared `workspace-index`
+  core run natively + as WASM for the browser; the lag benchmark):
+  @docs/editor-guide.md
+- **Tauri IPC + command threading** (why every `#[tauri::command]` is
+  `async`, the main-thread beachball trap, why it is invisible in the
+  browser-preview build): @docs/ipc-guide.md
+
+Add a new guide here when a subsystem accumulates enough non-obvious
+discipline (LLM context packets, IPC contract, file watcher
+reconciliation, plugin sandboxing, etc.) — and link it the same way.

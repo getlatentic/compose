@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+*.tsbuildinfo
+src-tauri/gen
+src-tauri/target
+artifacts
+
+# Local dev secrets — Bob API key etc. NEVER COMMIT.
+.env
+.env.local
+.env.*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Rust workspace build output — root target is ~13G (src-tauri/target already covered above)
+/target
+
+# Throwaway agent run artifacts (screenshots, etc.)
+.codex-artifacts/
+
+# Machine-local Claude Code settings (permissions, launch config)
+.claude/settings.local.json

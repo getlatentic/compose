@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Compose</title>
+    <style>
+      /*
+       * Pre-React splash. Lives inside #root so React replaces it
+       * automatically when <AppShell /> mounts. No `display: none`
+       * dance — React's reconciliation discards every child when
+       * it renders into the root. The user sees the splash for
+       * the ~200-500ms it takes the JS bundle to parse + the
+       * initial render to complete; then the real UI appears.
+       *
+       * Kept inline (not in global.scss) so it ships in the
+       * first HTML payload. No round-trip to a CSS file, no
+       * flash of unstyled splash.
+       *
+       * Design intent: this is a *preview of the opening screen*.
+       * Everything here is lifted straight from the dashboard
+       * brand (`.bob-dashboard__brand*` in global.scss) — white
+       * surface (#ffffff, == `--cds-background`), the same square
+       * #161616 mark holding the Carbon `ChatBot` glyph, and the
+       * same two-line "Bob / for Everyone" wordmark. The handoff
+       * to React is then a continuation, not a jarring swap.
+       *
+       * NOTE: `html, body` is white too (not the old #f4f4f4) so
+       * there is never a grey frame around the splash before the
+       * WebView paints it.
+       */
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #ffffff;
+        font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont,
+          "Segoe UI", Roboto, sans-serif;
+        color: #161616;
+      }
+      #root {
+        height: 100%;
+      }
+      .bob-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 1.25rem;
+        background: #ffffff;
+        animation: bob-splash-in 240ms ease-out;
+      }
+      /* Square mark — matches `.bob-dashboard__brand-mark`, scaled
+       * up for the splash. Carbon's brand marks are hard squares,
+       * not rounded, so we keep sharp corners. */
+      .bob-splash__mark {
+        inline-size: 64px;
+        block-size: 64px;
+        display: grid;
+        place-items: center;
+        background: #161616;
+        color: #ffffff;
+      }
+      .bob-splash__mark svg {
+        width: 36px;
+        height: 36px;
+        fill: currentColor;
+      }
+      /* Wordmark — mirrors `.bob-dashboard__brand-text`: bold
+       * product name over a helper-grey descriptor. Centered for
+       * the splash rather than left-aligned. */
+      .bob-splash__wordmark {
+        display: grid;
+        justify-items: center;
+        line-height: 1.15;
+        gap: 0.125rem;
+      }
+      .bob-splash__name {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #161616;
+        letter-spacing: -0.01em;
+      }
+      .bob-splash__descriptor {
+        font-size: 0.75rem;
+        font-weight: 400;
+        color: #6f6f6f;
+        letter-spacing: 0.01em;
+      }
+      /* Carbon-blue indeterminate sweep — the only motion, kept
+       * small and low so it reads as "loading", not decoration. */
+      .bob-splash__pulse {
+        width: 32px;
+        height: 2px;
+        margin-block-start: 0.25rem;
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          #0f62fe 50%,
+          transparent 100%
+        );
+        background-size: 200% 100%;
+        animation: bob-splash-pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes bob-splash-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes bob-splash-pulse {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .bob-splash { animation: none; }
+        .bob-splash__pulse { animation-duration: 2.4s; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root">
+      <!-- Splash. Replaced by React on mount. Lives inside #root so we
+        don't need an extra effect to remove it. Mirrors the dashboard
+        brand so the splash → app transition is seamless. -->
+      <div class="bob-splash" aria-hidden="true">
+        <span class="bob-splash__mark">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-hidden="true">
+            <path d="M16,19a6.9908,6.9908,0,0,1-5.833-3.1287l1.666-1.1074a5.0007,5.0007,0,0,0,8.334,0l1.666,1.1074A6.9908,6.9908,0,0,1,16,19Z"/>
+            <path d="M20,8a2,2,0,1,0,2,2A1.9806,1.9806,0,0,0,20,8Z"/>
+            <path d="M12,8a2,2,0,1,0,2,2A1.9806,1.9806,0,0,0,12,8Z"/>
+            <path d="M17.7358,30,16,29l4-7h6a1.9966,1.9966,0,0,0,2-2V6a1.9966,1.9966,0,0,0-2-2H6A1.9966,1.9966,0,0,0,4,6V20a1.9966,1.9966,0,0,0,2,2h9v2H6a3.9993,3.9993,0,0,1-4-4V6A3.9988,3.9988,0,0,1,6,2H26a3.9988,3.9988,0,0,1,4,4V20a3.9993,3.9993,0,0,1-4,4H21.1646Z"/>
+          </svg>
+        </span>
+        <div class="bob-splash__wordmark">
+          <span class="bob-splash__name">Compose</span>
+          <span class="bob-splash__descriptor">AI for everyone</span>
+        </div>
+        <div class="bob-splash__pulse"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

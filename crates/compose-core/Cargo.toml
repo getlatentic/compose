@@ -1,0 +1,26 @@
+[package]
+name = "compose-core"
+version = "0.1.0"
+edition = "2021"
+description = "Compose's neutral agent-harness layer: the Harness trait, adapters, and registry."
+
+# The product-neutral core. Defines the `Harness` abstraction — the
+# seam that lets Compose drive any agent backend (the `bob` CLI, a
+# direct LLM API, etc.) behind one interface. `bob-core` stays a
+# clean, standalone unofficial bob SDK; this crate *depends on* it to
+# provide the bob adapter, rather than polluting the SDK with the
+# abstraction.
+#
+# Consumers (`src-tauri`, `crates/bob-api`) depend on this crate for
+# the harness registry, and on `bob-core` directly for the few
+# bob-specific helpers (keychain slot, locator) the desktop host
+# still owns.
+[lib]
+
+[dependencies]
+# The unofficial bob SDK. `compose-core` adapts it behind the
+# `Harness` trait; future adapters (hosted LLM APIs) will not depend
+# on bob-core at all.
+bob-core = { path = "../bob-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

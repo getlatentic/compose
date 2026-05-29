@@ -1,0 +1,371 @@
+{
+  "capturedAt": "2026-05-29T08:06:07.182Z",
+  "machine": {
+    "platform": "darwin",
+    "cpuCount": 10
+  },
+  "measurementCaveats": [
+    "Comment-overlay numbers measure the real, shipping overlap-scan code: rangeOverlapsAny (naive, O(comments x visible lines)) versus CommentRangeIndex.anyOverlapping (O(visible lines x log comments)). No Canvas2D / graphics layer is involved — the harness runs DOM-less in Node.",
+    "Coordinate conversion (positionMapperBuild / positionMapperLookup10k) exercises PositionMapper, the byte<->code-unit owner that the comment layer and search-result locating depend on. This is the hot loop the chunked binary search exists to keep flat as documents grow.",
+    "All numbers are wall-clock from performance.now() on a single runner thread; no GC pauses are filtered. The bench config (vitest.bench.config.ts) pins a single fork with no file parallelism so measurements are not perturbed by concurrent work."
+  ],
+  "scenarios": [
+    {
+      "scenario": "small",
+      "documentLineCount": 10,
+      "documentByteSize": 313,
+      "operations": [
+        {
+          "name": "positionMapperBuild",
+          "samples": 20,
+          "medianMs": 0.03,
+          "p95Ms": 0.05,
+          "meanMs": 0.03
+        },
+        {
+          "name": "positionMapperLookup10k",
+          "samples": 10,
+          "medianMs": 13.29,
+          "p95Ms": 14.66,
+          "meanMs": 13.38
+        },
+        {
+          "name": "commentOverlay1",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentOverlay1_indexed",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentAnchorUpdate1",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.13,
+          "meanMs": 0.03
+        },
+        {
+          "name": "commentOverlay10",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.59,
+          "meanMs": 0.12
+        },
+        {
+          "name": "commentOverlay10_indexed",
+          "samples": 8,
+          "medianMs": 0,
+          "p95Ms": 0,
+          "meanMs": 0
+        },
+        {
+          "name": "commentAnchorUpdate10",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentOverlay100",
+          "samples": 8,
+          "medianMs": 0.02,
+          "p95Ms": 0.15,
+          "meanMs": 0.04
+        },
+        {
+          "name": "commentOverlay100_indexed",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentAnchorUpdate100",
+          "samples": 8,
+          "medianMs": 0.12,
+          "p95Ms": 0.13,
+          "meanMs": 0.11
+        },
+        {
+          "name": "commentOverlay1000",
+          "samples": 8,
+          "medianMs": 0.08,
+          "p95Ms": 0.08,
+          "meanMs": 0.08
+        },
+        {
+          "name": "commentOverlay1000_indexed",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentAnchorUpdate1000",
+          "samples": 8,
+          "medianMs": 0.5,
+          "p95Ms": 0.62,
+          "meanMs": 0.52
+        },
+        {
+          "name": "commentCreate100",
+          "samples": 8,
+          "medianMs": 0.69,
+          "p95Ms": 1.2,
+          "meanMs": 0.79
+        },
+        {
+          "name": "commentCreate1000",
+          "samples": 8,
+          "medianMs": 6.32,
+          "p95Ms": 7.76,
+          "meanMs": 6.64
+        }
+      ]
+    },
+    {
+      "scenario": "large",
+      "documentLineCount": 8533,
+      "documentByteSize": 307440,
+      "operations": [
+        {
+          "name": "positionMapperBuild",
+          "samples": 20,
+          "medianMs": 2.16,
+          "p95Ms": 3.21,
+          "meanMs": 2.34
+        },
+        {
+          "name": "positionMapperLookup10k",
+          "samples": 10,
+          "medianMs": 63.81,
+          "p95Ms": 193.94,
+          "meanMs": 94.36
+        },
+        {
+          "name": "commentOverlay1",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentOverlay1_indexed",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.02,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentAnchorUpdate1",
+          "samples": 8,
+          "medianMs": 0,
+          "p95Ms": 0,
+          "meanMs": 0
+        },
+        {
+          "name": "commentOverlay10",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.02,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentOverlay10_indexed",
+          "samples": 8,
+          "medianMs": 0.06,
+          "p95Ms": 0.17,
+          "meanMs": 0.08
+        },
+        {
+          "name": "commentAnchorUpdate10",
+          "samples": 8,
+          "medianMs": 0,
+          "p95Ms": 0.03,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentOverlay100",
+          "samples": 8,
+          "medianMs": 0.04,
+          "p95Ms": 0.06,
+          "meanMs": 0.04
+        },
+        {
+          "name": "commentOverlay100_indexed",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentAnchorUpdate100",
+          "samples": 8,
+          "medianMs": 0.02,
+          "p95Ms": 0.06,
+          "meanMs": 0.03
+        },
+        {
+          "name": "commentOverlay1000",
+          "samples": 8,
+          "medianMs": 0.59,
+          "p95Ms": 0.59,
+          "meanMs": 0.59
+        },
+        {
+          "name": "commentOverlay1000_indexed",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentAnchorUpdate1000",
+          "samples": 8,
+          "medianMs": 0.22,
+          "p95Ms": 0.25,
+          "meanMs": 0.22
+        },
+        {
+          "name": "commentCreate100",
+          "samples": 8,
+          "medianMs": 3.78,
+          "p95Ms": 4.32,
+          "meanMs": 3.9
+        },
+        {
+          "name": "commentCreate1000",
+          "samples": 8,
+          "medianMs": 18.54,
+          "p95Ms": 19.64,
+          "meanMs": 18.38
+        }
+      ]
+    },
+    {
+      "scenario": "xlarge",
+      "documentLineCount": 14104,
+      "documentByteSize": 512017,
+      "operations": [
+        {
+          "name": "positionMapperBuild",
+          "samples": 20,
+          "medianMs": 3.67,
+          "p95Ms": 4.31,
+          "meanMs": 3.78
+        },
+        {
+          "name": "positionMapperLookup10k",
+          "samples": 10,
+          "medianMs": 43.15,
+          "p95Ms": 45.6,
+          "meanMs": 43.32
+        },
+        {
+          "name": "commentOverlay1",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentOverlay1_indexed",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentAnchorUpdate1",
+          "samples": 8,
+          "medianMs": 0,
+          "p95Ms": 0,
+          "meanMs": 0
+        },
+        {
+          "name": "commentOverlay10",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentOverlay10_indexed",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.01,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentAnchorUpdate10",
+          "samples": 8,
+          "medianMs": 0,
+          "p95Ms": 0.01,
+          "meanMs": 0
+        },
+        {
+          "name": "commentOverlay100",
+          "samples": 8,
+          "medianMs": 0.04,
+          "p95Ms": 0.07,
+          "meanMs": 0.05
+        },
+        {
+          "name": "commentOverlay100_indexed",
+          "samples": 8,
+          "medianMs": 0.01,
+          "p95Ms": 0.03,
+          "meanMs": 0.01
+        },
+        {
+          "name": "commentAnchorUpdate100",
+          "samples": 8,
+          "medianMs": 0.02,
+          "p95Ms": 0.02,
+          "meanMs": 0.02
+        },
+        {
+          "name": "commentOverlay1000",
+          "samples": 8,
+          "medianMs": 0.59,
+          "p95Ms": 0.72,
+          "meanMs": 0.62
+        },
+        {
+          "name": "commentOverlay1000_indexed",
+          "samples": 8,
+          "medianMs": 0,
+          "p95Ms": 0,
+          "meanMs": 0
+        },
+        {
+          "name": "commentAnchorUpdate1000",
+          "samples": 8,
+          "medianMs": 0.21,
+          "p95Ms": 0.26,
+          "meanMs": 0.21
+        },
+        {
+          "name": "commentCreate100",
+          "samples": 8,
+          "medianMs": 5.22,
+          "p95Ms": 5.39,
+          "meanMs": 5.2
+        },
+        {
+          "name": "commentCreate1000",
+          "samples": 8,
+          "medianMs": 19.72,
+          "p95Ms": 20.49,
+          "meanMs": 19.6
+        }
+      ]
+    }
+  ]
+}

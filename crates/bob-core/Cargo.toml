@@ -1,0 +1,36 @@
+[package]
+name = "bob-core"
+version = "0.1.0"
+edition = "2021"
+description = "Shared bob CLI integration: detection, install, keychain, run."
+
+# Pure library. No binaries, no Tauri, no axum — those live in the
+# crates that depend on this one (`src-tauri` and `bob-api`). The
+# goal is that this crate is the *only* place the actual logic
+# (probing PATH, spawning the install script, reading the keychain,
+# parsing bob's stream-json) is implemented.
+[lib]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# OS keychain access. macOS Keychain Access via `apple-native`,
+# libsecret on Linux, Credential Vault on Windows. Same crate
+# `src-tauri` already depends on — we'll move the dep into this
+# crate once `src-tauri` consumes us.
+keyring = { version = "3.6", features = ["apple-native"] }
+# Tempfile is needed to spool the embedded `install-bob.sh` to
+# disk before exec'ing it. The script ships as a string constant
+# (`include_str!`) so the consumer doesn't need to ship a separate
+# file at runtime.
+tempfile = "3"
+# Cross-platform app-data-dir resolution. Used by `keychain` to
+# store the sidecar marker file that lets us tell whether a key
+# is configured *without* touching the OS keychain at boot.
+dirs = "5"
+# Used by `run::BobRunHandle::cancel()` for SIGTERM. On Windows
+# we fall back to `Child::kill()` (which sends TerminateProcess);
+# elsewhere `libc::kill(pid, SIGTERM)` lets bob flush a final
+# stream-json line before SIGKILL.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
