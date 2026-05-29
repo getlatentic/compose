@@ -225,16 +225,23 @@ pub fn normalize_bob_event(event: BobRunEvent) -> Vec<RunEvent> {
     normalize_process_event(event, |line| parse_bob_line(line))
 }
 
-/// Port of the TS `parseBobStreamLine`. bob emits one JSON object
-/// per line in stream-json mode; this decodes the fields we care
-/// about (assistant text, suggested edits, tool/file activity).
+/// Parse one line of bob's `--output-format stream-json` into the shared
+/// [`ParsedLine`]. Grounded in bob's *empirical* event schema (the
+/// `bob-agents` reference + "bob shell usage" findings), not guessed: bob
+/// emits one JSON object per line with a snake_case `type` discriminator —
+/// `init` / `message{role,content,delta}` / `tool_use{tool_id,tool_name,
+/// parameters}` / `tool_result{tool_id,status,output}` / `result{stats}`.
 ///
-/// Kept behaviourally identical to the TS original so the live
-/// rewire is a no-op for users: a non-JSON line passes through as
-/// raw text, text comes from `text` / `delta` / `content`, edits
-/// from the record itself or `edits` / `suggestedEdits` /
-/// `suggestions` arrays, and `type`-tagged tool/file events become
-/// activity strings.
+/// Mapping: an assistant `message` → text (the echoed `user` prompt is
+/// skipped — a real fix vs. the old role-blind heuristic); `tool_use` →
+/// a structured [`ToolCallStart`] (bob's edit tools — write_file /
+/// apply_diff / insert_content — surface as tool-cards too; reconstructing
+/// previewable diffs from their `parameters` is a separate follow-up);
+/// `tool_result` → [`ToolCallEnd`] (ok unless `status == "error"`).
+/// `init` / `result` are lifecycle (process start/exit drives
+/// Started/Exited). A non-JSON line passes through as raw text.
+/// Unrecognized shapes fall back to the legacy suggested-edits heuristic
+/// so a bob build that emits edit arrays still surfaces them.
 pub fn parse_bob_line(line: &str) -> ParsedLine {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -243,8 +250,8 @@ pub fn parse_bob_line(line: &str) -> ParsedLine {
 
     let payload: Value = match serde_json::from_str(trimmed) {
         Ok(value) => value,
-        // Not JSON — bob occasionally prints prose. Pass the raw
-        // (untrimmed) line through as text, matching the TS.
+        // Not JSON — bob occasionally prints prose / stderr-ish lines.
+        // Pass the raw (untrimmed) line through as text.
         Err(_) => {
             return ParsedLine {
                 text: Some(line.to_owned()),
@@ -257,59 +264,56 @@ pub fn parse_bob_line(line: &str) -> ParsedLine {
         return ParsedLine::default();
     };
 
-    let edits = parse_suggested_edits(record);
-
-    let text_candidate = pick_string(record, "text")
-        .or_else(|| pick_string(record, "delta"))
-        .or_else(|| pick_string(record, "content"));
-
-    if let Some(text) = text_candidate {
-        return ParsedLine {
-            text: Some(text),
-            edits,
-            ..ParsedLine::default()
-        };
-    }
-
-    if !edits.is_empty() {
-        let n = edits.len();
-        let activity = format!("{n} suggested edit{}", if n == 1 { "" } else { "s" });
-        return ParsedLine {
-            edits,
-            activity: Some(activity),
-            ..ParsedLine::default()
-        };
-    }
-
-    if let Some(type_str) = record.get("type").and_then(Value::as_str) {
-        let lowered = type_str.to_lowercase();
-        if lowered.contains("tool") {
-            let target = pick_string(record, "name")
-                .or_else(|| pick_string(record, "tool"))
-                .or_else(|| pick_string(record, "path"))
-                .or_else(|| pick_string(record, "file"));
-            return ParsedLine {
-                activity: Some(match target {
-                    Some(t) => format!("Tool · {t}"),
-                    None => "Tool activity".to_owned(),
-                }),
-                ..ParsedLine::default()
-            };
+    match record.get("type").and_then(Value::as_str) {
+        // Assistant text (`delta: true` marks a streaming chunk; both
+        // chunk and full message carry the text in `content`). The echoed
+        // user prompt (role "user") is not surfaced.
+        Some("message") => {
+            if record.get("role").and_then(Value::as_str) == Some("assistant") {
+                if let Some(content) = pick_string(record, "content") {
+                    return ParsedLine {
+                        text: Some(content),
+                        ..ParsedLine::default()
+                    };
+                }
+            }
+            ParsedLine::default()
         }
-        if lowered.contains("file") || lowered.contains("edit") {
-            let target =
-                pick_string(record, "path").or_else(|| pick_string(record, "file"));
-            return ParsedLine {
-                activity: Some(match target {
-                    Some(t) => format!("Editing {t}"),
-                    None => "File edit".to_owned(),
-                }),
+        // Tool call start → structured ToolStart (tool_id + tool_name).
+        Some("tool_use") => {
+            let tool_call_id = pick_string(record, "tool_id").unwrap_or_default();
+            let name = pick_string(record, "tool_name").unwrap_or_else(|| "tool".to_owned());
+            ParsedLine {
+                tool_start: Some(ToolCallStart { tool_call_id, name }),
                 ..ParsedLine::default()
-            };
+            }
+        }
+        // Tool call end → ToolEnd, matched by tool_id; ok unless the
+        // status is explicitly "error".
+        Some("tool_result") => {
+            let tool_call_id = pick_string(record, "tool_id").unwrap_or_default();
+            let ok = record.get("status").and_then(Value::as_str) != Some("error");
+            ParsedLine {
+                tool_end: Some(ToolCallEnd { tool_call_id, ok }),
+                ..ParsedLine::default()
+            }
+        }
+        // init / result and anything else: lifecycle / unknown. Fall back
+        // to the legacy suggested-edits heuristic so nothing regresses.
+        _ => {
+            let edits = parse_suggested_edits(record);
+            if edits.is_empty() {
+                ParsedLine::default()
+            } else {
+                let n = edits.len();
+                ParsedLine {
+                    edits,
+                    activity: Some(format!("{n} suggested edit{}", if n == 1 { "" } else { "s" })),
+                    ..ParsedLine::default()
+                }
+            }
         }
     }
-
-    ParsedLine::default()
 }
 
 /// Non-empty string field, else `None` (mirrors TS `pickString`).
@@ -401,19 +405,28 @@ mod tests {
     }
 
     #[test]
-    fn text_field_becomes_text() {
-        let parsed = parse_bob_line(r#"{"type":"message","text":"hi there"}"#);
+    fn assistant_message_becomes_text() {
+        let parsed =
+            parse_bob_line(r#"{"type":"message","role":"assistant","content":"hi there"}"#);
         assert_eq!(parsed.text.as_deref(), Some("hi there"));
         assert!(parsed.activity.is_none());
     }
 
     #[test]
-    fn delta_and_content_are_text_fallbacks() {
-        assert_eq!(parse_bob_line(r#"{"delta":"d"}"#).text.as_deref(), Some("d"));
-        assert_eq!(
-            parse_bob_line(r#"{"content":"c"}"#).text.as_deref(),
-            Some("c")
+    fn user_message_is_skipped() {
+        // The echoed user prompt must not surface as assistant text.
+        let parsed = parse_bob_line(r#"{"type":"message","role":"user","content":"my prompt"}"#);
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn assistant_delta_chunk_becomes_text() {
+        // `delta: true` marks a streaming chunk; the text is still in
+        // `content`.
+        let parsed = parse_bob_line(
+            r#"{"type":"message","role":"assistant","content":"chunk","delta":true}"#,
         );
+        assert_eq!(parsed.text.as_deref(), Some("chunk"));
     }
 
     #[test]
@@ -442,32 +455,53 @@ mod tests {
     }
 
     #[test]
-    fn text_with_edits_keeps_both_and_no_activity() {
-        let line = r#"{"text":"done","filePath":"a.md","start":0,"end":1,"replacement":"Z"}"#;
-        let parsed = parse_bob_line(line);
-        assert_eq!(parsed.text.as_deref(), Some("done"));
-        assert_eq!(parsed.edits.len(), 1);
+    fn tool_use_becomes_tool_start() {
+        let parsed = parse_bob_line(
+            r#"{"type":"tool_use","tool_id":"tool-1","tool_name":"execute_command","parameters":{"command":"ls"}}"#,
+        );
+        let start = parsed.tool_start.expect("tool_start");
+        assert_eq!(start.tool_call_id, "tool-1");
+        assert_eq!(start.name, "execute_command");
         assert!(parsed.activity.is_none());
     }
 
     #[test]
-    fn tool_and_file_types_become_activity() {
-        assert_eq!(
-            parse_bob_line(r#"{"type":"tool_use","name":"grep"}"#)
-                .activity
-                .as_deref(),
-            Some("Tool · grep")
-        );
-        assert_eq!(
-            parse_bob_line(r#"{"type":"tool_use"}"#).activity.as_deref(),
-            Some("Tool activity")
-        );
-        assert_eq!(
-            parse_bob_line(r#"{"type":"file_edit","path":"notes/x.md"}"#)
-                .activity
-                .as_deref(),
-            Some("Editing notes/x.md")
-        );
+    fn edit_tools_surface_as_tool_start() {
+        // bob's edit tools (apply_diff / insert_content / write_file) flow
+        // through as tool-cards too.
+        let start = parse_bob_line(
+            r#"{"type":"tool_use","tool_id":"t9","tool_name":"apply_diff","parameters":{"path":"a.md"}}"#,
+        )
+        .tool_start
+        .expect("tool_start");
+        assert_eq!(start.name, "apply_diff");
+    }
+
+    #[test]
+    fn tool_result_becomes_tool_end() {
+        let ok = parse_bob_line(
+            r#"{"type":"tool_result","tool_id":"tool-1","status":"success","output":"done"}"#,
+        )
+        .tool_end
+        .expect("tool_end");
+        assert_eq!(ok.tool_call_id, "tool-1");
+        assert!(ok.ok);
+
+        let err = parse_bob_line(
+            r#"{"type":"tool_result","tool_id":"tool-2","status":"error","output":"boom"}"#,
+        )
+        .tool_end
+        .expect("tool_end");
+        assert!(!err.ok);
+    }
+
+    #[test]
+    fn init_and_result_lifecycle_are_ignored() {
+        assert!(parse_bob_line(r#"{"type":"init","session_id":"s1","model":"premium"}"#).is_empty());
+        assert!(parse_bob_line(
+            r#"{"type":"result","status":"success","stats":{"total_tokens":1}}"#
+        )
+        .is_empty());
     }
 
     #[test]
@@ -481,12 +515,33 @@ mod tests {
     fn normalize_stdout_text_event() {
         let events = normalize_bob_event(BobRunEvent::Stdout {
             run_id: "r1".to_owned(),
-            line: r#"{"text":"hi"}"#.to_owned(),
+            line: r#"{"type":"message","role":"assistant","content":"hi"}"#.to_owned(),
         });
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
             RunEvent::Text { run_id, delta } if run_id == "r1" && delta == "hi"
+        ));
+    }
+
+    #[test]
+    fn normalize_bob_tool_events() {
+        let start = normalize_bob_event(BobRunEvent::Stdout {
+            run_id: "r1".to_owned(),
+            line: r#"{"type":"tool_use","tool_id":"t1","tool_name":"write_file"}"#.to_owned(),
+        });
+        assert!(matches!(
+            start.as_slice(),
+            [RunEvent::ToolStart { tool_call_id, name, .. }]
+                if tool_call_id == "t1" && name == "write_file"
+        ));
+        let end = normalize_bob_event(BobRunEvent::Stdout {
+            run_id: "r1".to_owned(),
+            line: r#"{"type":"tool_result","tool_id":"t1","status":"success"}"#.to_owned(),
+        });
+        assert!(matches!(
+            end.as_slice(),
+            [RunEvent::ToolEnd { tool_call_id, ok, .. }] if tool_call_id == "t1" && *ok
         ));
     }
 
