@@ -149,6 +149,7 @@ export interface BobRunSuggestedEdit {
 export type HarnessRunEvent =
   | { kind: "started"; runId: string }
   | { kind: "text"; runId: string; delta: string }
+  | { kind: "thinking"; runId: string; delta: string }
   | { kind: "suggestedEdits"; runId: string; edits: BobRunSuggestedEdit[] }
   | { kind: "activity"; runId: string; message: string }
   | { kind: "error"; runId: string; message: string }

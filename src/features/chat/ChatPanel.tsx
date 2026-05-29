@@ -128,6 +128,23 @@ export function ChatPanel() {
                 ].join(" ")}
                 key={message.id}
               >
+                {message.role === "assistant" && message.thinking ? (
+                  <details className="bob-message-thinking" style={{ marginBlockEnd: "0.25rem" }}>
+                    <summary style={{ cursor: "pointer", fontSize: "0.75rem", color: "#8d8d8d" }}>
+                      Thinking
+                    </summary>
+                    <div
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "#8d8d8d",
+                        whiteSpace: "pre-wrap",
+                        marginBlockStart: "0.25rem",
+                      }}
+                    >
+                      {message.thinking}
+                    </div>
+                  </details>
+                ) : null}
                 {message.role === "assistant" && message.activity ? (
                   <div className="bob-message-activity">{message.activity}</div>
                 ) : null}

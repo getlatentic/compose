@@ -35,6 +35,7 @@ import { markWorkspaceOpened } from "../lib/ipc/workspaceClient";
 import {
   acceptWorkspaceSuggestion,
   appendAssistantText,
+  appendAssistantThinking,
   appendAssistantSuggestions,
   assistantMessageContentForRun,
   appendUserChatMessage,
@@ -389,6 +390,12 @@ function handleHarnessRunEvent(
       updateWorkspaceForRun((current) => ({
         ...current,
         chatThread: appendAssistantText(current.chatThread, runId, event.delta),
+      }));
+      return;
+    case "thinking":
+      updateWorkspaceForRun((current) => ({
+        ...current,
+        chatThread: appendAssistantThinking(current.chatThread, runId, event.delta),
       }));
       return;
     case "suggestedEdits": {

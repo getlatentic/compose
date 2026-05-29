@@ -93,6 +93,9 @@ export interface WorkspaceChatMessage {
   runId?: string;
   streaming?: boolean;
   suggestions?: WorkspaceDocumentSuggestion[];
+  /** Accumulated model reasoning ("thinking"), rendered distinctly from
+   * `content`. Optional — present only when the harness streams it. */
+  thinking?: string;
 }
 
 export type WorkspaceSuggestionStatus = "pending" | "accepted" | "rejected" | "stale";
@@ -886,6 +889,30 @@ export function appendAssistantText(
     ...thread,
     messages: thread.messages.map((message) =>
       message.id === messageId ? { ...message, content: message.content + text } : message,
+    ),
+  };
+}
+
+/**
+ * Append a chunk of model reasoning to the active assistant message's
+ * `thinking` buffer (rendered distinctly from `content`). Mirrors
+ * `appendAssistantText`; a no-op when `runId` isn't the active run.
+ */
+export function appendAssistantThinking(
+  chatThread: WorkspaceChatThread,
+  runId: string,
+  delta: string,
+): WorkspaceChatThread {
+  if (!delta || chatThread.activeRunId !== runId) {
+    return chatThread;
+  }
+  const { thread, messageId } = ensureAssistantMessage(chatThread, runId);
+  return {
+    ...thread,
+    messages: thread.messages.map((message) =>
+      message.id === messageId
+        ? { ...message, thinking: (message.thinking ?? "") + delta }
+        : message,
     ),
   };
 }

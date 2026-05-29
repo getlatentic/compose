@@ -59,6 +59,10 @@ pub enum RunEvent {
     Started { run_id: String },
     /// A chunk of assistant text. Appended to the active message.
     Text { run_id: String, delta: String },
+    /// A chunk of model reasoning ("thinking"), rendered distinctly from
+    /// `Text` so the UI can show reasoning without mixing it into the
+    /// answer (e.g. Claude's `thinking_delta`).
+    Thinking { run_id: String, delta: String },
     /// One or more proposed edits. The app prepares + previews them.
     SuggestedEdits {
         run_id: String,
@@ -82,6 +86,9 @@ pub enum RunEvent {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ParsedLine {
     pub text: Option<String>,
+    /// Model reasoning chunk → `RunEvent::Thinking`. Kept separate from
+    /// `text` so the UI can render it distinctly.
+    pub thinking: Option<String>,
     pub edits: Vec<SuggestedEdit>,
     pub activity: Option<String>,
 }
@@ -92,7 +99,10 @@ impl ParsedLine {
     /// pushing zero events instead.
     #[cfg(test)]
     fn is_empty(&self) -> bool {
-        self.text.is_none() && self.edits.is_empty() && self.activity.is_none()
+        self.text.is_none()
+            && self.thinking.is_none()
+            && self.edits.is_empty()
+            && self.activity.is_none()
     }
 }
 
@@ -135,6 +145,12 @@ pub fn normalize_process_event(
                 out.push(RunEvent::Text {
                     run_id: run_id.clone(),
                     delta: text,
+                });
+            }
+            if let Some(thinking) = parsed.thinking {
+                out.push(RunEvent::Thinking {
+                    run_id: run_id.clone(),
+                    delta: thinking,
                 });
             }
             if !parsed.edits.is_empty() {
@@ -201,6 +217,7 @@ pub fn parse_bob_line(line: &str) -> ParsedLine {
     if let Some(text) = text_candidate {
         return ParsedLine {
             text: Some(text),
+            thinking: None,
             edits,
             activity: None,
         };
@@ -211,6 +228,7 @@ pub fn parse_bob_line(line: &str) -> ParsedLine {
         let activity = format!("{n} suggested edit{}", if n == 1 { "" } else { "s" });
         return ParsedLine {
             text: None,
+            thinking: None,
             edits,
             activity: Some(activity),
         };
@@ -473,5 +491,31 @@ mod tests {
         assert_eq!(json["edits"][0]["range"]["start"], 1);
         // title omitted when None
         assert!(json["edits"][0].get("title").is_none());
+    }
+
+    #[test]
+    fn thinking_normalizes_and_serializes() {
+        let events = normalize_process_event(
+            BobRunEvent::Stdout {
+                run_id: "r1".to_owned(),
+                line: "ignored".to_owned(),
+            },
+            |_| ParsedLine {
+                thinking: Some("pondering".to_owned()),
+                ..ParsedLine::default()
+            },
+        );
+        assert!(matches!(
+            events.as_slice(),
+            [RunEvent::Thinking { run_id, delta }] if run_id == "r1" && delta == "pondering"
+        ));
+        let json = serde_json::to_value(RunEvent::Thinking {
+            run_id: "r1".to_owned(),
+            delta: "d".to_owned(),
+        })
+        .unwrap();
+        assert_eq!(json["kind"], "thinking");
+        assert_eq!(json["runId"], "r1");
+        assert_eq!(json["delta"], "d");
     }
 }

@@ -287,6 +287,21 @@ pub fn parse_claude_line(line: &str) -> ParsedLine {
                             }
                         }
                     }
+                    // Extended-thinking deltas (Anthropic streaming):
+                    // `delta.type == "thinking_delta"` carries the reasoning
+                    // text in `delta.thinking`. Surfaced as a distinct
+                    // Thinking event (harmless no-op when the model isn't
+                    // thinking, since the arm never matches).
+                    if delta.get("type").and_then(Value::as_str) == Some("thinking_delta") {
+                        if let Some(thinking) = delta.get("thinking").and_then(Value::as_str) {
+                            if !thinking.is_empty() {
+                                return ParsedLine {
+                                    thinking: Some(thinking.to_owned()),
+                                    ..ParsedLine::default()
+                                };
+                            }
+                        }
+                    }
                 }
             }
 
@@ -347,6 +362,22 @@ mod tests {
     fn empty_text_delta_yields_nothing() {
         let parsed = parse_claude_line(&text_delta(""));
         assert!(parsed.text.is_none());
+    }
+
+    fn thinking_delta(text: &str) -> String {
+        serde_json::json!({
+            "type": "stream_event",
+            "event": { "type": "content_block_delta", "delta": { "type": "thinking_delta", "thinking": text } }
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn streams_thinking_deltas() {
+        let parsed = parse_claude_line(&thinking_delta("Let me reason"));
+        assert_eq!(parsed.thinking.as_deref(), Some("Let me reason"));
+        assert!(parsed.text.is_none());
+        assert!(parsed.activity.is_none());
     }
 
     #[test]
