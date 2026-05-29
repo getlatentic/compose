@@ -149,7 +149,7 @@ impl ParsedLine {
 /// shares this skeleton and supplies just its own line parser.
 pub fn normalize_process_event(
     event: BobRunEvent,
-    parse_line: impl Fn(&str) -> ParsedLine,
+    mut parse_line: impl FnMut(&str) -> ParsedLine,
 ) -> Vec<RunEvent> {
     match event {
         BobRunEvent::Started { run_id } => vec![RunEvent::Started { run_id }],
@@ -281,8 +281,26 @@ pub fn parse_bob_line(line: &str) -> ParsedLine {
         }
         // Tool call start → structured ToolStart (tool_id + tool_name).
         Some("tool_use") => {
-            let tool_call_id = pick_string(record, "tool_id").unwrap_or_default();
             let name = pick_string(record, "tool_name").unwrap_or_else(|| "tool".to_owned());
+            // bob delivers its final answer via the `attempt_completion`
+            // tool (grounded in a real run) — surface its `result` as the
+            // answer text, not a bare tool-card.
+            if name == "attempt_completion" {
+                return match record
+                    .get("parameters")
+                    .and_then(Value::as_object)
+                    .and_then(|p| p.get("result"))
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.is_empty())
+                {
+                    Some(result) => ParsedLine {
+                        text: Some(result.to_owned()),
+                        ..ParsedLine::default()
+                    },
+                    None => ParsedLine::default(),
+                };
+            }
+            let tool_call_id = pick_string(record, "tool_id").unwrap_or_default();
             ParsedLine {
                 tool_start: Some(ToolCallStart { tool_call_id, name }),
                 ..ParsedLine::default()
@@ -313,6 +331,80 @@ pub fn parse_bob_line(line: &str) -> ParsedLine {
                 }
             }
         }
+    }
+}
+
+/// Stateful wrapper over [`parse_bob_line`] for a single bob run. bob
+/// streams its reasoning inline as `<thinking>…</thinking>` within the
+/// assistant `message` content (grounded in a real run — the tags arrive
+/// as their own deltas), so routing that reasoning to the Thinking
+/// stream requires tracking the open/closed state *across* lines. The
+/// per-line dispatch (text / tool events / answer) stays in
+/// `parse_bob_line`; this only re-routes assistant text through the
+/// thinking-tag state machine. One instance per run (see `BobHarness`).
+#[derive(Debug, Default)]
+pub struct BobStreamParser {
+    in_thinking: bool,
+}
+
+impl BobStreamParser {
+    /// Parse one stdout line, routing any assistant text through the
+    /// `<thinking>` state machine into [`ParsedLine::text`] /
+    /// [`ParsedLine::thinking`].
+    pub fn parse_line(&mut self, line: &str) -> ParsedLine {
+        let mut parsed = parse_bob_line(line);
+        if let Some(content) = parsed.text.take() {
+            let (text, thinking) = self.route_thinking(&content);
+            parsed.text = text;
+            parsed.thinking = match (thinking, parsed.thinking.take()) {
+                (Some(a), Some(b)) => Some(a + &b),
+                (a, b) => a.or(b),
+            };
+        }
+        parsed
+    }
+
+    /// Split an assistant content chunk into (visible text, thinking),
+    /// honoring `<thinking>`/`</thinking>` markers and the carried-over
+    /// `in_thinking` state. Handles tags split across chunks and multiple
+    /// tags within one chunk.
+    fn route_thinking(&mut self, content: &str) -> (Option<String>, Option<String>) {
+        const OPEN: &str = "<thinking>";
+        const CLOSE: &str = "</thinking>";
+        let mut text = String::new();
+        let mut thinking = String::new();
+        let mut rest = content;
+        loop {
+            if self.in_thinking {
+                match rest.find(CLOSE) {
+                    Some(i) => {
+                        thinking.push_str(&rest[..i]);
+                        self.in_thinking = false;
+                        rest = &rest[i + CLOSE.len()..];
+                    }
+                    None => {
+                        thinking.push_str(rest);
+                        break;
+                    }
+                }
+            } else {
+                match rest.find(OPEN) {
+                    Some(i) => {
+                        text.push_str(&rest[..i]);
+                        self.in_thinking = true;
+                        rest = &rest[i + OPEN.len()..];
+                    }
+                    None => {
+                        text.push_str(rest);
+                        break;
+                    }
+                }
+            }
+        }
+        (
+            (!text.is_empty()).then_some(text),
+            (!thinking.is_empty()).then_some(thinking),
+        )
     }
 }
 
@@ -543,6 +635,95 @@ mod tests {
             end.as_slice(),
             [RunEvent::ToolEnd { tool_call_id, ok, .. }] if tool_call_id == "t1" && *ok
         ));
+    }
+
+    #[test]
+    fn attempt_completion_becomes_answer_text() {
+        // bob's final answer is delivered via the attempt_completion tool,
+        // not plain message content — surface it as text, not a card.
+        let parsed = parse_bob_line(
+            r#"{"type":"tool_use","tool_id":"tool-2","tool_name":"attempt_completion","parameters":{"result":"The answer is 42."}}"#,
+        );
+        assert_eq!(parsed.text.as_deref(), Some("The answer is 42."));
+        assert!(parsed.tool_start.is_none());
+    }
+
+    #[test]
+    fn bob_stream_parser_routes_thinking_across_deltas() {
+        // bob streams reasoning as <thinking>…</thinking> with the tags
+        // arriving as their own deltas; a persistent parser routes the
+        // between-tags content to `thinking`, the rest to `text`.
+        let mut parser = BobStreamParser::default();
+        let msg = |content: &str| {
+            serde_json::json!({ "type": "message", "role": "assistant", "content": content, "delta": true })
+                .to_string()
+        };
+        // Opening tag (its own delta): the text after <thinking> is reasoning.
+        let open = parser.parse_line(&msg("<thinking>\n"));
+        assert_eq!(open.thinking.as_deref(), Some("\n"));
+        assert!(open.text.is_none());
+        // Mid-block chunk → thinking (state carried across deltas).
+        let mid = parser.parse_line(&msg("the user wants X"));
+        assert_eq!(mid.thinking.as_deref(), Some("the user wants X"));
+        assert!(mid.text.is_none());
+        // Close tag + trailing answer in one delta → split.
+        let close = parser.parse_line(&msg("</thinking>Hello!"));
+        assert!(close.thinking.is_none());
+        assert_eq!(close.text.as_deref(), Some("Hello!"));
+        // After closing, plain content → text.
+        let after = parser.parse_line(&msg(" more"));
+        assert_eq!(after.text.as_deref(), Some(" more"));
+        assert!(after.thinking.is_none());
+    }
+
+    #[test]
+    fn grounded_against_real_bob_capture() {
+        // Verbatim shapes captured from `bob 1.0.4 -o stream-json`
+        // (timestamps trimmed) — locks the parser to bob's real format.
+        let mut parser = BobStreamParser::default();
+        assert!(parser
+            .parse_line(r#"{"type":"init","session_id":"s","model":"premium"}"#)
+            .is_empty());
+        // Echoed user prompt → skipped.
+        assert!(parser
+            .parse_line(r#"{"type":"message","role":"user","content":"list files"}"#)
+            .is_empty());
+        // Assistant reasoning wrapped in <thinking> → thinking, not text.
+        assert_eq!(
+            parser
+                .parse_line(
+                    r#"{"type":"message","role":"assistant","content":"<thinking>\n","delta":true}"#
+                )
+                .thinking
+                .as_deref(),
+            Some("\n")
+        );
+        let _ = parser.parse_line(
+            r#"{"type":"message","role":"assistant","content":"</thinking>\n","delta":true}"#,
+        );
+        // Real tool_use (list_files) → ToolStart.
+        let start = parser
+            .parse_line(r#"{"type":"tool_use","tool_name":"list_files","tool_id":"tool-1","parameters":{"dir_path":"/x/docs"}}"#)
+            .tool_start
+            .expect("tool_start");
+        assert_eq!(start.tool_call_id, "tool-1");
+        assert_eq!(start.name, "list_files");
+        // Real tool_result → ToolEnd(ok).
+        assert!(parser
+            .parse_line(r#"{"type":"tool_result","tool_id":"tool-1","status":"success","output":"Listed 11 item(s)."}"#)
+            .tool_end
+            .expect("tool_end")
+            .ok);
+        // attempt_completion → the answer text.
+        let answer = parser.parse_line(
+            r#"{"type":"tool_use","tool_id":"tool-2","tool_name":"attempt_completion","parameters":{"result":"The docs directory contains 10 files."}}"#,
+        );
+        assert_eq!(answer.text.as_deref(), Some("The docs directory contains 10 files."));
+        assert!(answer.tool_start.is_none());
+        // result → ignored.
+        assert!(parser
+            .parse_line(r#"{"type":"result","status":"success","stats":{"tool_calls":2}}"#)
+            .is_empty());
     }
 
     #[test]

@@ -49,7 +49,7 @@ pub mod events;
 
 use claude::ClaudeHarness;
 use codex::CodexHarness;
-use events::normalize_bob_event;
+use events::{normalize_process_event, BobStreamParser};
 
 /// The identifier of the harness used when the caller does not pick
 /// one. Keeps existing single-harness behaviour the default.
@@ -435,8 +435,15 @@ impl Harness for BobHarness {
         // stream-json stdout lines). Normalize each into zero or more
         // harness-neutral `RunEvent`s here, so the consumer only ever
         // sees the normalized shape — the keystone of the abstraction.
+        // bob streams its reasoning inline as `<thinking>…</thinking>`
+        // and its answer via the `attempt_completion` tool, across many
+        // lines — so parsing is stateful. Hold one `BobStreamParser` for
+        // the whole run; the stdout reader thread drives it sequentially,
+        // the `Mutex` just satisfies the `Fn + Send + Sync` callback bound.
+        let parser = Arc::new(Mutex::new(BobStreamParser::default()));
         let handle = spawn_bob(opts, request.run_id, move |event| {
-            for normalized in normalize_bob_event(event) {
+            let mut parser = parser.lock().expect("bob stream parser mutex");
+            for normalized in normalize_process_event(event, |line| parser.parse_line(line)) {
                 (*on_event)(normalized);
             }
         })?;
