@@ -93,6 +93,9 @@ export interface HarnessCapabilities {
   supportsEffort: boolean;
   /** Honors a max-turns cap (claude). */
   supportsMaxTurns: boolean;
+  /** Supports an interactive sign-in flow (claude/codex OAuth) the picker
+   * can trigger when installed-but-not-signed-in. */
+  supportsLogin: boolean;
 }
 
 /** One entry in the harness catalog (`harness_list` command). */
@@ -190,11 +193,14 @@ export async function harnessReadiness(harnessId: string): Promise<HarnessReadin
 }
 
 /**
- * Stream a harness's one-time install. Yields events as they arrive
- * on a Tauri `Channel`; resolves when the install process exits.
- * Mirrors the bob installer's channel-bridging pattern.
+ * Bridge a streaming subprocess Tauri command (install or login) onto an
+ * async generator: yields each `HarnessInstallEvent` as it arrives on the
+ * `Channel`, resolves when the process exits (`done`). Shared by
+ * `harnessInstall` and `harnessLogin` — both are "spawn a CLI, stream its
+ * output, wait for exit," so they share one channel-bridging loop.
  */
-export async function* harnessInstall(
+async function* streamSubprocessCommand(
+  command: "harness_install" | "harness_login",
   harnessId: string,
 ): AsyncGenerator<HarnessInstallEvent, void, void> {
   if (!isTauriRuntime()) {
@@ -221,14 +227,12 @@ export async function* harnessInstall(
     }
     wake();
   };
-  const invokePromise = invoke<void>("harness_install", { harnessId, onEvent: channel }).catch(
-    (err) => {
-      queue.push({ kind: "stderr", text: String(err) });
-      queue.push({ kind: "done", exitCode: null, ok: false });
-      finished = true;
-      wake();
-    },
-  );
+  const invokePromise = invoke<void>(command, { harnessId, onEvent: channel }).catch((err) => {
+    queue.push({ kind: "stderr", text: String(err) });
+    queue.push({ kind: "done", exitCode: null, ok: false });
+    finished = true;
+    wake();
+  });
   while (true) {
     while (queue.length > 0) {
       const event = queue.shift()!;
@@ -245,6 +249,23 @@ export async function* harnessInstall(
       pendingResolve = resolve;
     });
   }
+}
+
+/**
+ * Stream a harness's one-time install. Yields events as they arrive on a
+ * Tauri `Channel`; resolves when the install process exits.
+ */
+export function harnessInstall(harnessId: string): AsyncGenerator<HarnessInstallEvent, void, void> {
+  return streamSubprocessCommand("harness_install", harnessId);
+}
+
+/**
+ * Stream a harness's interactive sign-in (claude/codex OAuth). The CLI
+ * opens the user's browser; this yields progress and resolves when it
+ * exits with a `done` carrying success. Same event shape as install.
+ */
+export function harnessLogin(harnessId: string): AsyncGenerator<HarnessInstallEvent, void, void> {
+  return streamSubprocessCommand("harness_login", harnessId);
 }
 
 export async function subscribeHarnessRun(

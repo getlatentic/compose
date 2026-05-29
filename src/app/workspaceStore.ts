@@ -329,6 +329,7 @@ export function harnessCapabilitiesOf(
     allowsCustomModel: false,
     supportsEffort: false,
     supportsMaxTurns: false,
+    supportsLogin: false,
   };
 }
 

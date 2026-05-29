@@ -4,6 +4,7 @@ import { useWorkspaceStore } from "../../app/workspaceStore";
 import {
   harnessInstall,
   harnessList,
+  harnessLogin,
   harnessReadiness,
   type HarnessInfo,
   type HarnessReadiness,
@@ -44,6 +45,7 @@ export function HarnessPicker() {
   const [rows, setRows] = useState<HarnessRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [signingInId, setSigningInId] = useState<string | null>(null);
   const [installLog, setInstallLog] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const logRef = useRef<HTMLPreElement | null>(null);
@@ -107,6 +109,30 @@ export function HarnessPicker() {
       setError(caught instanceof Error ? caught.message : "Install failed");
     } finally {
       setInstallingId(null);
+    }
+  }
+
+  // Trigger the harness's own OAuth sign-in (claude/codex). The CLI opens
+  // the browser; we stream its progress, then re-probe so the badge flips
+  // "Needs sign-in" → "Ready" without reopening Settings.
+  async function handleSignIn(id: string) {
+    setSigningInId(id);
+    setInstallLog([]);
+    setError(null);
+    try {
+      for await (const event of harnessLogin(id)) {
+        if (event.kind !== "done" && "text" in event && event.text) {
+          setInstallLog((prev) => [...prev, event.text]);
+        }
+        if (event.kind === "done" && !event.ok) {
+          setError("Sign-in didn't complete. Try again, or finish it in your browser.");
+        }
+      }
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Sign-in failed");
+    } finally {
+      setSigningInId(null);
     }
   }
 
@@ -197,6 +223,15 @@ export function HarnessPicker() {
                   >
                     {installingId === info.id ? "Installing…" : "Install"}
                   </Button>
+                ) : installed && !ready && info.capabilities.supportsLogin ? (
+                  <Button
+                    size="sm"
+                    kind="tertiary"
+                    disabled={signingInId !== null}
+                    onClick={() => void handleSignIn(info.id)}
+                  >
+                    {signingInId === info.id ? "Signing in…" : "Sign in"}
+                  </Button>
                 ) : null}
               </li>
             );
@@ -208,7 +243,7 @@ export function HarnessPicker() {
         <pre
           ref={logRef}
           className="bob-settings-install-log"
-          aria-label="Install progress"
+          aria-label="Setup progress"
           aria-live="polite"
         >
           {installLog.map((line, i) => (
@@ -217,6 +252,16 @@ export function HarnessPicker() {
             </div>
           ))}
         </pre>
+      ) : null}
+
+      {signingInId ? (
+        <InlineNotification
+          hideCloseButton
+          kind="info"
+          lowContrast
+          title="Signing in"
+          subtitle="Your browser should open — finish signing in there, then this updates automatically."
+        />
       ) : null}
 
       {error ? (

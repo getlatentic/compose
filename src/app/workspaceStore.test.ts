@@ -131,6 +131,7 @@ describe("workspace store", () => {
             allowsCustomModel: false,
             supportsEffort: false,
             supportsMaxTurns: false,
+            supportsLogin: false,
           },
         },
       ],
