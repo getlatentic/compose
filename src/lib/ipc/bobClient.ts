@@ -150,6 +150,8 @@ export type HarnessRunEvent =
   | { kind: "started"; runId: string }
   | { kind: "text"; runId: string; delta: string }
   | { kind: "thinking"; runId: string; delta: string }
+  | { kind: "toolStart"; runId: string; toolCallId: string; name: string }
+  | { kind: "toolEnd"; runId: string; toolCallId: string; ok: boolean }
   | { kind: "suggestedEdits"; runId: string; edits: BobRunSuggestedEdit[] }
   | { kind: "activity"; runId: string; message: string }
   | { kind: "error"; runId: string; message: string }

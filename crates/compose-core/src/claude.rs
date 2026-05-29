@@ -25,7 +25,7 @@ use std::process::Command;
 use bob_core::{spawn_streaming, InstallEvent};
 use serde_json::Value;
 
-use crate::events::{normalize_process_event, ParsedLine};
+use crate::events::{normalize_process_event, ParsedLine, ToolCallEnd, ToolCallStart};
 use crate::{
     CredentialSpec, Harness, HarnessCapabilities, HarnessInfo, HarnessModel, HarnessReadiness,
     InstallCallback, RunCallback, RunHandle, RunMode, RunRequest, RunTuning,
@@ -305,13 +305,19 @@ pub fn parse_claude_line(line: &str) -> ParsedLine {
                 }
             }
 
-            // A tool call beginning → surface as activity.
+            // A tool call beginning → structured ToolStart (id + name) so
+            // the UI renders a state-ful card, ended by the matching
+            // tool_result (the `user` arm below).
             if event_type == Some("content_block_start") {
                 if let Some(block) = event.get("content_block").and_then(Value::as_object) {
                     if block.get("type").and_then(Value::as_str) == Some("tool_use") {
                         let name = block.get("name").and_then(Value::as_str).unwrap_or("tool");
+                        let id = block.get("id").and_then(Value::as_str).unwrap_or_default();
                         return ParsedLine {
-                            activity: Some(format!("Tool · {name}")),
+                            tool_start: Some(ToolCallStart {
+                                tool_call_id: id.to_owned(),
+                                name: name.to_owned(),
+                            }),
                             ..ParsedLine::default()
                         };
                     }
@@ -331,8 +337,39 @@ pub fn parse_claude_line(line: &str) -> ParsedLine {
             }
             ParsedLine::default()
         }
-        // Aggregate assistant/user/result lines: text already streamed
-        // via deltas, so ignore to avoid double-counting.
+        Some("user") => {
+            // Tool results arrive as a `user` message carrying
+            // tool_result blocks; each ends a tool call (matched by
+            // tool_use_id; `ok` = not is_error). Grounded from a real
+            // claude stream-json run.
+            if let Some(content) = obj
+                .get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(Value::as_array)
+            {
+                for item in content {
+                    let Some(block) = item.as_object() else {
+                        continue;
+                    };
+                    if block.get("type").and_then(Value::as_str) == Some("tool_result") {
+                        if let Some(id) = block.get("tool_use_id").and_then(Value::as_str) {
+                            let is_error =
+                                block.get("is_error").and_then(Value::as_bool).unwrap_or(false);
+                            return ParsedLine {
+                                tool_end: Some(ToolCallEnd {
+                                    tool_call_id: id.to_owned(),
+                                    ok: !is_error,
+                                }),
+                                ..ParsedLine::default()
+                            };
+                        }
+                    }
+                }
+            }
+            ParsedLine::default()
+        }
+        // Aggregate assistant/result lines: text already streamed via
+        // deltas, so ignore to avoid double-counting.
         _ => ParsedLine::default(),
     }
 }
@@ -381,16 +418,43 @@ mod tests {
     }
 
     #[test]
-    fn tool_use_start_becomes_activity() {
+    fn tool_use_start_becomes_tool_start() {
         let line = serde_json::json!({
             "type": "stream_event",
             "event": {
                 "type": "content_block_start",
-                "content_block": { "type": "tool_use", "name": "Edit", "id": "t1" }
+                "content_block": { "type": "tool_use", "name": "Edit", "id": "toolu_1" }
             }
         })
         .to_string();
-        assert_eq!(parse_claude_line(&line).activity.as_deref(), Some("Tool · Edit"));
+        let parsed = parse_claude_line(&line);
+        let start = parsed.tool_start.expect("tool_start");
+        assert_eq!(start.tool_call_id, "toolu_1");
+        assert_eq!(start.name, "Edit");
+        assert!(parsed.activity.is_none());
+    }
+
+    #[test]
+    fn tool_result_becomes_tool_end() {
+        let ok_line = serde_json::json!({
+            "type": "user",
+            "message": { "role": "user", "content": [
+                { "type": "tool_result", "tool_use_id": "toolu_1", "is_error": false, "content": "ok" }
+            ]}
+        })
+        .to_string();
+        let end = parse_claude_line(&ok_line).tool_end.expect("tool_end");
+        assert_eq!(end.tool_call_id, "toolu_1");
+        assert!(end.ok);
+
+        let err_line = serde_json::json!({
+            "type": "user",
+            "message": { "content": [
+                { "type": "tool_result", "tool_use_id": "toolu_2", "is_error": true }
+            ]}
+        })
+        .to_string();
+        assert!(!parse_claude_line(&err_line).tool_end.unwrap().ok);
     }
 
     #[test]

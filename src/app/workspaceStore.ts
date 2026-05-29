@@ -37,6 +37,8 @@ import {
   appendAssistantText,
   appendAssistantThinking,
   appendAssistantSuggestions,
+  startAssistantToolCall,
+  endAssistantToolCall,
   assistantMessageContentForRun,
   appendUserChatMessage,
   applyFileBuffer,
@@ -396,6 +398,18 @@ function handleHarnessRunEvent(
       updateWorkspaceForRun((current) => ({
         ...current,
         chatThread: appendAssistantThinking(current.chatThread, runId, event.delta),
+      }));
+      return;
+    case "toolStart":
+      updateWorkspaceForRun((current) => ({
+        ...current,
+        chatThread: startAssistantToolCall(current.chatThread, runId, event.toolCallId, event.name),
+      }));
+      return;
+    case "toolEnd":
+      updateWorkspaceForRun((current) => ({
+        ...current,
+        chatThread: endAssistantToolCall(current.chatThread, runId, event.toolCallId, event.ok),
       }));
       return;
     case "suggestedEdits": {

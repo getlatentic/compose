@@ -96,6 +96,17 @@ export interface WorkspaceChatMessage {
   /** Accumulated model reasoning ("thinking"), rendered distinctly from
    * `content`. Optional — present only when the harness streams it. */
   thinking?: string;
+  /** Tool calls made during this message, rendered as state-ful cards
+   * (running → done/error), keyed by id. */
+  tools?: WorkspaceToolCall[];
+}
+
+/** A tool call surfaced on an assistant message; its status flips
+ * running → done/error as ToolStart/ToolEnd events arrive. */
+export interface WorkspaceToolCall {
+  id: string;
+  name: string;
+  status: "running" | "done" | "error";
 }
 
 export type WorkspaceSuggestionStatus = "pending" | "accepted" | "rejected" | "stale";
@@ -914,6 +925,67 @@ export function appendAssistantThinking(
         ? { ...message, thinking: (message.thinking ?? "") + delta }
         : message,
     ),
+  };
+}
+
+/**
+ * Append a running tool call to the active assistant message (deduped by
+ * id). A no-op when `runId` isn't the active run.
+ */
+export function startAssistantToolCall(
+  chatThread: WorkspaceChatThread,
+  runId: string,
+  toolCallId: string,
+  name: string,
+): WorkspaceChatThread {
+  if (chatThread.activeRunId !== runId) {
+    return chatThread;
+  }
+  const { thread, messageId } = ensureAssistantMessage(chatThread, runId);
+  return {
+    ...thread,
+    messages: thread.messages.map((message) => {
+      if (message.id !== messageId) {
+        return message;
+      }
+      const tools = message.tools ?? [];
+      if (tools.some((tool) => tool.id === toolCallId)) {
+        return message;
+      }
+      return { ...message, tools: [...tools, { id: toolCallId, name, status: "running" as const }] };
+    }),
+  };
+}
+
+/**
+ * Flip a tool call's status to done/error (matched by id) on the active
+ * assistant message.
+ */
+export function endAssistantToolCall(
+  chatThread: WorkspaceChatThread,
+  runId: string,
+  toolCallId: string,
+  ok: boolean,
+): WorkspaceChatThread {
+  if (chatThread.activeRunId !== runId) {
+    return chatThread;
+  }
+  const { thread, messageId } = ensureAssistantMessage(chatThread, runId);
+  return {
+    ...thread,
+    messages: thread.messages.map((message) => {
+      if (message.id !== messageId || !message.tools) {
+        return message;
+      }
+      return {
+        ...message,
+        tools: message.tools.map((tool) =>
+          tool.id === toolCallId
+            ? { ...tool, status: ok ? ("done" as const) : ("error" as const) }
+            : tool,
+        ),
+      };
+    }),
   };
 }
 

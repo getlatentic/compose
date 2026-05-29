@@ -145,6 +145,33 @@ export function ChatPanel() {
                     </div>
                   </details>
                 ) : null}
+                {message.role === "assistant" && message.tools?.length ? (
+                  <div
+                    className="bob-message-tools"
+                    style={{ display: "grid", gap: "0.25rem", marginBlockEnd: "0.25rem" }}
+                  >
+                    {message.tools.map((tool) => (
+                      <div
+                        key={tool.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.375rem",
+                          fontSize: "0.75rem",
+                          color: tool.status === "error" ? "#da1e28" : "#525252",
+                          border: "1px solid #e0e0e0",
+                          borderRadius: 4,
+                          padding: "0.125rem 0.5rem",
+                        }}
+                      >
+                        <span aria-hidden>
+                          {tool.status === "running" ? "⋯" : tool.status === "done" ? "✓" : "✗"}
+                        </span>
+                        <span>{tool.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {message.role === "assistant" && message.activity ? (
                   <div className="bob-message-activity">{message.activity}</div>
                 ) : null}

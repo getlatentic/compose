@@ -43,6 +43,23 @@ pub struct SuggestedEdit {
     pub title: Option<String>,
 }
 
+/// A tool call beginning — its id + name, so the UI can render a
+/// state-ful card (running → done/✗) keyed by `tool_call_id`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallStart {
+    pub tool_call_id: String,
+    pub name: String,
+}
+
+/// A tool call finishing — matched to its start by `tool_call_id`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallEnd {
+    pub tool_call_id: String,
+    pub ok: bool,
+}
+
 /// The normalized event stream. `#[serde(tag = "kind")]` +
 /// camelCase mirrors the existing `BobRunEvent` wire contract the TS
 /// store already reads (`event.kind`, `event.runId`, …), so the
@@ -63,6 +80,18 @@ pub enum RunEvent {
     /// `Text` so the UI can show reasoning without mixing it into the
     /// answer (e.g. Claude's `thinking_delta`).
     Thinking { run_id: String, delta: String },
+    /// A tool call started — render a state-ful card keyed by id.
+    ToolStart {
+        run_id: String,
+        tool_call_id: String,
+        name: String,
+    },
+    /// A tool call finished (matched to its start by id).
+    ToolEnd {
+        run_id: String,
+        tool_call_id: String,
+        ok: bool,
+    },
     /// One or more proposed edits. The app prepares + previews them.
     SuggestedEdits {
         run_id: String,
@@ -89,6 +118,10 @@ pub struct ParsedLine {
     /// Model reasoning chunk → `RunEvent::Thinking`. Kept separate from
     /// `text` so the UI can render it distinctly.
     pub thinking: Option<String>,
+    /// A tool call began → `RunEvent::ToolStart`.
+    pub tool_start: Option<ToolCallStart>,
+    /// A tool call finished → `RunEvent::ToolEnd`.
+    pub tool_end: Option<ToolCallEnd>,
     pub edits: Vec<SuggestedEdit>,
     pub activity: Option<String>,
 }
@@ -101,6 +134,8 @@ impl ParsedLine {
     fn is_empty(&self) -> bool {
         self.text.is_none()
             && self.thinking.is_none()
+            && self.tool_start.is_none()
+            && self.tool_end.is_none()
             && self.edits.is_empty()
             && self.activity.is_none()
     }
@@ -151,6 +186,20 @@ pub fn normalize_process_event(
                 out.push(RunEvent::Thinking {
                     run_id: run_id.clone(),
                     delta: thinking,
+                });
+            }
+            if let Some(start) = parsed.tool_start {
+                out.push(RunEvent::ToolStart {
+                    run_id: run_id.clone(),
+                    tool_call_id: start.tool_call_id,
+                    name: start.name,
+                });
+            }
+            if let Some(end) = parsed.tool_end {
+                out.push(RunEvent::ToolEnd {
+                    run_id: run_id.clone(),
+                    tool_call_id: end.tool_call_id,
+                    ok: end.ok,
                 });
             }
             if !parsed.edits.is_empty() {
@@ -217,9 +266,8 @@ pub fn parse_bob_line(line: &str) -> ParsedLine {
     if let Some(text) = text_candidate {
         return ParsedLine {
             text: Some(text),
-            thinking: None,
             edits,
-            activity: None,
+            ..ParsedLine::default()
         };
     }
 
@@ -227,10 +275,9 @@ pub fn parse_bob_line(line: &str) -> ParsedLine {
         let n = edits.len();
         let activity = format!("{n} suggested edit{}", if n == 1 { "" } else { "s" });
         return ParsedLine {
-            text: None,
-            thinking: None,
             edits,
             activity: Some(activity),
+            ..ParsedLine::default()
         };
     }
 
