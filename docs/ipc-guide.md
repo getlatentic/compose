@@ -11,20 +11,20 @@ The harness layer is a publishable crate family. The dependency arrow
 only ever points *up*:
 
 ```
-harness-core   neutral agent-harness core: the `Harness` trait, the
+agent-harness   neutral agent-harness core: the `Harness` trait, the
                normalized `RunEvent` vocabulary, the request/metadata
                types, and the generic streaming subprocess engine
                (`spawn_streaming` / `ProcessEvent` / `ProcessHandle`).
                No bob / Compose / Tauri / axum knowledge.
    ▲
-   ├── bob-core        unofficial bob SDK (detection, install, keychain,
-   │                   `spawn_bob`). Depends on harness-core for the
+   ├── bob-rs        unofficial bob SDK (detection, install, keychain,
+   │                   `spawn_bob`). Depends on agent-harness for the
    │                   engine; knows nothing of the harness registry.
    │      ▲
    │   harness-bob     `BobHarness` + bob's stream-json parser.
-   │                   → harness-core + bob-core.
-   ├── harness-claude  `ClaudeHarness` + parser. → harness-core.
-   └── harness-codex   `CodexHarness` + parser. → harness-core.
+   │                   → agent-harness + bob-rs.
+   ├── harness-claude  `ClaudeHarness` + parser. → agent-harness.
+   └── harness-codex   `CodexHarness` + parser. → agent-harness.
           ▲
    compose-harness     the registry: `registry()` / `harness_by_id()` /
                        `harness_catalog()` over the harness-* adapters.
@@ -32,14 +32,14 @@ harness-core   neutral agent-harness core: the `Harness` trait, the
           ▲
    ├── src-tauri   desktop host; every #[tauri::command] resolves the
    │               active harness through compose-harness's registry.
-   └── bob-api     dev-only axum server (browser preview) — bob-core only.
+   └── bob-api     dev-only axum server (browser preview) — bob-rs only.
 ```
 
-If you find yourself wanting `bob-core` to know about `Harness` or the
-registry, or `harness-core` to know about a specific backend — stop.
-That coupling is what the split exists to prevent: harness-core and each
+If you find yourself wanting `bob-rs` to know about `Harness` or the
+registry, or `agent-harness` to know about a specific backend — stop.
+That coupling is what the split exists to prevent: agent-harness and each
 adapter must stay independently publishable. Put a neutral addition in
-`harness-core`; put backend-specific code in that backend's adapter crate.
+`agent-harness`; put backend-specific code in that backend's adapter crate.
 
 Product naming: this codebase is **Compose** — a local-first AI
 writing workspace, "AI for everyone." `bob` is one *harness* (agent
@@ -49,7 +49,7 @@ Compose into this repo.
 
 ## Adding a harness adapter
 
-A *harness* implements `harness_core::Harness` (info / readiness /
+A *harness* implements `agent_harness::Harness` (info / readiness /
 install / run / credential / login) in its **own `harness-<name>`
 crate**, and is registered in `compose-harness`'s `registry()`
 (`harness_by_id()` / `harness_catalog()` derive from it). Existing
@@ -59,12 +59,12 @@ process-backed CLI harness is fixed — copy `harness-codex` and change:
 
 1. **Binary + flags** in `run()` (e.g. `claude -p --output-format
    stream-json …` vs `codex exec --json …`). Spawn via
-   `harness_core::spawn_streaming` — the shared engine (PATH augmentation,
+   `agent_harness::spawn_streaming` — the shared engine (PATH augmentation,
    reader threads, SIGTERM/SIGKILL cancel). Pass per-harness secret
    env in its `env` arg, or none if the CLI manages its own auth.
 2. **A line parser** `parse_<harness>_line(&str) -> ParsedLine` that
    decodes that CLI's stdout wire format. Run each raw event through
-   `harness_core::normalize_process_event(event, parser)` so the
+   `agent_harness::normalize_process_event(event, parser)` so the
    front-end only ever sees the normalized `RunEvent`. **Ground the wire
    format in the tool's docs and unit-test the parser** — do not guess; a
    wrong parser is silent data loss.

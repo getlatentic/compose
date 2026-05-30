@@ -9,6 +9,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "agent-harness"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -355,7 +364,7 @@ name = "bob-api"
 version = "0.1.0"
 dependencies = [
  "axum",
- "bob-core",
+ "bob-rs",
  "dotenvy",
  "futures-util",
  "serde",
@@ -367,11 +376,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "bob-core"
+name = "bob-rs"
 version = "0.1.0"
 dependencies = [
+ "agent-harness",
  "dirs 5.0.1",
- "harness-core",
  "keyring",
  "serde",
  "serde_json",
@@ -571,10 +580,10 @@ dependencies = [
 name = "compose"
 version = "0.1.0"
 dependencies = [
- "bob-core",
+ "agent-harness",
+ "bob-rs",
  "compose-harness",
  "harness-bob",
- "harness-core",
  "keyring",
  "notify",
  "rusqlite",
@@ -595,10 +604,10 @@ dependencies = [
 name = "compose-harness"
 version = "0.1.0"
 dependencies = [
+ "agent-harness",
  "harness-bob",
  "harness-claude",
  "harness-codex",
- "harness-core",
 ]
 
 [[package]]
@@ -1600,8 +1609,8 @@ dependencies = [
 name = "harness-bob"
 version = "0.1.0"
 dependencies = [
- "bob-core",
- "harness-core",
+ "agent-harness",
+ "bob-rs",
  "serde_json",
 ]
 
@@ -1609,7 +1618,7 @@ dependencies = [
 name = "harness-claude"
 version = "0.1.0"
 dependencies = [
- "harness-core",
+ "agent-harness",
  "serde_json",
 ]
 
@@ -1617,16 +1626,7 @@ dependencies = [
 name = "harness-codex"
 version = "0.1.0"
 dependencies = [
- "harness-core",
- "serde_json",
-]
-
-[[package]]
-name = "harness-core"
-version = "0.1.0"
-dependencies = [
- "libc",
- "serde",
+ "agent-harness",
  "serde_json",
 ]
 

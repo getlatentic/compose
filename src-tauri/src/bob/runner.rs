@@ -2,9 +2,9 @@
 //!
 //! The IPC contract with the front-end (event names, payload
 //! shapes, command signatures) is unchanged from before the
-//! `bob-core` extraction. What changed is the *implementation*:
+//! `bob-rs` extraction. What changed is the *implementation*:
 //! the actual spawn + stdout/stderr/exit handling now lives in
-//! `bob_core::spawn_bob_raw`, the same function the
+//! `bob_rs::spawn_bob_raw`, the same function the
 //! browser-preview HTTP server calls.
 //!
 //! What remains here:
@@ -14,7 +14,7 @@
 //!     `BobRunMode` enum.
 //!   * Run-id keyed `BobRunnerState` so `cancel_harness_run` can find
 //!     the right handle.
-//!   * Bridging `bob_core::ProcessEvent` to Tauri's `app.emit`
+//!   * Bridging `bob_rs::ProcessEvent` to Tauri's `app.emit`
 //!     pump on the existing `HARNESS_RUN_EVENT` channel name.
 //!
 //! Net effect: the desktop build and the browser preview now
@@ -26,10 +26,10 @@ use crate::bob::locator::{resolve_bob_executable, BobExecutable};
 use crate::bob::{build_bob_command, BobApprovalMode, BobChatMode, BobCommandRequest, BobRunMode};
 use crate::settings::load_bob_api_key;
 use crate::workspace::WorkspaceRegistry;
-use bob_core::{spawn_bob_raw, ProcessEvent as CoreEvent, InstallEvent};
+use bob_rs::{spawn_bob_raw, ProcessEvent as CoreEvent, InstallEvent};
 use harness_bob::normalize_bob_event;
 use compose_harness::harness_by_id;
-use harness_core::{
+use agent_harness::{
     HarnessReadiness, InstallCallback, ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode,
     RunRequest, RunTuning,
 };
@@ -76,7 +76,7 @@ fn default_harness_id() -> String {
     compose_harness::DEFAULT_HARNESS_ID.to_owned()
 }
 
-// The IPC event shape is now `harness_core::RunEvent` — the
+// The IPC event shape is now `agent_harness::RunEvent` — the
 // normalized stream every harness emits (Started / Text /
 // SuggestedEdits / Activity / Error / Exited). bob's raw
 // stream-json stdout is parsed into those by
@@ -363,9 +363,9 @@ where
     })
 }
 
-/// Spawn via `bob-core` and wire the resulting event stream to
+/// Spawn via `bob-rs` and wire the resulting event stream to
 /// Tauri's `app.emit`. The Started event is re-emitted with the
-/// extra `workspace_id` field that bob-core doesn't carry; the
+/// extra `workspace_id` field that bob-rs doesn't carry; the
 /// rest map 1:1.
 fn spawn_via_core(
     prepared: PreparedSpawn,
@@ -378,8 +378,8 @@ fn spawn_via_core(
     let runner_inner_clone = Arc::clone(&runner.inner);
     let run_id_for_cleanup = run_id.clone();
 
-    // Bridge bob-core's raw event stream to Tauri's IPC events as
-    // the harness-neutral `harness_core::RunEvent`. Each core event
+    // Bridge bob-rs's raw event stream to Tauri's IPC events as
+    // the harness-neutral `agent_harness::RunEvent`. Each core event
     // is run through `normalize_bob_event`, which parses bob's
     // stream-json stdout into Text / SuggestedEdits / Activity and
     // passes lifecycle events through. We suppress the core
@@ -542,7 +542,7 @@ fn emit_error_and_exit(app: &AppHandle, run_id: &str, message: &str) {
 /// `harness_list` — the harness catalog for the Settings picker
 /// (id, display name, description, whether it needs an install).
 #[tauri::command(async)]
-pub fn harness_list() -> Result<Vec<harness_core::HarnessInfo>, String> {
+pub fn harness_list() -> Result<Vec<agent_harness::HarnessInfo>, String> {
     Ok(compose_harness::harness_catalog())
 }
 
@@ -672,7 +672,7 @@ mod tests {
     // NOTE: the IPC event wire contract (kind tag + camelCase fields)
     // is now owned + tested by `harness_bob`
     // (`run_event_serializes_with_kind_and_camelcase`). The runner
-    // just forwards `harness_core::RunEvent`, so there's nothing
+    // just forwards `agent_harness::RunEvent`, so there's nothing
     // src-tauri-specific left to assert about the event shape here.
 
     #[test]

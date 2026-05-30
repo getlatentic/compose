@@ -1,23 +1,23 @@
 //! Tauri command surface for Bob settings + setup.
 //!
 //! Every command in this file is a thin adapter on top of
-//! `bob-core` — the shared Rust library that also backs the
+//! `bob-rs` — the shared Rust library that also backs the
 //! browser-preview dev API (`crates/bob-api`). The point of the
 //! adapter layer is purely shape: the TypeScript front-end has
 //! pre-existing wire types (`BobAuthStatus`, `BobInstallStatus`,
-//! `BobRuntimeVerification`) that don't match `bob-core`'s
+//! `BobRuntimeVerification`) that don't match `bob-rs`'s
 //! richer `BobReadinessSnapshot` 1:1, so we map between them
 //! here rather than reshaping the TS surface.
 //!
 //! The runtime *smoke check* (`settings_verify_bob_runtime`) is
 //! still implemented locally because it spawns bob with a real
 //! prompt + measures the round-trip — that lives in `src-tauri`
-//! alongside the bob runner code, not in `bob-core` whose
+//! alongside the bob runner code, not in `bob-rs` whose
 //! responsibility is install / readiness / keychain.
 
 use crate::bob::locator::{resolve_bob_executable, BobExecutableError};
 use crate::bob::{build_bob_command, BobApprovalMode, BobChatMode, BobCommandRequest, BobRunMode};
-use bob_core::{
+use bob_rs::{
     auth_source, delete_api_key, get_readiness, install_bob, resolve_api_key, write_api_key,
     InstallEvent, KeySource,
 };
@@ -39,7 +39,7 @@ pub struct BobAuthStatus {
 }
 
 /// Mirrors `src/lib/ipc/settingsClient.ts::BobInstallStatus`.
-/// Populated by adapting `bob_core::BobReadinessSnapshot` — same
+/// Populated by adapting `bob_rs::BobReadinessSnapshot` — same
 /// underlying probe, different shape.
 #[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -116,7 +116,7 @@ pub fn settings_set_bob_api_key(api_key: String) -> Result<BobAuthStatus, String
     Ok(BobAuthStatus { configured: true, error_message: None })
 }
 
-/// Adapt `bob_core::BobReadinessSnapshot` to the TS-facing
+/// Adapt `bob_rs::BobReadinessSnapshot` to the TS-facing
 /// `BobInstallStatus` shape. Same fields, different layout.
 #[tauri::command(async)]
 pub fn settings_check_bob_install() -> Result<BobInstallStatus, String> {
@@ -146,7 +146,7 @@ pub fn settings_check_bob_install() -> Result<BobInstallStatus, String> {
 }
 
 /// Stream the install via Tauri's `Channel`. Bridges
-/// `bob_core::install_bob`'s blocking callback to the channel by
+/// `bob_rs::install_bob`'s blocking callback to the channel by
 /// running the install on a worker thread and forwarding each
 /// `InstallEvent` to the JS side.
 ///
@@ -158,7 +158,7 @@ pub fn settings_check_bob_install() -> Result<BobInstallStatus, String> {
 pub fn settings_install_bob(on_event: Channel<InstallEvent>) -> Result<(), String> {
     // Move the channel into the callback closure. Each call to
     // the closure does a Channel::send; the closure is dropped
-    // when bob_core::install_bob returns.
+    // when bob_rs::install_bob returns.
     let channel = on_event;
     install_bob(move |event| {
         let _ = channel.send(event);
@@ -179,7 +179,7 @@ pub fn settings_verify_bob_runtime() -> Result<BobRuntimeVerification, String> {
 }
 
 // Suppress the unused-import warning when nothing in this module
-// references `KeySource` directly. It's re-exported by bob-core
+// references `KeySource` directly. It's re-exported by bob-rs
 // and named here for grep-ability.
 #[allow(dead_code)]
 fn _key_source_anchor(_: KeySource) {}
@@ -376,9 +376,9 @@ mod tests {
         })
     }
 
-    // Detection / install / keychain logic now lives in `bob-core`
+    // Detection / install / keychain logic now lives in `bob-rs`
     // and is covered by its own unit tests (see
-    // `crates/bob-core/src/check.rs`). The tests below cover the
+    // `crates/bob-rs/src/check.rs`). The tests below cover the
     // `verify_bob_runtime` smoke path only — that's the piece
     // still implemented locally.
 

@@ -1,8 +1,8 @@
 //! bob's stream-json parser — bob's wire format → the neutral
-//! [`harness_core::RunEvent`] vocabulary.
+//! [`agent_harness::RunEvent`] vocabulary.
 //!
 //! The normalized event types and the generic `normalize_process_event`
-//! skeleton live in [`harness_core::events`]; this module is bob's
+//! skeleton live in [`agent_harness::events`]; this module is bob's
 //! adapter-side decoder on top of them. bob emits one JSON object per
 //! line with a snake_case `type` discriminator — see [`parse_bob_line`]
 //! for the grounded schema. Reasoning is streamed inline as
@@ -10,7 +10,7 @@
 
 use serde_json::Value;
 
-use harness_core::{
+use agent_harness::{
     normalize_process_event, ByteRange, ParsedLine, ProcessEvent, RunEvent, SuggestedEdit,
     ToolCallEnd, ToolCallStart,
 };

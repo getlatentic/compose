@@ -1,6 +1,6 @@
 # harness-codex
 
-The **OpenAI Codex** (`codex`) adapter for [`harness-core`](../core).
+The **OpenAI Codex** (`codex`) adapter for [`agent-harness`](../../agent-harness).
 Invokes `codex exec --json` and parses its JSONL into the normalized
 `RunEvent` vocabulary.
 
@@ -14,7 +14,7 @@ Codex manages its own credentials (`codex login` / ChatGPT auth or
 `OPENAI_API_KEY`), so `credential().required` is `false` and the adapter
 supports an interactive `login()` (`codex login`). It exposes reasoning
 effort (`-c model_reasoning_effort`) and free-text model selection. It
-needs no `bob-core` — only `harness-core`.
+needs no `bob-rs` — only `agent-harness`.
 
 ## License
 

@@ -1,8 +1,8 @@
 [package]
-name = "bob-core"
+name = "bob-rs"
 version = "0.1.0"
 edition = "2021"
-description = "Shared bob CLI integration: detection, install, keychain, run."
+description = "Unofficial Rust SDK for the bob agent CLI — detection, install, keychain, run. Not affiliated with or endorsed by the bob maintainers."
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 # repository = "https://github.com/<org>/compose"  # TODO: set when a public git remote exists
@@ -18,8 +18,8 @@ categories = ["command-line-utilities"]
 
 [dependencies]
 # Neutral harness core: the generic subprocess engine + event shapes
-# bob-core builds its bob-specific spawn/install on top of.
-harness-core = { path = "../harness/core", version = "0.1.0" }
+# bob-rs builds its bob-specific spawn/install on top of.
+agent-harness = { path = "../agent-harness", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # OS keychain access. macOS Keychain Access via `apple-native`,
@@ -36,5 +36,5 @@ tempfile = "3"
 # store the sidecar marker file that lets us tell whether a key
 # is configured *without* touching the OS keychain at boot.
 dirs = "5"
-# (The SIGTERM/SIGKILL cancel + libc dep moved to harness-core with the
+# (The SIGTERM/SIGKILL cancel + libc dep moved to agent-harness with the
 # streaming engine.)

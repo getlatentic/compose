@@ -25,11 +25,11 @@ tauri = { version = "2", features = ["devtools"] }
 # OS keychain). Same crate consumed by `crates/bob-api` for the
 # browser-preview dev server — guarantees the two transports
 # (Tauri IPC and HTTP) run identical logic.
-bob-core = { path = "../crates/bob-core" }
+bob-rs = { path = "../crates/bob-rs" }
 # The neutral harness contract (RunEvent / the request+metadata types)
 # and the bob adapter's stream parser (`normalize_bob_event`), both used
 # directly on bob's richer Tauri run path.
-harness-core = { path = "../crates/harness/core" }
+agent-harness = { path = "../crates/agent-harness" }
 harness-bob = { path = "../crates/harness/bob" }
 # Compose's harness registry. Tauri commands resolve the active harness
 # through this manager (H2+); `bob` is the default adapter.

@@ -2,12 +2,12 @@
 //!
 //! Both `bob-api` (browser preview HTTP) and `src-tauri` (desktop IPC)
 //! consume this. The generic subprocess engine (`spawn_streaming`, the
-//! process-event type, the run handle) lives in `harness-core`; this
+//! process-event type, the run handle) lives in `agent-harness`; this
 //! module is the bob-specific layer on top — the chat-mode / approval
 //! flags, `RunBobOptions`, and injecting bob's `BOBSHELL_API_KEY`.
 
 use crate::keychain::resolve_api_key;
-use harness_core::{spawn_streaming, ProcessEvent, ProcessHandle};
+use agent_harness::{spawn_streaming, ProcessEvent, ProcessHandle};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -90,7 +90,7 @@ fn default_max_coins() -> u32 { 30 }
 /// Returns a [`ProcessHandle`] immediately — the reader + wait threads
 /// continue in the background.
 ///
-/// `run_id` is opaque to bob-core; the caller chooses the identifier and
+/// `run_id` is opaque to bob-rs; the caller chooses the identifier and
 /// uses it to correlate events with the handle.
 pub fn spawn_bob<F>(
     opts: RunBobOptions,
@@ -111,7 +111,7 @@ where
 /// resolved the bob executable path, and loaded the API key themselves
 /// (the Tauri runner, which carries its own locator + workspace-aware
 /// argv builder). Thin bob-specific wrapper over
-/// [`harness_core::spawn_streaming`]: sets bob's `BOBSHELL_API_KEY` env
+/// [`agent_harness::spawn_streaming`]: sets bob's `BOBSHELL_API_KEY` env
 /// var, otherwise identical.
 pub fn spawn_bob_raw<F>(
     program: PathBuf,

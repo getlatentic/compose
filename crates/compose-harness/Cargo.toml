@@ -12,7 +12,7 @@ publish = false
 [lib]
 
 [dependencies]
-harness-core = { path = "../harness/core" }
+agent-harness = { path = "../agent-harness" }
 harness-bob = { path = "../harness/bob" }
 harness-claude = { path = "../harness/claude" }
 harness-codex = { path = "../harness/codex" }

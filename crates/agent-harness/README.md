@@ -1,4 +1,4 @@
-# harness-core
+# agent-harness
 
 The neutral core for driving — or building — an **agent harness**: a
 backend that answers a prompt (a CLI agent, a hosted LLM API, …) behind

@@ -1,9 +1,9 @@
-//! Dev HTTP server exposing `bob-core` to the browser preview.
+//! Dev HTTP server exposing `bob-rs` to the browser preview.
 //!
 //! Boots alongside Vite during `pnpm dev` so the browser at
 //! `localhost:1421` can reach the same Rust logic that the
 //! production Tauri binary uses. Production builds don't run
-//! this server — the Tauri runtime calls `bob-core` directly
+//! this server — the Tauri runtime calls `bob-rs` directly
 //! via `#[tauri::command]`.
 //!
 //! Endpoints (mirror the Tauri command surface):
@@ -22,7 +22,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use bob_core::{
+use bob_rs::{
     delete_api_key, get_readiness, install_bob, spawn_bob, write_api_key, BobReadinessSnapshot,
     ProcessEvent, InstallEvent, RunBobOptions,
 };
@@ -79,7 +79,7 @@ async fn handle_check() -> Json<BobReadinessSnapshot> {
 /// `install.stderr`, `install.done`). Matches the wire format the
 /// existing browser-side `installBob()` generator already parses.
 async fn handle_install() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    // Bridge between the blocking `bob_core::install_bob` callback
+    // Bridge between the blocking `bob_rs::install_bob` callback
     // and axum's async SSE stream via a tokio mpsc channel. The
     // installer runs on a blocking worker so its synchronous I/O
     // doesn't park a tokio runtime thread.
@@ -177,7 +177,7 @@ async fn handle_key_save(Json(body): Json<KeySaveBody>) -> impl IntoResponse {
 /// the `ProcessHandle` is dropped on the receiver side, but the spawn
 /// thread keeps the handle and `cancel()`s it via the dedicated
 /// disconnect arm of the stream. SIGTERM lets bob flush a final
-/// answer; SIGKILL fallback in `bob-core` covers the unrecoverable
+/// answer; SIGKILL fallback in `bob-rs` covers the unrecoverable
 /// hang case.
 async fn handle_run(Json(opts): Json<RunBobOptions>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let run_id = Uuid::new_v4().to_string();
@@ -185,7 +185,7 @@ async fn handle_run(Json(opts): Json<RunBobOptions>) -> Sse<impl Stream<Item = R
 
     // `spawn_bob` is sync — wrap in spawn_blocking so the spawn
     // step itself doesn't park a tokio worker. The reader/wait
-    // threads inside bob-core are already std::thread, so once
+    // threads inside bob-rs are already std::thread, so once
     // the spawn returns they're fully detached.
     let spawn_run_id = run_id.clone();
     let _ = tokio::task::spawn_blocking(move || {
@@ -198,7 +198,7 @@ async fn handle_run(Json(opts): Json<RunBobOptions>) -> Sse<impl Stream<Item = R
         match spawn_bob(opts, spawn_run_id, cb) {
             Ok(_handle) => {
                 // Drop tx when the run thread is done — the
-                // wait thread inside bob-core will have sent the
+                // wait thread inside bob-rs will have sent the
                 // terminal `Exited` event already. Closing the
                 // channel ends the SSE stream.
                 drop(tx);

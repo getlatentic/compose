@@ -1,21 +1,21 @@
 //! `bob` CLI as a [`Harness`].
 //!
-//! The bob adapter: wraps the standalone [`bob_core`] SDK (detection,
-//! install, keychain, spawn) behind the neutral [`harness_core::Harness`]
+//! The bob adapter: wraps the standalone [`bob_rs`] SDK (detection,
+//! install, keychain, spawn) behind the neutral [`agent_harness::Harness`]
 //! trait, and parses bob's `--output-format stream-json` stdout into the
-//! shared [`harness_core::RunEvent`] vocabulary via the [`parser`] module.
+//! shared [`agent_harness::RunEvent`] vocabulary via the [`parser`] module.
 //!
-//! Auth: Compose stores bob's API key (in the OS keychain via `bob_core`),
+//! Auth: Compose stores bob's API key (in the OS keychain via `bob_rs`),
 //! so `credential().required` is `true` and `supports_login` is `false` —
 //! unlike the Claude/Codex adapters, which own their CLI's login.
 
 use std::sync::{Arc, Mutex};
 
-use bob_core::{
+use bob_rs::{
     get_readiness, install_bob, spawn_bob, BobApprovalMode, BobChatMode, RunBobOptions,
     KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE,
 };
-use harness_core::{
+use agent_harness::{
     normalize_process_event, CredentialSpec, Harness, HarnessCapabilities, HarnessInfo,
     HarnessReadiness, InstallCallback, RunCallback, RunHandle, RunMode, RunRequest,
 };
@@ -27,7 +27,7 @@ pub use parser::{normalize_bob_event, parse_bob_line, BobStreamParser};
 /// Registry id for the bob harness.
 pub const BOB_HARNESS_ID: &str = "bob";
 
-/// `bob` CLI as a [`Harness`]. Delegates to the [`bob_core`] SDK;
+/// `bob` CLI as a [`Harness`]. Delegates to the [`bob_rs`] SDK;
 /// this is just the neutral face over it.
 #[derive(Debug, Default, Clone)]
 pub struct BobHarness;

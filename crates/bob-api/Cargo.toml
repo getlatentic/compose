@@ -2,7 +2,7 @@
 name = "bob-api"
 version = "0.1.0"
 edition = "2021"
-description = "HTTP+SSE dev server exposing bob-core to the browser preview."
+description = "HTTP+SSE dev server exposing bob-rs to the browser preview."
 # Dev-only host binary — not published.
 publish = false
 
@@ -11,7 +11,7 @@ name = "bob-api"
 path = "src/main.rs"
 
 [dependencies]
-bob-core = { path = "../bob-core" }
+bob-rs = { path = "../bob-rs" }
 # Web framework — async, type-driven routes, first-class SSE via
 # `axum::response::sse`. Pinned to a recent 0.8.x; track tower 0.5.
 axum = "0.8"

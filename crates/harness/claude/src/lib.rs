@@ -24,7 +24,7 @@ use std::process::Command;
 
 use serde_json::Value;
 
-use harness_core::{
+use agent_harness::{
     normalize_process_event, spawn_streaming, CredentialSpec, Harness, HarnessCapabilities,
     HarnessInfo, HarnessModel, HarnessReadiness, InstallCallback, InstallEvent, ParsedLine,
     RunCallback, RunHandle, RunMode, RunRequest, RunTuning, ToolCallEnd, ToolCallStart,
@@ -112,7 +112,7 @@ impl Harness for ClaudeHarness {
         });
         let output = Command::new("npm")
             .args(["install", "-g", "@anthropic-ai/claude-code"])
-            .env("PATH", harness_core::augmented_node_path())
+            .env("PATH", agent_harness::augmented_node_path())
             .output()
             .map_err(|e| format!("failed to run npm: {e}"))?;
         for line in String::from_utf8_lossy(&output.stdout).lines() {
@@ -169,7 +169,7 @@ impl Harness for ClaudeHarness {
     fn login(&self, on_event: InstallCallback) -> Result<(), String> {
         // `claude auth login` runs the CLI's OAuth flow (opens the
         // browser); streamed + blocked-until-exit by the shared helper.
-        harness_core::run_login_command("claude", &["auth", "login"], on_event)
+        agent_harness::run_login_command("claude", &["auth", "login"], on_event)
     }
 }
 
@@ -180,7 +180,7 @@ impl Harness for ClaudeHarness {
 fn probe_claude_signed_in() -> bool {
     let Ok(output) = Command::new("claude")
         .args(["auth", "status"])
-        .env("PATH", harness_core::augmented_node_path())
+        .env("PATH", agent_harness::augmented_node_path())
         .output()
     else {
         return false;
@@ -234,7 +234,7 @@ fn probe_version(program: &str) -> Option<String> {
     // installed CLI is mis-reported as "not installed".
     let output = Command::new(program)
         .arg("--version")
-        .env("PATH", harness_core::augmented_node_path())
+        .env("PATH", agent_harness::augmented_node_path())
         .output()
         .ok()?;
     if !output.status.success() {
@@ -376,7 +376,7 @@ pub fn parse_claude_line(line: &str) -> ParsedLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use harness_core::ReasoningEffort;
+    use agent_harness::ReasoningEffort;
 
     fn text_delta(text: &str) -> String {
         serde_json::json!({

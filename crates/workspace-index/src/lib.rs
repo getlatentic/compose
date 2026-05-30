@@ -13,7 +13,7 @@
 //!
 //! Both frontends run the *same* code over the same `{path, content}`
 //! input, which is the whole point: one implementation, no TS-fallback
-//! drift. This mirrors `bob-core`'s "pure, reusable" discipline.
+//! drift. This mirrors `bob-rs`'s "pure, reusable" discipline.
 //!
 //! Two inputs that depend on the host are passed *in* rather than
 //! computed here, so the core stays clock-free and fs-free (and so it

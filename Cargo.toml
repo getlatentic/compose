@@ -3,29 +3,29 @@
 # The harness layer is a publishable crate family — a neutral core, one
 # crate per agent CLI, plus a Compose-specific registry:
 #
-#   * `crates/harness/core` (harness-core)
+#   * `crates/agent-harness` (agent-harness)
 #                         — the neutral agent-harness core: the `Harness`
 #                           trait, the normalized `RunEvent` vocabulary,
 #                           the request/metadata types, and the generic
 #                           streaming subprocess engine (`spawn_streaming`
 #                           / `ProcessEvent` / `ProcessHandle`). No bob /
 #                           Compose / Tauri / axum knowledge. Publishable.
-#   * `crates/bob-core`   — unofficial bob SDK: bob CLI detection, install
+#   * `crates/bob-rs`   — unofficial bob SDK: bob CLI detection, install
 #                           streaming, OS keychain, `spawn_bob`. Depends on
-#                           harness-core for the engine; no harness/registry
+#                           agent-harness for the engine; no harness/registry
 #                           knowledge. Publishable.
 #   * `crates/harness/{bob,claude,codex}`
 #                         — one adapter per agent CLI: each implements
-#                           `harness_core::Harness` + a wire-format parser.
-#                           harness-bob wraps bob-core; claude/codex depend
-#                           on harness-core only. Publishable.
+#                           `agent_harness::Harness` + a wire-format parser.
+#                           harness-bob wraps bob-rs; claude/codex depend
+#                           on agent-harness only. Publishable.
 #   * `crates/compose-harness`
 #                         — Compose's harness registry (`registry()` /
 #                           `harness_by_id()` / `harness_catalog()`) over
 #                           the harness-* adapters. The one place the set of
 #                           harnesses is declared; both hosts route through
 #                           it. Compose-specific — not published.
-#   * `crates/bob-api`    — dev-only axum HTTP+SSE server. Wraps `bob-core`
+#   * `crates/bob-api`    — dev-only axum HTTP+SSE server. Wraps `bob-rs`
 #                           so the browser preview reaches the same spawn
 #                           code as the desktop build. Not shipped.
 #   * `crates/workspace-index` (+ `-wasm`)
@@ -35,10 +35,10 @@
 #   * `src-tauri`         — Tauri desktop host. Resolves the active harness
 #                           through `compose-harness`. The production runtime.
 #
-# The dependency arrow only points "up": harness-core ← bob-core ←
-# harness-bob; harness-core ← harness-claude / harness-codex; the adapters
-# ← compose-harness ← the hosts. bob-core never learns about the harness
-# abstraction; harness-core never learns about any specific backend.
+# The dependency arrow only points "up": agent-harness ← bob-rs ←
+# harness-bob; agent-harness ← harness-claude / harness-codex; the adapters
+# ← compose-harness ← the hosts. bob-rs never learns about the harness
+# abstraction; agent-harness never learns about any specific backend.
 #
 # Why a workspace at all (vs. independent crates):
 #   * the hosts + adapters share crates via path deps. A workspace gives
@@ -50,12 +50,12 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/harness/core",
+  "crates/agent-harness",
   "crates/harness/bob",
   "crates/harness/claude",
   "crates/harness/codex",
   "crates/compose-harness",
-  "crates/bob-core",
+  "crates/bob-rs",
   "crates/bob-api",
   "crates/workspace-index",
   "crates/workspace-index-wasm",

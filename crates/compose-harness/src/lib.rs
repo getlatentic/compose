@@ -2,7 +2,7 @@
 //! harnesses is declared, shared by both hosts (`src-tauri` desktop +
 //! `bob-api` dev).
 //!
-//! The neutral contract lives in [`harness_core`]; each adapter is its
+//! The neutral contract lives in [`agent_harness`]; each adapter is its
 //! own crate ([`harness_bob`] / [`harness_claude`] / [`harness_codex`]).
 //! This crate is the *manager*: it depends on the adapters it wants to
 //! offer and exposes [`registry`] / [`harness_by_id`] / [`harness_catalog`]
@@ -16,7 +16,7 @@
 use harness_bob::BobHarness;
 use harness_claude::ClaudeHarness;
 use harness_codex::CodexHarness;
-use harness_core::{Harness, HarnessInfo};
+use agent_harness::{Harness, HarnessInfo};
 
 /// The identifier of the harness used when the caller does not pick
 /// one. Keeps existing single-harness behaviour the default. Sourced

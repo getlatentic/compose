@@ -27,9 +27,9 @@ pub use keychain::{
 };
 pub use run::{spawn_bob, spawn_bob_raw, BobApprovalMode, BobChatMode, RunBobOptions};
 // The generic subprocess engine + install/process event shapes now live
-// in the neutral `harness-core`; re-export them here so existing
-// `bob_core::…` paths in the hosts keep compiling unchanged.
-pub use harness_core::{
+// in the neutral `agent-harness`; re-export them here so existing
+// `bob_rs::…` paths in the hosts keep compiling unchanged.
+pub use agent_harness::{
     augmented_node_path, spawn_streaming, ProcessEvent, ProcessHandle, InstallEvent,
 };
 

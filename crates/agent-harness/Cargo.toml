@@ -1,5 +1,5 @@
 [package]
-name = "harness-core"
+name = "agent-harness"
 version = "0.1.0"
 edition = "2021"
 description = "Neutral agent-harness core: the Harness trait, normalized run events, and a streaming subprocess engine for driving agent CLIs."

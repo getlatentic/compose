@@ -1,6 +1,9 @@
-# bob-core
+# bob-rs
 
-An unofficial, standalone Rust SDK for the **bob** agent CLI: detection
+> **Unofficial.** A community Rust SDK for the `bob` agent CLI. Not
+> affiliated with, sponsored by, or endorsed by the maintainers of bob.
+
+A standalone Rust SDK for the **bob** agent CLI: detection
 and readiness probing, streaming install, OS-keychain credential storage,
 and spawning a `bob` run with its `--output-format stream-json` stream
 piped back line-by-line.
@@ -16,7 +19,7 @@ Key surface:
   auth configured?).
 - `install_bob(cb)` → streams the bundled install script's progress.
 - `spawn_bob(opts, run_id, cb)` / `spawn_bob_raw(...)` → spawn a run,
-  streaming `ProcessEvent`s (from `harness-core`'s engine) until exit;
+  streaming `ProcessEvent`s (from `agent-harness`'s engine) until exit;
   returns a `ProcessHandle` for cancellation.
 - `read_api_key` / `write_api_key` / `resolve_api_key` → the bob API key
   in the OS keychain.
