@@ -1,0 +1,19 @@
+[package]
+name = "harness-core"
+version = "0.1.0"
+edition = "2021"
+description = "Neutral agent-harness core: the Harness trait, normalized run events, and a streaming subprocess engine for driving agent CLIs."
+
+# Pure, neutral library — no bob/Compose/Tauri/axum knowledge. This is
+# the crate a downstream consumer depends on to build their own harness
+# (implement `Harness`, parse their CLI's wire format into `RunEvent`).
+[lib]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# `BobRunHandle::cancel()` sends SIGTERM on unix (SIGKILL fallback);
+# Windows uses `Child::kill()` (TerminateProcess).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

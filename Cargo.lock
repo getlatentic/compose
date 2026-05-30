@@ -372,8 +372,8 @@ name = "bob-core"
 version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
+ "harness-core",
  "keyring",
- "libc",
  "serde",
  "serde_json",
  "tempfile",
@@ -1592,6 +1592,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "harness-core"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -21,13 +21,16 @@ pub mod keychain;
 pub mod run;
 
 pub use check::{get_readiness, BobReadinessSnapshot};
-pub use install::{install_bob, InstallEvent};
+pub use install::install_bob;
 pub use keychain::{
     auth_source, delete_api_key, read_api_key, resolve_api_key, write_api_key, KeySource,
 };
-pub use run::{
-    augmented_node_path, spawn_bob, spawn_bob_raw, spawn_streaming, BobApprovalMode, BobChatMode,
-    BobRunEvent, BobRunHandle, RunBobOptions,
+pub use run::{spawn_bob, spawn_bob_raw, BobApprovalMode, BobChatMode, RunBobOptions};
+// The generic subprocess engine + install/process event shapes now live
+// in the neutral `harness-core`; re-export them here so existing
+// `bob_core::…` paths in the hosts keep compiling unchanged.
+pub use harness_core::{
+    augmented_node_path, spawn_streaming, BobRunEvent, BobRunHandle, InstallEvent,
 };
 
 /// Bob's documented minimum Node.js version. Mirrored in

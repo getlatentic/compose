@@ -12,7 +12,7 @@
 //! their own runtime (axum's `tokio::sync::mpsc`, Tauri's
 //! `Channel`) wrap with a sender inside the closure.
 
-use serde::Serialize;
+use harness_core::InstallEvent;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Stdio};
@@ -23,20 +23,6 @@ use tempfile::NamedTempFile;
 /// `scripts/install-bob.sh`. The bob-api binary doesn't need a
 /// separate copy because it depends on this crate.
 const INSTALL_SCRIPT: &str = include_str!("../../../scripts/install-bob.sh");
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum InstallEvent {
-    /// `[BOB-INSTALL]`-prefixed marker line from the script.
-    /// Drives UI checkpoints without parsing prose.
-    Step { text: String },
-    /// Non-marker stdout. Curl progress, npm output, etc.
-    Stdout { text: String },
-    /// stderr line. Often warnings but sometimes the real error.
-    Stderr { text: String },
-    /// Terminal event. Always sent exactly once at the end.
-    Done { exit_code: Option<i32>, ok: bool },
-}
 
 /// Run the install script, invoking `callback` for each event.
 ///

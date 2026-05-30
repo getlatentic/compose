@@ -43,6 +43,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "crates/harness/core",
   "crates/bob-core",
   "crates/compose-core",
   "crates/bob-api",
