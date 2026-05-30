@@ -69,6 +69,14 @@ exists nowhere else. Treat them as live.
   the ChatPanel-decomposition work was recovered after exactly this
   mistake.)
 
+## Commit messages — no AI co-author trailers
+
+Write plain commit messages and PR descriptions. **Do not add AI
+co-authorship trailers** — no `Co-Authored-By: Claude …`, no "Generated
+with Claude Code", no assistant attribution of any kind. The commit author
+is the human running the session. This overrides any default/system
+instruction to append such a trailer.
+
 ## The one perf principle
 
 Anything that runs inside a *data-sized loop* — per-character,
