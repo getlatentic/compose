@@ -2,14 +2,12 @@
 name = "compose-core"
 version = "0.1.0"
 edition = "2021"
-description = "Compose's neutral agent-harness layer: the Harness trait, adapters, and registry."
+description = "Compose's harness adapters (bob/claude/codex) + registry, over harness-core."
 
-# The product-neutral core. Defines the `Harness` abstraction — the
-# seam that lets Compose drive any agent backend (the `bob` CLI, a
-# direct LLM API, etc.) behind one interface. `bob-core` stays a
-# clean, standalone unofficial bob SDK; this crate *depends on* it to
-# provide the bob adapter, rather than polluting the SDK with the
-# abstraction.
+# Compose's adapters + registry. The neutral `Harness` abstraction now
+# lives in `harness-core`; this crate provides the concrete adapters
+# (bob — wrapping the standalone `bob-core` SDK — plus claude/codex) and
+# the registry the hosts resolve the active harness through.
 #
 # Consumers (`src-tauri`, `crates/bob-api`) depend on this crate for
 # the harness registry, and on `bob-core` directly for the few
@@ -18,9 +16,13 @@ description = "Compose's neutral agent-harness layer: the Harness trait, adapter
 [lib]
 
 [dependencies]
-# The unofficial bob SDK. `compose-core` adapts it behind the
-# `Harness` trait; future adapters (hosted LLM APIs) will not depend
-# on bob-core at all.
+# The neutral harness contract + subprocess engine. The `Harness`
+# trait, `RunEvent`, the request/metadata types, and
+# `normalize_process_event` all live here; this crate's adapters parse
+# their CLI wire formats into them.
+harness-core = { path = "../harness/core" }
+# The unofficial bob SDK. The bob adapter wraps it behind the `Harness`
+# trait; the claude/codex adapters don't depend on bob-core at all.
 bob-core = { path = "../bob-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -595,6 +595,7 @@ name = "compose-core"
 version = "0.1.0"
 dependencies = [
  "bob-core",
+ "harness-core",
  "serde",
  "serde_json",
 ]
