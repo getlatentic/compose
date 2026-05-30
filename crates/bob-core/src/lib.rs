@@ -30,7 +30,7 @@ pub use run::{spawn_bob, spawn_bob_raw, BobApprovalMode, BobChatMode, RunBobOpti
 // in the neutral `harness-core`; re-export them here so existing
 // `bob_core::…` paths in the hosts keep compiling unchanged.
 pub use harness_core::{
-    augmented_node_path, spawn_streaming, BobRunEvent, BobRunHandle, InstallEvent,
+    augmented_node_path, spawn_streaming, ProcessEvent, ProcessHandle, InstallEvent,
 };
 
 /// Bob's documented minimum Node.js version. Mirrored in

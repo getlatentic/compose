@@ -7,7 +7,7 @@
 //!   * the normalized [`RunEvent`] vocabulary every adapter parses into
 //!     ([`normalize_process_event`] + [`ParsedLine`]),
 //!   * the generic streaming subprocess engine ([`spawn_streaming`] +
-//!     [`BobRunEvent`] + [`BobRunHandle`]) + the install/login event
+//!     [`ProcessEvent`] + [`ProcessHandle`]) + the install/login event
 //!     shape ([`InstallEvent`]), and
 //!   * the shared interactive-login helper ([`run_login_command`]).
 //!
@@ -34,4 +34,4 @@ pub use harness::{
     RunRequest, RunTuning,
 };
 pub use install::InstallEvent;
-pub use process::{augmented_node_path, spawn_streaming, BobRunEvent, BobRunHandle};
+pub use process::{augmented_node_path, spawn_streaming, ProcessEvent, ProcessHandle};

@@ -24,7 +24,7 @@ use axum::{
 };
 use bob_core::{
     delete_api_key, get_readiness, install_bob, spawn_bob, write_api_key, BobReadinessSnapshot,
-    BobRunEvent, InstallEvent, RunBobOptions,
+    ProcessEvent, InstallEvent, RunBobOptions,
 };
 use futures_util::stream::{Stream, StreamExt};
 use serde::Deserialize;
@@ -174,14 +174,14 @@ async fn handle_key_save(Json(body): Json<KeySaveBody>) -> impl IntoResponse {
 ///   * `event: end`              `{ exitCode, runId }`     — terminal
 ///
 /// Cancellation: when the SSE connection closes (browser disconnect),
-/// the `BobRunHandle` is dropped on the receiver side, but the spawn
+/// the `ProcessHandle` is dropped on the receiver side, but the spawn
 /// thread keeps the handle and `cancel()`s it via the dedicated
 /// disconnect arm of the stream. SIGTERM lets bob flush a final
 /// answer; SIGKILL fallback in `bob-core` covers the unrecoverable
 /// hang case.
 async fn handle_run(Json(opts): Json<RunBobOptions>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let run_id = Uuid::new_v4().to_string();
-    let (tx, rx) = mpsc::unbounded_channel::<BobRunEvent>();
+    let (tx, rx) = mpsc::unbounded_channel::<ProcessEvent>();
 
     // `spawn_bob` is sync — wrap in spawn_blocking so the spawn
     // step itself doesn't park a tokio worker. The reader/wait
@@ -191,7 +191,7 @@ async fn handle_run(Json(opts): Json<RunBobOptions>) -> Sse<impl Stream<Item = R
     let _ = tokio::task::spawn_blocking(move || {
         let cb = {
             let tx = tx.clone();
-            move |event: BobRunEvent| {
+            move |event: ProcessEvent| {
                 let _ = tx.send(event);
             }
         };
@@ -204,14 +204,14 @@ async fn handle_run(Json(opts): Json<RunBobOptions>) -> Sse<impl Stream<Item = R
                 drop(tx);
             }
             Err(err) => {
-                let _ = tx.send(BobRunEvent::Error { run_id: String::new(), message: err });
+                let _ = tx.send(ProcessEvent::Error { run_id: String::new(), message: err });
                 drop(tx);
             }
         }
     })
     .await;
 
-    // Map each BobRunEvent to the wire-shape SSE event the TS
+    // Map each ProcessEvent to the wire-shape SSE event the TS
     // client already understands.
     let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx).flat_map(|event| {
         let events = map_event_to_sse(event);
@@ -236,13 +236,13 @@ async fn handle_run(Json(opts): Json<RunBobOptions>) -> Sse<impl Stream<Item = R
     )
 }
 
-/// Translate one `BobRunEvent` into one or more SSE `Event`s
+/// Translate one `ProcessEvent` into one or more SSE `Event`s
 /// matching the wire shape the TS client expects. Returns a Vec
 /// because `Stdout` events fan out into JSON-typed sub-events.
-fn map_event_to_sse(event: BobRunEvent) -> Vec<Event> {
+fn map_event_to_sse(event: ProcessEvent) -> Vec<Event> {
     match event {
-        BobRunEvent::Started { .. } => Vec::new(), // already emitted as `ready` prelude
-        BobRunEvent::Stdout { line, .. } => {
+        ProcessEvent::Started { .. } => Vec::new(), // already emitted as `ready` prelude
+        ProcessEvent::Stdout { line, .. } => {
             // Each bob stdout line is a JSON object with a `type`
             // field. Emit `event: bob.<type>` and pass the parsed
             // object through verbatim — the TS parser uses the
@@ -268,13 +268,13 @@ fn map_event_to_sse(event: BobRunEvent) -> Vec<Event> {
                 }
             }
         }
-        BobRunEvent::Stderr { line, .. } => vec![Event::default()
+        ProcessEvent::Stderr { line, .. } => vec![Event::default()
             .event("bob.stderr")
             .data(serde_json::json!({ "text": line }).to_string())],
-        BobRunEvent::Error { message, .. } => vec![Event::default()
+        ProcessEvent::Error { message, .. } => vec![Event::default()
             .event("bob.error")
             .data(serde_json::json!({ "message": message }).to_string())],
-        BobRunEvent::Exited { exit_code, run_id, .. } => vec![Event::default()
+        ProcessEvent::Exited { exit_code, run_id, .. } => vec![Event::default()
             .event("end")
             .data(serde_json::json!({ "exitCode": exit_code, "runId": run_id }).to_string())],
     }

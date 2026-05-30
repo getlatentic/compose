@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::events::RunEvent;
 use crate::install::InstallEvent;
-use crate::process::{spawn_streaming, BobRunEvent, BobRunHandle};
+use crate::process::{spawn_streaming, ProcessEvent, ProcessHandle};
 
 // --- Streaming callbacks --------------------------------------------
 
@@ -59,12 +59,12 @@ pub type RunHandle = Box<dyn RunControl>;
 // The engine's run handle is the canonical process-backed `RunControl`.
 // Both the trait and the handle live in this crate, so this impl is here
 // (orphan rule) rather than in any adapter crate.
-impl RunControl for BobRunHandle {
+impl RunControl for ProcessHandle {
     fn cancel(&self) -> Result<(), String> {
-        BobRunHandle::cancel(self)
+        ProcessHandle::cancel(self)
     }
     fn was_cancelled(&self) -> bool {
-        BobRunHandle::was_cancelled(self)
+        ProcessHandle::was_cancelled(self)
     }
 }
 
@@ -297,17 +297,17 @@ pub fn run_login_command(
         std::env::current_dir().unwrap_or_default(),
         format!("login-{program}"),
         move |event| match event {
-            BobRunEvent::Started { .. } => {}
-            BobRunEvent::Stdout { line, .. } => {
+            ProcessEvent::Started { .. } => {}
+            ProcessEvent::Stdout { line, .. } => {
                 (*events_cb)(InstallEvent::Stdout { text: line });
             }
-            BobRunEvent::Stderr { line, .. } => {
+            ProcessEvent::Stderr { line, .. } => {
                 (*events_cb)(InstallEvent::Stderr { text: line });
             }
-            BobRunEvent::Error { message, .. } => {
+            ProcessEvent::Error { message, .. } => {
                 (*events_cb)(InstallEvent::Stderr { text: message });
             }
-            BobRunEvent::Exited { exit_code, .. } => {
+            ProcessEvent::Exited { exit_code, .. } => {
                 (*events_cb)(InstallEvent::Done {
                     exit_code,
                     ok: exit_code == Some(0),

@@ -13,7 +13,7 @@
 
 use serde_json::Value;
 
-use harness_core::BobRunEvent;
+use harness_core::ProcessEvent;
 // Re-exported so the `crate::events::{…}` paths in the claude/codex
 // adapters keep resolving until they move to their own crates (commit 3).
 // The neutral parser vocabulary itself lives in `harness-core` now.
@@ -24,7 +24,7 @@ pub use harness_core::{
 
 /// bob's adapter-side normalization: parse bob's `--output-format
 /// stream-json` stdout via [`parse_bob_line`].
-pub fn normalize_bob_event(event: BobRunEvent) -> Vec<RunEvent> {
+pub fn normalize_bob_event(event: ProcessEvent) -> Vec<RunEvent> {
     normalize_process_event(event, |line| parse_bob_line(line))
 }
 
@@ -404,7 +404,7 @@ mod tests {
 
     #[test]
     fn normalize_stdout_text_event() {
-        let events = normalize_bob_event(BobRunEvent::Stdout {
+        let events = normalize_bob_event(ProcessEvent::Stdout {
             run_id: "r1".to_owned(),
             line: r#"{"type":"message","role":"assistant","content":"hi"}"#.to_owned(),
         });
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn normalize_bob_tool_events() {
-        let start = normalize_bob_event(BobRunEvent::Stdout {
+        let start = normalize_bob_event(ProcessEvent::Stdout {
             run_id: "r1".to_owned(),
             line: r#"{"type":"tool_use","tool_id":"t1","tool_name":"write_file"}"#.to_owned(),
         });
@@ -426,7 +426,7 @@ mod tests {
             [RunEvent::ToolStart { tool_call_id, name, .. }]
                 if tool_call_id == "t1" && name == "write_file"
         ));
-        let end = normalize_bob_event(BobRunEvent::Stdout {
+        let end = normalize_bob_event(ProcessEvent::Stdout {
             run_id: "r1".to_owned(),
             line: r#"{"type":"tool_result","tool_id":"t1","status":"success"}"#.to_owned(),
         });
@@ -528,11 +528,11 @@ mod tests {
     #[test]
     fn normalize_passes_through_lifecycle_events() {
         assert!(matches!(
-            normalize_bob_event(BobRunEvent::Started { run_id: "r".into() }).as_slice(),
+            normalize_bob_event(ProcessEvent::Started { run_id: "r".into() }).as_slice(),
             [RunEvent::Started { .. }]
         ));
         assert!(matches!(
-            normalize_bob_event(BobRunEvent::Exited {
+            normalize_bob_event(ProcessEvent::Exited {
                 run_id: "r".into(),
                 exit_code: Some(0),
                 cancelled: false

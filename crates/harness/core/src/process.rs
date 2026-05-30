@@ -2,13 +2,13 @@
 //! process-backed harness (bob, Claude Code, Codex, …).
 //!
 //! Spawns a child, pipes stdout/stderr line-by-line through a callback
-//! as [`BobRunEvent`]s, augments PATH so Node-based CLIs resolve even
-//! from a Finder-launched `.app`, and hands back a [`BobRunHandle`] for
+//! as [`ProcessEvent`]s, augments PATH so Node-based CLIs resolve even
+//! from a Finder-launched `.app`, and hands back a [`ProcessHandle`] for
 //! cancellation (SIGTERM → SIGKILL). No harness-trait or bob knowledge —
 //! purely subprocess streaming.
 //!
 //! Cancellation is the wrinkle: a run needs to be stoppable mid-stream
-//! when the user closes the tab or hits "stop". `BobRunHandle::cancel()`
+//! when the user closes the tab or hits "stop". `ProcessHandle::cancel()`
 //! sends SIGTERM (with a SIGKILL fallback) and flips an atomic
 //! `cancelled` flag the reader threads use to short-circuit.
 
@@ -23,13 +23,11 @@ use std::time::Duration;
 
 /// Raw events emitted to the caller's callback during a streaming run.
 /// JSON-tagged so axum SSE and Tauri Channel render identical payloads
-/// on the wire.
-///
-/// (The name is historical — the shape is harness-neutral; it is renamed
-/// to `ProcessEvent` in a follow-up commit.)
+/// on the wire. Harness-neutral: a process-backed adapter parses the
+/// `Stdout` lines into the normalized [`crate::RunEvent`] vocabulary.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
-pub enum BobRunEvent {
+pub enum ProcessEvent {
     /// First event. Sent before the child has produced any output so the
     /// UI can show a "thinking…" state.
     Started { run_id: String },
@@ -56,7 +54,7 @@ pub enum BobRunEvent {
 /// wait thread continue independently. Use `cancel()` explicitly when
 /// the user closes the connection.
 #[derive(Clone)]
-pub struct BobRunHandle {
+pub struct ProcessHandle {
     inner: Arc<HandleInner>,
 }
 
@@ -65,7 +63,7 @@ struct HandleInner {
     cancelled: AtomicBool,
 }
 
-impl BobRunHandle {
+impl ProcessHandle {
     /// SIGTERM the process, then SIGKILL after 1.5s if it's still alive.
     /// The CLI is supposed to flush a final result on SIGTERM but we
     /// don't trust it to do so forever.
@@ -119,10 +117,10 @@ impl BobRunHandle {
 /// every process-backed harness (bob, Claude Code, Codex).
 ///
 /// Pipes stdout/stderr line-by-line through `callback` using the raw
-/// [`BobRunEvent`] vocabulary (Started / Stdout / Stderr / Error /
+/// [`ProcessEvent`] vocabulary (Started / Stdout / Stderr / Error /
 /// Exited). `env` supplies per-harness secrets (each harness's API-key
 /// var, or none for self-authenticating CLIs). PATH is augmented so
-/// Node-based CLIs find `node`. Returns a [`BobRunHandle`] for
+/// Node-based CLIs find `node`. Returns a [`ProcessHandle`] for
 /// cancellation.
 ///
 /// `callback` is invoked from three threads (stdout reader, stderr
@@ -136,9 +134,9 @@ pub fn spawn_streaming<F>(
     cwd: PathBuf,
     run_id: String,
     callback: F,
-) -> Result<BobRunHandle, String>
+) -> Result<ProcessHandle, String>
 where
-    F: FnMut(BobRunEvent) + Send + Sync + Clone + 'static,
+    F: FnMut(ProcessEvent) + Send + Sync + Clone + 'static,
 {
     // PATH augmentation: Node-based CLIs (bob, claude, codex) expect
     // `node` (and often `npm`, `git`) on PATH. A desktop app launched
@@ -173,12 +171,12 @@ where
         child: Mutex::new(Some(child)),
         cancelled: AtomicBool::new(false),
     });
-    let handle = BobRunHandle { inner: Arc::clone(&inner) };
+    let handle = ProcessHandle { inner: Arc::clone(&inner) };
 
     // Emit Started immediately so the caller doesn't wait on the first
     // output line for a UI signal.
     let mut started_cb = callback.clone();
-    started_cb(BobRunEvent::Started { run_id: run_id.clone() });
+    started_cb(ProcessEvent::Started { run_id: run_id.clone() });
 
     // Reader threads. Each owns its own callback clone — the Clone bound
     // is the whole point.
@@ -211,12 +209,12 @@ where
         let cancelled = exit_inner.cancelled.load(Ordering::SeqCst);
 
         match wait_result {
-            Some(Ok(status)) => exit_cb(BobRunEvent::Exited {
+            Some(Ok(status)) => exit_cb(ProcessEvent::Exited {
                 run_id: exit_run_id.clone(),
                 exit_code: status.code(),
                 cancelled,
             }),
-            Some(Err(err)) => exit_cb(BobRunEvent::Error {
+            Some(Err(err)) => exit_cb(ProcessEvent::Error {
                 run_id: exit_run_id.clone(),
                 message: format!("wait failed: {err}"),
             }),
@@ -236,21 +234,21 @@ where
 fn pump_lines<R, F>(reader: R, run_id: String, is_stdout: bool, mut callback: F)
 where
     R: Read,
-    F: FnMut(BobRunEvent),
+    F: FnMut(ProcessEvent),
 {
     let buffered = BufReader::new(reader);
     for line in buffered.lines() {
         match line {
             Ok(text) => {
                 let event = if is_stdout {
-                    BobRunEvent::Stdout { run_id: run_id.clone(), line: text }
+                    ProcessEvent::Stdout { run_id: run_id.clone(), line: text }
                 } else {
-                    BobRunEvent::Stderr { run_id: run_id.clone(), line: text }
+                    ProcessEvent::Stderr { run_id: run_id.clone(), line: text }
                 };
                 callback(event);
             }
             Err(err) => {
-                callback(BobRunEvent::Error {
+                callback(ProcessEvent::Error {
                     run_id: run_id.clone(),
                     message: format!("stream read failed: {err}"),
                 });

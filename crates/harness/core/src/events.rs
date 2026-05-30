@@ -18,7 +18,7 @@
 
 use serde::Serialize;
 
-use crate::process::BobRunEvent;
+use crate::process::ProcessEvent;
 
 /// A UTF-8 byte range into a document. Mirrors the persisted
 /// `ByteOffset` discipline (see `docs/editor-guide.md`): positions
@@ -60,7 +60,7 @@ pub struct ToolCallEnd {
 }
 
 /// The normalized event stream. `#[serde(tag = "kind")]` +
-/// camelCase mirrors the existing `BobRunEvent` wire contract the TS
+/// camelCase mirrors the existing `ProcessEvent` wire contract the TS
 /// store already reads (`event.kind`, `event.runId`, …), so the
 /// front-end consumes one shape regardless of which harness produced it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -145,12 +145,12 @@ impl ParsedLine {
 /// parsing differs per harness — so every process-backed adapter
 /// shares this skeleton and supplies just its own line parser.
 pub fn normalize_process_event(
-    event: BobRunEvent,
+    event: ProcessEvent,
     mut parse_line: impl FnMut(&str) -> ParsedLine,
 ) -> Vec<RunEvent> {
     match event {
-        BobRunEvent::Started { run_id } => vec![RunEvent::Started { run_id }],
-        BobRunEvent::Exited {
+        ProcessEvent::Started { run_id } => vec![RunEvent::Started { run_id }],
+        ProcessEvent::Exited {
             run_id,
             exit_code,
             cancelled,
@@ -159,8 +159,8 @@ pub fn normalize_process_event(
             exit_code,
             cancelled,
         }],
-        BobRunEvent::Error { run_id, message } => vec![RunEvent::Error { run_id, message }],
-        BobRunEvent::Stderr { run_id, line } => {
+        ProcessEvent::Error { run_id, message } => vec![RunEvent::Error { run_id, message }],
+        ProcessEvent::Stderr { run_id, line } => {
             // stderr is warnings/progress; surface as activity,
             // truncated like the TS store did (240 chars).
             let message = truncate(&line, 240);
@@ -170,7 +170,7 @@ pub fn normalize_process_event(
                 vec![RunEvent::Activity { run_id, message }]
             }
         }
-        BobRunEvent::Stdout { run_id, line } => {
+        ProcessEvent::Stdout { run_id, line } => {
             let parsed = parse_line(&line);
             let mut out = Vec::new();
             if let Some(text) = parsed.text {
@@ -235,13 +235,13 @@ mod tests {
     #[test]
     fn normalize_passes_through_lifecycle_events() {
         assert!(matches!(
-            normalize_process_event(BobRunEvent::Started { run_id: "r".into() }, empty_parser)
+            normalize_process_event(ProcessEvent::Started { run_id: "r".into() }, empty_parser)
                 .as_slice(),
             [RunEvent::Started { .. }]
         ));
         assert!(matches!(
             normalize_process_event(
-                BobRunEvent::Exited {
+                ProcessEvent::Exited {
                     run_id: "r".into(),
                     exit_code: Some(0),
                     cancelled: false
@@ -257,7 +257,7 @@ mod tests {
     fn stderr_becomes_truncated_activity() {
         let long = "x".repeat(500);
         let events = normalize_process_event(
-            BobRunEvent::Stderr {
+            ProcessEvent::Stderr {
                 run_id: "r1".into(),
                 line: long,
             },
@@ -272,7 +272,7 @@ mod tests {
         }
         // Empty stderr line → no event.
         assert!(normalize_process_event(
-            BobRunEvent::Stderr {
+            ProcessEvent::Stderr {
                 run_id: "r1".into(),
                 line: String::new(),
             },
@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn thinking_normalizes_and_serializes() {
         let events = normalize_process_event(
-            BobRunEvent::Stdout {
+            ProcessEvent::Stdout {
                 run_id: "r1".to_owned(),
                 line: "ignored".to_owned(),
             },

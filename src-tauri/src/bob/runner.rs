@@ -14,7 +14,7 @@
 //!     `BobRunMode` enum.
 //!   * Run-id keyed `BobRunnerState` so `cancel_harness_run` can find
 //!     the right handle.
-//!   * Bridging `bob_core::BobRunEvent` to Tauri's `app.emit`
+//!   * Bridging `bob_core::ProcessEvent` to Tauri's `app.emit`
 //!     pump on the existing `HARNESS_RUN_EVENT` channel name.
 //!
 //! Net effect: the desktop build and the browser preview now
@@ -26,7 +26,7 @@ use crate::bob::locator::{resolve_bob_executable, BobExecutable};
 use crate::bob::{build_bob_command, BobApprovalMode, BobChatMode, BobCommandRequest, BobRunMode};
 use crate::settings::load_bob_api_key;
 use crate::workspace::WorkspaceRegistry;
-use bob_core::{spawn_bob_raw, BobRunEvent as CoreEvent, InstallEvent};
+use bob_core::{spawn_bob_raw, ProcessEvent as CoreEvent, InstallEvent};
 use compose_core::events::normalize_bob_event;
 use compose_core::{
     harness_by_id, HarnessReadiness, InstallCallback, ReasoningEffort, RunCallback, RunControl,
@@ -81,8 +81,8 @@ fn default_harness_id() -> String {
 // stream-json stdout is parsed into those by
 // `normalize_bob_event` at the bridge below, so the front-end
 // consumes one harness-neutral vocabulary instead of parsing
-// bob's wire format itself. (The old src-tauri `BobRunEvent`
-// carried `workspace_id` on Started; the front-end correlates by
+// bob's wire format itself. (The old src-tauri-local `BobRunEvent`
+// type carried `workspace_id` on Started; the front-end correlates by
 // the per-run subscription closure, not that field, so it's gone.)
 
 #[derive(Default)]
@@ -110,7 +110,7 @@ struct BobRunnerInner {
 struct ActiveRun {
     cancelled: Arc<AtomicBool>,
     // `Box<dyn RunControl>` so the same registry/cancel machinery
-    // works for any harness: bob's `BobRunHandle` and the generic
+    // works for any harness: bob's `ProcessHandle` and the generic
     // harness `RunHandle` both implement `RunControl`.
     handle: Mutex<Option<Box<dyn RunControl>>>,
 }

@@ -7,7 +7,7 @@
 //! flags, `RunBobOptions`, and injecting bob's `BOBSHELL_API_KEY`.
 
 use crate::keychain::resolve_api_key;
-use harness_core::{spawn_streaming, BobRunEvent, BobRunHandle};
+use harness_core::{spawn_streaming, ProcessEvent, ProcessHandle};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -87,7 +87,7 @@ fn default_max_coins() -> u32 { 30 }
 // --- Spawn ----------------------------------------------------------
 
 /// Spawn bob and stream output through `callback` until the child exits.
-/// Returns a [`BobRunHandle`] immediately — the reader + wait threads
+/// Returns a [`ProcessHandle`] immediately — the reader + wait threads
 /// continue in the background.
 ///
 /// `run_id` is opaque to bob-core; the caller chooses the identifier and
@@ -96,9 +96,9 @@ pub fn spawn_bob<F>(
     opts: RunBobOptions,
     run_id: String,
     callback: F,
-) -> Result<BobRunHandle, String>
+) -> Result<ProcessHandle, String>
 where
-    F: FnMut(BobRunEvent) + Send + Sync + Clone + 'static,
+    F: FnMut(ProcessEvent) + Send + Sync + Clone + 'static,
 {
     let args = build_args(&opts);
     let api_key = resolve_api_key().map(|(value, _)| value).unwrap_or_default();
@@ -120,9 +120,9 @@ pub fn spawn_bob_raw<F>(
     cwd: PathBuf,
     run_id: String,
     callback: F,
-) -> Result<BobRunHandle, String>
+) -> Result<ProcessHandle, String>
 where
-    F: FnMut(BobRunEvent) + Send + Sync + Clone + 'static,
+    F: FnMut(ProcessEvent) + Send + Sync + Clone + 'static,
 {
     spawn_streaming(
         program,
