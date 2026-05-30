@@ -27,8 +27,8 @@ use crate::bob::{build_bob_command, BobApprovalMode, BobChatMode, BobCommandRequ
 use crate::settings::load_bob_api_key;
 use crate::workspace::WorkspaceRegistry;
 use bob_rs::{spawn_bob_raw, ProcessEvent as CoreEvent, InstallEvent};
-use harness_bob::normalize_bob_event;
-use compose_harness::harness_by_id;
+use agent_harness::normalize_bob_event;
+use agent_harness::harness_by_id;
 use agent_harness::{
     HarnessReadiness, InstallCallback, ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode,
     RunRequest, RunTuning,
@@ -73,7 +73,7 @@ pub struct HarnessRunRequest {
 }
 
 fn default_harness_id() -> String {
-    compose_harness::DEFAULT_HARNESS_ID.to_owned()
+    agent_harness::DEFAULT_HARNESS_ID.to_owned()
 }
 
 // The IPC event shape is now `agent_harness::RunEvent` — the
@@ -242,11 +242,11 @@ pub fn run_harness_stream(
     // (locator + workspace-aware argv + attached context files); any
     // other harness goes through the generic `compose_harness` registry.
     let harness_id = if request.harness_id.trim().is_empty() {
-        compose_harness::DEFAULT_HARNESS_ID.to_owned()
+        agent_harness::DEFAULT_HARNESS_ID.to_owned()
     } else {
         request.harness_id.clone()
     };
-    if harness_id != compose_harness::DEFAULT_HARNESS_ID {
+    if harness_id != agent_harness::DEFAULT_HARNESS_ID {
         return run_via_harness(&harness_id, request, &registry, &runner, app);
     }
 
@@ -543,7 +543,7 @@ fn emit_error_and_exit(app: &AppHandle, run_id: &str, message: &str) {
 /// (id, display name, description, whether it needs an install).
 #[tauri::command(async)]
 pub fn harness_list() -> Result<Vec<agent_harness::HarnessInfo>, String> {
-    Ok(compose_harness::harness_catalog())
+    Ok(agent_harness::harness_catalog())
 }
 
 /// `harness_readiness` — probe one harness (installed / version /

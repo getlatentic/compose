@@ -24,7 +24,7 @@ use std::process::Command;
 
 use serde_json::{Map, Value};
 
-use agent_harness::{
+use crate::{
     normalize_process_event, spawn_streaming, CredentialSpec, Harness, HarnessCapabilities,
     HarnessInfo, HarnessReadiness, InstallCallback, InstallEvent, ParsedLine, RunCallback,
     RunHandle, RunMode, RunRequest, RunTuning, ToolCallEnd, ToolCallStart,
@@ -105,7 +105,7 @@ impl Harness for CodexHarness {
         });
         let output = Command::new("npm")
             .args(["install", "-g", "@openai/codex"])
-            .env("PATH", agent_harness::augmented_node_path())
+            .env("PATH", crate::augmented_node_path())
             .output()
             .map_err(|e| format!("failed to run npm: {e}"))?;
         for line in String::from_utf8_lossy(&output.stdout).lines() {
@@ -159,7 +159,7 @@ impl Harness for CodexHarness {
 
     fn login(&self, on_event: InstallCallback) -> Result<(), String> {
         // `codex login` runs the CLI's OAuth flow (opens the browser).
-        agent_harness::run_login_command("codex", &["login"], on_event)
+        crate::run_login_command("codex", &["login"], on_event)
     }
 }
 
@@ -169,7 +169,7 @@ fn probe_version(program: &str) -> Option<String> {
     // installed CLI is mis-reported as "not installed".
     let output = Command::new(program)
         .arg("--version")
-        .env("PATH", agent_harness::augmented_node_path())
+        .env("PATH", crate::augmented_node_path())
         .output()
         .ok()?;
     if !output.status.success() {
@@ -189,7 +189,7 @@ fn probe_version(program: &str) -> Option<String> {
 fn probe_codex_signed_in() -> bool {
     Command::new("codex")
         .args(["login", "status"])
-        .env("PATH", agent_harness::augmented_node_path())
+        .env("PATH", crate::augmented_node_path())
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
@@ -372,7 +372,7 @@ fn truncate(s: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_harness::ReasoningEffort;
+    use crate::ReasoningEffort;
 
     #[test]
     fn agent_message_completed_becomes_text() {

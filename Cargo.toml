@@ -52,10 +52,6 @@ resolver = "2"
 members = [
   "crates/cli-stream",
   "crates/agent-harness",
-  "crates/harness/bob",
-  "crates/harness/claude",
-  "crates/harness/codex",
-  "crates/compose-harness",
   "crates/bob-rs",
   "crates/bob-api",
   "crates/workspace-index",

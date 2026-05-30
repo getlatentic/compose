@@ -1,9 +1,9 @@
 //! `bob` CLI as a [`Harness`].
 //!
 //! The bob adapter: wraps the standalone [`bob_rs`] SDK (detection,
-//! install, keychain, spawn) behind the neutral [`agent_harness::Harness`]
+//! install, keychain, spawn) behind the neutral [`crate::Harness`]
 //! trait, and parses bob's `--output-format stream-json` stdout into the
-//! shared [`agent_harness::RunEvent`] vocabulary via the [`parser`] module.
+//! shared [`crate::RunEvent`] vocabulary via the [`parser`] module.
 //!
 //! Auth: Compose stores bob's API key (in the OS keychain via `bob_rs`),
 //! so `credential().required` is `true` and `supports_login` is `false` —
@@ -15,7 +15,7 @@ use bob_rs::{
     get_readiness, install_bob, spawn_bob, BobApprovalMode, BobChatMode, RunBobOptions,
     KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE,
 };
-use agent_harness::{
+use crate::{
     normalize_process_event, CredentialSpec, Harness, HarnessCapabilities, HarnessInfo,
     HarnessReadiness, InstallCallback, RunCallback, RunHandle, RunMode, RunRequest,
 };

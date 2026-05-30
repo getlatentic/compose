@@ -11,9 +11,10 @@
 //!     shape ([`InstallEvent`]), and
 //!   * the shared interactive-login helper ([`run_login_command`]).
 //!
-//! Per-CLI adapters (bob/claude/codex) live in their own crates and
-//! depend on this one; this crate knows nothing about any specific
-//! backend.
+//! The built-in per-CLI adapters live here as modules ([`bob`] / [`claude`]
+//! / [`codex`]), re-exported as [`Bob`] / [`Claude`] / [`Codex`]. The
+//! [`Registry`] is open: a third party adds their own provider by
+//! implementing [`Harness`] in their crate and registering it — no fork.
 //!
 //! Wire shapes derive `Serialize` so every transport emits identical
 //! JSON — keep their field names stable; the TypeScript front-end
@@ -36,4 +37,19 @@ pub use harness::{
 // through the framework (e.g. `use harness::spawn_streaming`).
 pub use cli_stream::{
     augmented_node_path, spawn_streaming, InstallEvent, ProcessEvent, ProcessHandle,
+};
+
+pub mod bob;
+pub mod claude;
+pub mod codex;
+pub mod registry;
+
+// The built-in adapters, re-exported as short names so consumers write
+// `use harness::{Bob, Claude, Codex}`.
+pub use bob::{normalize_bob_event, BobHarness as Bob, BOB_HARNESS_ID};
+pub use claude::{ClaudeHarness as Claude, CLAUDE_HARNESS_ID};
+pub use codex::{CodexHarness as Codex, CODEX_HARNESS_ID};
+// The open registry + convenience constructors over the built-ins.
+pub use registry::{
+    default_registry, harness_by_id, harness_catalog, Registry, DEFAULT_HARNESS_ID,
 };
