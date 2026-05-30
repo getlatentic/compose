@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+pub mod chat_event;
 pub mod locator;
 pub mod runner;
 

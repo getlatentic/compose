@@ -11,7 +11,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 [[package]]
 name = "agent-harness"
 version = "0.1.0"
-source = "git+https://github.com/tosinamuda/agent-harness#d9581d8d7220a9c629615f74f66157d4a231824b"
+source = "git+https://github.com/tosinamuda/agent-harness#241dd4a444238e77edb3dc0a4d490ba1c69a5c0c"
 dependencies = [
  "bob-rs",
  "cli-stream",
@@ -380,7 +380,7 @@ dependencies = [
 [[package]]
 name = "bob-rs"
 version = "0.1.0"
-source = "git+https://github.com/tosinamuda/agent-harness#d9581d8d7220a9c629615f74f66157d4a231824b"
+source = "git+https://github.com/tosinamuda/agent-harness#241dd4a444238e77edb3dc0a4d490ba1c69a5c0c"
 dependencies = [
  "cli-stream",
  "dirs 5.0.1",
@@ -572,7 +572,7 @@ dependencies = [
 [[package]]
 name = "cli-stream"
 version = "0.1.0"
-source = "git+https://github.com/tosinamuda/agent-harness#d9581d8d7220a9c629615f74f66157d4a231824b"
+source = "git+https://github.com/tosinamuda/agent-harness#241dd4a444238e77edb3dc0a4d490ba1c69a5c0c"
 dependencies = [
  "libc",
  "serde",

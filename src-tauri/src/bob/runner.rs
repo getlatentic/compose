@@ -26,8 +26,8 @@ use crate::bob::locator::{resolve_bob_executable, BobExecutable};
 use crate::bob::{build_bob_command, BobApprovalMode, BobChatMode, BobCommandRequest, BobRunMode};
 use crate::settings::load_bob_api_key;
 use crate::workspace::WorkspaceRegistry;
-use bob_rs::{spawn_bob_raw, ProcessEvent as CoreEvent, InstallEvent};
-use harness::normalize_bob_event;
+use crate::bob::chat_event::{run_event_to_chat, BobChatMapper, ChatEvent};
+use bob_rs::{spawn_bob_raw, InstallEvent, ProcessEvent as CoreEvent};
 use harness::harness_by_id;
 use harness::{
     HarnessReadiness, InstallCallback, ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode,
@@ -76,15 +76,18 @@ fn default_harness_id() -> String {
     harness::DEFAULT_HARNESS_ID.to_owned()
 }
 
-// The IPC event shape is now `harness::RunEvent` — the
-// normalized stream every harness emits (Started / Text /
-// SuggestedEdits / Activity / Error / Exited). bob's raw
-// stream-json stdout is parsed into those by
-// `normalize_bob_event` at the bridge below, so the front-end
-// consumes one harness-neutral vocabulary instead of parsing
-// bob's wire format itself. (The old src-tauri-local `BobRunEvent`
-// type carried `workspace_id` on Started; the front-end correlates by
-// the per-run subscription closure, not that field, so it's gone.)
+// The IPC event shape is Compose's own `chat_event::ChatEvent` — the
+// three-surface chat vocabulary the front-end renders (started / text /
+// notice / thinking / toolStart{input} / toolEnd{output} / session /
+// usage / suggestedEdits / activity / error / exited). It is *not* a
+// harness type: `agent-harness` returns the model's output faithfully (a
+// neutral `RunEvent`, and bob's untyped raw passthrough `parse_bob_raw` →
+// `serde_json::Value`), and Compose decides what it means here. The two
+// bridges below produce `ChatEvent`s — bob from its raw tier via
+// `BobChatMapper`, claude/codex from the neutral tier via
+// `run_event_to_chat`. (The old src-tauri-local `BobRunEvent`
+// type carried `workspace_id` on Started; the front-end correlates by the
+// per-run subscription closure, not that field, so it's gone.)
 
 #[derive(Default)]
 pub struct BobRunnerState {
@@ -216,7 +219,7 @@ pub fn run_harness_stream(
     // Exited{cancelled:true} a moment later.
     let _ = app.emit(
         HARNESS_RUN_EVENT,
-        &RunEvent::Started {
+        &ChatEvent::Started {
             run_id: run_id.clone(),
         },
     );
@@ -228,7 +231,7 @@ pub fn run_harness_stream(
     if cancel_token.load(Ordering::SeqCst) {
         let _ = app.emit(
             HARNESS_RUN_EVENT,
-            &RunEvent::Exited {
+            &ChatEvent::Exited {
                 run_id: run_id.clone(),
                 exit_code: None,
                 cancelled: true,
@@ -263,14 +266,14 @@ pub fn run_harness_stream(
         Err(error) => {
             let _ = app.emit(
                 HARNESS_RUN_EVENT,
-                &RunEvent::Error {
+                &ChatEvent::Error {
                     run_id: run_id.clone(),
                     message: error.clone(),
                 },
             );
             let _ = app.emit(
                 HARNESS_RUN_EVENT,
-                &RunEvent::Exited {
+                &ChatEvent::Exited {
                     run_id: run_id.clone(),
                     exit_code: None,
                     cancelled: cancel_token.load(Ordering::SeqCst),
@@ -286,7 +289,7 @@ pub fn run_harness_stream(
     if cancel_token.load(Ordering::SeqCst) {
         let _ = app.emit(
             HARNESS_RUN_EVENT,
-            &RunEvent::Exited {
+            &ChatEvent::Exited {
                 run_id: run_id.clone(),
                 exit_code: None,
                 cancelled: true,
@@ -378,14 +381,19 @@ fn spawn_via_core(
     let runner_inner_clone = Arc::clone(&runner.inner);
     let run_id_for_cleanup = run_id.clone();
 
-    // Bridge bob-rs's raw event stream to Tauri's IPC events as
-    // the harness-neutral `harness::RunEvent`. Each core event
-    // is run through `normalize_bob_event`, which parses bob's
-    // stream-json stdout into Text / SuggestedEdits / Activity and
-    // passes lifecycle events through. We suppress the core
-    // `Started` (run_harness_stream already emitted `RunEvent::Started`
-    // up front), and on `Exited` deregister from the runner state so
-    // a later cancel doesn't try to SIGTERM a dead PID.
+    // Bridge bob-rs's raw event stream to Tauri's IPC events as Compose's
+    // `ChatEvent`. Each core event is run through `BobChatMapper`, which
+    // decodes bob's stream-json via its untyped raw tier (`parse_bob_raw`)
+    // and applies Compose's interpretation — narration vs answer, the
+    // `<thinking>` split, the `[using tool …]` echo drop, session + usage
+    // (see chat_event.rs). The mapper is stateful across lines (thinking
+    // tags, chunked echo), so one instance is held for the whole run; the
+    // stdout reader thread drives it sequentially and the `Mutex` just
+    // satisfies the `Fn + Send + Sync` callback bound. We suppress the core
+    // `Started` (run_harness_stream already emitted `ChatEvent::Started` up
+    // front), and on `Exited` deregister from the runner state so a later
+    // cancel doesn't try to SIGTERM a dead PID.
+    let mapper = Arc::new(Mutex::new(BobChatMapper::new()));
     let callback = move |event: CoreEvent| {
         if matches!(event, CoreEvent::Started { .. }) {
             return; // emitted explicitly up front
@@ -395,8 +403,9 @@ fn spawn_via_core(
                 inner.runs.remove(&run_id_for_cleanup);
             }
         }
-        for normalized in normalize_bob_event(event) {
-            let _ = app_for_cb.emit(HARNESS_RUN_EVENT, &normalized);
+        let mut mapper = mapper.lock().expect("bob chat mapper mutex");
+        for chat_event in mapper.on_process_event(event) {
+            let _ = app_for_cb.emit(HARNESS_RUN_EVENT, &chat_event);
         }
     };
 
@@ -504,7 +513,11 @@ fn run_via_harness(
                 inner.runs.remove(&run_id_cleanup);
             }
         }
-        let _ = app_cb.emit(HARNESS_RUN_EVENT, &event);
+        // Map the neutral event into Compose's `ChatEvent`. claude/codex
+        // stream their answer as `Text` (no narration concept), and the
+        // neutral tier carries no tool-io/session/usage — so those fields
+        // come through empty (see `run_event_to_chat`).
+        let _ = app_cb.emit(HARNESS_RUN_EVENT, &run_event_to_chat(event));
     });
 
     match harness.run(run_request, callback) {
@@ -524,14 +537,14 @@ fn run_via_harness(
 fn emit_error_and_exit(app: &AppHandle, run_id: &str, message: &str) {
     let _ = app.emit(
         HARNESS_RUN_EVENT,
-        &RunEvent::Error {
+        &ChatEvent::Error {
             run_id: run_id.to_owned(),
             message: message.to_owned(),
         },
     );
     let _ = app.emit(
         HARNESS_RUN_EVENT,
-        &RunEvent::Exited {
+        &ChatEvent::Exited {
             run_id: run_id.to_owned(),
             exit_code: None,
             cancelled: false,
@@ -669,11 +682,11 @@ mod tests {
             .contains("workspace"));
     }
 
-    // NOTE: the IPC event wire contract (kind tag + camelCase fields)
-    // is now owned + tested by `agent-harness`
-    // (`run_event_serializes_with_kind_and_camelcase`). The runner
-    // just forwards `harness::RunEvent`, so there's nothing
-    // src-tauri-specific left to assert about the event shape here.
+    // NOTE: the IPC event wire contract (kind tag + camelCase fields) is
+    // Compose's `ChatEvent`, owned + tested in `chat_event.rs`
+    // (`chat_event_serializes_kind_tagged_camelcase`, plus the bob-raw and
+    // neutral mapper tests). The runner just bridges those onto Tauri's
+    // emit pump, so there's nothing event-shape-specific left to assert here.
 
     #[test]
     fn cancel_unknown_run_returns_error() {
