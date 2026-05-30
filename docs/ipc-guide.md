@@ -7,55 +7,74 @@ not show up until you run the packaged `.app`.
 
 ## Crate topology (who depends on whom)
 
+The harness layer is a publishable crate family. The dependency arrow
+only ever points *up*:
+
 ```
-bob-core      pure unofficial bob SDK: detection, install, run,
-              keychain. No Tauri, no axum, no Compose, no harness
-              abstraction. Kept standalone so it can be published.
+harness-core   neutral agent-harness core: the `Harness` trait, the
+               normalized `RunEvent` vocabulary, the request/metadata
+               types, and the generic streaming subprocess engine
+               (`spawn_streaming` / `ProcessEvent` / `ProcessHandle`).
+               No bob / Compose / Tauri / axum knowledge.
    ▲
-compose-core  Compose's neutral agent-harness layer: the `Harness`
-              trait, the `bob` adapter (wraps bob-core), the
-              registry. Depends on bob-core — NEVER the reverse.
-   ▲
+   ├── bob-core        unofficial bob SDK (detection, install, keychain,
+   │                   `spawn_bob`). Depends on harness-core for the
+   │                   engine; knows nothing of the harness registry.
+   │      ▲
+   │   harness-bob     `BobHarness` + bob's stream-json parser.
+   │                   → harness-core + bob-core.
+   ├── harness-claude  `ClaudeHarness` + parser. → harness-core.
+   └── harness-codex   `CodexHarness` + parser. → harness-core.
+          ▲
+   compose-harness     the registry: `registry()` / `harness_by_id()` /
+                       `harness_catalog()` over the harness-* adapters.
+                       The one place the set of harnesses is declared.
+          ▲
    ├── src-tauri   desktop host; every #[tauri::command] resolves the
-   │               active harness through compose-core's registry.
-   └── bob-api     dev-only axum server (browser preview); same.
+   │               active harness through compose-harness's registry.
+   └── bob-api     dev-only axum server (browser preview) — bob-core only.
 ```
 
-The dependency arrow only ever points *up*. If you find yourself
-wanting `bob-core` to know about `Harness`, `compose-core`, or a
-second backend — stop. That coupling is what the split exists to
-prevent: bob-core must stay shippable on its own. Put the new
-abstraction in `compose-core` (or a future sibling), and have it
-depend on bob-core.
+If you find yourself wanting `bob-core` to know about `Harness` or the
+registry, or `harness-core` to know about a specific backend — stop.
+That coupling is what the split exists to prevent: harness-core and each
+adapter must stay independently publishable. Put a neutral addition in
+`harness-core`; put backend-specific code in that backend's adapter crate.
 
 Product naming: this codebase is **Compose** — a local-first AI
 writing workspace, "AI for everyone." `bob` is one *harness* (agent
 backend) Compose can drive, not the product; see the harness registry
-in `compose-core`. Don't reintroduce a product name other than
+in `compose-harness`. Don't reintroduce a product name other than
 Compose into this repo.
 
 ## Adding a harness adapter
 
-A *harness* implements `compose_core::Harness` (info / readiness /
-install / run / credential) and is registered in `registry()` +
-`harness_by_id()`. Existing adapters: `bob` (`lib.rs` `BobHarness`),
-`claude` (`claude.rs`), `codex` (`codex.rs`). The shape for a
-process-backed CLI harness is fixed — copy `codex.rs` and change:
+A *harness* implements `harness_core::Harness` (info / readiness /
+install / run / credential / login) in its **own `harness-<name>`
+crate**, and is registered in `compose-harness`'s `registry()`
+(`harness_by_id()` / `harness_catalog()` derive from it). Existing
+adapters: `harness-bob` (`BobHarness`), `harness-claude`
+(`ClaudeHarness`), `harness-codex` (`CodexHarness`). The shape for a
+process-backed CLI harness is fixed — copy `harness-codex` and change:
 
 1. **Binary + flags** in `run()` (e.g. `claude -p --output-format
    stream-json …` vs `codex exec --json …`). Spawn via
-   `bob_core::spawn_streaming` — the shared engine (PATH augmentation,
+   `harness_core::spawn_streaming` — the shared engine (PATH augmentation,
    reader threads, SIGTERM/SIGKILL cancel). Pass per-harness secret
    env in its `env` arg, or none if the CLI manages its own auth.
 2. **A line parser** `parse_<harness>_line(&str) -> ParsedLine` that
    decodes that CLI's stdout wire format. Run each raw event through
-   `events::normalize_process_event(event, parser)` so the front-end
-   only ever sees the normalized `RunEvent`. **Ground the wire format
-   in the tool's docs and unit-test the parser** — do not guess; a
+   `harness_core::normalize_process_event(event, parser)` so the
+   front-end only ever sees the normalized `RunEvent`. **Ground the wire
+   format in the tool's docs and unit-test the parser** — do not guess; a
    wrong parser is silent data loss.
 3. **readiness** (`<bin> --version` probe) and **credential**
    (`required: false` if the CLI owns its own login, like Claude/Codex;
    `true` if Compose stores the key, like bob).
+
+Then add the new crate to `compose-harness`'s dependencies + its
+`registry()` vec; the hosts pick it up automatically (the catalog and
+`harness_by_id` both derive from `registry()`).
 
 CLI agents that edit files directly (Claude, Codex) emit no
 suggested-edit previews — their edits land on disk and the file

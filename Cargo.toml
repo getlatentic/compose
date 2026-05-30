@@ -1,45 +1,52 @@
 # Cargo workspace tying together the Rust pieces of Compose.
 #
-# Members:
-#   * `crates/bob-core`   — pure Rust library: bob CLI detection,
-#                           install streaming, OS keychain access,
-#                           `bob` spawn + stream parsing. No
-#                           Tauri / no axum / no Node deps, and no
-#                           dependency on the Compose harness layer.
-#                           Kept standalone so it can be published as
-#                           an unofficial bob SDK.
-#   * `crates/compose-core`
-#                         — Compose's neutral agent-harness layer:
-#                           the `Harness` trait, the `bob` adapter
-#                           (which wraps `bob-core`), and the
-#                           registry. This is what `src-tauri` and
-#                           `bob-api` route runs through; it depends
-#                           on `bob-core`, never the reverse.
-#   * `crates/bob-api`    — axum HTTP server binary. Wraps
-#                           `bob-core` in a small REST + SSE
-#                           surface. Runs alongside Vite during
-#                           `pnpm dev` so the browser preview can
-#                           reach the same code the desktop build
-#                           uses. Not shipped to end users.
-#   * `crates/workspace-index`
-#                         — pure markdown index/search core
-#                           (parse + build snapshot + search). No
-#                           Tauri / fs / SQLite deps, so it compiles
-#                           to both native (for `src-tauri`) and WASM
-#                           (for the browser). Mirrors `bob-core`'s
-#                           "pure, reusable" discipline.
-#   * `src-tauri`         — Tauri desktop host. Same `bob-core`
-#                           backs every `#[tauri::command]`. This
-#                           is the production runtime.
+# The harness layer is a publishable crate family — a neutral core, one
+# crate per agent CLI, plus a Compose-specific registry:
+#
+#   * `crates/harness/core` (harness-core)
+#                         — the neutral agent-harness core: the `Harness`
+#                           trait, the normalized `RunEvent` vocabulary,
+#                           the request/metadata types, and the generic
+#                           streaming subprocess engine (`spawn_streaming`
+#                           / `ProcessEvent` / `ProcessHandle`). No bob /
+#                           Compose / Tauri / axum knowledge. Publishable.
+#   * `crates/bob-core`   — unofficial bob SDK: bob CLI detection, install
+#                           streaming, OS keychain, `spawn_bob`. Depends on
+#                           harness-core for the engine; no harness/registry
+#                           knowledge. Publishable.
+#   * `crates/harness/{bob,claude,codex}`
+#                         — one adapter per agent CLI: each implements
+#                           `harness_core::Harness` + a wire-format parser.
+#                           harness-bob wraps bob-core; claude/codex depend
+#                           on harness-core only. Publishable.
+#   * `crates/compose-harness`
+#                         — Compose's harness registry (`registry()` /
+#                           `harness_by_id()` / `harness_catalog()`) over
+#                           the harness-* adapters. The one place the set of
+#                           harnesses is declared; both hosts route through
+#                           it. Compose-specific — not published.
+#   * `crates/bob-api`    — dev-only axum HTTP+SSE server. Wraps `bob-core`
+#                           so the browser preview reaches the same spawn
+#                           code as the desktop build. Not shipped.
+#   * `crates/workspace-index` (+ `-wasm`)
+#                         — pure markdown index/search core, compiled both
+#                           native (for `src-tauri`) and to WASM (for the
+#                           browser). Compose-internal.
+#   * `src-tauri`         — Tauri desktop host. Resolves the active harness
+#                           through `compose-harness`. The production runtime.
+#
+# The dependency arrow only points "up": harness-core ← bob-core ←
+# harness-bob; harness-core ← harness-claude / harness-codex; the adapters
+# ← compose-harness ← the hosts. bob-core never learns about the harness
+# abstraction; harness-core never learns about any specific backend.
 #
 # Why a workspace at all (vs. independent crates):
-#   * `src-tauri` + `bob-api` share `bob-core` via path
-#     dependency. A workspace gives them one Cargo.lock so the
-#     same `bob-core` version compiles in both — no risk of a
-#     dev/prod skew where the browser preview runs different
-#     logic than the desktop binary.
-#   * `cargo test` / `cargo check` from the repo root touch
-#     everything, so CI doesn't need per-crate invocations.
+#   * the hosts + adapters share crates via path deps. A workspace gives
+#     them one Cargo.lock so the same versions compile everywhere — no
+#     dev/prod skew where the browser preview runs different logic than
+#     the desktop binary.
+#   * `cargo test` / `cargo check` from the repo root touch everything,
+#     so CI doesn't need per-crate invocations.
 [workspace]
 resolver = "2"
 members = [
