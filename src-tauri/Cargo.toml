@@ -21,15 +21,16 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["devtools"] }
-# Shared bob CLI integration (readiness check, install streaming,
-# OS keychain). Same crate consumed by `crates/bob-api` for the
-# browser-preview dev server — guarantees the two transports
-# (Tauri IPC and HTTP) run identical logic.
-bob-rs = { path = "../crates/bob-rs" }
-# The harness framework: the registry, the Harness trait, RunEvent + the
-# request/metadata types, and the bob adapter's `normalize_bob_event` — all
-# resolved through this one crate (the adapters + registry are folded in).
-agent-harness = { path = "../crates/agent-harness" }
+# The harness layer, now an external crate family (its own repo):
+#   https://github.com/tosinamuda/agent-harness
+# `bob-rs` — the unofficial bob SDK (readiness / install / keychain /
+# spawn_bob), also consumed by `crates/bob-api` so the two transports run
+# identical logic. `agent-harness` (imported as `harness`) — the framework:
+# the registry, the Harness trait, RunEvent + request/metadata types, and
+# the bob adapter's `normalize_bob_event`. Pinned via git until published to
+# crates.io (then swap `git`+`version` for just `version`).
+bob-rs = { git = "https://github.com/tosinamuda/agent-harness", version = "0.1.0" }
+agent-harness = { git = "https://github.com/tosinamuda/agent-harness", version = "0.1.0" }
 # Pure markdown index/search core, shared with the browser (WASM). The
 # Tauri command scans the disk and calls this; `db::SourceRange` is
 # re-exported from it so there is one coordinate type.

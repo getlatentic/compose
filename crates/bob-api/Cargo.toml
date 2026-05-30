@@ -11,7 +11,10 @@ name = "bob-api"
 path = "src/main.rs"
 
 [dependencies]
-bob-rs = { path = "../bob-rs" }
+# The unofficial bob SDK — now an external crate (its own repo):
+# https://github.com/tosinamuda/agent-harness . Pinned via git until
+# published to crates.io.
+bob-rs = { git = "https://github.com/tosinamuda/agent-harness", version = "0.1.0" }
 # Web framework — async, type-driven routes, first-class SSE via
 # `axum::response::sse`. Pinned to a recent 0.8.x; track tower 0.5.
 axum = "0.8"
