@@ -3,6 +3,9 @@ import {
   acceptWorkspaceSuggestion,
   appendAssistantText,
   appendAssistantSuggestions,
+  appendAssistantThinking,
+  endAssistantToolCall,
+  startAssistantToolCall,
   assistantMessageContentForRun,
   appendUserChatMessage,
   applyFileBuffer,
@@ -590,5 +593,74 @@ describe("workspace model", () => {
 
     const dismissed = dismissBufferConflict(conflicted, "a.md");
     expect(dismissed.fileContents["a.md"].conflict).toBe(false);
+  });
+
+  // Gap 1 (fallback b): the thinking / toolStart / toolEnd model helpers are
+  // exercised directly. The store-driven path (capturing subscribeHarnessRun's
+  // callback) is async and entangled with the rAF-batched run pipeline; these
+  // pure reducers give a deterministic, non-flaky assertion of the same
+  // behavior handleHarnessRunEvent dispatches to.
+  describe("assistant streaming events (thinking + tool calls)", () => {
+    const streamingThread = () => {
+      const base = createWorkspaceFromPath("/tmp/test-vault").chatThread;
+      const withUser = appendUserChatMessage(base, "Refactor this", null);
+      const started = startBobRun(withUser, "run-1", null);
+      return markBobRunStreaming(started, "run-1");
+    };
+
+    it("accumulates model reasoning onto the active assistant message", () => {
+      const streaming = streamingThread();
+      const afterFirst = appendAssistantThinking(streaming, "run-1", "Let me ");
+      const afterSecond = appendAssistantThinking(afterFirst, "run-1", "think...");
+
+      const assistant = afterSecond.messages[afterSecond.messages.length - 1];
+      expect(assistant.role).toBe("assistant");
+      expect(assistant.thinking).toBe("Let me think...");
+      expect(assistant.content).toBe("");
+    });
+
+    it("ignores reasoning + tool events for an inactive run", () => {
+      const streaming = streamingThread();
+      const thinking = appendAssistantThinking(streaming, "run-x", "nope");
+      const toolStart = startAssistantToolCall(thinking, "run-x", "t1", "Edit");
+      const toolEnd = endAssistantToolCall(toolStart, "run-x", "t1", true);
+
+      const assistant = toolEnd.messages[toolEnd.messages.length - 1];
+      expect(assistant.thinking).toBeUndefined();
+      expect(assistant.tools).toBeUndefined();
+    });
+
+    it("opens a tool card as running and flips it to done on success", () => {
+      const streaming = streamingThread();
+      const opened = startAssistantToolCall(streaming, "run-1", "t1", "Edit");
+      const openedMessage = opened.messages[opened.messages.length - 1];
+      expect(openedMessage.tools).toEqual([{ id: "t1", name: "Edit", status: "running" }]);
+
+      const closed = endAssistantToolCall(opened, "run-1", "t1", true);
+      const closedMessage = closed.messages[closed.messages.length - 1];
+      expect(closedMessage.tools).toEqual([{ id: "t1", name: "Edit", status: "done" }]);
+    });
+
+    it("flips a tool card to error when the tool fails", () => {
+      const streaming = streamingThread();
+      const opened = startAssistantToolCall(streaming, "run-1", "t1", "Bash");
+      const closed = endAssistantToolCall(opened, "run-1", "t1", false);
+
+      const message = closed.messages[closed.messages.length - 1];
+      expect(message.tools).toEqual([{ id: "t1", name: "Bash", status: "error" }]);
+    });
+
+    it("dedupes a repeated toolStart by id and tracks multiple tools", () => {
+      const streaming = streamingThread();
+      const first = startAssistantToolCall(streaming, "run-1", "t1", "Edit");
+      const duplicate = startAssistantToolCall(first, "run-1", "t1", "Edit");
+      const second = startAssistantToolCall(duplicate, "run-1", "t2", "Read");
+
+      const message = second.messages[second.messages.length - 1];
+      expect(message.tools).toEqual([
+        { id: "t1", name: "Edit", status: "running" },
+        { id: "t2", name: "Read", status: "running" },
+      ]);
+    });
   });
 });

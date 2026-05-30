@@ -44,6 +44,31 @@ MVP. Specifically:
   gates met (see *Verification* below). "It compiles" is not done.
   "It works on my one example" is not done.
 
+## Never force-destroy a git worktree
+
+Agent sessions run in worktrees under `.claude/worktrees/<name>/`, and
+those worktrees routinely hold **uncommitted, untracked** work that
+exists nowhere else. Treat them as live.
+
+- **Never** `git worktree remove --force` / `-f`, and never `rm -rf` a
+  path under `.claude/worktrees`. A `PreToolUse` hook
+  (`.claude/hooks/guard-worktree-remove.py`, wired in
+  `.claude/settings.json`) blocks both — that block is a feature, not an
+  obstacle to route around.
+- Plain `git worktree remove` is safe: it *refuses* when the worktree
+  has modified/untracked files ("contains modified or untracked files,
+  use --force to delete it"). If it refuses, that refusal is
+  information — stop, run `git -C <worktree> status`, and surface what's
+  there to the user. Do not reach for `--force`.
+- Before removing any worktree, commit its WIP to its branch (even a
+  throwaway `WIP:` commit). Committed work survives removal on the
+  branch; untracked work does not.
+- If work is ever lost this way, the session transcript under
+  `~/.claude/projects/<encoded-path>/*.jsonl` is the backstop — replay
+  its `Write`/`Edit` tool calls to reconstruct the files. (This is how
+  the ChatPanel-decomposition work was recovered after exactly this
+  mistake.)
+
 ## The one perf principle
 
 Anything that runs inside a *data-sized loop* — per-character,

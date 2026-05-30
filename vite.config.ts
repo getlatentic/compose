@@ -85,6 +85,10 @@ export default defineConfig(async () => ({
       "**/dist/**",
       "**/.{idea,git,cache,output,temp}/**",
       "**/*.baseline.spec.ts",
+      // Agent worktree mirrors (.claude/worktrees/<name>/src/**) are full
+      // copies of the repo; without this, vitest collects every suite a
+      // second/third time and the count silently triples.
+      "**/.claude/**",
     ],
   },
 }));

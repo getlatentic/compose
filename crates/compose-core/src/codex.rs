@@ -23,9 +23,9 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use bob_core::{spawn_streaming, InstallEvent};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
-use crate::events::{normalize_process_event, ParsedLine};
+use crate::events::{normalize_process_event, ParsedLine, ToolCallEnd, ToolCallStart};
 use crate::{
     CredentialSpec, Harness, HarnessCapabilities, HarnessInfo, HarnessReadiness, InstallCallback,
     RunCallback, RunHandle, RunMode, RunRequest, RunTuning,
@@ -222,11 +222,48 @@ fn build_codex_args(prompt: String, mode: RunMode, tuning: &RunTuning) -> Vec<St
     args
 }
 
+/// Display label for a codex tool `item`, or `None` if the item isn't
+/// a tool we surface as a card. Grounded in the `codex exec --json`
+/// item types (`command_execution` carries the literal `command`;
+/// `file_change` / `web_search` / `mcp_tool_call` get a fixed label).
+fn codex_tool_label(item: &Map<String, Value>) -> Option<String> {
+    match item.get("type").and_then(Value::as_str)? {
+        "command_execution" => {
+            let command = item.get("command").and_then(Value::as_str).unwrap_or("");
+            Some(if command.is_empty() {
+                "Running a command".to_owned()
+            } else {
+                format!("Running: {}", truncate(command, 80))
+            })
+        }
+        "file_change" => Some("Editing files".to_owned()),
+        "web_search" => Some("Searching the web".to_owned()),
+        "mcp_tool_call" => Some("Tool · MCP".to_owned()),
+        _ => None,
+    }
+}
+
+/// Did a codex tool item succeed? `command_execution` reports
+/// `exit_code` (0 = ok); otherwise fall back to `status` (anything but
+/// an explicit failure is treated as ok, since not every tool type
+/// carries an exit code).
+fn codex_tool_ok(item: &Map<String, Value>) -> bool {
+    if let Some(code) = item.get("exit_code").and_then(Value::as_i64) {
+        return code == 0;
+    }
+    !matches!(
+        item.get("status").and_then(Value::as_str),
+        Some("failed") | Some("error")
+    )
+}
+
 /// Parse one line of `codex exec --json` JSONL into the shared
 /// [`ParsedLine`]. Assistant text is the full `agent_message` on
-/// `item.completed`; command executions become activity. Codex edits
-/// files directly via tools (reflected on disk by the file watcher),
-/// so it never emits suggested-edit previews — `edits` stays empty.
+/// `item.completed`; tool items (`command_execution`, `file_change`,
+/// `web_search`, `mcp_tool_call`) become structured tool cards
+/// (`ToolStart`/`ToolEnd`). Codex edits files directly via tools
+/// (reflected on disk by the file watcher), so it never emits
+/// suggested-edit previews — `edits` stays empty.
 pub fn parse_codex_line(line: &str) -> ParsedLine {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -255,39 +292,63 @@ pub fn parse_codex_line(line: &str) -> ParsedLine {
                     }
                 }
             }
+            // A tool item finished. Grounded in codex 0.125.0's
+            // `--json` schema: command_execution / web_search /
+            // file_change / mcp_tool_call items arrive on
+            // `item.completed` carrying `id` + `status` (+ `exit_code`
+            // for commands). It does NOT emit an `item.started` for
+            // these, so emit BOTH start and end from this one event —
+            // that's what makes a card appear. The frontend dedups a
+            // repeated start by id, so a future codex that *does* send
+            // `item.started` still renders correctly.
+            if let Some(label) = codex_tool_label(item) {
+                return match item.get("id").and_then(Value::as_str) {
+                    Some(id) => {
+                        let id = id.to_owned();
+                        ParsedLine {
+                            tool_start: Some(ToolCallStart {
+                                tool_call_id: id.clone(),
+                                name: label,
+                            }),
+                            tool_end: Some(ToolCallEnd {
+                                tool_call_id: id,
+                                ok: codex_tool_ok(item),
+                            }),
+                            ..ParsedLine::default()
+                        }
+                    }
+                    None => ParsedLine {
+                        activity: Some(label),
+                        ..ParsedLine::default()
+                    },
+                };
+            }
             ParsedLine::default()
         }
         Some("item.started") => {
             let Some(item) = obj.get("item").and_then(Value::as_object) else {
                 return ParsedLine::default();
             };
-            match item.get("type").and_then(Value::as_str) {
-                Some("command_execution") => {
-                    let command = item.get("command").and_then(Value::as_str).unwrap_or("");
-                    let activity = if command.is_empty() {
-                        "Running a command".to_owned()
-                    } else {
-                        format!("Running: {}", truncate(command, 80))
-                    };
-                    ParsedLine {
-                        activity: Some(activity),
+            // A tool announced before it finishes → a "running" card; the
+            // matching `item.completed` flips it to done/error. If the
+            // item has no `id` to key the card, degrade to a plain
+            // activity line rather than drop it.
+            if let Some(label) = codex_tool_label(item) {
+                return match item.get("id").and_then(Value::as_str) {
+                    Some(id) => ParsedLine {
+                        tool_start: Some(ToolCallStart {
+                            tool_call_id: id.to_owned(),
+                            name: label,
+                        }),
                         ..ParsedLine::default()
-                    }
-                }
-                Some("file_change") => ParsedLine {
-                    activity: Some("Editing files".to_owned()),
-                    ..ParsedLine::default()
-                },
-                Some("web_search") => ParsedLine {
-                    activity: Some("Searching the web".to_owned()),
-                    ..ParsedLine::default()
-                },
-                Some("mcp_tool_call") => ParsedLine {
-                    activity: Some("Tool · MCP".to_owned()),
-                    ..ParsedLine::default()
-                },
-                _ => ParsedLine::default(),
+                    },
+                    None => ParsedLine {
+                        activity: Some(label),
+                        ..ParsedLine::default()
+                    },
+                };
             }
+            ParsedLine::default()
         }
         Some("error") => {
             let message = obj
@@ -327,17 +388,84 @@ mod tests {
         assert!(parsed.activity.is_none());
     }
 
+    // Tool-card tests grounded in codex-cli 0.125.0's `--json` schema:
+    // tool items (command_execution / web_search / file_change /
+    // mcp_tool_call) arrive on `item.completed` carrying `id`, `status`
+    // (in_progress|completed|failed) and, for commands, `exit_code`.
+    // Example (verbatim from the documented schema):
+    //   {"type":"item.completed","item":{"id":"item_2","type":
+    //    "command_execution","command":"bash -lc false",
+    //    "aggregated_output":"","exit_code":1,"status":"failed"}}
+
     #[test]
-    fn command_execution_started_becomes_activity() {
+    fn command_execution_completed_becomes_finished_tool_card() {
+        let line = serde_json::json!({
+            "type": "item.completed",
+            "item": {
+                "id": "item_2",
+                "type": "command_execution",
+                "command": "bash -lc 'echo hi'",
+                "aggregated_output": "hi\n",
+                "exit_code": 0,
+                "status": "completed"
+            }
+        })
+        .to_string();
+        let parsed = parse_codex_line(&line);
+        let start = parsed.tool_start.expect("tool_start");
+        let end = parsed.tool_end.expect("tool_end");
+        assert_eq!(start.tool_call_id, "item_2");
+        assert_eq!(end.tool_call_id, "item_2");
+        assert_eq!(start.name, "Running: bash -lc 'echo hi'");
+        assert!(end.ok, "exit_code 0 → ok");
+        assert!(parsed.activity.is_none());
+        assert!(parsed.text.is_none());
+    }
+
+    #[test]
+    fn command_execution_nonzero_exit_is_error_card() {
+        let line = r#"{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"bash -lc false","aggregated_output":"","exit_code":1,"status":"failed"}}"#;
+        let end = parse_codex_line(line).tool_end.expect("tool_end");
+        assert!(!end.ok, "exit_code 1 / status failed → error");
+    }
+
+    #[test]
+    fn web_search_completed_becomes_tool_card() {
+        let line = serde_json::json!({
+            "type": "item.completed",
+            "item": { "id": "item_5", "type": "web_search", "status": "completed" }
+        })
+        .to_string();
+        let parsed = parse_codex_line(&line);
+        assert_eq!(parsed.tool_start.expect("start").name, "Searching the web");
+        assert!(parsed.tool_end.expect("end").ok, "no exit_code, status completed → ok");
+    }
+
+    #[test]
+    fn started_tool_with_id_becomes_running_card() {
         let line = serde_json::json!({
             "type": "item.started",
             "item": { "id": "item_1", "type": "command_execution", "command": "bash -lc ls", "status": "in_progress" }
         })
         .to_string();
-        assert_eq!(
-            parse_codex_line(&line).activity.as_deref(),
-            Some("Running: bash -lc ls")
-        );
+        let parsed = parse_codex_line(&line);
+        assert_eq!(parsed.tool_start.expect("start").name, "Running: bash -lc ls");
+        assert!(parsed.tool_end.is_none(), "started → running (no end yet)");
+        assert!(parsed.activity.is_none());
+    }
+
+    #[test]
+    fn tool_without_id_degrades_to_activity() {
+        // Defensive: an item lacking `id` can't key a card, so it falls
+        // back to a plain activity line rather than vanishing.
+        let line = serde_json::json!({
+            "type": "item.completed",
+            "item": { "type": "command_execution", "command": "ls -la", "exit_code": 0 }
+        })
+        .to_string();
+        let parsed = parse_codex_line(&line);
+        assert_eq!(parsed.activity.as_deref(), Some("Running: ls -la"));
+        assert!(parsed.tool_start.is_none() && parsed.tool_end.is_none());
     }
 
     #[test]

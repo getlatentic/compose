@@ -78,11 +78,6 @@ pub struct BobEnvironmentBinding {
     pub secret: bool,
 }
 
-#[tauri::command(async)]
-pub fn preview_bob_command(request: BobCommandRequest) -> Result<BobCommandPreview, String> {
-    build_bob_command(&request).map_err(|error| error.to_string())
-}
-
 pub fn build_bob_command(
     request: &BobCommandRequest,
 ) -> Result<BobCommandPreview, BobCommandError> {

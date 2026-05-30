@@ -192,4 +192,32 @@ describe("workspace store", () => {
     expect(workspace?.chatThread.runError).toBeNull();
     expect(workspace?.openPanes.some((pane) => pane.kind === "settings") ?? false).toBe(false);
   });
+
+  it("forwards the selected harness's persisted model + tuning on an ask-about-selection run", () => {
+    // Symmetric to the sendChatPrompt tuning test: the "ask about this
+    // selection" flow must also carry the *selected* harness's persisted
+    // model/effort through to runHarnessStream (as a read-only "ask"), so
+    // the adapter maps them onto the same CLI flags a chat run would.
+    vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
+
+    useWorkspaceStore.setState({
+      selectedHarnessId: "codex",
+      harnessOptions: { codex: { model: "gpt-5-codex", effort: "high" } },
+    });
+    useWorkspaceStore.getState().addWorkspace("/tmp/codex-vault");
+
+    return useWorkspaceStore
+      .getState()
+      .askBobAboutSelectionStream("question", { range: { start: 0, end: 4 }, text: "todo" })
+      .then(() => {
+        expect(runHarnessStream).toHaveBeenCalledWith(
+          expect.objectContaining({
+            harnessId: "codex",
+            chatMode: "ask",
+            model: "gpt-5-codex",
+            effort: "high",
+          }),
+        );
+      });
+  });
 });

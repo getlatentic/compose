@@ -1212,13 +1212,6 @@ function replaceByByteRange(mapper: PositionMapper, range: SourceRange, replacem
   return `${mapper.text.slice(0, start)}${replacement}${mapper.text.slice(end)}`;
 }
 
-export function formatBobCommandPreview(program: string, args: string[], hasSecretEnv: boolean) {
-  const envPrefix = hasSecretEnv ? "BOBSHELL_API_KEY=<configured> " : "";
-  const escapedArgs = args.map((arg) => (arg.includes(" ") ? JSON.stringify(arg) : arg));
-
-  return `${envPrefix}${[program, ...escapedArgs].join(" ")}`;
-}
-
 export function createPromptWithContext(prompt: string, contextItems: WorkspaceContextItem[]) {
   const trimmedPrompt = prompt.trim();
   if (contextItems.length === 0) {

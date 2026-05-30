@@ -37,7 +37,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            bob::preview_bob_command,
             bob::runner::run_harness_stream,
             bob::runner::cancel_harness_run,
             bob::runner::harness_list,

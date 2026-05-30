@@ -1,42 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
 
-export type BobRunMode = "json_task" | "stream_json" | "interactive_pty" | "resume_latest";
 export type BobChatMode = "plan" | "code" | "advanced" | "ask";
 export type BobApprovalMode = "default" | "auto_edit";
 /** Harness-neutral reasoning-effort levels (Codex's
  * `model_reasoning_effort`). Mirrors `compose_core::ReasoningEffort`. */
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
-
-export interface BobCommandRequest {
-  approvalMode: BobApprovalMode;
-  chatMode: BobChatMode;
-  contextFilePaths?: string[];
-  maxCoins: number;
-  mode: BobRunMode;
-  prompt?: string;
-  workspaceId?: string;
-}
-
-export interface BobEnvironmentBinding {
-  key: string;
-  secret: boolean;
-}
-
-export interface BobCommandPreview {
-  args: string[];
-  cwdRequired: boolean;
-  env: BobEnvironmentBinding[];
-  program: string;
-}
-
-export function previewBobCommand(request: BobCommandRequest) {
-  if (!isTauriRuntime()) {
-    return Promise.resolve(buildDevelopmentPreview(request));
-  }
-
-  return invoke<BobCommandPreview>("preview_bob_command", { request });
-}
 
 export interface HarnessRunRequest {
   approvalMode: BobApprovalMode;
@@ -285,40 +254,4 @@ export async function subscribeHarnessRun(
     }
   });
   return unlisten;
-}
-
-function buildDevelopmentPreview(request: BobCommandRequest): BobCommandPreview {
-  const prompt = request.prompt?.trim();
-  if (request.mode !== "resume_latest" && request.mode !== "interactive_pty" && !prompt) {
-    throw new Error("prompt is required for this Bob run mode");
-  }
-
-  const args = ["--auth-method", "api-key"];
-
-  if (request.mode === "interactive_pty") {
-    if (prompt) {
-      args.push("-i", prompt);
-    }
-  } else if (request.mode === "resume_latest") {
-    args.push("--resume", "latest", "--output-format", "stream-json");
-  } else if (prompt) {
-    args.push(
-      prompt,
-      "--chat-mode",
-      request.chatMode,
-      "--output-format",
-      request.mode === "json_task" ? "json" : "stream-json",
-      "--approval-mode",
-      request.approvalMode,
-      "--max-coins",
-      String(request.maxCoins),
-    );
-  }
-
-  return {
-    args,
-    cwdRequired: true,
-    env: [{ key: "BOBSHELL_API_KEY", secret: true }],
-    program: "bob",
-  };
 }

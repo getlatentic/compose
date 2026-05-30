@@ -136,7 +136,11 @@ export function HarnessPicker() {
     }
   }
 
-  const selectedIsBob = selectedHarnessId === RECOMMENDED_ID;
+  // Capability-driven, not an id check: the edit-permission helper copy
+  // depends on whether the selected harness *previews* edits (approve
+  // before apply) vs writes directly — a declared capability.
+  const selectedPreviewsEdits =
+    rows.find((row) => row.info.id === selectedHarnessId)?.info.capabilities.previewsEdits ?? false;
 
   return (
     <div className="bob-settings-section">
@@ -282,8 +286,8 @@ export function HarnessPicker() {
         />
         <p className="bob-settings-helper">
           Only in your workspace folder — never anywhere else on your computer.{" "}
-          {selectedIsBob
-            ? "Bob proposes edits you approve before they apply."
+          {selectedPreviewsEdits
+            ? "Proposed edits wait for your approval before they apply."
             : "Changes apply directly; Compose keeps a history so you can undo."}
         </p>
       </div>
