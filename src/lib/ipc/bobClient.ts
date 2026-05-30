@@ -117,12 +117,27 @@ export interface BobRunSuggestedEdit {
  */
 export type HarnessRunEvent =
   | { kind: "started"; runId: string }
+  /** A chunk of the *answer* → the message bubble. For bob this is only
+   * the `attempt_completion` result; for Claude/Codex the streamed text. */
   | { kind: "text"; runId: string; delta: string }
+  /** Process narration ("what I'm doing") → live status + trace. Not the
+   * answer. bob's plain assistant messages; Claude/Codex don't emit it. */
+  | { kind: "notice"; runId: string; message: string }
   | { kind: "thinking"; runId: string; delta: string }
-  | { kind: "toolStart"; runId: string; toolCallId: string; name: string }
-  | { kind: "toolEnd"; runId: string; toolCallId: string; ok: boolean }
+  | { kind: "toolStart"; runId: string; toolCallId: string; name: string; input: string | null }
+  | { kind: "toolEnd"; runId: string; toolCallId: string; ok: boolean; output: string | null }
+  /** Harness session identity (bob's `init`) → trace. */
+  | { kind: "session"; runId: string; sessionId: string; model: string | null }
   | { kind: "suggestedEdits"; runId: string; edits: BobRunSuggestedEdit[] }
   | { kind: "activity"; runId: string; message: string }
+  /** Terminal usage stats (bob's `result.stats`) → stats float. */
+  | {
+      kind: "usage";
+      runId: string;
+      totalTokens: number | null;
+      toolCalls: number | null;
+      coins: number | null;
+    }
   | { kind: "error"; runId: string; message: string }
   | { kind: "exited"; runId: string; exitCode: number | null; cancelled: boolean };
 

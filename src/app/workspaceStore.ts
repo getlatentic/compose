@@ -15,6 +15,11 @@ import {
 import { rebuildWorkspaceIndex as rebuildWorkspaceIndexIpc } from "../lib/ipc/indexClient";
 import { appendLlmMessage, recordLlmThread } from "../lib/ipc/llmContextClient";
 import {
+  loadActiveConversation,
+  newConversation,
+  saveConversation,
+} from "../lib/ipc/conversationsClient";
+import {
   checkBobInstall,
   getBobAuthStatus,
   type BobInstallStatus,
@@ -35,8 +40,11 @@ import { markWorkspaceOpened } from "../lib/ipc/workspaceClient";
 import {
   acceptWorkspaceSuggestion,
   appendAssistantText,
+  appendAssistantNotice,
   appendAssistantThinking,
   appendAssistantSuggestions,
+  setAssistantSession,
+  setAssistantStats,
   startAssistantToolCall,
   endAssistantToolCall,
   assistantMessageContentForRun,
@@ -54,9 +62,12 @@ import {
   createWorkspaceFromPath,
   dismissBufferConflict,
   finalizeBobRun,
+  hydrateChatThread,
   hydrateWorkspaceRecords,
   isSetupComplete,
   markBobRunStreaming,
+  resetChatThread,
+  serializeChatMessages,
   markBufferConflict,
   markBufferSaved,
   markWorkspaceIndexFailed,
@@ -164,6 +175,7 @@ interface WorkspaceState {
   viewMode: "dashboard" | "workspace";
   loadActiveWorkspaceFiles: () => Promise<void>;
   openChat: () => void;
+  newChat: () => Promise<void>;
   reloadActiveFile: () => Promise<void>;
   rebuildWorkspaceIndex: (workspaceId?: string) => Promise<void>;
   removeWorkspace: (workspaceId: string) => void;
@@ -348,6 +360,27 @@ function persistTabs(workspaces: BobWorkspace[], workspaceId: string) {
   );
 }
 
+/**
+ * Fire-and-forget persist of a workspace's active conversation (settled
+ * turns only — `serializeChatMessages` skips in-flight messages). Called
+ * on send and on turn completion; a no-op when the thread has no
+ * conversation id yet. Best-effort, off the input thread.
+ */
+function persistConversation(workspaces: BobWorkspace[], workspaceId: string) {
+  const workspace = workspaces.find((item) => item.id === workspaceId);
+  const conversationId = workspace?.chatThread.conversationId;
+  if (!workspace || !conversationId) {
+    return;
+  }
+  void saveConversation(
+    workspaceId,
+    conversationId,
+    serializeChatMessages(workspace.chatThread),
+  ).catch(() => {
+    // best-effort — a failed save shouldn't disrupt the chat
+  });
+}
+
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
@@ -381,6 +414,9 @@ function handleHarnessRunEvent(
   // stream (bob's stream-json is parsed into these by the harness
   // adapter), so this handler never parses a harness wire format —
   // it just applies already-decoded events. See `bobClient.ts`.
+  // Each event appends to the active message's ordered trace (or the
+  // answer bubble for `text`); the live status indicator is derived from
+  // the trace's last entry in the UI, so this handler sets no status.
   switch (event.kind) {
     case "started":
       updateWorkspaceForRun((current) => ({
@@ -389,9 +425,19 @@ function handleHarnessRunEvent(
       }));
       return;
     case "text":
+      // The answer (bob: only attempt_completion; Claude/Codex: streamed
+      // text). Goes to the bubble, replacing the live status.
       updateWorkspaceForRun((current) => ({
         ...current,
         chatThread: appendAssistantText(current.chatThread, runId, event.delta),
+      }));
+      return;
+    case "notice":
+      // Narration — appended to the trace (and the last entry drives the
+      // live status indicator).
+      updateWorkspaceForRun((current) => ({
+        ...current,
+        chatThread: appendAssistantNotice(current.chatThread, runId, event.message),
       }));
       return;
     case "thinking":
@@ -403,13 +449,35 @@ function handleHarnessRunEvent(
     case "toolStart":
       updateWorkspaceForRun((current) => ({
         ...current,
-        chatThread: startAssistantToolCall(current.chatThread, runId, event.toolCallId, event.name),
+        chatThread: startAssistantToolCall(
+          current.chatThread,
+          runId,
+          event.toolCallId,
+          event.name,
+          event.input,
+        ),
       }));
       return;
     case "toolEnd":
       updateWorkspaceForRun((current) => ({
         ...current,
-        chatThread: endAssistantToolCall(current.chatThread, runId, event.toolCallId, event.ok),
+        chatThread: endAssistantToolCall(current.chatThread, runId, event.toolCallId, event.ok, event.output),
+      }));
+      return;
+    case "session":
+      updateWorkspaceForRun((current) => ({
+        ...current,
+        chatThread: setAssistantSession(current.chatThread, runId, event.sessionId),
+      }));
+      return;
+    case "usage":
+      updateWorkspaceForRun((current) => ({
+        ...current,
+        chatThread: setAssistantStats(current.chatThread, runId, {
+          ...(event.totalTokens != null ? { totalTokens: event.totalTokens } : {}),
+          ...(event.toolCalls != null ? { toolCalls: event.toolCalls } : {}),
+          ...(event.coins != null ? { coins: event.coins } : {}),
+        }),
       }));
       return;
     case "suggestedEdits": {
@@ -897,10 +965,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     try {
       const entries = await scanWorkspace(workspaceId);
       const comments = await loadWorkspaceComments(workspaceId);
+      // Restore the workspace's active conversation (most-recent
+      // non-archived) so the chat survives reload. Best-effort: a load
+      // failure shouldn't block the scan/comments restore.
+      const conversation = await loadActiveConversation(workspaceId).catch(() => null);
       set((state) => ({
-        workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
-          applyScanResult({ ...item, comments }, entries),
-        ),
+        workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => {
+          const scanned = applyScanResult({ ...item, comments }, entries);
+          return conversation
+            ? { ...scanned, chatThread: hydrateChatThread(scanned.chatThread, conversation) }
+            : scanned;
+        }),
       }));
       persistTabs(get().workspaces, workspaceId);
 
@@ -936,6 +1011,31 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return;
     }
     set({ chatOpen: true });
+  },
+  newChat: async () => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    const thread = workspace.chatThread;
+    // Don't start a new chat over a running turn.
+    if (thread.activeRunId || thread.runState === "starting" || thread.runState === "streaming") {
+      return;
+    }
+    const workspaceId = workspace.id;
+    // Archive the current conversation and get a fresh id (stamped with
+    // the active harness). Best-effort; on failure we still reset the
+    // visible thread so the user gets a clean slate.
+    const conversationId = await newConversation(
+      workspaceId,
+      get().selectedHarnessId,
+    ).catch(() => null);
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+        ...item,
+        chatThread: { ...resetChatThread(item.chatThread), conversationId },
+      })),
+    }));
   },
   reloadActiveFile: async () => {
     const workspace = get().activeWorkspace();
@@ -1160,10 +1260,35 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
     }
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const promptWithContext = createPromptWithContext(userMessage, thread.contextItems);
+    // `thread` is the pre-append snapshot, so `thread.messages` are the
+    // *prior* turns — replay them into the prompt for harness-neutral
+    // continuity (the agent "remembers" the conversation). Trace excluded.
+    const promptWithContext = createPromptWithContext(
+      userMessage,
+      thread.contextItems,
+      thread.messages,
+    );
     const contextFilePaths = thread.contextItems
       .filter((item) => item.kind === "file")
       .map((item) => item.path);
+
+    // Ensure the thread maps to a persisted conversation, then save the
+    // just-appended user message (so a mid-stream crash keeps the
+    // question). Lazily create the conversation on first send.
+    let conversationId = thread.conversationId;
+    if (!conversationId) {
+      conversationId = await newConversation(workspaceId, harnessId).catch(() => null);
+      if (conversationId) {
+        const id = conversationId;
+        set((state) => ({
+          workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+            ...item,
+            chatThread: { ...item.chatThread, conversationId: id },
+          })),
+        }));
+      }
+    }
+    persistConversation(get().workspaces, workspaceId);
 
     // Batched setter — folds all stream-driven state changes for
     // this run into one set() per animation frame. See
@@ -1198,6 +1323,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       updateThread((current) => finalizeBobRun(current, runId, options));
       batched.flushNow();
       batched.dispose();
+      // Turn settled — persist the final answer (+ its trace + stats).
+      persistConversation(get().workspaces, workspaceId);
       if (releaseSubscription) {
         releaseSubscription();
         releaseSubscription = null;
@@ -1361,6 +1488,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       updateThread((current) => finalizeBobRun(current, runId, options));
       batched.flushNow();
       batched.dispose();
+      // Turn settled — persist the final answer (+ its trace + stats).
+      persistConversation(get().workspaces, workspaceId);
       if (releaseSubscription) {
         releaseSubscription();
         releaseSubscription = null;
@@ -1380,6 +1509,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         ),
       })),
     }));
+
+    // Ensure a persisted conversation + save the question (same as the
+    // main send path).
+    const existingConversationId = workspace.chatThread.conversationId;
+    if (!existingConversationId) {
+      const created = await newConversation(workspaceId, harnessId).catch(() => null);
+      if (created) {
+        set((state) => ({
+          workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+            ...item,
+            chatThread: { ...item.chatThread, conversationId: created },
+          })),
+        }));
+      }
+    }
+    persistConversation(get().workspaces, workspaceId);
 
     try {
       releaseSubscription = await subscribeHarnessRun(runId, (event) => {

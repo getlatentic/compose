@@ -1,11 +1,8 @@
 import type { Element, Nodes, Root, Text } from "hast";
-import rehypeSanitize from "rehype-sanitize";
-import remarkParse from "remark-parse";
-import remarkRehype from "remark-rehype";
-import { unified } from "unified";
+import { createMarkdownProcessor } from "../lib/markdown/processor";
 import type { MarkdownHeading, MarkdownPreviewDocument } from "./shared/markdownTypes";
 
-const processor = unified().use(remarkParse).use(remarkRehype).use(rehypeSanitize);
+const processor = createMarkdownProcessor();
 
 export async function renderMarkdownPreview(markdown: string): Promise<MarkdownPreviewDocument> {
   const markdownTree = processor.parse(markdown);

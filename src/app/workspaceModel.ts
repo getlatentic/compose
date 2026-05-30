@@ -8,6 +8,10 @@ import {
   type SourceRange,
   type WorkspaceCommentThread,
 } from "../features/comments/commentModel";
+import type {
+  ConversationMessageRecord,
+  ConversationSnapshot,
+} from "../lib/ipc/conversationsClient";
 import type { WorkspaceIndexSnapshot } from "../lib/ipc/indexClient";
 import type { BobInstallStatus } from "../lib/ipc/settingsClient";
 
@@ -76,6 +80,9 @@ export type ChatRunState = "idle" | "starting" | "streaming" | "error";
 export interface WorkspaceChatThread {
   activeLlmThreadId: string | null;
   activeRunId: string | null;
+  /** The persisted conversation this thread maps to (the `conversations`
+   * row). Null until the first send / load creates one. */
+  conversationId: string | null;
   contextItems: WorkspaceContextItem[];
   messages: WorkspaceChatMessage[];
   preparedCommand: string | null;
@@ -86,6 +93,8 @@ export interface WorkspaceChatThread {
 
 export interface WorkspaceChatMessage {
   activity: string | null;
+  /** The *answer* shown in the bubble. For bob this is fed only by the
+   * `attempt_completion` result; narration goes to `notices`/`status`. */
   content: string;
   id: string;
   llmThreadId?: string;
@@ -93,20 +102,58 @@ export interface WorkspaceChatMessage {
   runId?: string;
   streaming?: boolean;
   suggestions?: WorkspaceDocumentSuggestion[];
-  /** Accumulated model reasoning ("thinking"), rendered distinctly from
-   * `content`. Optional — present only when the harness streams it. */
-  thinking?: string;
-  /** Tool calls made during this message, rendered as state-ful cards
-   * (running → done/error), keyed by id. */
-  tools?: WorkspaceToolCall[];
+  /** Harness session id (bob's `init`). Trace-only. */
+  sessionId?: string;
+  /** The agent's process as an *ordered* timeline — reasoning, narration,
+   * and tool calls interleaved in arrival order (not grouped by kind).
+   * Drives both the agent-trace panel and the live status indicator (the
+   * last entry). The transient status is derived from this, never stored;
+   * the answer is `content`, fed only by `attempt_completion`. */
+  trace?: TraceEntry[];
+  /** Terminal usage stats (token / coin counts), shown as a float beside
+   * the trace toggle. */
+  stats?: WorkspaceRunStats;
 }
 
-/** A tool call surfaced on an assistant message; its status flips
- * running → done/error as ToolStart/ToolEnd events arrive. */
+/** One step in a message's agent trace, in arrival order. Consecutive
+ * `thinking`/`notice` deltas are concatenated into the same entry; tool
+ * calls are discrete and keyed by id. */
+export type TraceEntry =
+  | { kind: "thinking"; text: string }
+  | { kind: "notice"; text: string }
+  | { kind: "tool"; tool: WorkspaceToolCall };
+
+/** A tool call in the trace; its status flips running → done/error as
+ * ToolStart/ToolEnd events arrive. `input` is the call's arguments and
+ * `output` the result, paired in the trace. */
 export interface WorkspaceToolCall {
   id: string;
   name: string;
   status: "running" | "done" | "error";
+  input?: string;
+  output?: string;
+}
+
+/** Terminal run stats from the harness (bob's `result.stats`). */
+export interface WorkspaceRunStats {
+  totalTokens?: number;
+  toolCalls?: number;
+  coins?: number;
+}
+
+/**
+ * Sum the per-message usage stats across a whole thread, for the header
+ * total. Messages without stats (user turns, in-flight assistant turns)
+ * contribute nothing.
+ */
+export function sumChatThreadStats(thread: WorkspaceChatThread): WorkspaceRunStats {
+  let totalTokens = 0;
+  let coins = 0;
+  for (const message of thread.messages) {
+    totalTokens += message.stats?.totalTokens ?? 0;
+    coins += message.stats?.coins ?? 0;
+  }
+  return { totalTokens, coins };
 }
 
 export type WorkspaceSuggestionStatus = "pending" | "accepted" | "rejected" | "stale";
@@ -263,6 +310,7 @@ export function createWorkspaceFromPath(path: string): BobWorkspace {
     chatThread: {
       activeLlmThreadId: null,
       activeRunId: null,
+      conversationId: null,
       contextItems: [],
       messages: [],
       preparedCommand: null,
@@ -906,12 +954,41 @@ export function appendAssistantText(
 
 /**
  * Append a chunk of model reasoning to the active assistant message's
- * `thinking` buffer (rendered distinctly from `content`). Mirrors
- * `appendAssistantText`; a no-op when `runId` isn't the active run.
+ * trace. Consecutive thinking deltas concatenate into the same `thinking`
+ * entry; a tool/notice in between starts a fresh one. A no-op when `runId`
+ * isn't the active run.
  */
 export function appendAssistantThinking(
   chatThread: WorkspaceChatThread,
   runId: string,
+  delta: string,
+): WorkspaceChatThread {
+  return appendTraceText(chatThread, runId, "thinking", delta);
+}
+
+/**
+ * Append a chunk of agent *narration* to the active assistant message's
+ * trace (the intermediate "what I'm doing" text — never the answer).
+ * Consecutive notice deltas concatenate into the same `notice` entry; the
+ * last entry drives the live status indicator.
+ */
+export function appendAssistantNotice(
+  chatThread: WorkspaceChatThread,
+  runId: string,
+  delta: string,
+): WorkspaceChatThread {
+  return appendTraceText(chatThread, runId, "notice", delta);
+}
+
+/**
+ * Shared body for the streaming text traces (`thinking` / `notice`):
+ * concatenate the delta into the trailing entry when it is the same kind,
+ * else push a new entry, preserving arrival order.
+ */
+function appendTraceText(
+  chatThread: WorkspaceChatThread,
+  runId: string,
+  kind: "thinking" | "notice",
   delta: string,
 ): WorkspaceChatThread {
   if (!delta || chatThread.activeRunId !== runId) {
@@ -920,23 +997,86 @@ export function appendAssistantThinking(
   const { thread, messageId } = ensureAssistantMessage(chatThread, runId);
   return {
     ...thread,
-    messages: thread.messages.map((message) =>
-      message.id === messageId
-        ? { ...message, thinking: (message.thinking ?? "") + delta }
-        : message,
+    messages: thread.messages.map((message) => {
+      if (message.id !== messageId) {
+        return message;
+      }
+      const trace = message.trace ?? [];
+      const last = trace[trace.length - 1];
+      // Concatenate into the trailing entry when it's the same streaming
+      // kind; otherwise start a fresh entry (preserving arrival order).
+      const prevText = last && last.kind === kind && "text" in last ? last.text : null;
+      if (prevText !== null) {
+        const merged = makeTextEntry(kind, prevText + delta);
+        return { ...message, trace: [...trace.slice(0, -1), merged] };
+      }
+      // Don't start a brand-new entry for a whitespace-only delta: bob
+      // emits a "\n\n" message after a tool, which would otherwise become
+      // a blank trace step / blank status line. Real text that merely
+      // *begins* with whitespace still concatenates (handled above).
+      if (!delta.trim()) {
+        return message;
+      }
+      return { ...message, trace: [...trace, makeTextEntry(kind, delta)] };
+    }),
+  };
+}
+
+/** Build a `thinking`/`notice` trace entry from a literal kind (keeps the
+ * discriminated union sound — a `"thinking" | "notice"` variable can't be
+ * assigned to `TraceEntry` directly). */
+function makeTextEntry(kind: "thinking" | "notice", text: string): TraceEntry {
+  return kind === "thinking" ? { kind: "thinking", text } : { kind: "notice", text };
+}
+
+/** Record the harness session id on the active assistant message (trace). */
+export function setAssistantSession(
+  chatThread: WorkspaceChatThread,
+  runId: string,
+  sessionId: string,
+): WorkspaceChatThread {
+  if (!sessionId || chatThread.activeRunId !== runId) {
+    return chatThread;
+  }
+  const { thread, messageId } = ensureAssistantMessage(chatThread, runId);
+  return {
+    ...thread,
+    messages: thread.messages.map((item) =>
+      item.id === messageId ? { ...item, sessionId } : item,
+    ),
+  };
+}
+
+/** Record terminal usage stats on the active assistant message. */
+export function setAssistantStats(
+  chatThread: WorkspaceChatThread,
+  runId: string,
+  stats: WorkspaceRunStats,
+): WorkspaceChatThread {
+  if (chatThread.activeRunId !== runId) {
+    return chatThread;
+  }
+  const { thread, messageId } = ensureAssistantMessage(chatThread, runId);
+  return {
+    ...thread,
+    messages: thread.messages.map((item) =>
+      item.id === messageId ? { ...item, stats } : item,
     ),
   };
 }
 
 /**
- * Append a running tool call to the active assistant message (deduped by
- * id). A no-op when `runId` isn't the active run.
+ * Append a running tool call to the active assistant message's trace
+ * (deduped by id), capturing its `input`. Pushed in arrival order so it
+ * interleaves with reasoning/narration. A no-op when `runId` isn't the
+ * active run.
  */
 export function startAssistantToolCall(
   chatThread: WorkspaceChatThread,
   runId: string,
   toolCallId: string,
   name: string,
+  input?: string | null,
 ): WorkspaceChatThread {
   if (chatThread.activeRunId !== runId) {
     return chatThread;
@@ -948,24 +1088,31 @@ export function startAssistantToolCall(
       if (message.id !== messageId) {
         return message;
       }
-      const tools = message.tools ?? [];
-      if (tools.some((tool) => tool.id === toolCallId)) {
+      const trace = message.trace ?? [];
+      if (trace.some((entry) => entry.kind === "tool" && entry.tool.id === toolCallId)) {
         return message;
       }
-      return { ...message, tools: [...tools, { id: toolCallId, name, status: "running" as const }] };
+      const tool: WorkspaceToolCall = {
+        id: toolCallId,
+        name,
+        status: "running",
+        ...(input ? { input } : {}),
+      };
+      return { ...message, trace: [...trace, { kind: "tool", tool }] };
     }),
   };
 }
 
 /**
- * Flip a tool call's status to done/error (matched by id) on the active
- * assistant message.
+ * Flip a tool call's status to done/error (matched by id) in the active
+ * assistant message's trace, recording its `output`.
  */
 export function endAssistantToolCall(
   chatThread: WorkspaceChatThread,
   runId: string,
   toolCallId: string,
   ok: boolean,
+  output?: string | null,
 ): WorkspaceChatThread {
   if (chatThread.activeRunId !== runId) {
     return chatThread;
@@ -974,15 +1121,22 @@ export function endAssistantToolCall(
   return {
     ...thread,
     messages: thread.messages.map((message) => {
-      if (message.id !== messageId || !message.tools) {
+      if (message.id !== messageId || !message.trace) {
         return message;
       }
       return {
         ...message,
-        tools: message.tools.map((tool) =>
-          tool.id === toolCallId
-            ? { ...tool, status: ok ? ("done" as const) : ("error" as const) }
-            : tool,
+        trace: message.trace.map((entry) =>
+          entry.kind === "tool" && entry.tool.id === toolCallId
+            ? {
+                kind: "tool",
+                tool: {
+                  ...entry.tool,
+                  status: ok ? ("done" as const) : ("error" as const),
+                  ...(output ? { output } : {}),
+                },
+              }
+            : entry,
         ),
       };
     }),
@@ -1147,6 +1301,9 @@ export function finalizeBobRun(
     } else {
       activity = null;
     }
+    // The run is over: clearing `streaming` retires the live status
+    // indicator (which is derived from the trace + streaming). The trace
+    // itself is preserved.
     return { ...message, streaming: false, activity };
   });
 
@@ -1158,6 +1315,86 @@ export function finalizeBobRun(
     runError: hasFailure ? errorMessage ?? `Bob exited with code ${exitCode ?? "?"}` : null,
     runState: hasFailure ? "error" : "idle",
   };
+}
+
+/**
+ * Serialize a thread's messages for persistence — `<role, content, trace,
+ * stats>` per message. `trace`/`stats` are JSON-stringified (the trace is
+ * already the consolidated `TraceEntry[]` on the message; no transform).
+ * Streaming / placeholder messages with no content are skipped — only
+ * settled turns are persisted.
+ */
+export function serializeChatMessages(
+  thread: WorkspaceChatThread,
+): ConversationMessageRecord[] {
+  return thread.messages
+    .filter((message) => message.content.trim())
+    .map((message, index) => ({
+      messageId: message.id || `message-${index + 1}`,
+      role: message.role,
+      content: message.content,
+      ...(message.trace?.length ? { traceJson: JSON.stringify(message.trace) } : {}),
+      ...(message.stats ? { statsJson: JSON.stringify(message.stats) } : {}),
+      createdAt: index,
+    }));
+}
+
+/**
+ * Rebuild a chat thread from a persisted conversation snapshot, parsing
+ * `traceJson`/`statsJson` back into `trace`/`stats` so a restored
+ * assistant reply renders identically to live (bubble + "Show work" trace
+ * + stats float). `contextItems` is preserved from the current thread
+ * (the open-file context is live state, not persisted here).
+ */
+export function hydrateChatThread(
+  thread: WorkspaceChatThread,
+  snapshot: ConversationSnapshot,
+): WorkspaceChatThread {
+  const messages: WorkspaceChatMessage[] = snapshot.messages.map((record) => ({
+    activity: null,
+    content: record.content,
+    id: record.messageId,
+    role: record.role,
+    ...(record.traceJson ? { trace: safeParseJson<TraceEntry[]>(record.traceJson) } : {}),
+    ...(record.statsJson ? { stats: safeParseJson<WorkspaceRunStats>(record.statsJson) } : {}),
+  }));
+  return {
+    ...thread,
+    conversationId: snapshot.conversationId,
+    messages,
+    runError: null,
+    runState: "idle",
+  };
+}
+
+/**
+ * Clear a thread for "New chat": drop messages + run state, keep the live
+ * `contextItems` (the open file stays as context). `conversationId` is
+ * reset by the caller to the freshly-created id.
+ */
+export function resetChatThread(thread: WorkspaceChatThread): WorkspaceChatThread {
+  return {
+    ...thread,
+    activeLlmThreadId: null,
+    activeRunId: null,
+    conversationId: null,
+    messages: [],
+    preparedCommand: null,
+    prompt: "",
+    runError: null,
+    runState: "idle",
+  };
+}
+
+/** Parse persisted JSON, returning undefined on malformed data rather
+ * than throwing — a corrupt row degrades to "no trace/stats", not a
+ * crash that loses the whole conversation. */
+function safeParseJson<T>(value: string): T | undefined {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
 }
 
 // NOTE: bob's stream-json parsing used to live here
@@ -1212,11 +1449,34 @@ function replaceByByteRange(mapper: PositionMapper, range: SourceRange, replacem
   return `${mapper.text.slice(0, start)}${replacement}${mapper.text.slice(end)}`;
 }
 
-export function createPromptWithContext(prompt: string, contextItems: WorkspaceContextItem[]) {
+/**
+ * How many *prior* turns of the conversation to replay into the prompt
+ * for continuity. Caps prompt growth on a long conversation (oldest
+ * turns drop first). A "turn" here is a single prior message (user or
+ * assistant), so ~12 messages ≈ the last 6 exchanges.
+ */
+export const CONVERSATION_REPLAY_LIMIT = 12;
+
+/**
+ * Build the harness prompt: the prior-conversation transcript (for
+ * continuity), then the open-file / comment context, then the new
+ * prompt. The transcript is harness-neutral — it's just text every
+ * harness receives, so bob / claude / codex all "remember" the
+ * conversation without any native resume API.
+ *
+ * Only `<role, content>` is replayed — the answer and the user's words,
+ * never the agent trace (that is display history, not model input). The
+ * replay is capped at `CONVERSATION_REPLAY_LIMIT` most-recent prior
+ * messages so a long thread can't blow the prompt size.
+ */
+export function createPromptWithContext(
+  prompt: string,
+  contextItems: WorkspaceContextItem[],
+  priorMessages: WorkspaceChatMessage[] = [],
+) {
   const trimmedPrompt = prompt.trim();
-  if (contextItems.length === 0) {
-    return trimmedPrompt;
-  }
+
+  const transcript = buildConversationTranscript(priorMessages);
 
   const fileContext = contextItems
     .filter((item): item is WorkspaceFileContextItem => item.kind === "file")
@@ -1238,12 +1498,33 @@ export function createPromptWithContext(prompt: string, contextItems: WorkspaceC
     )
     .join("\n\n");
 
-  const contextBlocks = [
+  const blocks = [
+    transcript ? `Conversation so far:\n${transcript}` : null,
     fileContext ? `Context files:\n${fileContext}` : null,
     commentContext ? `Comment context:\n${commentContext}` : null,
   ].filter(Boolean);
 
-  return `${trimmedPrompt}\n\n${contextBlocks.join("\n\n")}`;
+  if (blocks.length === 0) {
+    return trimmedPrompt;
+  }
+  return `${blocks.join("\n\n")}\n\n${trimmedPrompt}`;
+}
+
+/** A compact `User: … / Assistant: …` transcript of the most-recent
+ * prior turns, content only (trace excluded), capped to the replay
+ * limit. Empty string when there's nothing to replay. */
+function buildConversationTranscript(priorMessages: WorkspaceChatMessage[]): string {
+  const replayable = priorMessages.filter((message) => message.content.trim());
+  const recent = replayable.slice(-CONVERSATION_REPLAY_LIMIT);
+  if (recent.length === 0) {
+    return "";
+  }
+  return recent
+    .map((message) => {
+      const speaker = message.role === "user" ? "User" : "Assistant";
+      return `${speaker}: ${message.content.trim()}`;
+    })
+    .join("\n\n");
 }
 
 export function createWorkspaceId(path: string) {

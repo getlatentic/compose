@@ -1597,6 +1597,26 @@ select {
   white-space: nowrap;
 }
 
+.bob-chat-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bob-chat-header__new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-chat-header__new:disabled {
+  color: var(--cds-icon-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
 .bob-mark {
   display: inline-grid;
   place-items: center;
@@ -1677,10 +1697,23 @@ select {
 }
 
 .bob-message-bubble {
+  // `min-inline-size: 0` lets the bubble shrink inside the flex column so
+  // a wide child (a code block, a long URL) scrolls/wraps within it
+  // instead of forcing the bubble — and the panel — wider.
+  min-inline-size: 0;
   max-inline-size: min(32rem, 85%);
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
-  line-height: 1.5rem;
+  // Unitless so every element (headings included) keeps the same rhythm
+  // relative to its own size.
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+// User turns (and the streaming placeholder) are plain text — preserve
+// the newlines the user typed. Assistant turns render markdown and must
+// not be pre-wrapped, or block elements inherit collapsed whitespace.
+.bob-message-bubble--plain {
   white-space: pre-wrap;
 }
 
@@ -1695,39 +1728,354 @@ select {
   background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-message-audit {
+// Rendered markdown inside an assistant bubble. The bubble owns the
+// padding; the markdown's outer blocks collapse their edge margins so
+// the text hugs that padding rather than doubling it. Font + line-height
+// are inherited from the bubble so every block reads as one consistent
+// type system; `overflow-wrap` keeps long words/URLs inside the panel.
+.bob-markdown {
+  display: flow-root;
+  overflow-wrap: anywhere;
+}
+
+// Carbon styles bare h1–h6 / p / a / lists globally with its own type
+// tokens, whose font-family chain differs from `:root` (Plex isn't
+// loaded, so they fall back to different system fonts) and which add
+// token letter-spacing. That makes raw markdown tags render in a
+// different, "uneven" font than the message bubble. Force the bubble's
+// font + normal letter-spacing back onto every text element. Code keeps
+// its monospace stack (set on `.bob-markdown code`).
+.bob-markdown,
+.bob-markdown p,
+.bob-markdown h1,
+.bob-markdown h2,
+.bob-markdown h3,
+.bob-markdown h4,
+.bob-markdown h5,
+.bob-markdown h6,
+.bob-markdown li,
+.bob-markdown a,
+.bob-markdown strong,
+.bob-markdown em,
+.bob-markdown blockquote,
+.bob-markdown th,
+.bob-markdown td {
+  font-family: inherit;
+  letter-spacing: normal;
+}
+
+.bob-markdown > :first-child {
+  margin-block-start: 0;
+}
+
+.bob-markdown > :last-child {
+  margin-block-end: 0;
+}
+
+.bob-markdown p,
+.bob-markdown ul,
+.bob-markdown ol,
+.bob-markdown blockquote,
+.bob-markdown pre,
+.bob-markdown table {
+  margin-block: 0.5rem;
+}
+
+// Headings read at the *same* size and line-height as body text — only
+// the weight sets them apart. Markdown from a chat reply shouldn't render
+// like a document with a big type scale; the consistent size keeps the
+// bubble calm. (Margins still give them breathing room.)
+.bob-markdown h1,
+.bob-markdown h2,
+.bob-markdown h3,
+.bob-markdown h4,
+.bob-markdown h5,
+.bob-markdown h6 {
+  margin-block: 0.5rem 0.25rem;
+  // Identical size + line-height to body (overriding the browser's larger
+  // heading defaults); only the weight sets a heading apart.
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.bob-markdown ul,
+.bob-markdown ol {
+  padding-inline-start: 1.25rem;
+}
+
+.bob-markdown li {
+  margin-block: 0.125rem;
+}
+
+.bob-markdown a {
+  color: var(--cds-link-primary, #0f62fe);
+  text-decoration: underline;
+}
+
+.bob-markdown code {
+  padding: 0.0625rem 0.25rem;
+  border-radius: 4px;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  // Slightly smaller than body so monospace doesn't look oversized, but
+  // breakable so a long token can't widen the bubble.
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.bob-markdown pre {
+  // Long code lines scroll within the block rather than stretch the
+  // bubble; `max-inline-size: 100%` keeps the block itself contained.
+  max-inline-size: 100%;
+  overflow-x: auto;
+  padding: 0.625rem 0.75rem;
+  border-radius: 6px;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+}
+
+.bob-markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.85em;
+  // Don't break inside a code block — preserve lines and scroll instead.
+  overflow-wrap: normal;
+  line-height: 1.45;
+}
+
+.bob-markdown blockquote {
+  margin-inline: 0;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 3px solid var(--cds-border-subtle-02, #c6c6c6);
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-markdown table {
+  // `display: block` + overflow lets a wide table scroll inside the
+  // bubble instead of forcing the panel wider.
+  display: block;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.bob-markdown th,
+.bob-markdown td {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  text-align: start;
+}
+
+.bob-markdown hr {
+  margin-block: 0.75rem;
+  border: 0;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-markdown img {
+  max-inline-size: 100%;
+  height: auto;
+}
+
+// Transient status indicator shown in the message slot while a turn is
+// running and the answer is still pending. Deliberately NOT styled like
+// the answer bubble (no border/background) — it must not read as a real
+// response. It rewrites itself as events arrive and is removed once the
+// answer lands.
+.bob-message-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-inline-size: min(32rem, 85%);
+  padding-block: 0.25rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
+.bob-message-status__dot {
+  flex-shrink: 0;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--cds-icon-secondary, #8d8d8d);
+  animation: bob-status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes bob-status-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+// Meta row under an assistant turn: the "Agent trace" toggle on the left,
+// usage stats floated to the right.
+.bob-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-self: stretch;
+  max-inline-size: min(32rem, 85%);
+}
+
+.bob-message-stats {
+  color: var(--cds-text-helper, #8d8d8d);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+// The trace toggle reveals the reasoning + tool calls below.
+.bob-message-trace__toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  max-inline-size: 9rem;
-  min-block-size: 1.5rem;
   border: 0;
-  padding-inline: 0.375rem;
-  color: var(--cds-text-secondary, #525252);
+  padding: 0.125rem 0.25rem;
   background: transparent;
+  color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.75rem;
   cursor: pointer;
 }
 
-.bob-message-row--user .bob-message-audit {
-  margin-inline-end: 0.25rem;
-}
-
-.bob-message-row--assistant .bob-message-audit {
-  margin-inline-start: 0.25rem;
-}
-
-.bob-message-audit:hover,
-.bob-message-audit:focus {
-  background: var(--cds-layer-hover-01, #e8e8e8);
+.bob-message-trace__toggle:hover,
+.bob-message-trace__toggle:focus-visible {
   color: var(--cds-text-primary, #161616);
   outline: none;
 }
 
-.bob-message-audit span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.bob-message-trace__chevron {
+  flex-shrink: 0;
+  transition: transform 0.12s ease;
+}
+
+.bob-message-trace__toggle[aria-expanded="true"] .bob-message-trace__chevron {
+  transform: rotate(180deg);
+}
+
+.bob-agent-trace {
+  display: grid;
+  gap: 0.5rem;
+  margin-block-start: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+// The ordered timeline: reasoning, narration, and tool calls in arrival
+// order, connected by a left rail so it reads as a sequence.
+.bob-trace-timeline {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bob-trace-step {
+  position: relative;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--cds-border-subtle-02, #c6c6c6);
+}
+
+// Narration step — the agent's own words, plain text.
+.bob-trace-notice {
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: var(--cds-text-secondary, #525252);
+  overflow-wrap: anywhere;
+}
+
+// Reasoning — a collapsed accordion so a long chain doesn't bury the rest.
+.bob-trace-thinking__summary {
+  cursor: pointer;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-trace-thinking__body {
+  margin-block-start: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: var(--cds-text-secondary, #525252);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+// Tool call — a status head, then input → output when captured.
+.bob-trace-tool {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-trace-tool__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+// When the tool has input/output it's an accordion; the summary carries
+// the head and a pointer affordance.
+.bob-trace-tool__summary {
+  cursor: pointer;
+}
+
+.bob-trace-tool__summary:focus-visible {
+  outline: none;
+  text-decoration: underline;
+}
+
+.bob-trace-tool__icon {
+  flex-shrink: 0;
+}
+
+.bob-trace-tool--running .bob-trace-tool__icon {
+  color: var(--cds-icon-secondary, #8d8d8d);
+}
+
+.bob-trace-tool--done .bob-trace-tool__icon {
+  color: var(--cds-support-success, #24a148);
+}
+
+.bob-trace-tool--error {
+  color: var(--cds-text-error, #da1e28);
+}
+
+.bob-trace-tool--error .bob-trace-tool__icon {
+  color: var(--cds-support-error, #da1e28);
+}
+
+.bob-trace-tool__name {
+  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-weight: 600;
+}
+
+.bob-trace-tool__io {
+  max-block-size: 8rem;
+  margin: 0;
+  padding: 0.25rem 0.375rem;
+  overflow-y: auto;
+  border-radius: 4px;
+  background: var(--cds-layer-02, #ffffff);
+  font-size: 0.6875rem;
+  line-height: 1.125rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bob-trace-tool__io--out {
+  color: var(--cds-text-secondary, #525252);
 }
 
 .bob-suggestion-list {
@@ -1911,13 +2259,18 @@ select {
 }
 
 .bob-chat-input-row textarea {
-  min-block-size: 2.25rem;
-  max-block-size: 6rem;
+  // Auto-grown by `useAutoGrowTextarea`: it sets an inline `height` from
+  // `scrollHeight`, which `min`/`max-block-size` clamp. `border-box` so
+  // the scrollHeight math lines up exactly with the padding (the global
+  // reset doesn't set box-sizing, so set it here).
+  box-sizing: border-box;
+  min-block-size: 2.5rem;
+  max-block-size: 12rem;
   resize: none;
   border: 0;
   border-block-end: 1px solid var(--cds-border-strong-01, #8d8d8d);
   outline: none;
-  padding: 0.4375rem 0.625rem;
+  padding: 0.5rem 0.625rem;
   background: var(--cds-field-01, #ffffff);
   color: var(--cds-text-primary, #161616);
   font-size: 0.875rem;
@@ -2131,191 +2484,6 @@ select {
   place-items: center;
   padding: 1rem;
   background: rgb(0 0 0 / 38%);
-}
-
-.bob-context-audit {
-  display: flex;
-  inline-size: min(100%, 48rem);
-  max-block-size: min(44rem, calc(100vh - 2rem));
-  min-block-size: 18rem;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--cds-layer-02, #ffffff);
-  box-shadow: 0 1rem 4rem rgb(0 0 0 / 22%);
-}
-
-.bob-context-audit__header {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem;
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-.bob-context-audit__header h2 {
-  margin: 0.25rem 0 0;
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.375rem;
-}
-
-.bob-context-audit__eyebrow,
-.bob-context-message__role {
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.03125rem;
-  text-transform: uppercase;
-}
-
-.bob-context-audit__body {
-  display: flex;
-  min-block-size: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 1rem;
-  overflow: auto;
-  padding: 1rem;
-}
-
-.bob-context-audit__status,
-.bob-context-audit__error,
-.bob-context-audit__empty {
-  margin: 1rem;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.875rem;
-  line-height: 1.375rem;
-}
-
-.bob-context-audit__error {
-  border-inline-start: 4px solid var(--cds-support-error, #da1e28);
-  padding: 0.75rem 1rem;
-  background: var(--cds-support-error-inverse, #fff1f1);
-  color: var(--cds-text-error, #da1e28);
-}
-
-.bob-context-audit__summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-}
-
-.bob-context-audit__summary span {
-  padding: 0.125rem 0.5rem;
-  background: var(--cds-layer-accent-01, #e0e0e0);
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.75rem;
-}
-
-.bob-context-audit__section {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.bob-context-audit__section h3 {
-  margin: 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.25rem;
-}
-
-.bob-context-list,
-.bob-context-message-list {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.bob-context-item,
-.bob-context-message {
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  background: var(--cds-layer-01, #f4f4f4);
-}
-
-.bob-context-item {
-  display: grid;
-  gap: 0.625rem;
-  padding: 0.75rem;
-}
-
-.bob-context-item__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.bob-context-item__path {
-  color: var(--cds-text-primary, #161616);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.25rem;
-  overflow-wrap: anywhere;
-}
-
-.bob-context-item__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-block-start: 0.25rem;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.6875rem;
-  line-height: 1rem;
-}
-
-.bob-context-item__open {
-  flex: 0 0 auto;
-  min-block-size: 2rem;
-  border: 0;
-  padding-inline: 0.75rem;
-  background: var(--cds-button-secondary, #393939);
-  color: var(--cds-text-on-color, #ffffff);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.bob-context-item__open:hover {
-  background: var(--cds-button-secondary-hover, #4c4c4c);
-}
-
-.bob-context-item__selection {
-  margin: 0;
-  padding: 0.5rem 0.75rem;
-  border-inline-start: 3px solid var(--cds-button-primary, #0f62fe);
-  background: var(--cds-highlight, #d0e2ff);
-  color: var(--cds-text-primary, #161616);
-  font-size: 0.8125rem;
-  line-height: 1.25rem;
-}
-
-.bob-context-item__surrounding,
-.bob-context-message pre {
-  margin: 0;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.8125rem;
-  line-height: 1.375rem;
-}
-
-.bob-context-item__surrounding {
-  max-block-size: 12rem;
-  padding: 0.75rem;
-  background: var(--cds-field-01, #ffffff);
-  color: var(--cds-text-secondary, #525252);
-}
-
-.bob-context-message {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.75rem;
-}
-
-.bob-context-message pre {
-  color: var(--cds-text-primary, #161616);
 }
 
 .bob-settings-dialog {

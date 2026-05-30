@@ -2,12 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   acceptWorkspaceSuggestion,
   appendAssistantText,
+  appendAssistantNotice,
   appendAssistantSuggestions,
-  appendAssistantThinking,
-  endAssistantToolCall,
-  startAssistantToolCall,
   assistantMessageContentForRun,
   appendUserChatMessage,
+  appendAssistantThinking,
+  endAssistantToolCall,
+  setAssistantSession,
+  setAssistantStats,
+  startAssistantToolCall,
+  createPromptWithContext,
+  hydrateChatThread,
+  resetChatThread,
+  serializeChatMessages,
+  CONVERSATION_REPLAY_LIMIT,
   applyFileBuffer,
   applyFsEvent,
   applyScanResult,
@@ -449,6 +457,91 @@ describe("workspace model", () => {
     expect(annotated.messages[annotated.messages.length - 1]?.activity).toBe("Reading notes/a.md");
   });
 
+  it("concatenates narration deltas into one ordered trace entry, never the answer", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+
+    // Two deltas of the same narration message concatenate into one entry.
+    const t1 = appendAssistantNotice(streaming, runId, "I'll read ");
+    const t2 = appendAssistantNotice(t1, runId, "the file.");
+    const msg = t2.messages[t2.messages.length - 1];
+    expect(msg?.trace).toEqual([{ kind: "notice", text: "I'll read the file." }]);
+    // Narration is never the answer.
+    expect(msg?.content).toBe("");
+
+    // The answer (attempt_completion → Text) is the only thing in content.
+    const answered = appendAssistantText(t2, runId, "The file is about relocation.");
+    expect(answered.messages[answered.messages.length - 1]?.content).toBe(
+      "The file is about relocation.",
+    );
+  });
+
+  it("does not start a trace entry for a whitespace-only notice", () => {
+    // bob emits a "\n\n" message after a tool; it must not become a blank
+    // trace step (which would blank the live status line).
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    let thread = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    thread = appendAssistantNotice(thread, runId, "Reading the notes.");
+    thread = startAssistantToolCall(thread, runId, "t1", "read_file", "{}");
+    thread = endAssistantToolCall(thread, runId, "t1", true, "ok");
+    thread = appendAssistantNotice(thread, runId, "\n\n"); // the bob filler
+    const trace = thread.messages[thread.messages.length - 1]?.trace ?? [];
+    // No blank notice entry was added after the tool.
+    expect(trace.filter((e) => e.kind === "notice")).toEqual([
+      { kind: "notice", text: "Reading the notes." },
+    ]);
+    expect(trace[trace.length - 1]?.kind).toBe("tool");
+  });
+
+  it("builds an ordered trace: thinking → notice → tool, with tool input/output", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    let thread = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    thread = appendAssistantThinking(thread, runId, "Let me ");
+    thread = appendAssistantThinking(thread, runId, "look.");
+    thread = appendAssistantNotice(thread, runId, "Reading the notes.");
+    thread = startAssistantToolCall(thread, runId, "t1", "read_file", '{"path":"a.md"}');
+    thread = endAssistantToolCall(thread, runId, "t1", true, "ok: 10 lines");
+
+    const trace = thread.messages[thread.messages.length - 1]?.trace;
+    // Interleaved in arrival order; consecutive thinking deltas merged.
+    expect(trace).toEqual([
+      { kind: "thinking", text: "Let me look." },
+      { kind: "notice", text: "Reading the notes." },
+      {
+        kind: "tool",
+        tool: {
+          id: "t1",
+          name: "read_file",
+          status: "done",
+          input: '{"path":"a.md"}',
+          output: "ok: 10 lines",
+        },
+      },
+    ]);
+
+    // The trace survives finalize.
+    const finalized = finalizeBobRun(thread, runId, { exitCode: 0 });
+    expect(finalized.messages[finalized.messages.length - 1]?.trace).toHaveLength(3);
+  });
+
+  it("records session id and usage stats on the assistant message", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const withSession = setAssistantSession(streaming, runId, "session-abc");
+    const withStats = setAssistantStats(withSession, runId, {
+      totalTokens: 1234,
+      toolCalls: 3,
+      coins: 0.06,
+    });
+    const msg = withStats.messages[withStats.messages.length - 1];
+    expect(msg?.sessionId).toBe("session-abc");
+    expect(msg?.stats).toEqual({ totalTokens: 1234, toolCalls: 3, coins: 0.06 });
+  });
+
   it("turns Bob suggested edits into pending message suggestions", () => {
     const workspace = applyFileBuffer(
       openWorkspaceFile(workspaceWithFiles("/tmp/alpha", ["a.md"]), "a.md"),
@@ -595,72 +688,115 @@ describe("workspace model", () => {
     expect(dismissed.fileContents["a.md"].conflict).toBe(false);
   });
 
-  // Gap 1 (fallback b): the thinking / toolStart / toolEnd model helpers are
-  // exercised directly. The store-driven path (capturing subscribeHarnessRun's
-  // callback) is async and entangled with the rAF-batched run pipeline; these
-  // pure reducers give a deterministic, non-flaky assertion of the same
-  // behavior handleHarnessRunEvent dispatches to.
-  describe("assistant streaming events (thinking + tool calls)", () => {
-    const streamingThread = () => {
-      const base = createWorkspaceFromPath("/tmp/test-vault").chatThread;
-      const withUser = appendUserChatMessage(base, "Refactor this", null);
-      const started = startBobRun(withUser, "run-1", null);
-      return markBobRunStreaming(started, "run-1");
+  it("serialize → hydrate round-trips content, trace, and stats", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    let thread = markBobRunStreaming(
+      startBobRun(appendUserChatMessage(workspace.chatThread, "what is this about?", null), runId),
+      runId,
+    );
+    thread = appendAssistantThinking(thread, runId, "Let me look.");
+    thread = startAssistantToolCall(thread, runId, "t1", "read_file", '{"path":"a.md"}');
+    thread = endAssistantToolCall(thread, runId, "t1", true, "ok: 10 lines");
+    thread = appendAssistantText(thread, runId, "It is a relocation plan.");
+    thread = setAssistantStats(thread, runId, { totalTokens: 21956, coins: 0.05 });
+    thread = finalizeBobRun(thread, runId, { exitCode: 0 });
+    thread = { ...thread, conversationId: "conv-1" };
+
+    const records = serializeChatMessages(thread);
+    // Only settled turns (with content): the user + the answer.
+    expect(records.map((r) => r.role)).toEqual(["user", "assistant"]);
+
+    const snapshot = {
+      conversationId: "conv-1",
+      title: null,
+      harnessId: "bob",
+      messages: records,
+      createdAt: 0,
+      updatedAt: 1,
     };
+    const fresh = createWorkspaceFromPath("/tmp/alpha").chatThread;
+    const restored = hydrateChatThread(fresh, snapshot);
 
-    it("accumulates model reasoning onto the active assistant message", () => {
-      const streaming = streamingThread();
-      const afterFirst = appendAssistantThinking(streaming, "run-1", "Let me ");
-      const afterSecond = appendAssistantThinking(afterFirst, "run-1", "think...");
+    expect(restored.conversationId).toBe("conv-1");
+    expect(restored.messages).toHaveLength(2);
+    const answer = restored.messages[1];
+    expect(answer.content).toBe("It is a relocation plan.");
+    // Trace survives → "Show work" still renders the consolidated steps.
+    expect(answer.trace).toEqual([
+      { kind: "thinking", text: "Let me look." },
+      {
+        kind: "tool",
+        tool: {
+          id: "t1",
+          name: "read_file",
+          status: "done",
+          input: '{"path":"a.md"}',
+          output: "ok: 10 lines",
+        },
+      },
+    ]);
+    expect(answer.stats).toEqual({ totalTokens: 21956, coins: 0.05 });
+  });
 
-      const assistant = afterSecond.messages[afterSecond.messages.length - 1];
-      expect(assistant.role).toBe("assistant");
-      expect(assistant.thinking).toBe("Let me think...");
-      expect(assistant.content).toBe("");
-    });
+  it("resetChatThread clears messages + run state, keeps context", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+    const withContext = setCurrentTabContext(workspace.chatThread, workspace.id, "a.md");
+    const runId = "run-1";
+    const used = finalizeBobRun(
+      appendAssistantText(
+        markBobRunStreaming(
+          startBobRun(appendUserChatMessage(withContext, "hi", null), runId),
+          runId,
+        ),
+        runId,
+        "done",
+      ),
+      runId,
+      { exitCode: 0 },
+    );
+    const reset = resetChatThread(used);
+    expect(reset.messages).toEqual([]);
+    expect(reset.runState).toBe("idle");
+    expect(reset.conversationId).toBeNull();
+    // The open-file context survives a New chat.
+    expect(reset.contextItems.map((item) => item.path)).toEqual(["a.md"]);
+  });
 
-    it("ignores reasoning + tool events for an inactive run", () => {
-      const streaming = streamingThread();
-      const thinking = appendAssistantThinking(streaming, "run-x", "nope");
-      const toolStart = startAssistantToolCall(thinking, "run-x", "t1", "Edit");
-      const toolEnd = endAssistantToolCall(toolStart, "run-x", "t1", true);
+  it("createPromptWithContext replays prior request/answer turns, excludes trace", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    let thread = markBobRunStreaming(
+      startBobRun(appendUserChatMessage(workspace.chatThread, "first question", null), runId),
+      runId,
+    );
+    thread = appendAssistantThinking(thread, runId, "secret reasoning");
+    thread = appendAssistantText(thread, runId, "first answer");
+    thread = finalizeBobRun(thread, runId, { exitCode: 0 });
 
-      const assistant = toolEnd.messages[toolEnd.messages.length - 1];
-      expect(assistant.thinking).toBeUndefined();
-      expect(assistant.tools).toBeUndefined();
-    });
+    const prompt = createPromptWithContext("second question", [], thread.messages);
+    expect(prompt).toContain("Conversation so far:");
+    expect(prompt).toContain("User: first question");
+    expect(prompt).toContain("Assistant: first answer");
+    // The new prompt comes last; the trace is never replayed.
+    expect(prompt.endsWith("second question")).toBe(true);
+    expect(prompt).not.toContain("secret reasoning");
+  });
 
-    it("opens a tool card as running and flips it to done on success", () => {
-      const streaming = streamingThread();
-      const opened = startAssistantToolCall(streaming, "run-1", "t1", "Edit");
-      const openedMessage = opened.messages[opened.messages.length - 1];
-      expect(openedMessage.tools).toEqual([{ id: "t1", name: "Edit", status: "running" }]);
+  it("createPromptWithContext caps the replayed transcript", () => {
+    const many = Array.from({ length: CONVERSATION_REPLAY_LIMIT + 6 }, (_, index) => ({
+      activity: null,
+      content: `turn ${index}`,
+      id: `m${index}`,
+      role: (index % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+    }));
+    const prompt = createPromptWithContext("now", [], many);
+    // Oldest dropped, newest kept.
+    expect(prompt).not.toContain("turn 0");
+    expect(prompt).toContain(`turn ${CONVERSATION_REPLAY_LIMIT + 5}`);
+  });
 
-      const closed = endAssistantToolCall(opened, "run-1", "t1", true);
-      const closedMessage = closed.messages[closed.messages.length - 1];
-      expect(closedMessage.tools).toEqual([{ id: "t1", name: "Edit", status: "done" }]);
-    });
-
-    it("flips a tool card to error when the tool fails", () => {
-      const streaming = streamingThread();
-      const opened = startAssistantToolCall(streaming, "run-1", "t1", "Bash");
-      const closed = endAssistantToolCall(opened, "run-1", "t1", false);
-
-      const message = closed.messages[closed.messages.length - 1];
-      expect(message.tools).toEqual([{ id: "t1", name: "Bash", status: "error" }]);
-    });
-
-    it("dedupes a repeated toolStart by id and tracks multiple tools", () => {
-      const streaming = streamingThread();
-      const first = startAssistantToolCall(streaming, "run-1", "t1", "Edit");
-      const duplicate = startAssistantToolCall(first, "run-1", "t1", "Edit");
-      const second = startAssistantToolCall(duplicate, "run-1", "t2", "Read");
-
-      const message = second.messages[second.messages.length - 1];
-      expect(message.tools).toEqual([
-        { id: "t1", name: "Edit", status: "running" },
-        { id: "t2", name: "Read", status: "running" },
-      ]);
-    });
+  it("createPromptWithContext with no prior turns and no context is just the prompt", () => {
+    expect(createPromptWithContext("hello", [])).toBe("hello");
   });
 });
