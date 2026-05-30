@@ -21,8 +21,6 @@
 
 pub mod events;
 pub mod harness;
-pub mod install;
-pub mod process;
 
 pub use events::{
     normalize_process_event, ByteRange, ParsedLine, RunEvent, SuggestedEdit, ToolCallEnd,
@@ -33,5 +31,9 @@ pub use harness::{
     HarnessReadiness, InstallCallback, ReasoningEffort, RunCallback, RunControl, RunHandle, RunMode,
     RunRequest, RunTuning,
 };
-pub use install::InstallEvent;
-pub use process::{augmented_node_path, spawn_streaming, ProcessEvent, ProcessHandle};
+// The generic subprocess engine + the install/process event shapes live in
+// the `cli-stream` leaf; re-export them so adapters + consumers reach them
+// through the framework (e.g. `use harness::spawn_streaming`).
+pub use cli_stream::{
+    augmented_node_path, spawn_streaming, InstallEvent, ProcessEvent, ProcessHandle,
+};

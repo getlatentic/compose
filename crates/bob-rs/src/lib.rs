@@ -26,11 +26,12 @@ pub use keychain::{
     auth_source, delete_api_key, read_api_key, resolve_api_key, write_api_key, KeySource,
 };
 pub use run::{spawn_bob, spawn_bob_raw, BobApprovalMode, BobChatMode, RunBobOptions};
-// The generic subprocess engine + install/process event shapes now live
-// in the neutral `agent-harness`; re-export them here so existing
-// `bob_rs::…` paths in the hosts keep compiling unchanged.
-pub use agent_harness::{
-    augmented_node_path, spawn_streaming, ProcessEvent, ProcessHandle, InstallEvent,
+// The generic subprocess engine + install/process event shapes live in the
+// `cli-stream` leaf; re-export them here so existing `bob_rs::…` paths in
+// the hosts keep compiling unchanged. (bob-rs depends only on cli-stream —
+// not on the harness framework — so it stays a standalone SDK.)
+pub use cli_stream::{
+    augmented_node_path, spawn_streaming, InstallEvent, ProcessEvent, ProcessHandle,
 };
 
 /// Bob's documented minimum Node.js version. Mirrored in

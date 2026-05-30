@@ -12,7 +12,7 @@
 //! their own runtime (axum's `tokio::sync::mpsc`, Tauri's
 //! `Channel`) wrap with a sender inside the closure.
 
-use agent_harness::InstallEvent;
+use cli_stream::InstallEvent;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Stdio};

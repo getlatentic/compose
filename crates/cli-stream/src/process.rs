@@ -24,7 +24,7 @@ use std::time::Duration;
 /// Raw events emitted to the caller's callback during a streaming run.
 /// JSON-tagged so axum SSE and Tauri Channel render identical payloads
 /// on the wire. Harness-neutral: a process-backed adapter parses the
-/// `Stdout` lines into the normalized [`crate::RunEvent`] vocabulary.
+/// `Stdout` lines into a normalized event vocabulary (e.g. `agent-harness`'s `RunEvent`).
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ProcessEvent {

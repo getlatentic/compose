@@ -7,7 +7,7 @@
 //! flags, `RunBobOptions`, and injecting bob's `BOBSHELL_API_KEY`.
 
 use crate::keychain::resolve_api_key;
-use agent_harness::{spawn_streaming, ProcessEvent, ProcessHandle};
+use cli_stream::{spawn_streaming, ProcessEvent, ProcessHandle};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

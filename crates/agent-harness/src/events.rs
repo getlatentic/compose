@@ -18,7 +18,7 @@
 
 use serde::Serialize;
 
-use crate::process::ProcessEvent;
+use cli_stream::ProcessEvent;
 
 /// A UTF-8 byte range into a document. Mirrors the persisted
 /// `ByteOffset` discipline (see `docs/editor-guide.md`): positions

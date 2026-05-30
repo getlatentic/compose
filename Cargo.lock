@@ -12,7 +12,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 name = "agent-harness"
 version = "0.1.0"
 dependencies = [
- "libc",
+ "cli-stream",
  "serde",
  "serde_json",
 ]
@@ -379,7 +379,7 @@ dependencies = [
 name = "bob-rs"
 version = "0.1.0"
 dependencies = [
- "agent-harness",
+ "cli-stream",
  "dirs 5.0.1",
  "keyring",
  "serde",
@@ -564,6 +564,14 @@ dependencies = [
  "num-traits",
  "serde",
  "windows-link 0.2.1",
+]
+
+[[package]]
+name = "cli-stream"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
 ]
 
 [[package]]

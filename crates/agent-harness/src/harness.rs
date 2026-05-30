@@ -26,8 +26,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use serde::{Deserialize, Serialize};
 
 use crate::events::RunEvent;
-use crate::install::InstallEvent;
-use crate::process::{spawn_streaming, ProcessEvent, ProcessHandle};
+use cli_stream::{spawn_streaming, InstallEvent, ProcessEvent, ProcessHandle};
 
 // --- Streaming callbacks --------------------------------------------
 

@@ -50,6 +50,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "crates/cli-stream",
   "crates/agent-harness",
   "crates/harness/bob",
   "crates/harness/claude",
