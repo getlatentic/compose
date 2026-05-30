@@ -1,30 +1,25 @@
 # Cargo workspace tying together the Rust pieces of Compose.
 #
-# The harness layer is a publishable crate family — a neutral core, one
-# crate per agent CLI, plus a Compose-specific registry:
+# The harness layer is a small publishable crate family — a leaf engine, a
+# standalone unofficial bob SDK, and an umbrella framework:
 #
-#   * `crates/agent-harness` (agent-harness)
-#                         — the neutral agent-harness core: the `Harness`
-#                           trait, the normalized `RunEvent` vocabulary,
-#                           the request/metadata types, and the generic
-#                           streaming subprocess engine (`spawn_streaming`
-#                           / `ProcessEvent` / `ProcessHandle`). No bob /
-#                           Compose / Tauri / axum knowledge. Publishable.
-#   * `crates/bob-rs`   — unofficial bob SDK: bob CLI detection, install
-#                           streaming, OS keychain, `spawn_bob`. Depends on
-#                           agent-harness for the engine; no harness/registry
-#                           knowledge. Publishable.
-#   * `crates/harness/{bob,claude,codex}`
-#                         — one adapter per agent CLI: each implements
-#                           `agent_harness::Harness` + a wire-format parser.
-#                           harness-bob wraps bob-rs; claude/codex depend
-#                           on agent-harness only. Publishable.
-#   * `crates/compose-harness`
-#                         — Compose's harness registry (`registry()` /
-#                           `harness_by_id()` / `harness_catalog()`) over
-#                           the harness-* adapters. The one place the set of
-#                           harnesses is declared; both hosts route through
-#                           it. Compose-specific — not published.
+#   * `crates/cli-stream` — generic streaming subprocess engine (spawn /
+#                           stream stdout-stderr lines / cancel / PATH
+#                           augment). No agent knowledge; the two crates
+#                           below depend on it. Publishable.
+#   * `crates/bob-rs`     — unofficial bob SDK: detection, install
+#                           streaming, OS keychain, `spawn_bob`. Depends
+#                           ONLY on cli-stream → truly standalone (no
+#                           harness framework). Publishable.
+#   * `crates/agent-harness` (imported as `harness`)
+#                         — the umbrella framework: the `Harness` trait, the
+#                           `RunEvent` vocabulary, the open `Registry`, plus
+#                           the built-in bob/claude/codex adapters as
+#                           feature-gated modules (`bob` wraps bob-rs;
+#                           claude/codex use cli-stream directly). With
+#                           `default-features = false` it's the lean
+#                           framework others build custom providers on.
+#                           Publishable.
 #   * `crates/bob-api`    — dev-only axum HTTP+SSE server. Wraps `bob-rs`
 #                           so the browser preview reaches the same spawn
 #                           code as the desktop build. Not shipped.
@@ -33,12 +28,11 @@
 #                           native (for `src-tauri`) and to WASM (for the
 #                           browser). Compose-internal.
 #   * `src-tauri`         — Tauri desktop host. Resolves the active harness
-#                           through `compose-harness`. The production runtime.
+#                           through `agent-harness`'s registry. Production runtime.
 #
-# The dependency arrow only points "up": agent-harness ← bob-rs ←
-# harness-bob; agent-harness ← harness-claude / harness-codex; the adapters
-# ← compose-harness ← the hosts. bob-rs never learns about the harness
-# abstraction; agent-harness never learns about any specific backend.
+# The dependency arrow only points "up": cli-stream ← bob-rs; cli-stream ←
+# agent-harness → bob-rs (its `bob` adapter module). cli-stream knows no
+# agent abstraction; bob-rs never learns about the harness framework.
 #
 # Why a workspace at all (vs. independent crates):
 #   * the hosts + adapters share crates via path deps. A workspace gives

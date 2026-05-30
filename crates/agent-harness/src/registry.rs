@@ -7,19 +7,26 @@
 //! implementing [`Harness`](crate::Harness) in their own crate and calling
 //! [`Registry::register`] — no fork of this crate required.
 
-use crate::{Bob, Claude, Codex, Harness, HarnessInfo};
+use crate::{Harness, HarnessInfo};
+#[cfg(feature = "bob")]
+use crate::Bob;
+#[cfg(feature = "claude")]
+use crate::Claude;
+#[cfg(feature = "codex")]
+use crate::Codex;
 
-/// The identifier used when the caller doesn't pick one. Sourced from the
-/// bob adapter so the default id has one owner.
-pub const DEFAULT_HARNESS_ID: &str = crate::BOB_HARNESS_ID;
+/// The identifier used when the caller doesn't pick one — the bob adapter,
+/// the conventional default. (A literal so it's available even in builds
+/// that compile without the `bob` feature; hosts override as needed.)
+pub const DEFAULT_HARNESS_ID: &str = "bob";
 
 /// An open set of harnesses. Build it with the ones you want — the
 /// built-ins (`Bob`/`Claude`/`Codex`) and/or your own:
 ///
 /// ```no_run
-/// use agent_harness::Registry;
+/// use harness::Registry;
 /// let reg = Registry::new()
-///     .register(agent_harness::Bob::new());
+///     .register(harness::Bob::new());
 ///     // .register(MyCustomHarness::new())   // your own impl Harness
 /// assert!(reg.by_id("bob").is_some());
 /// ```
@@ -63,24 +70,46 @@ impl Registry {
 /// A [`Registry`] of the built-in adapters compiled into this build
 /// (bob / claude / codex), in display order.
 pub fn default_registry() -> Registry {
-    Registry::new()
-        .register(Bob::new())
-        .register(Claude::new())
-        .register(Codex::new())
+    #[allow(unused_mut)]
+    let mut reg = Registry::new();
+    #[cfg(feature = "bob")]
+    {
+        reg = reg.register(Bob::new());
+    }
+    #[cfg(feature = "claude")]
+    {
+        reg = reg.register(Claude::new());
+    }
+    #[cfg(feature = "codex")]
+    {
+        reg = reg.register(Codex::new());
+    }
+    reg
 }
 
 /// Resolve a *built-in* harness by id, as an owned box — convenience for
 /// hosts that look one up per call. Returns `None` for an unknown id.
 pub fn harness_by_id(id: &str) -> Option<Box<dyn Harness>> {
-    if id == crate::BOB_HARNESS_ID {
-        Some(Box::new(Bob::new()))
-    } else if id == crate::CLAUDE_HARNESS_ID {
-        Some(Box::new(Claude::new()))
-    } else if id == crate::CODEX_HARNESS_ID {
-        Some(Box::new(Codex::new()))
-    } else {
-        None
+    let _ = id;
+    #[cfg(feature = "bob")]
+    {
+        if id == crate::BOB_HARNESS_ID {
+            return Some(Box::new(Bob::new()));
+        }
     }
+    #[cfg(feature = "claude")]
+    {
+        if id == crate::CLAUDE_HARNESS_ID {
+            return Some(Box::new(Claude::new()));
+        }
+    }
+    #[cfg(feature = "codex")]
+    {
+        if id == crate::CODEX_HARNESS_ID {
+            return Some(Box::new(Codex::new()));
+        }
+    }
+    None
 }
 
 /// Metadata for every built-in harness — the payload the UI picker renders.
