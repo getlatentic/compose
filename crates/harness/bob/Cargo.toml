@@ -3,12 +3,17 @@ name = "harness-bob"
 version = "0.1.0"
 edition = "2021"
 description = "bob CLI harness adapter for harness-core (wraps the bob-core SDK + bob's stream-json parser)."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+# repository = "https://github.com/<org>/compose"  # TODO: set when a public git remote exists
+keywords = ["bob", "agent", "harness", "cli"]
+categories = ["command-line-utilities"]
 
 [lib]
 
 [dependencies]
 # The neutral harness contract + subprocess engine.
-harness-core = { path = "../core" }
+harness-core = { path = "../core", version = "0.1.0" }
 # The unofficial bob SDK — detection, install, keychain, spawn_bob.
-bob-core = { path = "../../bob-core" }
+bob-core = { path = "../../bob-core", version = "0.1.0" }
 serde_json = "1"

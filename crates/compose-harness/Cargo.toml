@@ -3,6 +3,9 @@ name = "compose-harness"
 version = "0.1.0"
 edition = "2021"
 description = "Compose's harness registry over the harness-* adapter crates."
+# Compose-specific manager — never published; the harness-* adapters it
+# composes are the publishable units.
+publish = false
 
 # Compose-specific manager — not a publishable library. It depends on
 # the concrete adapter crates and exposes the registry both hosts share.

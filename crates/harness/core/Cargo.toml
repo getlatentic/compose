@@ -3,6 +3,11 @@ name = "harness-core"
 version = "0.1.0"
 edition = "2021"
 description = "Neutral agent-harness core: the Harness trait, normalized run events, and a streaming subprocess engine for driving agent CLIs."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+# repository = "https://github.com/<org>/compose"  # TODO: set when a public git remote exists
+keywords = ["agent", "llm", "harness", "cli", "subprocess"]
+categories = ["command-line-utilities", "api-bindings"]
 
 # Pure, neutral library — no bob/Compose/Tauri/axum knowledge. This is
 # the crate a downstream consumer depends on to build their own harness

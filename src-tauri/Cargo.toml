@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Compose — local-first AI writing workspace"
 authors = ["Compose contributors"]
 edition = "2021"
+# The desktop application host — not published to crates.io.
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

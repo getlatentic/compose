@@ -3,6 +3,11 @@ name = "bob-core"
 version = "0.1.0"
 edition = "2021"
 description = "Shared bob CLI integration: detection, install, keychain, run."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+# repository = "https://github.com/<org>/compose"  # TODO: set when a public git remote exists
+keywords = ["bob", "agent", "cli", "sdk", "keychain"]
+categories = ["command-line-utilities"]
 
 # Pure library. No binaries, no Tauri, no axum — those live in the
 # crates that depend on this one (`src-tauri` and `bob-api`). The
@@ -14,7 +19,7 @@ description = "Shared bob CLI integration: detection, install, keychain, run."
 [dependencies]
 # Neutral harness core: the generic subprocess engine + event shapes
 # bob-core builds its bob-specific spawn/install on top of.
-harness-core = { path = "../harness/core" }
+harness-core = { path = "../harness/core", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # OS keychain access. macOS Keychain Access via `apple-native`,

@@ -3,6 +3,8 @@ name = "bob-api"
 version = "0.1.0"
 edition = "2021"
 description = "HTTP+SSE dev server exposing bob-core to the browser preview."
+# Dev-only host binary — not published.
+publish = false
 
 [[bin]]
 name = "bob-api"

@@ -3,6 +3,8 @@ name = "workspace-index-wasm"
 version = "0.1.0"
 edition = "2021"
 description = "wasm-bindgen wrapper exposing the pure workspace-index core (build + search) to the browser."
+# Compose-internal; not part of the published harness family.
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
