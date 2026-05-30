@@ -44,8 +44,11 @@
 resolver = "2"
 members = [
   "crates/harness/core",
+  "crates/harness/bob",
+  "crates/harness/claude",
+  "crates/harness/codex",
+  "crates/compose-harness",
   "crates/bob-core",
-  "crates/compose-core",
   "crates/bob-api",
   "crates/workspace-index",
   "crates/workspace-index-wasm",

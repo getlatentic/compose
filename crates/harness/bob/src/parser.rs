@@ -7,19 +7,12 @@
 //! line with a snake_case `type` discriminator — see [`parse_bob_line`]
 //! for the grounded schema. Reasoning is streamed inline as
 //! `<thinking>…</thinking>` and routed by the stateful [`BobStreamParser`].
-//!
-//! (This stays in `compose-core` only until commit 3 moves it, with
-//! `BobHarness`, into the `harness-bob` crate.)
 
 use serde_json::Value;
 
-use harness_core::ProcessEvent;
-// Re-exported so the `crate::events::{…}` paths in the claude/codex
-// adapters keep resolving until they move to their own crates (commit 3).
-// The neutral parser vocabulary itself lives in `harness-core` now.
-pub use harness_core::{
-    normalize_process_event, ByteRange, ParsedLine, RunEvent, SuggestedEdit, ToolCallEnd,
-    ToolCallStart,
+use harness_core::{
+    normalize_process_event, ByteRange, ParsedLine, ProcessEvent, RunEvent, SuggestedEdit,
+    ToolCallEnd, ToolCallStart,
 };
 
 /// bob's adapter-side normalization: parse bob's `--output-format

@@ -22,13 +22,12 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use bob_core::{spawn_streaming, InstallEvent};
 use serde_json::{Map, Value};
 
-use crate::events::{normalize_process_event, ParsedLine, ToolCallEnd, ToolCallStart};
-use crate::{
-    CredentialSpec, Harness, HarnessCapabilities, HarnessInfo, HarnessReadiness, InstallCallback,
-    RunCallback, RunHandle, RunMode, RunRequest, RunTuning,
+use harness_core::{
+    normalize_process_event, spawn_streaming, CredentialSpec, Harness, HarnessCapabilities,
+    HarnessInfo, HarnessReadiness, InstallCallback, InstallEvent, ParsedLine, RunCallback,
+    RunHandle, RunMode, RunRequest, RunTuning, ToolCallEnd, ToolCallStart,
 };
 
 /// Registry id for the Codex harness.
@@ -106,7 +105,7 @@ impl Harness for CodexHarness {
         });
         let output = Command::new("npm")
             .args(["install", "-g", "@openai/codex"])
-            .env("PATH", bob_core::augmented_node_path())
+            .env("PATH", harness_core::augmented_node_path())
             .output()
             .map_err(|e| format!("failed to run npm: {e}"))?;
         for line in String::from_utf8_lossy(&output.stdout).lines() {
@@ -160,7 +159,7 @@ impl Harness for CodexHarness {
 
     fn login(&self, on_event: InstallCallback) -> Result<(), String> {
         // `codex login` runs the CLI's OAuth flow (opens the browser).
-        crate::run_login_command("codex", &["login"], on_event)
+        harness_core::run_login_command("codex", &["login"], on_event)
     }
 }
 
@@ -170,7 +169,7 @@ fn probe_version(program: &str) -> Option<String> {
     // installed CLI is mis-reported as "not installed".
     let output = Command::new(program)
         .arg("--version")
-        .env("PATH", bob_core::augmented_node_path())
+        .env("PATH", harness_core::augmented_node_path())
         .output()
         .ok()?;
     if !output.status.success() {
@@ -190,7 +189,7 @@ fn probe_version(program: &str) -> Option<String> {
 fn probe_codex_signed_in() -> bool {
     Command::new("codex")
         .args(["login", "status"])
-        .env("PATH", bob_core::augmented_node_path())
+        .env("PATH", harness_core::augmented_node_path())
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
@@ -373,7 +372,7 @@ fn truncate(s: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ReasoningEffort;
+    use harness_core::ReasoningEffort;
 
     #[test]
     fn agent_message_completed_becomes_text() {

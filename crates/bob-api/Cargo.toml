@@ -10,9 +10,6 @@ path = "src/main.rs"
 
 [dependencies]
 bob-core = { path = "../bob-core" }
-# Compose's neutral harness layer. The dev API resolves the active
-# harness through this registry (H2+); `bob` is the default adapter.
-compose-core = { path = "../compose-core" }
 # Web framework — async, type-driven routes, first-class SSE via
 # `axum::response::sse`. Pinned to a recent 0.8.x; track tower 0.5.
 axum = "0.8"

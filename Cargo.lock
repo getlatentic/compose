@@ -356,7 +356,6 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "bob-core",
- "compose-core",
  "dotenvy",
  "futures-util",
  "serde",
@@ -573,7 +572,9 @@ name = "compose"
 version = "0.1.0"
 dependencies = [
  "bob-core",
- "compose-core",
+ "compose-harness",
+ "harness-bob",
+ "harness-core",
  "keyring",
  "notify",
  "rusqlite",
@@ -591,13 +592,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "compose-core"
+name = "compose-harness"
 version = "0.1.0"
 dependencies = [
- "bob-core",
+ "harness-bob",
+ "harness-claude",
+ "harness-codex",
  "harness-core",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1593,6 +1594,31 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "harness-bob"
+version = "0.1.0"
+dependencies = [
+ "bob-core",
+ "harness-core",
+ "serde_json",
+]
+
+[[package]]
+name = "harness-claude"
+version = "0.1.0"
+dependencies = [
+ "harness-core",
+ "serde_json",
+]
+
+[[package]]
+name = "harness-codex"
+version = "0.1.0"
+dependencies = [
+ "harness-core",
+ "serde_json",
 ]
 
 [[package]]

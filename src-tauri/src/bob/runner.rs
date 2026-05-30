@@ -27,10 +27,11 @@ use crate::bob::{build_bob_command, BobApprovalMode, BobChatMode, BobCommandRequ
 use crate::settings::load_bob_api_key;
 use crate::workspace::WorkspaceRegistry;
 use bob_core::{spawn_bob_raw, ProcessEvent as CoreEvent, InstallEvent};
-use compose_core::events::normalize_bob_event;
-use compose_core::{
-    harness_by_id, HarnessReadiness, InstallCallback, ReasoningEffort, RunCallback, RunControl,
-    RunEvent, RunMode, RunRequest, RunTuning,
+use harness_bob::normalize_bob_event;
+use compose_harness::harness_by_id;
+use harness_core::{
+    HarnessReadiness, InstallCallback, ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode,
+    RunRequest, RunTuning,
 };
 use serde::Deserialize;
 use tauri::ipc::Channel;
@@ -56,7 +57,7 @@ pub struct HarnessRunRequest {
     /// Which harness to run. Defaults to `"bob"` so existing callers
     /// (and the chat panel until the H5 picker lands) keep hitting
     /// bob's richer Tauri path. Other ids route through the
-    /// `compose_core` registry.
+    /// `compose_harness` registry.
     #[serde(default = "default_harness_id")]
     pub harness_id: String,
     /// Per-harness run tuning the Settings picker exposes. Only the
@@ -72,10 +73,10 @@ pub struct HarnessRunRequest {
 }
 
 fn default_harness_id() -> String {
-    compose_core::DEFAULT_HARNESS_ID.to_owned()
+    compose_harness::DEFAULT_HARNESS_ID.to_owned()
 }
 
-// The IPC event shape is now `compose_core::RunEvent` — the
+// The IPC event shape is now `harness_core::RunEvent` — the
 // normalized stream every harness emits (Started / Text /
 // SuggestedEdits / Activity / Error / Exited). bob's raw
 // stream-json stdout is parsed into those by
@@ -239,13 +240,13 @@ pub fn run_harness_stream(
 
     // Route by harness. bob keeps its richer Tauri path below
     // (locator + workspace-aware argv + attached context files); any
-    // other harness goes through the generic `compose_core` registry.
+    // other harness goes through the generic `compose_harness` registry.
     let harness_id = if request.harness_id.trim().is_empty() {
-        compose_core::DEFAULT_HARNESS_ID.to_owned()
+        compose_harness::DEFAULT_HARNESS_ID.to_owned()
     } else {
         request.harness_id.clone()
     };
-    if harness_id != compose_core::DEFAULT_HARNESS_ID {
+    if harness_id != compose_harness::DEFAULT_HARNESS_ID {
         return run_via_harness(&harness_id, request, &registry, &runner, app);
     }
 
@@ -378,7 +379,7 @@ fn spawn_via_core(
     let run_id_for_cleanup = run_id.clone();
 
     // Bridge bob-core's raw event stream to Tauri's IPC events as
-    // the harness-neutral `compose_core::RunEvent`. Each core event
+    // the harness-neutral `harness_core::RunEvent`. Each core event
     // is run through `normalize_bob_event`, which parses bob's
     // stream-json stdout into Text / SuggestedEdits / Activity and
     // passes lifecycle events through. We suppress the core
@@ -423,7 +424,7 @@ fn spawn_via_core(
     Ok(())
 }
 
-/// Run a non-bob harness through the `compose_core` registry. bob
+/// Run a non-bob harness through the `compose_harness` registry. bob
 /// keeps its richer Tauri path in `run_harness_stream` (locator +
 /// workspace-aware argv + attached context files); this handles
 /// Claude Code, Codex, and any future adapter generically — resolve
@@ -541,8 +542,8 @@ fn emit_error_and_exit(app: &AppHandle, run_id: &str, message: &str) {
 /// `harness_list` — the harness catalog for the Settings picker
 /// (id, display name, description, whether it needs an install).
 #[tauri::command(async)]
-pub fn harness_list() -> Result<Vec<compose_core::HarnessInfo>, String> {
-    Ok(compose_core::harness_catalog())
+pub fn harness_list() -> Result<Vec<harness_core::HarnessInfo>, String> {
+    Ok(compose_harness::harness_catalog())
 }
 
 /// `harness_readiness` — probe one harness (installed / version /
@@ -669,9 +670,9 @@ mod tests {
     }
 
     // NOTE: the IPC event wire contract (kind tag + camelCase fields)
-    // is now owned + tested by `compose_core::events`
+    // is now owned + tested by `harness_bob`
     // (`run_event_serializes_with_kind_and_camelcase`). The runner
-    // just forwards `compose_core::RunEvent`, so there's nothing
+    // just forwards `harness_core::RunEvent`, so there's nothing
     // src-tauri-specific left to assert about the event shape here.
 
     #[test]
