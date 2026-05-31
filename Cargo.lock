@@ -11,7 +11,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 [[package]]
 name = "agent-harness"
 version = "0.1.0"
-source = "git+https://github.com/tosinamuda/agent-harness#cfc7de565edcdd0ac22a6d8059cb0f1fb3bf0ffe"
+source = "git+https://github.com/tosinamuda/agent-harness#8378fb36d1ba4322e98309416b3237231136242e"
 dependencies = [
  "bob-rs",
  "cli-stream",
@@ -380,7 +380,7 @@ dependencies = [
 [[package]]
 name = "bob-rs"
 version = "0.1.0"
-source = "git+https://github.com/tosinamuda/agent-harness#cfc7de565edcdd0ac22a6d8059cb0f1fb3bf0ffe"
+source = "git+https://github.com/tosinamuda/agent-harness#8378fb36d1ba4322e98309416b3237231136242e"
 dependencies = [
  "cli-stream",
  "dirs 5.0.1",
@@ -572,7 +572,7 @@ dependencies = [
 [[package]]
 name = "cli-stream"
 version = "0.1.0"
-source = "git+https://github.com/tosinamuda/agent-harness#cfc7de565edcdd0ac22a6d8059cb0f1fb3bf0ffe"
+source = "git+https://github.com/tosinamuda/agent-harness#8378fb36d1ba4322e98309416b3237231136242e"
 dependencies = [
  "libc",
  "serde",
@@ -886,7 +886,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1078,7 +1078,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2334,7 +2334,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3154,7 +3154,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3539,7 +3539,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4048,10 +4048,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.2",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4429,7 +4429,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4458,7 +4458,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4876,7 +4876,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
