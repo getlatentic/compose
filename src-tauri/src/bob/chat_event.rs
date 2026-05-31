@@ -3,7 +3,7 @@
 //!
 //! `agent-harness` is a public library: it returns what each model emits,
 //! faithfully, in two tiers — a harness-neutral [`harness::RunEvent`]
-//! (default) and bob's untyped raw passthrough ([`harness::parse_bob_raw`],
+//! (default) and a harness-agnostic raw passthrough ([`harness::parse_raw_line`],
 //! one stdout line → one `serde_json::Value`, opt-in). Neither tier carries
 //! Compose's opinions, and that is deliberate. This module is where those
 //! opinions live: the three-surface chat model (status indicator / final
@@ -35,7 +35,7 @@
 //! `kind`-tagged, camelCase union. Keep the two in lockstep.
 
 use bob_rs::ProcessEvent;
-use harness::{parse_bob_raw, RunEvent, SuggestedEdit};
+use harness::{parse_raw_line, RunEvent, SuggestedEdit};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -223,14 +223,14 @@ impl BobChatMapper {
                     vec![ChatEvent::Activity { run_id, message }]
                 }
             }
-            ProcessEvent::Stdout { run_id, line } => self.map_raw(parse_bob_raw(&line), &run_id),
+            ProcessEvent::Stdout { run_id, line } => self.map_raw(parse_raw_line(&line), &run_id),
         }
     }
 
     /// The interpretation core: one raw stdout line (decoded JSON) → Compose
     /// surfaces. bob emits one object per line with a snake_case `type`
     /// discriminator; reading it is Compose's interpretation (the lib's raw
-    /// tier imposes no schema — see [`parse_bob_raw`]).
+    /// tier imposes no schema — see [`parse_raw_line`]).
     fn map_raw(&mut self, value: Value, run_id: &str) -> Vec<ChatEvent> {
         let mut out = Vec::new();
         // A non-object decode — a non-JSON line surfaced as a JSON string, or
@@ -451,7 +451,7 @@ mod tests {
     use super::*;
 
     fn raw(line: &str) -> Value {
-        parse_bob_raw(line)
+        parse_raw_line(line)
     }
 
     // --- bob raw → ChatEvent interpretation ---------------------------------
