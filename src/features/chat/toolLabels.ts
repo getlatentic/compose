@@ -27,6 +27,13 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
   list_files: { verb: "Looking through", object: "your files", noun: "Listed files" },
   execute_command: { verb: "Running", object: "a command", noun: "Ran a command" },
   attempt_completion: { verb: "Finalizing", object: "", noun: "Finished up" },
+  // Codex tool identifiers (its `--json` item types). The command/args ride
+  // in the tool input, never the name, so the live status reads "Running a
+  // command…" rather than a raw shell line.
+  command_execution: { verb: "Running", object: "a command", noun: "Ran a command" },
+  file_change: { verb: "Editing", object: "files", noun: "Edited files" },
+  web_search: { verb: "Searching", object: "the web", noun: "Searched the web" },
+  mcp_tool_call: { verb: "Running", object: "a tool", noun: "Used a tool" },
 };
 
 function deUnderscore(name: string): string {
