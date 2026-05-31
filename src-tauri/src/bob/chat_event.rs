@@ -23,10 +23,12 @@
 //!
 //! * **claude/codex → neutral.** Their streamed text *is* the answer — no
 //!   narration concept — so the neutral tier is exactly right; map it
-//!   ~1:1 ([`run_event_to_chat`]). The neutral tier carries no
-//!   tool-input/output, session, or usage, so those `ChatEvent` fields stay
-//!   empty for these harnesses — an accepted graceful degradation until the
-//!   neutral tier gains those facts. Bob, on the raw tier, populates them.
+//!   ~1:1 ([`run_event_to_chat`]). The neutral tier now also carries session
+//!   identity, token usage, and tool input/output, so those `ChatEvent`
+//!   fields are populated for these harnesses too — reaching bob's fidelity.
+//!   Only the bob-specific stats stay empty (`tool_calls` / `coins`, which
+//!   live in bob's raw `result.stats`), plus Claude's tool *input* (it
+//!   streams incrementally rather than arriving inline).
 //!
 //! [`ChatEvent`] is Compose's own type. Its `#[serde]` shape is the
 //! front-end contract (`src/lib/ipc/bobClient.ts` `HarnessRunEvent`): a
@@ -55,16 +57,18 @@ pub enum ChatEvent {
     Notice { run_id: String, message: String },
     /// Model reasoning → the trace's reasoning accordion.
     Thinking { run_id: String, delta: String },
-    /// A tool call began. `input` is the tool's arguments (bob: the
-    /// `parameters` object as pretty JSON; claude/codex: `null`).
+    /// A tool call began. `input` is the tool's arguments: bob's
+    /// `parameters` and codex's `command`; `null` for Claude (it streams
+    /// args incrementally, so they don't arrive inline).
     ToolStart {
         run_id: String,
         tool_call_id: String,
         name: String,
         input: Option<String>,
     },
-    /// A tool call finished. `output` is the tool's result text (bob;
-    /// claude/codex: `null`).
+    /// A tool call finished. `output` is the tool's result text — bob's
+    /// `tool_result.output`, codex's `aggregated_output`, Claude's
+    /// `tool_result.content`.
     ToolEnd {
         run_id: String,
         tool_call_id: String,
@@ -103,35 +107,63 @@ pub enum ChatEvent {
 
 /// Map a neutral [`RunEvent`] (claude/codex) to a [`ChatEvent`], ~1:1.
 /// Their streamed `Text` is the answer, so it maps to [`ChatEvent::Text`]
-/// (no narration concept). Tool input/output, session, and usage are absent
-/// from the neutral tier, so those fields are `None` here.
+/// (no narration concept). The neutral tier now carries session identity,
+/// token usage, and tool input/output, so those pass straight through —
+/// reaching bob's fidelity. Only the bob-specific stats stay `None`:
+/// `tool_calls` + `coins` live in bob's raw `result.stats`, not the neutral
+/// tier (and Claude's tool *input* is `None` upstream — it streams
+/// incrementally rather than arriving inline).
 pub fn run_event_to_chat(event: RunEvent) -> ChatEvent {
     match event {
         RunEvent::Started { run_id } => ChatEvent::Started { run_id },
+        RunEvent::Session {
+            run_id,
+            session_id,
+            model,
+        } => ChatEvent::Session {
+            run_id,
+            // claude/codex always report an id; default defensively otherwise.
+            session_id: session_id.unwrap_or_default(),
+            model,
+        },
         RunEvent::Text { run_id, delta } => ChatEvent::Text { run_id, delta },
         RunEvent::Thinking { run_id, delta } => ChatEvent::Thinking { run_id, delta },
         RunEvent::ToolStart {
             run_id,
             tool_call_id,
             name,
+            input,
         } => ChatEvent::ToolStart {
             run_id,
             tool_call_id,
             name,
-            input: None,
+            input,
         },
         RunEvent::ToolEnd {
             run_id,
             tool_call_id,
             ok,
+            output,
         } => ChatEvent::ToolEnd {
             run_id,
             tool_call_id,
             ok,
-            output: None,
+            output,
         },
         RunEvent::SuggestedEdits { run_id, edits } => ChatEvent::SuggestedEdits { run_id, edits },
         RunEvent::Activity { run_id, message } => ChatEvent::Activity { run_id, message },
+        RunEvent::Usage {
+            run_id,
+            total_tokens,
+            ..
+        } => ChatEvent::Usage {
+            run_id,
+            // Neutral total → the stats float. `tool_calls` + `coins` are
+            // bob-specific (from bob's raw stats), so absent for claude/codex.
+            total_tokens: total_tokens.map(|t| t as i64),
+            tool_calls: None,
+            coins: None,
+        },
         RunEvent::Error { run_id, message } => ChatEvent::Error { run_id, message },
         RunEvent::Exited {
             run_id,
@@ -743,18 +775,21 @@ mod tests {
     }
 
     #[test]
-    fn neutral_tool_events_have_no_io() {
+    fn neutral_tool_events_carry_io() {
+        // The enriched neutral tier now carries tool input/output (codex/bob);
+        // run_event_to_chat passes them straight through.
         assert_eq!(
             run_event_to_chat(RunEvent::ToolStart {
                 run_id: "r".to_owned(),
                 tool_call_id: "t".to_owned(),
                 name: "shell".to_owned(),
+                input: Some("ls -la".to_owned()),
             }),
             ChatEvent::ToolStart {
                 run_id: "r".to_owned(),
                 tool_call_id: "t".to_owned(),
                 name: "shell".to_owned(),
-                input: None,
+                input: Some("ls -la".to_owned()),
             }
         );
         assert_eq!(
@@ -762,12 +797,44 @@ mod tests {
                 run_id: "r".to_owned(),
                 tool_call_id: "t".to_owned(),
                 ok: true,
+                output: Some("done".to_owned()),
             }),
             ChatEvent::ToolEnd {
                 run_id: "r".to_owned(),
                 tool_call_id: "t".to_owned(),
                 ok: true,
-                output: None,
+                output: Some("done".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn neutral_session_and_usage_map_through() {
+        assert_eq!(
+            run_event_to_chat(RunEvent::Session {
+                run_id: "r".to_owned(),
+                session_id: Some("sess-1".to_owned()),
+                model: Some("opus".to_owned()),
+            }),
+            ChatEvent::Session {
+                run_id: "r".to_owned(),
+                session_id: "sess-1".to_owned(),
+                model: Some("opus".to_owned()),
+            }
+        );
+        // Neutral usage → stats float; tool_calls + coins are bob-only → None.
+        assert_eq!(
+            run_event_to_chat(RunEvent::Usage {
+                run_id: "r".to_owned(),
+                input_tokens: Some(100),
+                output_tokens: Some(40),
+                total_tokens: Some(140),
+            }),
+            ChatEvent::Usage {
+                run_id: "r".to_owned(),
+                total_tokens: Some(140),
+                tool_calls: None,
+                coins: None,
             }
         );
     }
