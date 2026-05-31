@@ -632,13 +632,13 @@ function persistedRunBody(
     return { body: assistantBody, role: "assistant" as const };
   }
   if (options.cancelled) {
-    return { body: "Bob run cancelled", role: "system" as const };
+    return { body: "Run cancelled", role: "system" as const };
   }
   if (options.errorMessage) {
     return { body: options.errorMessage, role: "system" as const };
   }
   if (typeof options.exitCode === "number" && options.exitCode !== 0) {
-    return { body: `Bob exited with code ${options.exitCode}`, role: "system" as const };
+    return { body: `The assistant exited with code ${options.exitCode}`, role: "system" as const };
   }
   return null;
 }
@@ -761,7 +761,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     try {
       await cancelHarnessRunIpc(runId);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not cancel Bob run";
+      const message = error instanceof Error ? error.message : "Could not cancel the run";
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
           ...item,
@@ -1390,7 +1390,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         maxTurns: tuning.maxTurns,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Bob run could not start";
+      const message = error instanceof Error ? error.message : "The assistant could not start";
       const currentThread =
         get().workspaces.find((item) => item.id === workspaceId)?.chatThread ?? null;
       if (currentThread?.activeRunId === runId) {
@@ -1553,7 +1553,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         maxTurns: tuning.maxTurns,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Bob run could not start";
+      const message = error instanceof Error ? error.message : "The assistant could not start";
       const currentThread =
         get().workspaces.find((item) => item.id === workspaceId)?.chatThread ?? null;
       if (currentThread?.activeRunId === runId) {

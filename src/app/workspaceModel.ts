@@ -1297,7 +1297,7 @@ export function finalizeBobRun(
     } else if (errorMessage) {
       activity = errorMessage;
     } else if (typeof exitCode === "number" && exitCode !== 0) {
-      activity = `Bob exited with code ${exitCode}`;
+      activity = `The assistant exited with code ${exitCode}`;
     } else {
       activity = null;
     }
@@ -1312,7 +1312,7 @@ export function finalizeBobRun(
     activeLlmThreadId: null,
     activeRunId: null,
     messages,
-    runError: hasFailure ? errorMessage ?? `Bob exited with code ${exitCode ?? "?"}` : null,
+    runError: hasFailure ? errorMessage ?? `The assistant exited with code ${exitCode ?? "?"}` : null,
     runState: hasFailure ? "error" : "idle",
   };
 }
