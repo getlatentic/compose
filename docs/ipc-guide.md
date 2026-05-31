@@ -96,6 +96,16 @@ identically. The Settings picker persists the selection + per-harness
 options and the chat send forwards them. So Claude Code / Codex are
 user-reachable today.
 
+**Harness errors are typed; stringify at the boundary.** `Harness`'s
+`install` / `run` / `login` and `RunControl::cancel` return the typed
+`harness::HarnessError` (Spawn / Install / Login / Cancel / Other), so the
+*adapter* can branch on the kind of failure. Compose's Tauri commands stay
+`Result<_, String>` — the front-end only ever sees a rejection string — so
+**`.map_err(|e| e.to_string())` (or `error.to_string()`) at the command /
+run-event boundary** in `runner.rs`, the single place the typed error meets
+the wire. Don't propagate `HarnessError` into the command signature or the
+`HARNESS_RUN_EVENT` payload; the boundary is where it collapses to text.
+
 **Capabilities, not id checks.** Each harness declares a
 `HarnessCapabilities` (on `HarnessInfo`): `credential_required`,
 `previews_edits`, model list, `allows_custom_model`, `supports_effort`,

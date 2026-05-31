@@ -140,10 +140,11 @@ impl BobRunnerState {
         // Flip the flag first — this lets a still-preparing
         // spawn bail out the moment its blocking work returns.
         run.cancelled.store(true, Ordering::SeqCst);
-        // If the child is already alive, signal it too.
+        // If the child is already alive, signal it too. `RunControl::cancel`
+        // returns the typed `HarnessError`; stringify it for the Tauri boundary.
         if let Ok(guard) = run.handle.lock() {
             if let Some(handle) = guard.as_ref() {
-                return handle.cancel();
+                return handle.cancel().map_err(|e| e.to_string());
             }
         }
         Ok(())
@@ -526,9 +527,12 @@ fn run_via_harness(
             Ok(())
         }
         Err(error) => {
-            emit_error_and_exit(&app, &run_id, &error);
+            // `Harness::run` returns the typed `HarnessError`; stringify once
+            // for the run-event channel + the command's `Result<_, String>`.
+            let message = error.to_string();
+            emit_error_and_exit(&app, &run_id, &message);
             runner.unregister(&run_id);
-            Err(error)
+            Err(message)
         }
     }
 }
@@ -580,7 +584,8 @@ pub fn harness_install(harness_id: String, on_event: Channel<InstallEvent>) -> R
     let callback: InstallCallback = std::sync::Arc::new(move |event| {
         let _ = on_event.send(event);
     });
-    harness.install(callback)
+    // `install` returns the typed `HarnessError`; stringify at the boundary.
+    harness.install(callback).map_err(|e| e.to_string())
 }
 
 /// `harness_login` — stream a harness's interactive sign-in (its CLI's
@@ -595,7 +600,8 @@ pub fn harness_login(harness_id: String, on_event: Channel<InstallEvent>) -> Res
     let callback: InstallCallback = std::sync::Arc::new(move |event| {
         let _ = on_event.send(event);
     });
-    harness.login(callback)
+    // `login` returns the typed `HarnessError`; stringify at the boundary.
+    harness.login(callback).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
