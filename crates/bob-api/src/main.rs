@@ -153,7 +153,7 @@ async fn handle_key_save(Json(body): Json<KeySaveBody>) -> impl IntoResponse {
         ),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": err })),
+            Json(serde_json::json!({ "error": err.to_string() })),
         ),
     }
 }
@@ -204,7 +204,10 @@ async fn handle_run(Json(opts): Json<RunBobOptions>) -> Sse<impl Stream<Item = R
                 drop(tx);
             }
             Err(err) => {
-                let _ = tx.send(ProcessEvent::Error { run_id: String::new(), message: err });
+                let _ = tx.send(ProcessEvent::Error {
+                    run_id: String::new(),
+                    message: err.to_string(),
+                });
                 drop(tx);
             }
         }
@@ -277,6 +280,9 @@ fn map_event_to_sse(event: ProcessEvent) -> Vec<Event> {
         ProcessEvent::Exited { exit_code, run_id, .. } => vec![Event::default()
             .event("end")
             .data(serde_json::json!({ "exitCode": exit_code, "runId": run_id }).to_string())],
+        // `ProcessEvent` is `#[non_exhaustive]`; a future engine variant has
+        // no SSE wire shape the TS client knows, so emit nothing.
+        _ => Vec::new(),
     }
 }
 
@@ -286,7 +292,7 @@ async fn handle_key_delete() -> impl IntoResponse {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": err })),
+            Json(serde_json::json!({ "error": err.to_string() })),
         ),
     }
 }

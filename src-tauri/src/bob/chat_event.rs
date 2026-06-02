@@ -112,9 +112,10 @@ pub enum ChatEvent {
 /// reaching bob's fidelity. Only the bob-specific stats stay `None`:
 /// `tool_calls` + `coins` live in bob's raw `result.stats`, not the neutral
 /// tier (and Claude's tool *input* is `None` upstream — it streams
-/// incrementally rather than arriving inline).
-pub fn run_event_to_chat(event: RunEvent) -> ChatEvent {
-    match event {
+/// incrementally rather than arriving inline). Returns `None` for a future
+/// `#[non_exhaustive]` `RunEvent` variant Compose doesn't model yet.
+pub fn run_event_to_chat(event: RunEvent) -> Option<ChatEvent> {
+    Some(match event {
         RunEvent::Started { run_id } => ChatEvent::Started { run_id },
         RunEvent::Session {
             run_id,
@@ -174,7 +175,10 @@ pub fn run_event_to_chat(event: RunEvent) -> ChatEvent {
             exit_code,
             cancelled,
         },
-    }
+        // `RunEvent` is `#[non_exhaustive]`: a future neutral variant Compose
+        // doesn't model yet maps to no `ChatEvent` — drop it, don't guess.
+        _ => return None,
+    })
 }
 
 /// Compose's interpretation of bob's raw stream, held per-run.
@@ -224,6 +228,9 @@ impl BobChatMapper {
                 }
             }
             ProcessEvent::Stdout { run_id, line } => self.map_raw(parse_raw_line(&line), &run_id),
+            // `ProcessEvent` is `#[non_exhaustive]`: a future engine variant
+            // yields no Compose surface.
+            _ => Vec::new(),
         }
     }
 
@@ -767,10 +774,10 @@ mod tests {
                 run_id: "r".to_owned(),
                 delta: "hello".to_owned(),
             }),
-            ChatEvent::Text {
+            Some(ChatEvent::Text {
                 run_id: "r".to_owned(),
                 delta: "hello".to_owned(),
-            }
+            })
         );
     }
 
@@ -785,12 +792,12 @@ mod tests {
                 name: "shell".to_owned(),
                 input: Some("ls -la".to_owned()),
             }),
-            ChatEvent::ToolStart {
+            Some(ChatEvent::ToolStart {
                 run_id: "r".to_owned(),
                 tool_call_id: "t".to_owned(),
                 name: "shell".to_owned(),
                 input: Some("ls -la".to_owned()),
-            }
+            })
         );
         assert_eq!(
             run_event_to_chat(RunEvent::ToolEnd {
@@ -799,12 +806,12 @@ mod tests {
                 ok: true,
                 output: Some("done".to_owned()),
             }),
-            ChatEvent::ToolEnd {
+            Some(ChatEvent::ToolEnd {
                 run_id: "r".to_owned(),
                 tool_call_id: "t".to_owned(),
                 ok: true,
                 output: Some("done".to_owned()),
-            }
+            })
         );
     }
 
@@ -816,11 +823,11 @@ mod tests {
                 session_id: Some("sess-1".to_owned()),
                 model: Some("opus".to_owned()),
             }),
-            ChatEvent::Session {
+            Some(ChatEvent::Session {
                 run_id: "r".to_owned(),
                 session_id: "sess-1".to_owned(),
                 model: Some("opus".to_owned()),
-            }
+            })
         );
         // Neutral usage → stats float; tool_calls + coins are bob-only → None.
         assert_eq!(
@@ -830,12 +837,12 @@ mod tests {
                 output_tokens: Some(40),
                 total_tokens: Some(140),
             }),
-            ChatEvent::Usage {
+            Some(ChatEvent::Usage {
                 run_id: "r".to_owned(),
                 total_tokens: Some(140),
                 tool_calls: None,
                 coins: None,
-            }
+            })
         );
     }
 

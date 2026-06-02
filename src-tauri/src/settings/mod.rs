@@ -112,7 +112,8 @@ pub fn load_bob_api_key() -> Result<String, String> {
 /// override.
 #[tauri::command(async)]
 pub fn settings_set_bob_api_key(api_key: String) -> Result<BobAuthStatus, String> {
-    write_api_key(api_key.trim())?;
+    // bob-rs now returns the typed `BobError`; stringify at the command boundary.
+    write_api_key(api_key.trim()).map_err(|e| e.to_string())?;
     Ok(BobAuthStatus { configured: true, error_message: None })
 }
 
@@ -163,6 +164,7 @@ pub fn settings_install_bob(on_event: Channel<InstallEvent>) -> Result<(), Strin
     install_bob(move |event| {
         let _ = channel.send(event);
     })
+    .map_err(|e| e.to_string())
 }
 
 /// Smoke-test bob with a real prompt. Reuses the existing
@@ -357,7 +359,7 @@ fn preview_bytes(bytes: &[u8]) -> Option<String> {
 // re-export is discoverable via `grep`.
 #[allow(dead_code)]
 pub(crate) fn _delete_api_key() -> Result<(), String> {
-    delete_api_key()
+    delete_api_key().map_err(|e| e.to_string())
 }
 
 // --- Tests ---------------------------------------------------------

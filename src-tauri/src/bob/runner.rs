@@ -422,7 +422,8 @@ fn spawn_via_core(
         cwd,
         run_id.clone(),
         callback,
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
 
     // The run is already registered as "pending" from the
     // run_harness_stream entry point. Attach the live handle so
@@ -517,8 +518,11 @@ fn run_via_harness(
         // Map the neutral event into Compose's `ChatEvent`. claude/codex
         // stream their answer as `Text` (no narration concept), and the
         // neutral tier carries no tool-io/session/usage — so those fields
-        // come through empty (see `run_event_to_chat`).
-        let _ = app_cb.emit(HARNESS_RUN_EVENT, &run_event_to_chat(event));
+        // come through empty (see `run_event_to_chat`). `None` = a future
+        // `#[non_exhaustive]` RunEvent variant Compose doesn't model → skip.
+        if let Some(chat) = run_event_to_chat(event) {
+            let _ = app_cb.emit(HARNESS_RUN_EVENT, &chat);
+        }
     });
 
     match harness.run(run_request, callback) {
