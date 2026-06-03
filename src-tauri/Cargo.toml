@@ -21,16 +21,15 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["devtools"] }
-# The harness layer, now an external crate family (its own repo):
-#   https://github.com/tosinamuda/agent-harness
+# The harness layer — an external crate family published to crates.io
+# (repo: https://github.com/getlatentic/agent-harness).
 # `bob-rs` — the unofficial bob SDK (readiness / install / keychain /
 # spawn_bob), also consumed by `crates/bob-api` so the two transports run
 # identical logic. `agent-harness` (imported as `harness`) — the framework:
 # the registry, the Harness trait, RunEvent + request/metadata types, and
-# the bob adapter's `normalize_bob_event`. Pinned via git until published to
-# crates.io (then swap `git`+`version` for just `version`).
-bob-rs = { git = "https://github.com/tosinamuda/agent-harness", version = "0.1.0" }
-agent-harness = { git = "https://github.com/tosinamuda/agent-harness", version = "0.1.0" }
+# the bob adapter's `normalize_bob_event`.
+bob-rs = "0.1"
+agent-harness = "0.1"
 # Pure markdown index/search core, shared with the browser (WASM). The
 # Tauri command scans the disk and calls this; `db::SourceRange` is
 # re-exported from it so there is one coordinate type.
