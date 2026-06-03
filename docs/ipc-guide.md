@@ -8,10 +8,10 @@ not show up until you run the packaged `.app`.
 ## Crate topology (who depends on whom)
 
 The harness layer lives in its **own repository** —
-[`github.com/tosinamuda/agent-harness`](https://github.com/tosinamuda/agent-harness)
-— which Compose consumes as a **git dependency** (`src-tauri` +
-`crates/bob-api`; swap for a crates.io `version` once published). It is a
-publishable crate family; the dependency arrow only ever points *up*. The
+[`github.com/getlatentic/agent-harness`](https://github.com/getlatentic/agent-harness)
+— which Compose consumes from **crates.io** as ordinary version deps
+(`src-tauri` + `crates/bob-api`). It is a published crate family; the
+dependency arrow only ever points *up*. The
 layout below — and the "Adding a harness adapter" steps — describe **that**
 repo, not this one:
 

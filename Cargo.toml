@@ -1,14 +1,13 @@
 # Cargo workspace for the Compose app's Rust crates.
 #
 # The harness layer (the framework + the unofficial bob SDK + the streaming
-# engine) now lives in its OWN repository:
+# engine) lives in its OWN repository:
 #
-#     https://github.com/tosinamuda/agent-harness
+#     https://github.com/getlatentic/agent-harness
 #
-# as the publishable crates `agent-harness` / `bob-rs` / `cli-stream`.
-# Compose consumes them as a **git dependency** (see `src-tauri` and
-# `crates/bob-api`), so they are NOT workspace members here. When those
-# crates are published to crates.io, swap the `git = …` deps for `version`.
+# as the published crates `agent-harness` / `bob-rs` / `cli-stream`.
+# Compose consumes them from **crates.io** as ordinary version deps (see
+# `src-tauri` and `crates/bob-api`), so they are NOT workspace members here.
 #
 # Members (Compose-internal only):
 #   * `crates/bob-api`    — dev-only axum HTTP+SSE server. Wraps the external
@@ -22,10 +21,10 @@
 #                           through the external `agent-harness` registry.
 #                           The production runtime.
 #
-# Developing the harness against Compose locally: rather than push + `cargo
-# update` on every harness edit, add an (uncommitted) patch to a local
-# checkout, e.g.
-#   [patch."https://github.com/tosinamuda/agent-harness"]
+# Developing the harness against Compose locally: rather than publish a new
+# version on every harness edit, add an (uncommitted) patch to a local
+# checkout. Since the deps come from crates.io, key the patch on `crates-io`:
+#   [patch.crates-io]
 #   agent-harness = { path = "../agent-harness/crates/agent-harness" }
 #   bob-rs        = { path = "../agent-harness/crates/bob-rs" }
 #   cli-stream    = { path = "../agent-harness/crates/cli-stream" }
