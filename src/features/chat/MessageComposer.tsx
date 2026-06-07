@@ -2,6 +2,7 @@ import type { KeyboardEvent } from "react";
 import { Document, Send, StopFilledAlt } from "@carbon/react/icons";
 
 import type { BobRuntimeReadiness, WorkspaceContextItem } from "../../app/workspaceModel";
+import { ChatHarnessPicker } from "./ChatHarnessPicker";
 import { useAutoGrowTextarea } from "./useAutoGrowTextarea";
 
 /**
@@ -93,6 +94,10 @@ export function MessageComposer({
           </button>
         )}
       </div>
+
+      {/* Switch the active harness from the chat, like a model picker.
+          Hidden in the browser preview; disabled mid-run. */}
+      <ChatHarnessPicker disabled={running} />
 
       {!assistantReady.ready ? (
         <div className="bob-chat-error bob-chat-error--setup">

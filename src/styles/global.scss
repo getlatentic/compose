@@ -2313,6 +2313,14 @@ select {
   line-height: 1rem;
 }
 
+// In-composer harness picker — a Carbon inline `Select` (it carries its own
+// styling); the wrapper just left-aligns it in the composer footer.
+.bob-chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .bob-comments-panel {
   display: flex;
   min-block-size: 0;
