@@ -57,16 +57,22 @@ these are product work; they're the ship vehicle.
 - [ ] **Code signing + notarization.** `tauri.conf.json` has no Developer ID
       identity or entitlements (only `scripts/setup-dev-signing.sh` for local).
       Unsigned/un-notarized → Gatekeeper blocks first launch.
+      **Requires a paid Apple Developer Program membership ($99/yr)** — a free
+      Apple ID only does local/ad-hoc signing, which is not distributable.
+      Notarization is included in the program (no extra cost).
+  - [ ] Enroll in the Apple Developer Program; create a **Developer ID
+        Application** certificate.
   - [ ] Add `bundle.macOS` signing identity + hardened-runtime entitlements.
-  - [ ] Wire notarization (notarytool) into the build/release script.
+  - [ ] Wire notarization (notarytool) + stapling into the build/release script.
   - [ ] Verify a downloaded `.dmg` opens clean on a machine that never built it.
 - [ ] **Auto-updater.** No `tauri-plugin-updater`, no `updater` config. Without
       an update channel you cannot ship a single fix post-release.
   - [ ] Add `tauri-plugin-updater` + signing keypair; host an update manifest.
   - [ ] Add an in-app "update available / restart to update" surface.
-- [ ] **Real README** (currently the Tauri template boilerplate) — what Compose
-      is, install, first-run, support.
-- [ ] **LICENSE file** (none present) — pick and add.
+- [x] **Real README** — replaced the Tauri boilerplate with a proper
+      Compose README (what it is, features, dev setup, layout, docs, license).
+- [x] **LICENSE file** — MIT (`LICENSE`), `license: "MIT"` added to
+      `package.json`.
 - [ ] **Minimal crash / error capture.** Nothing surfaces a panic or failed run
       to you today. At least log uncaught errors + agent-run failures to a local
       file the user can attach to a report. (Telemetry can stay off by default

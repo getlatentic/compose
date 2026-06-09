@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "dev": "concurrently --names bob-api,vite --prefix-colors blue,green --kill-others-on-fail 'pnpm dev:bob-api' 'pnpm dev:vite'",
     "dev:vite": "vite",
