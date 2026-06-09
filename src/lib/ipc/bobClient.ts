@@ -7,6 +7,16 @@ export type BobApprovalMode = "default" | "auto_edit";
  * `model_reasoning_effort`). Mirrors `compose_core::ReasoningEffort`. */
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 
+/**
+ * How a run's edits are guarded, chosen per harness from its capabilities +
+ * the user's "review edits" toggle. Mirrors `compose::review::EditGuard`.
+ * - `none`: the harness reviews its own edits (bob) — no gate.
+ * - `snapshot`: direct edits, but a baseline is recorded first so they undo.
+ * - `clone`: run against a sandbox; the user approves the diff before anything
+ *   touches their files.
+ */
+export type EditGuard = "none" | "snapshot" | "clone";
+
 export interface HarnessRunRequest {
   approvalMode: BobApprovalMode;
   chatMode: BobChatMode;
@@ -30,6 +40,12 @@ export interface HarnessRunRequest {
   model?: string;
   effort?: ReasoningEffort;
   maxTurns?: number;
+  /**
+   * How this run's edits should be guarded. Omitted → the Rust side defaults
+   * to `none` (bob). The frontend sets `clone` / `snapshot` for write-capable
+   * harnesses depending on the user's review toggle.
+   */
+  editGuard?: EditGuard;
 }
 
 /** The default harness id when nothing is selected / the catalog is

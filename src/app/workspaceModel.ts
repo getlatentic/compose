@@ -163,25 +163,90 @@ export function sumChatThreadStats(thread: WorkspaceChatThread): WorkspaceRunSta
 
 export type WorkspaceSuggestionStatus = "pending" | "accepted" | "rejected" | "stale";
 
-export interface WorkspaceDocumentSuggestion {
-  createdAt: number;
-  filePath: string;
+/** Fields every previewable change carries, whatever its shape. */
+interface WorkspaceSuggestionBase {
   id: string;
-  originalText: string;
-  range: SourceRange;
-  replacement: string;
+  /** The run that produced this change. File-level kinds apply through that
+   *  run's review session (see reviewClient); bob's `replace` ignores it. */
+  runId: string;
+  filePath: string;
+  title: string;
   status: WorkspaceSuggestionStatus;
   statusMessage: string | null;
-  title: string;
+  createdAt: number;
   updatedAt: number;
 }
 
+/**
+ * A previewable change awaiting the user's approval. bob proposes a byte-range
+ * `replace` applied to the in-memory buffer; a write-capable harness reviewed
+ * through the clone gate proposes whole-file `create` / `rewrite` / `delete`
+ * applied to disk (see reviewClient + workspaceStore). One accept/reject UI
+ * renders every kind.
+ */
+export type WorkspaceDocumentSuggestion =
+  | WorkspaceReplaceSuggestion
+  | WorkspaceCreateSuggestion
+  | WorkspaceRewriteSuggestion
+  | WorkspaceDeleteSuggestion;
+
+/** bob's byte-range replacement, applied to the loaded buffer. */
+export interface WorkspaceReplaceSuggestion extends WorkspaceSuggestionBase {
+  kind: "replace";
+  range: SourceRange;
+  originalText: string;
+  replacement: string;
+}
+
+/** A new file the assistant created in the review sandbox. */
+export interface WorkspaceCreateSuggestion extends WorkspaceSuggestionBase {
+  kind: "create";
+  newText: string | null;
+  newSize: number;
+  previewOmitted: boolean;
+}
+
+/** A whole-file rewrite the assistant made in the sandbox. */
+export interface WorkspaceRewriteSuggestion extends WorkspaceSuggestionBase {
+  kind: "rewrite";
+  originalText: string | null;
+  newText: string | null;
+  originalSize: number;
+  newSize: number;
+  previewOmitted: boolean;
+  /** The live file changed since the run started — accepting overwrites it. */
+  stale: boolean;
+}
+
+/** A file the assistant deleted in the sandbox. */
+export interface WorkspaceDeleteSuggestion extends WorkspaceSuggestionBase {
+  kind: "delete";
+  originalText: string | null;
+  originalSize: number;
+  previewOmitted: boolean;
+  stale: boolean;
+}
+
+/** bob's byte-range edit draft, before it becomes a pending suggestion. */
 export interface WorkspaceSuggestionDraft {
   filePath: string;
   originalText: string;
   range: SourceRange;
   replacement: string;
   title: string;
+}
+
+/** A file-level change from the review gate, before it becomes a pending
+ *  suggestion. The store maps a reviewClient `ReviewFileChange` into this. */
+export interface WorkspaceReviewSuggestionDraft {
+  kind: "create" | "rewrite" | "delete";
+  filePath: string;
+  originalText: string | null;
+  newText: string | null;
+  originalSize: number;
+  newSize: number;
+  previewOmitted: boolean;
+  stale: boolean;
 }
 
 export interface BobSuggestedEditInput {
@@ -1169,12 +1234,14 @@ export function appendAssistantSuggestions(
       }
       const existingSuggestions = message.suggestions ?? [];
       const nextSuggestions = drafts.map((draft, index) => ({
+        kind: "replace" as const,
         createdAt: timestamp,
         filePath: draft.filePath,
         id: `${messageId}-suggestion-${existingSuggestions.length + index + 1}`,
         originalText: draft.originalText,
         range: { ...draft.range },
         replacement: draft.replacement,
+        runId,
         status: "pending" as const,
         statusMessage: null,
         title: draft.title,
@@ -1189,6 +1256,97 @@ export function appendAssistantSuggestions(
   };
 }
 
+/**
+ * Attach file-level review changes (create / rewrite / delete, from the clone
+ * gate) to a run's assistant message as pending suggestions. Unlike
+ * `appendAssistantSuggestions` this runs *after* the run finished, so it finds
+ * the message by `runId` rather than the active run.
+ */
+export function appendReviewChangeSuggestions(
+  chatThread: WorkspaceChatThread,
+  runId: string,
+  drafts: WorkspaceReviewSuggestionDraft[],
+  timestamp: number,
+): WorkspaceChatThread {
+  if (drafts.length === 0) {
+    return chatThread;
+  }
+  const target = [...chatThread.messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.runId === runId);
+  if (!target) {
+    return chatThread;
+  }
+  const messageId = target.id;
+  return {
+    ...chatThread,
+    messages: chatThread.messages.map((message) => {
+      if (message.id !== messageId) {
+        return message;
+      }
+      const existing = message.suggestions ?? [];
+      const next = drafts.map((draft, index): WorkspaceDocumentSuggestion => {
+        const base = {
+          id: `${messageId}-suggestion-${existing.length + index + 1}`,
+          runId,
+          filePath: draft.filePath,
+          title: reviewChangeTitle(draft.kind),
+          status: "pending" as const,
+          statusMessage: null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        if (draft.kind === "create") {
+          return {
+            ...base,
+            kind: "create",
+            newText: draft.newText,
+            newSize: draft.newSize,
+            previewOmitted: draft.previewOmitted,
+          };
+        }
+        if (draft.kind === "delete") {
+          return {
+            ...base,
+            kind: "delete",
+            originalText: draft.originalText,
+            originalSize: draft.originalSize,
+            previewOmitted: draft.previewOmitted,
+            stale: draft.stale,
+          };
+        }
+        return {
+          ...base,
+          kind: "rewrite",
+          originalText: draft.originalText,
+          newText: draft.newText,
+          originalSize: draft.originalSize,
+          newSize: draft.newSize,
+          previewOmitted: draft.previewOmitted,
+          stale: draft.stale,
+        };
+      });
+      const total = existing.length + next.length;
+      return {
+        ...message,
+        activity: `${total} change${total === 1 ? "" : "s"} to review`,
+        suggestions: [...existing, ...next],
+      };
+    }),
+  };
+}
+
+function reviewChangeTitle(kind: WorkspaceReviewSuggestionDraft["kind"]): string {
+  switch (kind) {
+    case "create":
+      return "New file";
+    case "delete":
+      return "Delete file";
+    default:
+      return "Updated file";
+  }
+}
+
 export function acceptWorkspaceSuggestion(
   workspace: BobWorkspace,
   suggestionId: string,
@@ -1196,6 +1354,13 @@ export function acceptWorkspaceSuggestion(
 ): BobWorkspace {
   const suggestion = findSuggestion(workspace.chatThread, suggestionId);
   if (!suggestion || suggestion.status !== "pending") {
+    return workspace;
+  }
+  // Only bob's byte-range edits apply to the in-memory buffer here. File-level
+  // changes (create / rewrite / delete from the clone gate) are applied to
+  // disk through the review session by the store, which then marks status via
+  // `markWorkspaceSuggestion`.
+  if (suggestion.kind !== "replace") {
     return workspace;
   }
 
@@ -1437,6 +1602,25 @@ function findSuggestion(
     }
   }
   return null;
+}
+
+/**
+ * Set a suggestion's status from outside the model — used by the store after
+ * a file-level review change is applied (or fails) on disk, where the pure
+ * model can't do the I/O itself.
+ */
+export function markWorkspaceSuggestion(
+  workspace: BobWorkspace,
+  suggestionId: string,
+  status: WorkspaceSuggestionStatus,
+  statusMessage: string | null,
+  timestamp: number,
+): BobWorkspace {
+  return updateWorkspaceSuggestion(workspace, suggestionId, {
+    status,
+    statusMessage,
+    updatedAt: timestamp,
+  });
 }
 
 function updateWorkspaceSuggestion(

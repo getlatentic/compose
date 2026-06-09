@@ -4,6 +4,8 @@ import {
   appendAssistantText,
   appendAssistantNotice,
   appendAssistantSuggestions,
+  appendReviewChangeSuggestions,
+  markWorkspaceSuggestion,
   assistantMessageContentForRun,
   appendUserChatMessage,
   appendAssistantThinking,
@@ -585,12 +587,14 @@ describe("workspace model", () => {
     expect(preparation.rejectedCount).toBe(0);
     expect(withSuggestion.messages[1].suggestions).toEqual([
       {
+        kind: "replace",
         createdAt: 123,
         filePath: "a.md",
         id: "message-2-suggestion-1",
         originalText: "Old title",
         range: { start: 2, end: 11 },
         replacement: "Launch plan",
+        runId: "run-1",
         status: "pending",
         statusMessage: null,
         title: "Rename heading",
@@ -691,6 +695,103 @@ describe("workspace model", () => {
     expect(rejected.chatThread.messages[1].suggestions?.[0]).toMatchObject({
       status: "rejected",
       updatedAt: 456,
+    });
+  });
+
+  it("appendReviewChangeSuggestions attaches file-level changes to the run's message", () => {
+    const base = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    const started = appendAssistantText(
+      startBobRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
+      runId,
+      "Done.",
+    );
+    const withChanges = appendReviewChangeSuggestions(
+      started,
+      runId,
+      [
+        {
+          kind: "create",
+          filePath: "new.md",
+          originalText: null,
+          newText: "hi",
+          originalSize: 0,
+          newSize: 2,
+          previewOmitted: false,
+          stale: false,
+        },
+        {
+          kind: "rewrite",
+          filePath: "edit.md",
+          originalText: "old",
+          newText: "new",
+          originalSize: 3,
+          newSize: 3,
+          previewOmitted: false,
+          stale: true,
+        },
+        {
+          kind: "delete",
+          filePath: "gone.md",
+          originalText: "bye",
+          newText: null,
+          originalSize: 3,
+          newSize: 0,
+          previewOmitted: false,
+          stale: false,
+        },
+      ],
+      200,
+    );
+
+    const suggestions = withChanges.messages[1].suggestions ?? [];
+    expect(suggestions.map((s) => [s.kind, s.filePath])).toEqual([
+      ["create", "new.md"],
+      ["rewrite", "edit.md"],
+      ["delete", "gone.md"],
+    ]);
+    expect(suggestions.every((s) => s.status === "pending" && s.runId === runId)).toBe(true);
+    const rewrite = suggestions.find((s) => s.kind === "rewrite");
+    expect(rewrite?.kind === "rewrite" && rewrite.stale).toBe(true);
+  });
+
+  it("acceptWorkspaceSuggestion leaves file-level changes to the store; markWorkspaceSuggestion records the result", () => {
+    const base = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    const chatThread = appendReviewChangeSuggestions(
+      appendAssistantText(
+        startBobRun(appendUserChatMessage(base.chatThread, "x", null), runId),
+        runId,
+        "Done.",
+      ),
+      runId,
+      [
+        {
+          kind: "create",
+          filePath: "new.md",
+          originalText: null,
+          newText: "hi",
+          originalSize: 0,
+          newSize: 2,
+          previewOmitted: false,
+          stale: false,
+        },
+      ],
+      200,
+    );
+    const workspace = { ...base, chatThread };
+
+    // File-level kinds don't touch the in-memory buffer here — the store
+    // applies them to disk through the review session, so accept is a no-op.
+    const untouched = acceptWorkspaceSuggestion(workspace, "message-2-suggestion-1", 300);
+    expect(untouched.chatThread.messages[1].suggestions?.[0]?.status).toBe("pending");
+    expect(untouched.fileContents).toEqual(base.fileContents);
+
+    // The store records the outcome after applying on disk.
+    const marked = markWorkspaceSuggestion(workspace, "message-2-suggestion-1", "accepted", null, 300);
+    expect(marked.chatThread.messages[1].suggestions?.[0]).toMatchObject({
+      status: "accepted",
+      updatedAt: 300,
     });
   });
 
