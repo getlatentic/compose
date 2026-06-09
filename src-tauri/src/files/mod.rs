@@ -3,7 +3,7 @@ use crate::workspace::WorkspaceRegistry;
 use serde::Serialize;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use walkdir::WalkDir;
 
 pub mod clone;
@@ -11,6 +11,9 @@ pub mod diff;
 pub mod trash;
 pub mod trash_sweep;
 pub mod watcher;
+
+#[cfg(test)]
+mod ipc_tests;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -85,11 +88,21 @@ impl From<std::io::Error> for FileError {
 #[tauri::command(async)]
 pub fn workspace_scan(
     workspace_id: String,
+    app: AppHandle,
     registry: State<'_, WorkspaceRegistry>,
     metadata: State<'_, MetadataStore>,
     watchers: State<'_, watcher::WatcherManager>,
 ) -> Result<Vec<WorkspaceFileEntry>, FileError> {
     let root = registry.workspace_root(&workspace_id)?;
+    // Opening a workspace makes its files (notably pasted images under
+    // `images/`) servable to the webview via the `asset:` protocol, so the
+    // editor can display them. The markdown keeps workspace-relative paths;
+    // resolution to an asset URL happens at display time on the front end. The
+    // scope is additive and per-workspace — only folders the user has opened
+    // are ever exposed. A scope failure must not block the scan.
+    if let Err(error) = app.asset_protocol_scope().allow_directory(&root, true) {
+        eprintln!("asset scope allow failed for {workspace_id}: {error}");
+    }
     let entries = scan_markdown_files(&root)?;
     ensure_vault_metadata(&metadata, &workspace_id, &root)?;
     let inventory = document_inventory_for_entries(&root, &entries)?;
@@ -181,6 +194,32 @@ pub fn workspace_create_file(
         content.len() as u64,
     )?;
     Ok(result)
+}
+
+/// Write raw bytes to a workspace file, atomically. This is the seam for the
+/// image-insert pipeline (paste / drag-and-drop): the front end decodes the
+/// pasted or dropped image and hands us the bytes plus a workspace-relative
+/// path under `images/`, and we land them on disk so the markdown can
+/// reference a real file rather than inlining a data URL.
+///
+/// Deliberately records **no** document-inventory entry. The inventory and its
+/// version history are text-document concepts — revisions store UTF-8
+/// snapshots, titles, and the search index — and `workspace_scan` only ever
+/// surfaces `.md` files, so a binary row there would be marked deleted on the
+/// very next scan (`sync_documents` deletes everything the scan didn't see).
+/// We still `ensure_vault_metadata` so this command initialises the vault
+/// consistently with its text siblings.
+#[tauri::command(async)]
+pub fn workspace_write_binary_file(
+    workspace_id: String,
+    relative_path: String,
+    bytes: Vec<u8>,
+    registry: State<'_, WorkspaceRegistry>,
+    metadata: State<'_, MetadataStore>,
+) -> Result<WorkspaceWriteResult, FileError> {
+    let root = registry.workspace_root(&workspace_id)?;
+    ensure_vault_metadata(&metadata, &workspace_id, &root)?;
+    write_binary_file(&registry, &workspace_id, &relative_path, &bytes)
 }
 
 #[tauri::command(async)]
@@ -305,6 +344,23 @@ pub(crate) fn write_file(
     }
 
     write_file_atomic(&absolute, content)?;
+    let metadata = std::fs::metadata(&absolute)?;
+    Ok(WorkspaceWriteResult {
+        last_modified_ms: mtime_ms(&metadata)?,
+    })
+}
+
+pub(crate) fn write_binary_file(
+    registry: &WorkspaceRegistry,
+    workspace_id: &str,
+    relative_path: &str,
+    bytes: &[u8],
+) -> Result<WorkspaceWriteResult, FileError> {
+    // `resolve_workspace_path` rejects traversal; `write_file_atomic` creates
+    // the parent directory (e.g. `images/`) and writes through a temp file +
+    // rename so a reader never observes a partially written image.
+    let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
+    write_file_atomic(&absolute, bytes)?;
     let metadata = std::fs::metadata(&absolute)?;
     Ok(WorkspaceWriteResult {
         last_modified_ms: mtime_ms(&metadata)?,
@@ -603,6 +659,23 @@ mod tests {
     }
 
     #[test]
+    fn write_binary_round_trips_bytes_and_creates_parent_dir() {
+        let dir = tempdir().expect("tempdir");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+        // A non-UTF-8 payload (PNG magic + bytes that aren't valid UTF-8)
+        // proves this path is genuinely binary, not a disguised text write.
+        let bytes = [0x89u8, b'P', b'N', b'G', 0x0D, 0x0A, 0x00, 0xFF, 0x93, 0x96];
+
+        let result = write_binary_file(&registry, &workspace_id, "images/pic.png", &bytes)
+            .expect("write binary");
+        assert!(result.last_modified_ms > 0);
+
+        // Parent dir `images/` was created and the bytes survive a round trip.
+        let written = fs::read(dir.path().join("images/pic.png")).expect("read back");
+        assert_eq!(written, bytes);
+    }
+
+    #[test]
     fn write_rejects_conflict_when_disk_is_newer() {
         let dir = tempdir().expect("tempdir");
         let (registry, workspace_id) = registry_with_workspace(dir.path());
@@ -714,6 +787,7 @@ mod tests {
 
         assert!(read_file(&registry, &workspace_id, "../escape.md").is_err());
         assert!(write_file(&registry, &workspace_id, "../escape.md", "x", None).is_err());
+        assert!(write_binary_file(&registry, &workspace_id, "../escape.png", &[1, 2, 3]).is_err());
         assert!(create_file(&registry, &workspace_id, "../escape.md", "x").is_err());
         assert!(rename_file(&registry, &workspace_id, "a.md", "../escape.md").is_err());
         assert!(soft_delete(&registry, &metadata, &workspace_id, "../escape.md").is_err());

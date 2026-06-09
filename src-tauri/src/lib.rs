@@ -88,6 +88,7 @@ pub fn run() {
             files::workspace_rename_file,
             files::workspace_restore_version,
             files::workspace_scan,
+            files::workspace_write_binary_file,
             files::workspace_write_file,
             review::workspace_review_diff,
             review::workspace_apply_review_change,

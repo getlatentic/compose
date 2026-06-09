@@ -20,7 +20,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools"] }
+# `protocol-asset` registers the `asset:` protocol used to display
+# workspace-local images in the editor (gated at runtime by
+# `assetProtocol.enable` + the per-workspace scope; see files::workspace_scan).
+tauri = { version = "2", features = ["devtools", "protocol-asset"] }
 # The harness layer — an external crate family published to crates.io
 # (repo: https://github.com/getlatentic/agent-harness).
 # `bob-rs` — the unofficial bob SDK (readiness / install / keychain /
@@ -53,6 +56,13 @@ uuid = { version = "1", features = ["v4"] }
 # install-bob.sh to disk for `bash -l` to exec. Also reused in
 # dev-only tests, but the production code path needs it too.
 tempfile = "3"
+
+[dev-dependencies]
+# Pulls in `tauri::test` (mock_builder / MockRuntime / get_ipc_response) so the
+# IPC-contract tests can drive `#[tauri::command]`s through the real router.
+# The `test` feature is additive and only compiled for test builds — it never
+# reaches the shipped binary, which still builds from `[dependencies]` alone.
+tauri = { version = "2", features = ["test"] }
 
 # clonefile(2) for copy-on-write workspace clones in the edit-review gate
 # (files::clone). macOS-only; other platforms use the recursive-copy

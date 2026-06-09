@@ -503,6 +503,8 @@ export function AppShell() {
                   mode={editorMode}
                   value={activeFileBuffer.content}
                   workspaceId={activeWorkspaceId ?? undefined}
+                  workspaceRoot={activeWorkspace?.path ?? undefined}
+                  filePath={activeWorkspace?.activeFilePath ?? undefined}
                   onChange={updateActiveContent}
                   onSelectionChange={setSelectionSnapshot}
                   onAskAboutSelection={handleAskAboutSelection}

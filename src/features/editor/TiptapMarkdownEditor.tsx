@@ -1,5 +1,4 @@
 import { Markdown } from "@tiptap/markdown";
-import { Image } from "@tiptap/extension-image";
 import { Link } from "@tiptap/extension-link";
 import { Table } from "@tiptap/extension-table";
 import { TableCell } from "@tiptap/extension-table-cell";
@@ -36,6 +35,8 @@ import {
   extractImageFiles,
   insertImageBlob,
 } from "./imageInsert";
+import { ImageWithAssets } from "./imageAssetExtension";
+import { computeFileDir, type ImageResolveContext } from "./imageSrcResolver";
 import { TiptapToolbar } from "./TiptapToolbar";
 
 export type TiptapEditorMode = "wysiwyg" | "source";
@@ -78,6 +79,12 @@ export interface TiptapMarkdownEditorProps {
   onSelectionChange?: (selection: { range: SourceRange; text: string } | null) => void;
   value: string;
   workspaceId?: string;
+  /** Absolute OS path of the workspace root — used to resolve relative image
+   * references to displayable asset URLs on the desktop. */
+  workspaceRoot?: string;
+  /** Workspace-relative path of the file being edited; relative image
+   * references resolve against this file's directory. */
+  filePath?: string;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -101,6 +108,8 @@ function TiptapMarkdownEditorInner({
   onSelectionChange,
   value,
   workspaceId,
+  workspaceRoot,
+  filePath,
 }: TiptapMarkdownEditorProps) {
   // YAML frontmatter separation. The editor renders **only the
   // body** — the user shouldn't see raw `key: value` lines
@@ -141,6 +150,16 @@ function TiptapMarkdownEditorInner({
   // Debounce timer for autosave.
   const autosaveTimerRef = useRef<number | null>(null);
 
+  // Resolve context for image display. Held in a ref so the Image node view —
+  // configured once in the extensions memo below — always reads the *current*
+  // file's directory even as the active file changes underneath it.
+  const imageCtx = useMemo<ImageResolveContext>(
+    () => ({ fileDir: computeFileDir(workspaceRoot, filePath) }),
+    [workspaceRoot, filePath],
+  );
+  const imageCtxRef = useRef(imageCtx);
+  imageCtxRef.current = imageCtx;
+
   const extensions = useMemo(
     () => [
       // StarterKit bundles paragraph, heading, bold, italic,
@@ -156,11 +175,14 @@ function TiptapMarkdownEditorInner({
         autolink: true,
         HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
       }),
-      Image.configure({
+      ImageWithAssets.configure({
         // Allow loading images by URL on `setContent`. The
         // imageInsert pipeline produces either a workspace-
         // relative path or a `data:` URL — both are valid `src`.
         allowBase64: true,
+        // Relative refs (e.g. `images/…`) are resolved to displayable
+        // asset URLs at render time; the stored attribute stays relative.
+        getContext: () => imageCtxRef.current,
       }),
       Table.configure({ resizable: true }),
       TableRow,
