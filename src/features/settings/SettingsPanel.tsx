@@ -11,6 +11,7 @@ import {
   TabPanels,
   Tabs,
   TextInput,
+  Toggle,
 } from "@carbon/react";
 import {
   useWorkspaceStore,
@@ -235,6 +236,23 @@ function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
       </p>
 
       <div style={{ display: "grid", gap: "1rem", maxWidth: "22rem", marginBlockStart: "0.75rem" }}>
+        {/* The headline safety control: review the assistant's edits before
+            they touch your files. On by default. Off still records a version
+            you can restore, so an edit is never unrecoverable. */}
+        <Toggle
+          id={`${harnessId}-review-edits`}
+          size="sm"
+          labelText="Review changes before applying"
+          labelA="Off — apply changes directly"
+          labelB="On — show me changes to approve"
+          toggled={options.reviewEdits ?? true}
+          onToggle={(checked) => setHarnessOptions(harnessId, { reviewEdits: checked })}
+        />
+        <p className="bob-settings-helper" style={{ marginBlockStart: "-0.5rem" }}>
+          When on, {name} works on a copy and you approve each change. When off, changes apply
+          straight to your files — you can still undo them from a file's “Previous versions”.
+        </p>
+
         {caps.allowsCustomModel ? (
           <TextInput
             id={`${harnessId}-model`}

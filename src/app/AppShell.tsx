@@ -14,6 +14,7 @@ import {
   Home,
   Save,
   Settings,
+  Time,
 } from "@carbon/react/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "../features/chat/ChatPanel";
@@ -24,6 +25,7 @@ import {
 import type { SourceRange } from "../features/comments/commentModel";
 import { TiptapMarkdownEditor } from "../features/editor/TiptapMarkdownEditor";
 import { PaneTabs, type EditorTab } from "../features/editor/PaneTabs";
+import { VersionHistory } from "../features/history/VersionHistory";
 import { SettingsPanel } from "../features/settings/SettingsPanel";
 import { useMarkdownPreview } from "../features/editor/useMarkdownPreview";
 import { DashboardScreen } from "../features/dashboard/DashboardScreen";
@@ -91,6 +93,7 @@ export function AppShell() {
         ) ?? null
       : null;
   const preview = useMarkdownPreview(activeFileBuffer?.content ?? "");
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen);
   const openSettings = useWorkspaceStore((state) => state.openSettings);
   const closeSettings = useWorkspaceStore((state) => state.closeSettings);
@@ -358,6 +361,19 @@ export function AppShell() {
             <Save size={20} />
           </HeaderGlobalAction>
           <HeaderGlobalAction
+            aria-label="Previous versions"
+            aria-disabled={!activeFileEntry}
+            className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
+            onClick={() => {
+              if (activeFileEntry) {
+                setVersionHistoryOpen(true);
+              }
+            }}
+            tooltipAlignment="end"
+          >
+            <Time size={20} />
+          </HeaderGlobalAction>
+          <HeaderGlobalAction
             aria-label="Export Markdown"
             aria-disabled={!activeFileEntry}
             className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
@@ -589,6 +605,15 @@ export function AppShell() {
 
       </div>
       {settingsOpen ? <SettingsDialog onClose={() => closeSettings()} /> : null}
+      {activeWorkspace && activeFileEntry ? (
+        <VersionHistory
+          workspaceId={activeWorkspace.id}
+          filePath={activeFileEntry.relativePath}
+          open={versionHistoryOpen}
+          onClose={() => setVersionHistoryOpen(false)}
+          onRestored={() => reloadActiveFile()}
+        />
+      ) : null}
     </>
   );
 }
