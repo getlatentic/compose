@@ -1723,6 +1723,7 @@ select {
   // relative to its own size.
   line-height: 1.5;
   overflow-wrap: anywhere;
+  border-radius: 8px;
 }
 
 // User turns (and the streaming placeholder) are plain text — preserve
@@ -1732,15 +1733,25 @@ select {
   white-space: pre-wrap;
 }
 
+// Your own turn: a quiet outlined card, not a filled primary button. Primary
+// blue is reserved for actions (Send, suggestion CTAs); painting the message
+// text in it makes the user's words read like a button and out-shout the
+// assistant's answer. White surface + subtle border, right-aligned.
 .bob-message-row--user .bob-message-bubble {
-  color: var(--cds-text-on-color, #ffffff);
-  background: var(--cds-button-primary, #0f62fe);
-}
-
-.bob-message-row--assistant .bob-message-bubble {
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   color: var(--cds-text-primary, #161616);
   background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+// The assistant's answer is the main content — let it breathe as open prose
+// rather than boxing it. No border/fill; it spans the panel width and aligns
+// to the conversation's left edge. The contrast with the right-aligned,
+// outlined user card is what tells the two turns apart — not a competing box.
+.bob-message-row--assistant .bob-message-bubble {
+  max-inline-size: 100%;
+  padding-inline: 0;
+  padding-block: 0.25rem;
+  color: var(--cds-text-primary, #161616);
 }
 
 // Rendered markdown inside an assistant bubble. The bubble owns the
@@ -1751,16 +1762,23 @@ select {
 .bob-markdown {
   display: flow-root;
   overflow-wrap: anywhere;
+  // One uniform type ramp for the whole reply: a single line-height,
+  // letter-spacing and kerning that every child inherits. The ONLY visual
+  // variation is bold (strong), italic (em) and link colour — font size,
+  // line spacing, kerning and colour stay identical across paragraphs,
+  // list items and headings.
+  line-height: 1.5;
+  letter-spacing: normal;
+  font-kerning: normal;
 }
 
 // Carbon styles bare h1–h6 / p / a / lists globally with its own type
-// tokens, whose font-family chain differs from `:root` (Plex isn't
-// loaded, so they fall back to different system fonts) and which add
-// token letter-spacing. That makes raw markdown tags render in a
-// different, "uneven" font than the message bubble. Force the bubble's
-// font + normal letter-spacing back onto every text element. Code keeps
-// its monospace stack (set on `.bob-markdown code`).
-.bob-markdown,
+// tokens — a different font-family chain (Plex isn't loaded, so they fall
+// back to other system fonts), token letter-spacing, and per-element sizes
+// AND line-heights. That per-element drift is what makes raw markdown render
+// "uneven". Force the bubble's own typography back onto every text element so
+// size / line spacing / kerning / colour are uniform; only weight, style and
+// link colour vary. Code keeps its monospace stack (set on `.bob-markdown code`).
 .bob-markdown p,
 .bob-markdown h1,
 .bob-markdown h2,
@@ -1768,6 +1786,8 @@ select {
 .bob-markdown h4,
 .bob-markdown h5,
 .bob-markdown h6,
+.bob-markdown ul,
+.bob-markdown ol,
 .bob-markdown li,
 .bob-markdown a,
 .bob-markdown strong,
@@ -1776,7 +1796,10 @@ select {
 .bob-markdown th,
 .bob-markdown td {
   font-family: inherit;
-  letter-spacing: normal;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
 }
 
 .bob-markdown > :first-child {
@@ -1787,31 +1810,41 @@ select {
   margin-block-end: 0;
 }
 
+// Same gap above/below every block, so paragraphs, lists and headings share
+// one rhythm — no heading "section break" larger than a paragraph break.
 .bob-markdown p,
 .bob-markdown ul,
 .bob-markdown ol,
+.bob-markdown h1,
+.bob-markdown h2,
+.bob-markdown h3,
+.bob-markdown h4,
+.bob-markdown h5,
+.bob-markdown h6,
 .bob-markdown blockquote,
 .bob-markdown pre,
 .bob-markdown table {
   margin-block: 0.5rem;
 }
 
-// Headings read at the *same* size and line-height as body text — only
-// the weight sets them apart. Markdown from a chat reply shouldn't render
-// like a document with a big type scale; the consistent size keeps the
-// bubble calm. (Margins still give them breathing room.)
+// Headings carry no type scale of their own — same size + line-height as
+// body (inherited above); only the weight marks them, matching inline bold.
 .bob-markdown h1,
 .bob-markdown h2,
 .bob-markdown h3,
 .bob-markdown h4,
 .bob-markdown h5,
 .bob-markdown h6 {
-  margin-block: 0.5rem 0.25rem;
-  // Identical size + line-height to body (overriding the browser's larger
-  // heading defaults); only the weight sets a heading apart.
-  font-size: 1em;
   font-weight: 600;
-  line-height: 1.5;
+}
+
+// Bold and italic are the only inline variations.
+.bob-markdown strong {
+  font-weight: 600;
+}
+
+.bob-markdown em {
+  font-style: italic;
 }
 
 .bob-markdown ul,
@@ -1819,8 +1852,21 @@ select {
   padding-inline-start: 1.25rem;
 }
 
+// Tailwind's preflight strips `list-style` from ul/ol globally (same reset the
+// editor works around at `.bob-editor`). Restore it so chat lists actually
+// show bullets / numbers instead of bare hanging indents.
+.bob-markdown ul {
+  list-style: disc outside;
+}
+.bob-markdown ol {
+  list-style: decimal outside;
+}
 .bob-markdown li {
-  margin-block: 0.125rem;
+  display: list-item;
+}
+
+.bob-markdown li {
+  margin-block: 0.25rem;
 }
 
 .bob-markdown a {
@@ -1859,10 +1905,11 @@ select {
 }
 
 .bob-markdown blockquote {
+  // Structural indent only — the text colour stays the body colour (colour is
+  // uniform everywhere except links).
   margin-inline: 0;
   padding-inline-start: 0.75rem;
   border-inline-start: 3px solid var(--cds-border-subtle-02, #c6c6c6);
-  color: var(--cds-text-secondary, #525252);
 }
 
 .bob-markdown table {
@@ -1872,7 +1919,6 @@ select {
   max-inline-size: 100%;
   overflow-x: auto;
   border-collapse: collapse;
-  font-size: 0.9em;
 }
 
 .bob-markdown th,
