@@ -5,6 +5,7 @@ pub mod export;
 pub mod files;
 pub mod index;
 pub mod pty;
+pub mod review;
 mod settings;
 mod workspace;
 
@@ -17,6 +18,7 @@ pub fn run() {
         .manage(db::MetadataStore::default())
         .manage(files::watcher::WatcherManager::default())
         .manage(bob::runner::BobRunnerState::default())
+        .manage(review::ReviewSessionStore::default())
         .manage(index::WorkspaceIndexStore::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -79,6 +81,9 @@ pub fn run() {
             files::workspace_restore_version,
             files::workspace_scan,
             files::workspace_write_file,
+            review::workspace_review_diff,
+            review::workspace_apply_review_change,
+            review::workspace_review_cleanup,
             index::workspace_index_snapshot,
             index::workspace_rebuild_index,
             index::workspace_search_index

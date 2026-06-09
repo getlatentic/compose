@@ -24,6 +24,8 @@
 
 use crate::bob::locator::{resolve_bob_executable, BobExecutable};
 use crate::bob::{build_bob_command, BobApprovalMode, BobChatMode, BobCommandRequest, BobRunMode};
+use crate::db::MetadataStore;
+use crate::review::{prepare_edit_guard, EditGuard, ReviewSessionStore};
 use crate::settings::load_bob_api_key;
 use crate::workspace::WorkspaceRegistry;
 use crate::bob::chat_event::{run_event_to_chat, BobChatMapper, ChatEvent};
@@ -70,6 +72,13 @@ pub struct HarnessRunRequest {
     pub effort: Option<ReasoningEffort>,
     #[serde(default)]
     pub max_turns: Option<u32>,
+    /// How this run's edits should be guarded — chosen by the frontend per
+    /// harness from its capabilities + the user's "review edits" toggle.
+    /// `none` (bob, which reviews its own edits) skips the gate; `snapshot`
+    /// records an undo baseline before direct edits; `clone` runs the harness
+    /// against a sandbox the user approves. Only the non-bob path acts on it.
+    #[serde(default)]
+    pub edit_guard: EditGuard,
 }
 
 fn default_harness_id() -> String {
@@ -204,6 +213,8 @@ pub fn run_harness_stream(
     request: HarnessRunRequest,
     registry: State<'_, WorkspaceRegistry>,
     runner: State<'_, BobRunnerState>,
+    metadata: State<'_, MetadataStore>,
+    review: State<'_, ReviewSessionStore>,
     app: AppHandle,
 ) -> Result<(), String> {
     // Register the run as "pending" up front. From this moment
@@ -251,7 +262,7 @@ pub fn run_harness_stream(
         request.harness_id.clone()
     };
     if harness_id != harness::DEFAULT_HARNESS_ID {
-        return run_via_harness(&harness_id, request, &registry, &runner, app);
+        return run_via_harness(&harness_id, request, &registry, &runner, &metadata, &review, app);
     }
 
     // Blocking work. May trigger the macOS Keychain prompt on
@@ -447,6 +458,8 @@ fn run_via_harness(
     request: HarnessRunRequest,
     registry: &WorkspaceRegistry,
     runner: &BobRunnerState,
+    metadata: &MetadataStore,
+    review: &ReviewSessionStore,
     app: AppHandle,
 ) -> Result<(), String> {
     let run_id = request.run_id.clone();
@@ -458,7 +471,20 @@ fn run_via_harness(
         return Err(message);
     };
 
-    let cwd = match registry.workspace_root(&request.workspace_id) {
+    // Resolve the working directory through the edit-review gate: for `clone`
+    // this builds a sandbox (and records a baseline) and returns its path so
+    // the harness edits the copy, not the user's files; for `snapshot` it
+    // records a baseline and returns the real root; for `none` it is the real
+    // root. The post-run diff (workspace_review_diff) reads the session by
+    // run id. See review/mod.rs.
+    let cwd = match prepare_edit_guard(
+        request.edit_guard,
+        &run_id,
+        &request.workspace_id,
+        registry,
+        metadata,
+        review,
+    ) {
         Ok(path) => path,
         Err(error) => {
             emit_error_and_exit(&app, &run_id, &error);
@@ -635,6 +661,7 @@ mod tests {
             model: None,
             effort: None,
             max_turns: None,
+            edit_guard: EditGuard::None,
         };
 
         assert!(prepare_bob_spawn(&request, &registry)
@@ -663,6 +690,7 @@ mod tests {
             model: None,
             effort: None,
             max_turns: None,
+            edit_guard: EditGuard::None,
         };
 
         assert!(prepare_bob_spawn(&request, &registry)
@@ -685,6 +713,7 @@ mod tests {
             model: None,
             effort: None,
             max_turns: None,
+            edit_guard: EditGuard::None,
         };
 
         assert!(prepare_bob_spawn(&request, &registry)
@@ -727,6 +756,7 @@ mod tests {
             model: None,
             effort: None,
             max_turns: None,
+            edit_guard: EditGuard::None,
         };
 
         let prepared = prepare_bob_spawn_with_dependencies(

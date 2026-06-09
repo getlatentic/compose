@@ -38,7 +38,7 @@ pub use conversations::{ConversationMessageRecord, ConversationSnapshot, Convers
 // primitives; the queries reuse the private `MetadataStore::vault_connection`
 // (a descendant module can see its ancestor's private items).
 pub mod history;
-pub use history::DocumentVersion;
+pub use history::{BaselineCandidate, DocumentVersion};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

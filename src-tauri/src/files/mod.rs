@@ -41,6 +41,19 @@ pub enum FileError {
     Message { message: String },
 }
 
+impl std::fmt::Display for FileError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileError::Conflict { .. } => {
+                write!(formatter, "the file changed on disk since it was loaded")
+            }
+            FileError::NotFound { message }
+            | FileError::AlreadyExists { message }
+            | FileError::Message { message } => write!(formatter, "{message}"),
+        }
+    }
+}
+
 impl From<String> for FileError {
     fn from(message: String) -> Self {
         Self::Message { message }
@@ -199,23 +212,7 @@ pub fn workspace_delete_file(
 ) -> Result<(), FileError> {
     let root = registry.workspace_root(&workspace_id)?;
     ensure_vault_metadata(&metadata, &workspace_id, &root)?;
-    // Preserve the file's content in version history before removing it, so it
-    // stays restorable. Non-text files can't be read as a string; they skip the
-    // snapshot but the physical trash copy below still recovers them.
-    if let Ok(existing) = read_file(&registry, &workspace_id, &relative_path) {
-        metadata.record_document_written(
-            &workspace_id,
-            &relative_path,
-            &existing.content,
-            existing.last_modified_ms,
-            existing.content.as_bytes().len() as u64,
-        )?;
-    }
-    // Move to recoverable trash instead of hard-deleting.
-    let trash_root = metadata.trash_root()?;
-    trash_file(&registry, &workspace_id, &relative_path, &trash_root)?;
-    metadata.mark_document_deleted(&workspace_id, &relative_path)?;
-    Ok(())
+    soft_delete(&registry, &metadata, &workspace_id, &relative_path)
 }
 
 /// Recent restorable versions of a file (newest first). The live file's
@@ -267,15 +264,7 @@ pub fn workspace_restore_version(
     }
     let content = metadata.document_version_content(&workspace_id, &relative_path, &revision_id)?;
     // The user explicitly chose this version — overwrite unconditionally.
-    let result = write_file(&registry, &workspace_id, &relative_path, &content, None)?;
-    metadata.record_document_written(
-        &workspace_id,
-        &relative_path,
-        &content,
-        result.last_modified_ms,
-        content.as_bytes().len() as u64,
-    )?;
-    Ok(result)
+    write_and_record(&registry, &metadata, &workspace_id, &relative_path, &content)
 }
 
 pub(crate) fn read_file(
@@ -474,7 +463,7 @@ pub(crate) fn mtime_ms(metadata: &std::fs::Metadata) -> Result<i64, FileError> {
     Ok(duration.as_millis() as i64)
 }
 
-fn write_file_atomic(target: &Path, content: &str) -> Result<(), FileError> {
+pub(crate) fn write_file_atomic(target: &Path, content: impl AsRef<[u8]>) -> Result<(), FileError> {
     let parent = target.parent().ok_or_else(|| FileError::Message {
         message: "file path has no parent".to_owned(),
     })?;
@@ -488,11 +477,57 @@ fn write_file_atomic(target: &Path, content: &str) -> Result<(), FileError> {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     let tmp = parent.join(format!(".{file_name}.tmp-{nanos}"));
-    std::fs::write(&tmp, content)?;
+    std::fs::write(&tmp, content.as_ref())?;
     if let Err(error) = std::fs::rename(&tmp, target) {
         let _ = std::fs::remove_file(&tmp);
         return Err(error.into());
     }
+    Ok(())
+}
+
+/// Write whole-file `content` to a workspace file and record a history
+/// snapshot of it. The single seam used by document writes that don't carry a
+/// fine-grained change list — restore, and applying a reviewed file change.
+pub(crate) fn write_and_record(
+    registry: &WorkspaceRegistry,
+    metadata: &MetadataStore,
+    workspace_id: &str,
+    relative_path: &str,
+    content: &str,
+) -> Result<WorkspaceWriteResult, FileError> {
+    let result = write_file(registry, workspace_id, relative_path, content, None)?;
+    metadata.record_document_written(
+        workspace_id,
+        relative_path,
+        content,
+        result.last_modified_ms,
+        content.as_bytes().len() as u64,
+    )?;
+    Ok(result)
+}
+
+/// Soft-delete a workspace file: snapshot its content into history (when it's
+/// text), move the physical file to the recoverable trash, and mark it deleted
+/// in metadata. Never hard-deletes. Shared by the delete command and the
+/// review "accept a deletion" path.
+pub(crate) fn soft_delete(
+    registry: &WorkspaceRegistry,
+    metadata: &MetadataStore,
+    workspace_id: &str,
+    relative_path: &str,
+) -> Result<(), FileError> {
+    if let Ok(existing) = read_file(registry, workspace_id, relative_path) {
+        metadata.record_document_written(
+            workspace_id,
+            relative_path,
+            &existing.content,
+            existing.last_modified_ms,
+            existing.content.as_bytes().len() as u64,
+        )?;
+    }
+    let trash_root = metadata.trash_root()?;
+    trash_file(registry, workspace_id, relative_path, &trash_root)?;
+    metadata.mark_document_deleted(workspace_id, relative_path)?;
     Ok(())
 }
 

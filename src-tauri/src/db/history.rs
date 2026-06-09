@@ -119,6 +119,29 @@ impl MetadataStore {
         String::from_utf8(blob).map_err(|error| format!("stored version is not valid text: {error}"))
     }
 
+    /// The content hash metadata last recorded for a live document, if any.
+    /// After a pre-run baseline this is the pre-run content hash, so the
+    /// review command can flag a file the user changed during the run.
+    pub fn current_document_hash(
+        &self,
+        vault_id: &str,
+        relative_path: &str,
+    ) -> Result<Option<String>, String> {
+        validate_storage_id(vault_id, "vault id")?;
+        validate_relative_metadata_path(relative_path)?;
+        let connection = self.vault_connection(vault_id)?;
+        connection
+            .query_row(
+                "select content_hash from documents
+                 where current_path = ?1 and deleted_at is null
+                 limit 1",
+                params![relative_path],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| format!("could not load document hash: {error}"))
+    }
+
     /// Of the scanned `candidates`, the paths that still need a baseline
     /// snapshot before a run — anything new, changed on disk since we last
     /// saw it, or whose current content has no snapshot yet. Unchanged,

@@ -41,6 +41,11 @@ pub struct FileChange {
     /// True when either side is binary or too large to inline — the UI shows
     /// a size-only card rather than an inline diff.
     pub preview_omitted: bool,
+    /// True when the live file changed since the pre-run baseline (e.g. the
+    /// user edited it during the run), so accepting would overwrite that edit.
+    /// Always false from [`diff_workspace`]; set by the review command, which
+    /// is the only caller that knows the baseline. The UI warns before accept.
+    pub stale: bool,
     pub original_size: u64,
     pub new_size: u64,
 }
@@ -163,6 +168,7 @@ fn build_change(
         original_text,
         new_text,
         preview_omitted: original_omitted || new_omitted,
+        stale: false,
         original_size,
         new_size,
     })
