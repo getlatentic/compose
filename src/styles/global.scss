@@ -3219,30 +3219,6 @@ select {
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-dashboard__rail-status {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.75rem;
-}
-
-.bob-dashboard__rail-status-dot {
-  inline-size: 0.5rem;
-  block-size: 0.5rem;
-  border-radius: 50%;
-  background: var(--cds-text-helper, #6f6f6f);
-}
-
-.bob-dashboard__rail-status--ok .bob-dashboard__rail-status-dot {
-  background: var(--cds-support-success, #24a148);
-}
-
-.bob-dashboard__rail-status--warn .bob-dashboard__rail-status-dot {
-  background: var(--cds-support-warning, #f1c21b);
-}
-
 .bob-dashboard__rail-help {
   display: flex;
   align-items: center;

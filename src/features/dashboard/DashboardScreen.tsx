@@ -29,8 +29,7 @@ import {
   importFolderFromPicker,
   type ImportedFile,
 } from "../../lib/workspace/folderImport";
-import { type BobInstallStatus } from "../../lib/ipc/settingsClient";
-import { useWorkspaceStore } from "../../app/workspaceStore";
+import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceStore";
 
 const browserPreviewWorkspacePath = "/Users/dev/workspace/bob4everyone";
 
@@ -46,19 +45,22 @@ export function DashboardScreen({
   onOpenWorkspace,
 }: DashboardScreenProps) {
   const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
+  const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
+  const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const hydrateWorkspaces = useWorkspaceStore((state) => state.hydrateWorkspaces);
   const removeStoreWorkspace = useWorkspaceStore((state) => state.removeWorkspace);
 
+  // Only nag about a stored key when the *selected* harness actually needs
+  // one (today: bob). Login-managed CLIs (Claude/Codex) authenticate
+  // themselves, so the dashboard must not push a "connect your key" notice at
+  // them — same capability gate the chat composer's preflight uses.
+  const selectedNeedsKey = harnessCapabilitiesOf(
+    harnessCatalog,
+    selectedHarnessId,
+  ).credentialRequired;
+
   const [activeNav, setActiveNav] = useState<DashboardNav>("home");
-  // Read install status from the store — it's populated by
-  // AppShell's single boot-time probe. Previously this component
-  // had its own checkBobInstall() useEffect, which (with React
-  // StrictMode + dashboard remounts on viewMode flips) fired the
-  // IPC repeatedly. The store is the single source of truth.
-  const installStatus: BobInstallStatus | null = useWorkspaceStore(
-    (state) => state.bobInstallStatus,
-  );
   const [addingWorkspace, setAddingWorkspace] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
 
@@ -165,7 +167,6 @@ export function DashboardScreen({
         </nav>
 
         <div className="bob-dashboard__rail-footer">
-          <RailStatusLine status={installStatus} />
           <button type="button" className="bob-dashboard__rail-help">
             <HelpDesk size={16} />
             <span>Help & feedback</span>
@@ -177,7 +178,7 @@ export function DashboardScreen({
         <div className="bob-dashboard__content">
           <header className="bob-dashboard__hero">
             <h1>Welcome to your workspace</h1>
-            <p>Open a local folder and start writing with Bob. Your files stay on your device.</p>
+            <p>Open a local folder and start writing with your AI assistant. Your files stay on your device.</p>
             <div className="bob-dashboard__cta-row">
               <Button
                 kind="primary"
@@ -210,12 +211,12 @@ export function DashboardScreen({
             ) : null}
           </header>
 
-          {!bobAuthStatus.configured ? (
+          {selectedNeedsKey && !bobAuthStatus.configured ? (
             <ActionableNotification
               kind="info"
               lowContrast
               title="API key not connected."
-              subtitle="Connect your key to enable Bob's chat features."
+              subtitle="Connect your key to enable chat features."
               hideCloseButton
               actionButtonLabel="Connect key"
               onActionButtonClick={onOpenSettings}
@@ -290,7 +291,7 @@ export function DashboardScreen({
             <GuideItem
               number="2"
               title="Start writing"
-              body="Bob reads and writes Markdown files alongside you."
+              body="Your AI assistant reads and writes Markdown files alongside you."
             />
             <GuideItem
               number="3"
@@ -326,26 +327,6 @@ function RailNavItem({
       <span aria-hidden="true">{icon}</span>
       <span>{label}</span>
     </button>
-  );
-}
-
-function RailStatusLine({ status }: { status: BobInstallStatus | null }) {
-  const label = !status
-    ? "Checking Bob CLI"
-    : status.requiresDesktopRuntime
-      ? "Desktop app required"
-    : status.installed
-      ? `Bob CLI ${status.version && /^\d/.test(status.version) ? `v${status.version}` : status.version ?? "detected"}`
-      : "Bob CLI not found";
-  const tone = !status ? "neutral" : status.installed ? "ok" : "warn";
-  return (
-    <div
-      className={`bob-dashboard__rail-status bob-dashboard__rail-status--${tone}`}
-      title={status?.path ?? status?.errorMessage}
-    >
-      <span className="bob-dashboard__rail-status-dot" aria-hidden="true" />
-      <span>{label}</span>
-    </div>
   );
 }
 
