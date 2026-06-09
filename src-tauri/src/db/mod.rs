@@ -49,6 +49,12 @@ pub use history::{BaselineCandidate, DocumentVersion};
 pub mod trash;
 pub use trash::TrashEntry;
 
+// Snapshot blob storage: compression codec (deflate, with a self-describing
+// `codec` tag and a raw fallback) and the retention policy that bounds a
+// document's history. Kept out of this file so the persistence primitives here
+// stay free of compression details. Private to the `db` module.
+mod snapshot;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentAnchor {
@@ -1152,6 +1158,11 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
               transaction_id text,
               created_at integer not null
             );
+            -- The latest-revision-for-a-document lookup runs on every write
+            -- (and now on every snapshot prune); index the doc + the recency it
+            -- orders by so it stays a seek, not a scan, as revisions pile up.
+            create index if not exists idx_document_revisions_doc
+              on document_revisions(doc_id, created_at);
             create table if not exists transactions (
               transaction_id text primary key,
               doc_id text not null,
@@ -1168,8 +1179,17 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
               revision_id text not null,
               content_hash text not null,
               compressed_text blob not null,
+              codec integer not null default 0,
+              uncompressed_size integer,
               created_at integer not null
             );
+            -- This table is append-on-every-run and pruned per document, so its
+            -- queries (list/prune by doc, lookup/backfill by revision) must not
+            -- table-scan as history accumulates over months.
+            create index if not exists idx_document_snapshots_doc
+              on document_snapshots(doc_id);
+            create index if not exists idx_document_snapshots_revision
+              on document_snapshots(revision_id);
             create table if not exists comment_threads (
               thread_id text primary key,
               doc_id text not null,
@@ -1295,6 +1315,7 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
     // existing DBs from before the OPEN/ARCHIVE/DELETE split get the new
     // columns (and the indexes that reference them) added in place here.
     conversations::ensure_conversation_columns(&connection)?;
+    snapshot::ensure_snapshot_columns(&connection)?;
     Ok(())
 }
 
@@ -1417,7 +1438,7 @@ fn record_revision_if_needed(
             // "restore previous version" history would have a revision row but
             // nothing to restore.
             if let Some(snapshot_text) = snapshot_text {
-                ensure_snapshot_exists(
+                snapshot::ensure_snapshot_exists(
                     transaction,
                     doc_id,
                     revision_id,
@@ -1447,48 +1468,17 @@ fn record_revision_if_needed(
     )?;
 
     if let Some(snapshot_text) = snapshot_text {
-        ensure_snapshot_exists(transaction, doc_id, &revision_id, content_hash, snapshot_text, now)?;
-    }
-
-    Ok(revision_id)
-}
-
-/// Insert a content snapshot for `revision_id` unless one already exists.
-/// Snapshots are addressed by revision, so this stays idempotent across
-/// repeated baseline passes over an unchanged document.
-fn ensure_snapshot_exists(
-    transaction: &Transaction<'_>,
-    doc_id: &str,
-    revision_id: &str,
-    content_hash: &str,
-    snapshot_text: &[u8],
-    now: i64,
-) -> rusqlite::Result<()> {
-    let exists = transaction
-        .query_row(
-            "select 1 from document_snapshots where revision_id = ?1 limit 1",
-            params![revision_id],
-            |_row| Ok(()),
-        )
-        .optional()?
-        .is_some();
-    if exists {
-        return Ok(());
-    }
-    transaction.execute(
-        "insert into document_snapshots
-         (snapshot_id, doc_id, revision_id, content_hash, compressed_text, created_at)
-         values (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![
-            Uuid::new_v4().to_string(),
+        snapshot::ensure_snapshot_exists(
+            transaction,
             doc_id,
-            revision_id,
+            &revision_id,
             content_hash,
             snapshot_text,
             now,
-        ],
-    )?;
-    Ok(())
+        )?;
+    }
+
+    Ok(revision_id)
 }
 
 fn parent_revision_for(

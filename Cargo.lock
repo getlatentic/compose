@@ -645,6 +645,7 @@ version = "0.1.0"
 dependencies = [
  "agent-harness",
  "bob-rs",
+ "flate2",
  "keyring",
  "libc",
  "notify",

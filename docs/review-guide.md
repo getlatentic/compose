@@ -140,6 +140,55 @@ early-return that skips the snapshot.
   writes the chosen version back via `write_and_record`. Restoring a
   soft-deleted file recreates it.
 
+### Snapshot storage: compression + retention (`db/snapshot.rs`)
+
+Snapshots accumulate on every write-capable run (baseline + apply), so the blob
+column and the row count are both bounded here. All of this lives in
+`db/snapshot.rs` so the persistence primitives in `db/mod.rs` stay free of
+compression detail; every snapshot-table write goes through
+`snapshot::ensure_snapshot_exists`.
+
+- **Compression.** Blobs are deflate-compressed (`flate2`/zlib) on write and
+  inflated on read. Each row carries a `codec` tag (`0` raw, `1` zlib) so it is
+  self-describing: legacy rows written before compression (the column defaults
+  to raw) and rows that don't shrink (tiny files — compression would *grow*
+  them past the frame overhead) are stored raw and read back unchanged. The
+  decision is "store the smaller of raw vs compressed," so a snapshot is never
+  larger than its content. `uncompressed_size` is stored alongside so
+  `list_document_versions` reports the original size without inflating
+  (`coalesce(uncompressed_size, length(compressed_text))` — the fallback covers
+  legacy rows, where the two are equal).
+- **The content-hash invariant is preserved.** `content_hash` is still computed
+  over the *uncompressed* bytes — it is compared against live-file hashes in
+  `current_document_hash` and `unbaselined_paths`. Compression must stay
+  invisible to those callers; do not hash the compressed blob.
+- **Retention.** After each insert, `prune_document_snapshots` keeps a
+  document's newest `SNAPSHOT_RETENTION_LIMIT` (50, matching the version-list UI
+  page size) snapshots and deletes the rest — **except** two protected sets that
+  survive regardless of age: the document's **latest revision** (the
+  restore-to-current anchor, and the snapshot `unbaselined_paths` reads to
+  decide a file is already baselined) and any revision the **LLM audit trail**
+  (`llm_context_items.document_revision_id`) references. Pruning removes the
+  **whole stale unit** — the snapshot blob, the `transactions` row, and the
+  `document_revisions` row itself — so per-revision metadata rows stay bounded,
+  not just the blobs. (`prune_document_history` iterates every revision, not
+  only snapshot-backed ones, so sync-only revisions are bounded too.) Pointers
+  that would otherwise dangle into pruned history — a survivor's
+  `parent_revision_id`, a transaction's `base_revision_id` — are nulled;
+  protected revisions keep their row, snapshot, and transaction intact so the
+  audit trail still fully resolves.
+- **Interaction with the trash sweep.** `soft_delete` records a deleted file's
+  final content as that document's *latest* revision, and retention always
+  protects the latest revision — so a soft-deleted file's recovery snapshot is
+  never pruned and outlives the `TRASH_RETENTION_DAYS` sweep that eventually
+  removes its physical trash copy. This is why count-based retention is safe
+  here without a time window keyed to the trash policy; if you ever switch to a
+  *time-windowed* history policy, restore that constraint (window ≥
+  `TRASH_RETENTION_DAYS`) so history never drops the last recovery path early.
+- **Schema migration** mirrors `ensure_conversation_columns`:
+  `ensure_snapshot_columns` adds `codec` / `uncompressed_size` in place for DBs
+  created before compression. Idempotent; runs on every vault connection.
+
 ## Recoverable trash (`files/trash.rs`, `files/trash_sweep.rs`, `db/trash.rs`)
 
 `soft_delete` snapshots the file (so it stays in history), then moves the
@@ -207,16 +256,7 @@ domain ever grows to giant repos, the diff is where to bound work first (and
 These work correctly today but are real "operate for years at scale" gaps —
 treat them as follow-ups, not done:
 
-1. **Snapshot history grows unbounded and uncompressed.** `document_snapshots`
-   stores full raw bytes (the `compressed_text` column name is aspirational —
-   compression was never implemented), and nothing prunes old revisions. The
-   baseline + apply paths add snapshots on every run, accelerating growth.
-   Needs a retention policy (keep last N / time-windowed) + compression, taking
-   care not to prune a revision referenced by `llm_context_items`. **Keep the
-   window ≥ `TRASH_RETENTION_DAYS`** (item 2 / `files::trash_sweep`) so pruning
-   history never drops a soft-deleted file's last recovery path before its
-   trash entry was due to expire.
-2. **Trash retention is windowed; the UI and configurability are deferred.**
+1. **Trash retention is windowed; the UI and configurability are deferred.**
    *Done:* a 30-day startup sweep (`files::trash_sweep`) permanently removes
    files trashed longer ago than `TRASH_RETENTION_DAYS`, tracked by
    `trash_entries` rows so the deletion time is exact (see "Recoverable trash"
@@ -226,16 +266,22 @@ treat them as follow-ups, not done:
    restart). All three were a deliberate "backend sweep only" product scope, not
    oversights — the seams (`sweep_expired_trash(retention_days)` param,
    `TrashEntry.original_path` kept for a restore UI) are in place for them.
-3. **Pending review is in-memory only.** `ReviewSessionStore` is not persisted;
+2. **Pending review is in-memory only.** `ReviewSessionStore` is not persisted;
    quitting mid-review discards the sandbox (real files are safe, but the
    agent's work is lost and must be re-run). Acceptable for a safety gate;
    document if that changes.
-4. **Sandbox leak on crash.** A hard crash before `reviewCleanup` leaks the
+3. **Sandbox leak on crash.** A hard crash before `reviewCleanup` leaks the
    temp clone (COW, so ~free disk; the OS reclaims it). A startup sweep of stale
    review sandboxes would close this.
-5. **Binary file edits aren't in text history.** Non-UTF-8 files are applied by
+4. **Binary file edits aren't in text history.** Non-UTF-8 files are applied by
    byte copy and not snapshotted, so the undo list doesn't cover them. Fine for
    a markdown app; revisit if binary assets become first-class.
+
+(Snapshot history growth — previously tracked here and cross-referenced from the
+trash sweep — is now handled end to end: see *Snapshot storage: compression +
+retention* above. Retention compresses blobs and prunes whole stale units
+(snapshot + transaction + revision rows), so neither the blobs nor the
+per-revision metadata grow without bound.)
 
 ## Code map
 
@@ -248,6 +294,7 @@ treat them as follow-ups, not done:
 | `trash_entries` table + queries | [src-tauri/src/db/trash.rs](../src-tauri/src/db/trash.rs) |
 | Atomic write / write+record / soft-delete / version commands | [src-tauri/src/files/mod.rs](../src-tauri/src/files/mod.rs) |
 | Snapshot list / restore / baseline queries / snapshot backfill | [src-tauri/src/db/history.rs](../src-tauri/src/db/history.rs), [src-tauri/src/db/mod.rs](../src-tauri/src/db/mod.rs) |
+| Snapshot blob codec (compression) + retention/pruning | [src-tauri/src/db/snapshot.rs](../src-tauri/src/db/snapshot.rs) |
 | Review session, EditGuard, clone+diff+apply orchestration | [src-tauri/src/review/mod.rs](../src-tauri/src/review/mod.rs) |
 | cwd seam, `edit_guard` request field | [src-tauri/src/bob/runner.rs](../src-tauri/src/bob/runner.rs) |
 | Suggestion union, append/accept/mark | [src/app/workspaceModel.ts](../src/app/workspaceModel.ts) |

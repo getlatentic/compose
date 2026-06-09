@@ -43,6 +43,11 @@ keyring = { version = "3.6.3", features = ["apple-native"] }
 notify = "6"
 walkdir = "2"
 sha2 = "0.10"
+# Compresses document-history snapshot blobs (db::snapshot). Already in the
+# dependency tree transitively; its default miniz_oxide backend is pure Rust,
+# so this adds no native build. The snapshot content hash stays over the
+# uncompressed bytes, so compression is invisible to callers.
+flate2 = "1"
 uuid = { version = "1", features = ["v4"] }
 # Used by settings::settings_install_bob to spool the embedded
 # install-bob.sh to disk for `bash -l` to exec. Also reused in
