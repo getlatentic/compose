@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 # The unofficial bob SDK — an external crate, published to crates.io
 # (repo: https://github.com/getlatentic/agent-harness).
-bob-rs = "0.2"
+bob-rs = "0.3"
 # Web framework — async, type-driven routes, first-class SSE via
 # `axum::response::sse`. Pinned to a recent 0.8.x; track tower 0.5.
 axum = "0.8"

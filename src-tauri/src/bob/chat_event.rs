@@ -859,6 +859,47 @@ mod tests {
         );
     }
 
+    #[test]
+    fn neutral_error_maps_to_chat_error() {
+        // The arm a failing codex/claude run relies on: an in-band
+        // RunEvent::Error becomes a ChatEvent::Error (which the frontend
+        // finalizes into a system bubble). Untested until agent-harness 0.3.0
+        // made codex failures reach RunEvent::Error at all.
+        assert_eq!(
+            run_event_to_chat(RunEvent::Error {
+                run_id: "r".to_owned(),
+                message: "context window exceeded".to_owned(),
+            }),
+            Some(ChatEvent::Error {
+                run_id: "r".to_owned(),
+                message: "context window exceeded".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn failing_codex_turn_surfaces_a_chat_error() {
+        // End-to-end on the real (published 0.3.0) codex path: a `turn.failed`
+        // stdout line → harness::codex::CodexStreamParser → RunEvent::Error →
+        // run_event_to_chat → ChatEvent::Error. This is exactly the bug the
+        // 0.3.0 bump fixes — before it, the failure produced no answer AND no
+        // error, so the run looked like codex silently did nothing.
+        use harness::codex::CodexStreamParser;
+        let mut parser = CodexStreamParser::new();
+        let run_events = parser.on_process_event(ProcessEvent::Stdout {
+            run_id: "r".to_owned(),
+            line: r#"{"type":"turn.failed","error":{"message":"quota exceeded"}}"#.to_owned(),
+        });
+        let chat: Vec<ChatEvent> = run_events.into_iter().filter_map(run_event_to_chat).collect();
+        assert!(
+            chat.iter().any(|e| matches!(
+                e,
+                ChatEvent::Error { message, .. } if message == "quota exceeded"
+            )),
+            "a failing codex turn must surface a ChatEvent::Error, got {chat:?}"
+        );
+    }
+
     // --- wire contract (must match bobClient.ts HarnessRunEvent) ------------
 
     #[test]

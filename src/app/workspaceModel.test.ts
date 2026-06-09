@@ -448,6 +448,24 @@ describe("workspace model", () => {
     expect(failed.runError).toContain("2");
   });
 
+  it("finalizeBobRun surfaces an in-band errorMessage as the runError", () => {
+    // The path a failing codex/claude run takes: a ChatEvent::Error (now
+    // produced by agent-harness 0.3.0 from codex's turn.failed/error) →
+    // finalize({ errorMessage }). The message must reach runError + the
+    // assistant trace, not vanish — the run is shown as errored, not silent.
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+
+    const failed = finalizeBobRun(streaming, runId, { errorMessage: "quota exceeded" });
+    expect(failed.runState).toBe("error");
+    expect(failed.runError).toBe("quota exceeded");
+    expect(failed.activeRunId).toBeNull();
+    const lastAssistant = failed.messages[failed.messages.length - 1];
+    expect(lastAssistant?.streaming).toBe(false);
+    expect(lastAssistant?.activity).toBe("quota exceeded");
+  });
+
   it("setAssistantActivity attaches a status line to the latest assistant message", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
