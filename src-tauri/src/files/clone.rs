@@ -55,12 +55,11 @@ fn clone_tree(src: &Path, dst: &Path, method: &mut CloneMethod) -> Result<(), Fi
         }
         if file_type.is_dir() {
             clone_tree(&from, &to, method)?;
-        } else if file_type.is_file() {
-            if !try_cow_clone(&from, &to)? {
+        } else if file_type.is_file()
+            && !try_cow_clone(&from, &to)? {
                 *method = CloneMethod::DeepCopy;
                 std::fs::copy(&from, &to)?;
             }
-        }
     }
     Ok(())
 }

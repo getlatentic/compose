@@ -178,10 +178,15 @@ struct MarkdownLink {
     target_path: String,
 }
 
+/// A parsed frontmatter field: `(key, value, byte range of the value)`.
+type FrontmatterField = (String, String, SourceRange);
+/// A parsed tag: `(tag text, kind, byte range)`.
+type ParsedTag = (String, TagKind, SourceRange);
+
 struct DocumentParseResult {
-    frontmatter: Vec<(String, String, SourceRange)>,
+    frontmatter: Vec<FrontmatterField>,
     links: Vec<MarkdownLink>,
-    tags: Vec<(String, TagKind, SourceRange)>,
+    tags: Vec<ParsedTag>,
 }
 
 /// Build a workspace index snapshot from already-loaded documents.
@@ -369,7 +374,7 @@ fn parse_markdown_document(
 
     let mut links = parse_wikilinks(source_path, content, doc_id_by_path);
     links.extend(parse_markdown_links(source_path, content, doc_id_by_path));
-    links.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+    links.sort_by_key(|a| a.range.start);
 
     DocumentParseResult {
         frontmatter,
@@ -378,13 +383,7 @@ fn parse_markdown_document(
     }
 }
 
-fn parse_frontmatter(
-    content: &str,
-) -> (
-    Vec<(String, String, SourceRange)>,
-    Vec<(String, TagKind, SourceRange)>,
-    usize,
-) {
+fn parse_frontmatter(content: &str) -> (Vec<FrontmatterField>, Vec<ParsedTag>, usize) {
     let Some(first_line_end) = content.find('\n') else {
         return (Vec::new(), Vec::new(), 0);
     };
@@ -402,7 +401,7 @@ fn parse_frontmatter(
             .map(|relative| offset + relative + 1)
             .unwrap_or(content.len());
         let line = &content[offset..next_line_end];
-        let line_without_newline = line.trim_end_matches(|ch| ch == '\r' || ch == '\n');
+        let line_without_newline = line.trim_end_matches(['\r', '\n']);
         let trimmed = line_without_newline.trim();
         if trimmed == "---" || trimmed == "..." {
             return (fields, tags, next_line_end);
@@ -473,7 +472,7 @@ fn tags_from_frontmatter_value(
         .collect()
 }
 
-fn parse_inline_tags(content: &str, start_offset: usize) -> Vec<(String, TagKind, SourceRange)> {
+fn parse_inline_tags(content: &str, start_offset: usize) -> Vec<ParsedTag> {
     let mut tags = Vec::new();
     let mut index = start_offset;
     while index < content.len() {

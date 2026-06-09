@@ -159,7 +159,7 @@ fn flush_pending(
         }
         if relative
             .split('/')
-            .any(|segment| is_ignored_segment(segment))
+            .any(is_ignored_segment)
         {
             continue;
         }

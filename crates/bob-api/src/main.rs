@@ -165,10 +165,8 @@ async fn handle_key_save(Json(body): Json<KeySaveBody>) -> impl IntoResponse {
 /// unchanged:
 ///   * `event: ready`            `{ runId }`               — handshake
 ///   * `event: bob.<type>`       `<parsed bob JSON>`       — per stdout line
-///                                                            (`bob.init`, `bob.message`,
-///                                                             `bob.tool_use`, etc — `type`
-///                                                             field on the JSON line names
-///                                                             the SSE event)
+///     (`bob.init`, `bob.message`, `bob.tool_use`, etc — the `type` field on
+///     the JSON line names the SSE event)
 ///   * `event: bob.stderr`       `{ text }`                — non-JSON stdout or stderr
 ///   * `event: bob.error`        `{ message }`             — spawn / IO failure
 ///   * `event: end`              `{ exitCode, runId }`     — terminal
