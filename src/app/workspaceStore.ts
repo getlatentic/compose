@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create, type StoreApi } from "zustand";
 import {
   createFile as createFileIpc,
   deleteFile as deleteFileIpc,
@@ -15,9 +15,16 @@ import {
 import { rebuildWorkspaceIndex as rebuildWorkspaceIndexIpc } from "../lib/ipc/indexClient";
 import { appendLlmMessage, recordLlmThread } from "../lib/ipc/llmContextClient";
 import {
+  archiveConversation as archiveConversationIpc,
+  deleteConversation as deleteConversationIpc,
+  duplicateConversation as duplicateConversationIpc,
+  listConversations,
   loadActiveConversation,
+  loadConversation,
   newConversation,
+  renameConversation as renameConversationIpc,
   saveConversation,
+  type ConversationSummary,
 } from "../lib/ipc/conversationsClient";
 import {
   checkBobInstall,
@@ -55,6 +62,7 @@ import {
   applyWorkspaceDocumentChanges,
   applyWorkspaceIndexSnapshot,
   bobRuntimeReadiness,
+  chatThreadContextFileLabels,
   closeWorkspaceFileTab,
   addWorkspaceComment,
   createLlmContextSnapshots,
@@ -176,6 +184,34 @@ interface WorkspaceState {
   loadActiveWorkspaceFiles: () => Promise<void>;
   openChat: () => void;
   newChat: () => Promise<void>;
+  /**
+   * Per-workspace conversation history, newest activity first, *including*
+   * archived ones (the UI filters by the `archived` flag). Keyed by
+   * workspace id. Loaded on workspace open and refreshed after any mutation.
+   */
+  conversations: Record<string, ConversationSummary[]>;
+  /** (Re)load the history list for a workspace from persistence. */
+  loadConversations: (workspaceId: string) => Promise<void>;
+  /** Open a conversation in the panel: hydrate its thread + bump its
+   * last-opened. No-op while the current thread is mid-run. */
+  openConversation: (conversationId: string) => Promise<void>;
+  /** Set (null clears to derived) a conversation's title — optimistic. */
+  renameConversation: (conversationId: string, title: string | null) => Promise<void>;
+  /** Archive / un-archive — optimistic; archiving the open one opens the next. */
+  archiveConversation: (conversationId: string, archived: boolean) => Promise<void>;
+  /** Soft-delete with a grace window: the row leaves the list immediately and
+   * the persisted delete commits after a delay unless undone. */
+  deleteConversation: (conversationId: string) => void;
+  /** Cancel a pending delete within its grace window and restore the row. */
+  undoDeleteConversation: (conversationId: string) => void;
+  /** Duplicate a conversation and open the copy — optimistic. */
+  duplicateConversation: (conversationId: string) => Promise<void>;
+  /** Transient toast backing the post-delete undo affordance, or null. */
+  conversationDeleteNotice: {
+    workspaceId: string;
+    conversationId: string;
+    title: string;
+  } | null;
   reloadActiveFile: () => Promise<void>;
   rebuildWorkspaceIndex: (workspaceId?: string) => Promise<void>;
   removeWorkspace: (workspaceId: string) => void;
@@ -364,10 +400,13 @@ function persistTabs(workspaces: BobWorkspace[], workspaceId: string) {
  * Fire-and-forget persist of a workspace's active conversation (settled
  * turns only — `serializeChatMessages` skips in-flight messages). Called
  * on send and on turn completion; a no-op when the thread has no
- * conversation id yet. Best-effort, off the input thread.
+ * conversation id yet. Best-effort, off the input thread. Persists the
+ * thread's context-file labels too (so the history list shows file chips),
+ * and refreshes the history list once the save commits so titles / previews
+ * / counts stay live.
  */
-function persistConversation(workspaces: BobWorkspace[], workspaceId: string) {
-  const workspace = workspaces.find((item) => item.id === workspaceId);
+function persistConversation(get: StoreApi<WorkspaceState>["getState"], workspaceId: string) {
+  const workspace = get().workspaces.find((item) => item.id === workspaceId);
   const conversationId = workspace?.chatThread.conversationId;
   if (!workspace || !conversationId) {
     return;
@@ -376,13 +415,66 @@ function persistConversation(workspaces: BobWorkspace[], workspaceId: string) {
     workspaceId,
     conversationId,
     serializeChatMessages(workspace.chatThread),
-  ).catch(() => {
-    // best-effort — a failed save shouldn't disrupt the chat
-  });
+    chatThreadContextFileLabels(workspace.chatThread),
+  )
+    .then(() => {
+      void get().loadConversations(workspaceId);
+    })
+    .catch(() => {
+      // best-effort — a failed save shouldn't disrupt the chat
+    });
 }
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+/**
+ * Grace window for the soft-delete undo affordance. The conversation leaves
+ * the list immediately, but the persisted delete only commits after this
+ * delay — so an Undo within the window cancels the IPC entirely and the row
+ * is restored with no server round-trip.
+ */
+const CONVERSATION_DELETE_GRACE_MS = 6000;
+
+/** Pending soft-deletes keyed by `${workspaceId}:${conversationId}`, so Undo
+ * can cancel the timer before it fires. Module-level: timers outlive any one
+ * render and there is exactly one store. */
+const conversationDeleteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Replace one workspace's conversation list via a transform. */
+function patchConversationList(
+  conversations: Record<string, ConversationSummary[]>,
+  workspaceId: string,
+  transform: (list: ConversationSummary[]) => ConversationSummary[],
+): Record<string, ConversationSummary[]> {
+  return { ...conversations, [workspaceId]: transform(conversations[workspaceId] ?? []) };
+}
+
+/**
+ * After the open conversation leaves the active set (archived or deleted),
+ * open the next most-recent non-archived one — or reset to a fresh empty
+ * chat when none remain. Reads the (already optimistically-updated) list.
+ */
+function openNextConversationOrReset(
+  get: StoreApi<WorkspaceState>["getState"],
+  set: StoreApi<WorkspaceState>["setState"],
+  workspaceId: string,
+  excludeId: string,
+): Promise<void> {
+  const next = (get().conversations[workspaceId] ?? []).find(
+    (item) => item.conversationId !== excludeId && !item.archived,
+  );
+  if (next) {
+    return get().openConversation(next.conversationId);
+  }
+  set((state) => ({
+    workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+      ...item,
+      chatThread: { ...resetChatThread(item.chatThread), conversationId: null },
+    })),
+  }));
+  return Promise.resolve();
 }
 
 function persistComments(
@@ -966,9 +1058,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     try {
       const entries = await scanWorkspace(workspaceId);
       const comments = await loadWorkspaceComments(workspaceId);
-      // Restore the workspace's active conversation (most-recent
-      // non-archived) so the chat survives reload. Best-effort: a load
-      // failure shouldn't block the scan/comments restore.
+      // Restore the workspace's active conversation (most-recently-OPENED
+      // non-archived, non-deleted) so the chat survives reload. Best-effort:
+      // a load failure shouldn't block the scan/comments restore.
       const conversation = await loadActiveConversation(workspaceId).catch(() => null);
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => {
@@ -979,6 +1071,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         }),
       }));
       persistTabs(get().workspaces, workspaceId);
+      // Populate the conversation history list for the panel's switcher.
+      void get().loadConversations(workspaceId);
 
       const refreshed = get().workspaces.find((item) => item.id === workspaceId);
       const activeFilePath = refreshed?.activeFilePath ?? "";
@@ -1024,19 +1118,190 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return;
     }
     const workspaceId = workspace.id;
-    // Archive the current conversation and get a fresh id (stamped with
-    // the active harness). Best-effort; on failure we still reset the
-    // visible thread so the user gets a clean slate.
-    const conversationId = await newConversation(
-      workspaceId,
-      get().selectedHarnessId,
-    ).catch(() => null);
+    // Just clear the visible thread to an empty, conversation-less slate.
+    // We do NOT touch the DB here — the conversation row is created lazily
+    // on the first send (see `sendChatPrompt`), so clicking "New chat"
+    // repeatedly never litters history with empty conversations, and the
+    // prior conversation is left exactly as it was (not archived).
     set((state) => ({
       workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
         ...item,
-        chatThread: { ...resetChatThread(item.chatThread), conversationId },
+        chatThread: { ...resetChatThread(item.chatThread), conversationId: null },
       })),
     }));
+  },
+  conversations: {},
+  conversationDeleteNotice: null,
+  loadConversations: async (workspaceId: string) => {
+    // The list always includes archived rows (the UI filters by the
+    // `archived` flag), so the history dropdown, All view, and Archived
+    // filter all read from one fetch.
+    const summaries = await listConversations(workspaceId, true).catch(() => null);
+    if (!summaries) {
+      return;
+    }
+    set((state) => ({ conversations: { ...state.conversations, [workspaceId]: summaries } }));
+  },
+  openConversation: async (conversationId: string) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    const thread = workspace.chatThread;
+    // Don't switch out from under a running turn (the run subscription is
+    // bound to the live thread).
+    if (thread.activeRunId || thread.runState === "starting" || thread.runState === "streaming") {
+      return;
+    }
+    const workspaceId = workspace.id;
+    if (thread.conversationId === conversationId) {
+      set({ chatOpen: true });
+      return;
+    }
+    // Opening bumps `last_opened_at` server-side, so this conversation
+    // becomes the one restored on next load.
+    const snapshot = await loadConversation(workspaceId, conversationId).catch(() => null);
+    if (!snapshot) {
+      return;
+    }
+    set((state) => ({
+      chatOpen: true,
+      workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+        ...item,
+        chatThread: hydrateChatThread(item.chatThread, snapshot),
+      })),
+    }));
+    void get().loadConversations(workspaceId);
+  },
+  renameConversation: async (conversationId: string, title: string | null) => {
+    const workspaceId = get().activeWorkspaceId;
+    if (!workspaceId) {
+      return;
+    }
+    const previous = get().conversations[workspaceId] ?? [];
+    const trimmed = title?.trim() ? title.trim() : null;
+    // Optimistic: show the explicit title immediately. Clearing it (null)
+    // keeps the current label until the refresh resolves the derived one.
+    set((state) => ({
+      conversations: patchConversationList(state.conversations, workspaceId, (list) =>
+        list.map((item) =>
+          item.conversationId === conversationId
+            ? { ...item, title: trimmed ?? item.title }
+            : item,
+        ),
+      ),
+    }));
+    try {
+      await renameConversationIpc(workspaceId, conversationId, title);
+      await get().loadConversations(workspaceId);
+    } catch {
+      set((state) => ({
+        conversations: { ...state.conversations, [workspaceId]: previous },
+      }));
+    }
+  },
+  archiveConversation: async (conversationId: string, archived: boolean) => {
+    const workspaceId = get().activeWorkspaceId;
+    if (!workspaceId) {
+      return;
+    }
+    const previous = get().conversations[workspaceId] ?? [];
+    set((state) => ({
+      conversations: patchConversationList(state.conversations, workspaceId, (list) =>
+        list.map((item) =>
+          item.conversationId === conversationId ? { ...item, archived } : item,
+        ),
+      ),
+    }));
+    // Archiving the open conversation just opens the next one.
+    const openId = get().activeWorkspace()?.chatThread.conversationId ?? null;
+    if (archived && openId === conversationId) {
+      await openNextConversationOrReset(get, set, workspaceId, conversationId);
+    }
+    try {
+      await archiveConversationIpc(workspaceId, conversationId, archived);
+      await get().loadConversations(workspaceId);
+    } catch {
+      set((state) => ({
+        conversations: { ...state.conversations, [workspaceId]: previous },
+      }));
+    }
+  },
+  deleteConversation: (conversationId: string) => {
+    const workspaceId = get().activeWorkspaceId;
+    if (!workspaceId) {
+      return;
+    }
+    const target = (get().conversations[workspaceId] ?? []).find(
+      (item) => item.conversationId === conversationId,
+    );
+    if (!target) {
+      return;
+    }
+    const wasOpen =
+      get().activeWorkspace()?.chatThread.conversationId === conversationId;
+    // Optimistic: drop it from the list now and surface the undo toast.
+    set((state) => ({
+      conversations: patchConversationList(state.conversations, workspaceId, (list) =>
+        list.filter((item) => item.conversationId !== conversationId),
+      ),
+      conversationDeleteNotice: { workspaceId, conversationId, title: target.title },
+    }));
+    if (wasOpen) {
+      void openNextConversationOrReset(get, set, workspaceId, conversationId);
+    }
+    // Commit the soft-delete after the grace window unless undone.
+    const key = `${workspaceId}:${conversationId}`;
+    const pending = conversationDeleteTimers.get(key);
+    if (pending) {
+      clearTimeout(pending);
+    }
+    const timer = setTimeout(() => {
+      conversationDeleteTimers.delete(key);
+      const notice = get().conversationDeleteNotice;
+      if (
+        notice &&
+        notice.workspaceId === workspaceId &&
+        notice.conversationId === conversationId
+      ) {
+        set({ conversationDeleteNotice: null });
+      }
+      void deleteConversationIpc(workspaceId, conversationId)
+        .catch(() => {})
+        .finally(() => {
+          void get().loadConversations(workspaceId);
+        });
+    }, CONVERSATION_DELETE_GRACE_MS);
+    conversationDeleteTimers.set(key, timer);
+  },
+  undoDeleteConversation: (conversationId: string) => {
+    const workspaceId =
+      get().conversationDeleteNotice?.workspaceId ?? get().activeWorkspaceId;
+    if (!workspaceId) {
+      return;
+    }
+    const key = `${workspaceId}:${conversationId}`;
+    const timer = conversationDeleteTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      conversationDeleteTimers.delete(key);
+    }
+    set({ conversationDeleteNotice: null });
+    // The delete never committed — reloading restores the row.
+    void get().loadConversations(workspaceId);
+  },
+  duplicateConversation: async (conversationId: string) => {
+    const workspaceId = get().activeWorkspaceId;
+    if (!workspaceId) {
+      return;
+    }
+    try {
+      const newId = await duplicateConversationIpc(workspaceId, conversationId);
+      await get().loadConversations(workspaceId);
+      await get().openConversation(newId);
+    } catch {
+      void get().loadConversations(workspaceId);
+    }
   },
   reloadActiveFile: async () => {
     const workspace = get().activeWorkspace();
@@ -1289,7 +1554,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         }));
       }
     }
-    persistConversation(get().workspaces, workspaceId);
+    persistConversation(get, workspaceId);
 
     // Batched setter — folds all stream-driven state changes for
     // this run into one set() per animation frame. See
@@ -1325,7 +1590,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       batched.flushNow();
       batched.dispose();
       // Turn settled — persist the final answer (+ its trace + stats).
-      persistConversation(get().workspaces, workspaceId);
+      persistConversation(get, workspaceId);
       if (releaseSubscription) {
         releaseSubscription();
         releaseSubscription = null;
@@ -1490,7 +1755,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       batched.flushNow();
       batched.dispose();
       // Turn settled — persist the final answer (+ its trace + stats).
-      persistConversation(get().workspaces, workspaceId);
+      persistConversation(get, workspaceId);
       if (releaseSubscription) {
         releaseSubscription();
         releaseSubscription = null;
@@ -1525,7 +1790,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         }));
       }
     }
-    persistConversation(get().workspaces, workspaceId);
+    persistConversation(get, workspaceId);
 
     try {
       releaseSubscription = await subscribeHarnessRun(runId, (event) => {

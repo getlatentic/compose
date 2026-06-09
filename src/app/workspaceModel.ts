@@ -1347,6 +1347,19 @@ export function serializeChatMessages(
 }
 
 /**
+ * The display labels of the files currently attached as context — persisted
+ * alongside a conversation so the history list can show its attached-file
+ * chips. De-duplicated, file context items only (comment context is anchored
+ * to a file already counted). Labels (not paths) since they're user-facing.
+ */
+export function chatThreadContextFileLabels(thread: WorkspaceChatThread): string[] {
+  const labels = thread.contextItems
+    .filter((item) => item.kind === "file")
+    .map((item) => item.label);
+  return Array.from(new Set(labels));
+}
+
+/**
  * Rebuild a chat thread from a persisted conversation snapshot, parsing
  * `traceJson`/`statsJson` back into `trace`/`stats` so a restored
  * assistant reply renders identically to live (bubble + "Show work" trace

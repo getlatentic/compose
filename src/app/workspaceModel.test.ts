@@ -730,6 +730,7 @@ describe("workspace model", () => {
       conversationId: "conv-1",
       title: null,
       harnessId: "bob",
+      contextFiles: [],
       messages: records,
       createdAt: 0,
       updatedAt: 1,
