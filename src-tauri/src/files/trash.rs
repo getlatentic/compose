@@ -4,22 +4,48 @@
 //! own, or one an assistant proposed and the user approved — moves the file
 //! into an app-managed trash directory outside any workspace. The file's last
 //! content is also snapshotted into history (by the caller) so it can be
-//! restored, and the physical file in the trash is a second safety net. There
-//! is intentionally no UI that empties this trash in v1: deletes are rare and
-//! always reversible.
+//! restored, and the physical file in the trash is a second safety net.
+//!
+//! This module owns the trash's on-disk layout: a file lives at
+//! `<trash_root>/<vault_id>/<trashed_name>`, where `trashed_name` is
+//! `<uuid>-<original name>`. The retention sweep ([`super::trash_sweep`])
+//! records that name in the db *before* the move and reads it back to purge an
+//! expired file, so name generation, the move, and the purge are kept as
+//! separate seams here rather than one all-in-one helper.
 
 use super::FileError;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-/// Move `source` into `<trash_root>/<vault_id>/` under a collision-proof
-/// name, returning the file's new path. Uses a rename when possible and
-/// falls back to copy-then-remove across devices. Errors if `source` is
-/// missing.
-pub fn move_to_trash(
+/// The collision-proof name a file takes inside the trash:
+/// `<uuid>-<original name>` — unique even for repeated deletes of files that
+/// share a name, with the suffix keeping the trashed file recognizable.
+///
+/// Exposed so a caller can record a trash-entry row under this name *before*
+/// the physical move (the retention sweep relies on every trashed file having
+/// a row — see [`super::soft_delete`]).
+pub fn trashed_name_for(source: &Path) -> String {
+    let file_name = source
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "file".to_owned());
+    format!("{}-{file_name}", Uuid::new_v4())
+}
+
+/// Absolute path of a trashed file, given the name [`trashed_name_for`]
+/// produced. The single place the trash layout is reconstructed.
+pub fn trashed_path(trash_root: &Path, vault_id: &str, trashed_name: &str) -> PathBuf {
+    trash_root.join(vault_id).join(trashed_name)
+}
+
+/// Move `source` into the trash under a pre-chosen `trashed_name`, returning
+/// its new path. Uses a rename when possible and falls back to
+/// copy-then-remove across devices. Errors if `source` is missing.
+pub fn move_to_trash_as(
     trash_root: &Path,
     vault_id: &str,
     source: &Path,
+    trashed_name: &str,
 ) -> Result<PathBuf, FileError> {
     if !source.exists() {
         return Err(FileError::NotFound {
@@ -28,14 +54,7 @@ pub fn move_to_trash(
     }
     let vault_trash = trash_root.join(vault_id);
     std::fs::create_dir_all(&vault_trash)?;
-
-    let file_name = source
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| "file".to_owned());
-    // `<uuid>-<original name>` — unique even for repeated deletes of files
-    // that share a name, and the suffix keeps the trashed file recognizable.
-    let destination = vault_trash.join(format!("{}-{file_name}", Uuid::new_v4()));
+    let destination = vault_trash.join(trashed_name);
 
     match std::fs::rename(source, &destination) {
         Ok(()) => Ok(destination),
@@ -46,6 +65,28 @@ pub fn move_to_trash(
             std::fs::remove_file(source)?;
             Ok(destination)
         }
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Move `source` into the trash under a freshly generated name. Convenience for
+/// callers that don't need the name beforehand.
+pub fn move_to_trash(trash_root: &Path, vault_id: &str, source: &Path) -> Result<PathBuf, FileError> {
+    move_to_trash_as(trash_root, vault_id, source, &trashed_name_for(source))
+}
+
+/// Permanently remove a trashed file (the only place the trash is hard-deleted,
+/// driven by the retention sweep). A file that is already gone counts as
+/// success, so a stale entry never wedges the sweep.
+pub fn purge_trashed_file(
+    trash_root: &Path,
+    vault_id: &str,
+    trashed_name: &str,
+) -> Result<(), FileError> {
+    let path = trashed_path(trash_root, vault_id, trashed_name);
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.into()),
     }
 }
@@ -110,5 +151,24 @@ mod tests {
         let trash = tempdir().unwrap();
         let result = move_to_trash(trash.path(), "v", Path::new("/nope/missing.md"));
         assert!(matches!(result, Err(FileError::NotFound { .. })));
+    }
+
+    #[test]
+    fn purge_removes_a_trashed_file_and_treats_missing_as_success() {
+        let workspace = tempdir().unwrap();
+        let trash = tempdir().unwrap();
+        let source = workspace.path().join("note.md");
+        fs::write(&source, "bye").unwrap();
+        let name = trashed_name_for(&source);
+        move_to_trash_as(trash.path(), "vault-1", &source, &name).expect("trash");
+
+        let path = trashed_path(trash.path(), "vault-1", &name);
+        assert!(path.exists());
+        purge_trashed_file(trash.path(), "vault-1", &name).expect("purge");
+        assert!(!path.exists(), "purge hard-deletes the trashed file");
+
+        // A second purge of the now-gone file is still Ok — a stale entry must
+        // never wedge the sweep.
+        purge_trashed_file(trash.path(), "vault-1", &name).expect("purge missing is ok");
     }
 }

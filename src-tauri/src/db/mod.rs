@@ -40,6 +40,15 @@ pub use conversations::{ConversationMessageRecord, ConversationSnapshot, Convers
 pub mod history;
 pub use history::{BaselineCandidate, DocumentVersion};
 
+// Recoverable-trash bookkeeping: a row per soft-deleted file recording *when*
+// it was trashed, so the retention sweep (`files::trash_sweep`) can purge old
+// entries. Rows live in the global db keyed by `vault_id` (one sweep query
+// covers every vault); the filesystem alone can't tell us the deletion time
+// because a rename preserves the file's content-mtime, not the moment it was
+// deleted. Like `history`, this submodule reuses the private `app_connection`.
+pub mod trash;
+pub use trash::TrashEntry;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentAnchor {
@@ -55,6 +64,16 @@ pub struct CommentAnchor {
 pub struct DocumentTextChange {
     pub range: SourceRange,
     pub text: String,
+}
+
+/// One document edit handed to [`MetadataStore::record_document_transaction`]:
+/// the text before and after the edit, plus the change-list that transforms one
+/// into the other. The three always travel together, so they are bundled rather
+/// than passed as separate arguments.
+pub struct DocumentEdit<'a> {
+    pub base_text: &'a str,
+    pub resulting_text: &'a str,
+    pub changes: Vec<DocumentTextChange>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -346,17 +365,15 @@ impl MetadataStore {
         &self,
         vault_id: &str,
         relative_path: &str,
-        base_text: &str,
-        resulting_text: &str,
-        changes: Vec<DocumentTextChange>,
+        edit: DocumentEdit<'_>,
         last_seen_mtime: i64,
         last_seen_size: u64,
     ) -> Result<(), String> {
-        if changes.is_empty() {
+        if edit.changes.is_empty() {
             return self.record_document_written(
                 vault_id,
                 relative_path,
-                resulting_text,
+                edit.resulting_text,
                 last_seen_mtime,
                 last_seen_size,
             );
@@ -365,15 +382,15 @@ impl MetadataStore {
         validate_storage_id(vault_id, "vault id")?;
         validate_relative_metadata_path(relative_path)?;
         let (_computed_text, inverse_changes) =
-            inverse_changes_for_transaction(base_text, resulting_text, &changes)?;
+            inverse_changes_for_transaction(edit.base_text, edit.resulting_text, &edit.changes)?;
         let now = now_ms();
         let transaction_id = Uuid::new_v4().to_string();
         let entry = DocumentInventoryEntry {
-            content_hash: content_hash(resulting_text),
+            content_hash: content_hash(edit.resulting_text),
             last_seen_mtime,
             last_seen_size,
             relative_path: relative_path.to_owned(),
-            title: title_from_content_or_path(resulting_text, relative_path),
+            title: title_from_content_or_path(edit.resulting_text, relative_path),
         };
         let mut connection = self.vault_connection(vault_id)?;
         let transaction = connection
@@ -382,14 +399,14 @@ impl MetadataStore {
         let (doc_id, resulting_revision_id) = upsert_document(
             &transaction,
             &entry,
-            Some(resulting_text.as_bytes()),
+            Some(edit.resulting_text.as_bytes()),
             Some(&transaction_id),
             now,
         )
         .map_err(|error| format!("could not record document transaction revision: {error}"))?;
         let base_revision_id = parent_revision_for(&transaction, &resulting_revision_id)
             .map_err(|error| format!("could not resolve base revision: {error}"))?;
-        let changes_json = serde_json::to_string(&changes)
+        let changes_json = serde_json::to_string(&edit.changes)
             .map_err(|error| format!("could not encode transaction changes: {error}"))?;
         let inverse_changes_json = serde_json::to_string(&inverse_changes)
             .map_err(|error| format!("could not encode inverse transaction changes: {error}"))?;
@@ -1079,6 +1096,16 @@ fn migrate_global_database(db_path: &Path) -> Result<(), String> {
               value_json text not null,
               updated_at integer not null
             );
+            create table if not exists trash_entries (
+              id text primary key,
+              vault_id text not null,
+              original_path text not null,
+              trashed_name text not null,
+              size_bytes integer not null,
+              trashed_at integer not null
+            );
+            create index if not exists idx_trash_entries_trashed_at
+              on trash_entries(trashed_at);
             ",
         )
         .map_err(|error| format!("could not migrate app metadata db: {error}"))?;
@@ -1844,7 +1871,7 @@ fn validate_index_kind(value: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis() as i64)
@@ -1966,12 +1993,14 @@ mod tests {
             .record_document_transaction(
                 vault_id,
                 "notes/a.md",
-                "# A\n\nText",
-                "# A!\n\nText",
-                vec![DocumentTextChange {
-                    range: SourceRange { start: 3, end: 3 },
-                    text: "!".to_owned(),
-                }],
+                DocumentEdit {
+                    base_text: "# A\n\nText",
+                    resulting_text: "# A!\n\nText",
+                    changes: vec![DocumentTextChange {
+                        range: SourceRange { start: 3, end: 3 },
+                        text: "!".to_owned(),
+                    }],
+                },
                 20,
                 10,
             )
@@ -2002,12 +2031,14 @@ mod tests {
             .record_document_transaction(
                 vault_id,
                 "notes/a.md",
-                "# A\n\nText",
-                "# Different",
-                vec![DocumentTextChange {
-                    range: SourceRange { start: 3, end: 3 },
-                    text: "!".to_owned(),
-                }],
+                DocumentEdit {
+                    base_text: "# A\n\nText",
+                    resulting_text: "# Different",
+                    changes: vec![DocumentTextChange {
+                        range: SourceRange { start: 3, end: 3 },
+                        text: "!".to_owned(),
+                    }],
+                },
                 20,
                 10,
             )

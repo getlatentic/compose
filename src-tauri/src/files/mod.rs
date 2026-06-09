@@ -9,6 +9,7 @@ use walkdir::WalkDir;
 pub mod clone;
 pub mod diff;
 pub mod trash;
+pub mod trash_sweep;
 pub mod watcher;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -140,7 +141,7 @@ pub fn workspace_write_file(
             &relative_path,
             &content,
             result.last_modified_ms,
-            content.as_bytes().len() as u64,
+            content.len() as u64,
         )?;
     } else {
         let base = base.ok_or_else(|| FileError::Message {
@@ -149,11 +150,13 @@ pub fn workspace_write_file(
         metadata.record_document_transaction(
             &workspace_id,
             &relative_path,
-            &base.content,
-            &content,
-            changes,
+            db::DocumentEdit {
+                base_text: &base.content,
+                resulting_text: &content,
+                changes,
+            },
             result.last_modified_ms,
-            content.as_bytes().len() as u64,
+            content.len() as u64,
         )?;
     }
     Ok(result)
@@ -175,7 +178,7 @@ pub fn workspace_create_file(
         &relative_path,
         &content,
         result.last_modified_ms,
-        content.as_bytes().len() as u64,
+        content.len() as u64,
     )?;
     Ok(result)
 }
@@ -196,7 +199,7 @@ pub fn workspace_rename_file(
         &from_relative,
         &existing.content,
         existing.last_modified_ms,
-        existing.content.as_bytes().len() as u64,
+        existing.content.len() as u64,
     )?;
     rename_file(&registry, &workspace_id, &from_relative, &to_relative)?;
     metadata.rename_document(&workspace_id, &from_relative, &to_relative)?;
@@ -259,7 +262,7 @@ pub fn workspace_restore_version(
             &relative_path,
             &current.content,
             current.last_modified_ms,
-            current.content.as_bytes().len() as u64,
+            current.content.len() as u64,
         )?;
     }
     let content = metadata.document_version_content(&workspace_id, &relative_path, &revision_id)?;
@@ -353,19 +356,6 @@ pub(crate) fn rename_file(
     }
     std::fs::rename(&from, &to)?;
     Ok(())
-}
-
-/// Move a workspace file into the recoverable trash, returning its trashed
-/// path. Resolution rejects path traversal (via `resolve_workspace_path`) just
-/// like every other file command.
-pub(crate) fn trash_file(
-    registry: &WorkspaceRegistry,
-    workspace_id: &str,
-    relative_path: &str,
-    trash_root: &Path,
-) -> Result<std::path::PathBuf, FileError> {
-    let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
-    trash::move_to_trash(trash_root, workspace_id, &absolute)
 }
 
 pub(crate) fn scan_markdown_files(root: &Path) -> Result<Vec<WorkspaceFileEntry>, FileError> {
@@ -501,7 +491,7 @@ pub(crate) fn write_and_record(
         relative_path,
         content,
         result.last_modified_ms,
-        content.as_bytes().len() as u64,
+        content.len() as u64,
     )?;
     Ok(result)
 }
@@ -510,23 +500,47 @@ pub(crate) fn write_and_record(
 /// text), move the physical file to the recoverable trash, and mark it deleted
 /// in metadata. Never hard-deletes. Shared by the delete command and the
 /// review "accept a deletion" path.
+///
+/// The trash-entry row is recorded *before* the physical move so the retention
+/// sweep ([`trash_sweep`]) can never miss a trashed file — an orphan file with
+/// no row would leak forever, defeating the growth bound. If the move then
+/// fails, the row is rolled back.
 pub(crate) fn soft_delete(
     registry: &WorkspaceRegistry,
     metadata: &MetadataStore,
     workspace_id: &str,
     relative_path: &str,
 ) -> Result<(), FileError> {
+    // Snapshot first: this is the recovery path that outlives the physical
+    // trash copy once the retention sweep purges it.
     if let Ok(existing) = read_file(registry, workspace_id, relative_path) {
         metadata.record_document_written(
             workspace_id,
             relative_path,
             &existing.content,
             existing.last_modified_ms,
-            existing.content.as_bytes().len() as u64,
+            existing.content.len() as u64,
         )?;
     }
+
+    let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
+    let size_bytes = std::fs::metadata(&absolute).map(|m| m.len()).unwrap_or(0) as i64;
     let trash_root = metadata.trash_root()?;
-    trash_file(registry, workspace_id, relative_path, &trash_root)?;
+    let trashed_name = trash::trashed_name_for(&absolute);
+
+    let entry_id = metadata.record_trash_entry(
+        workspace_id,
+        relative_path,
+        &trashed_name,
+        size_bytes,
+        db::now_ms(),
+    )?;
+    if let Err(error) = trash::move_to_trash_as(&trash_root, workspace_id, &absolute, &trashed_name)
+    {
+        let _ = metadata.delete_trash_entry(&entry_id);
+        return Err(error);
+    }
+
     metadata.mark_document_deleted(workspace_id, relative_path)?;
     Ok(())
 }
@@ -659,28 +673,49 @@ mod tests {
     }
 
     #[test]
-    fn trash_moves_file_out_of_workspace() {
-        let dir = tempdir().expect("tempdir");
-        let trash = tempdir().expect("trash");
+    fn soft_delete_trashes_file_records_history_and_a_trash_entry() {
+        let data = tempdir().expect("data");
+        let dir = tempdir().expect("workspace");
         let (registry, workspace_id) = registry_with_workspace(dir.path());
-        fs::write(dir.path().join("a.md"), "x").unwrap();
+        let metadata = MetadataStore::default();
+        metadata.init_from_dir(data.path()).expect("init metadata");
+        ensure_vault_metadata(&metadata, &workspace_id, dir.path()).expect("vault");
+        fs::write(dir.path().join("gone.md"), "bye").unwrap();
 
-        let trashed =
-            trash_file(&registry, &workspace_id, "a.md", trash.path()).expect("trash");
-        assert!(!dir.path().join("a.md").exists());
-        assert_eq!(fs::read_to_string(&trashed).unwrap(), "x");
+        soft_delete(&registry, &metadata, &workspace_id, "gone.md").expect("soft delete");
+
+        // The real file left the workspace...
+        assert!(!dir.path().join("gone.md").exists());
+        // ...is restorable from history...
+        assert_eq!(
+            metadata
+                .list_document_versions(&workspace_id, "gone.md", None, 10)
+                .expect("versions")
+                .len(),
+            1
+        );
+        // ...and has a trash entry stamped now (so it survives until the
+        // retention window elapses), with the physical file in the trash.
+        let entries = metadata.expired_trash_entries(i64::MAX).expect("entries");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].original_path, "gone.md");
+        let trash_root = metadata.trash_root().expect("trash root");
+        let trashed = trash::trashed_path(&trash_root, &workspace_id, &entries[0].trashed_name);
+        assert_eq!(fs::read_to_string(&trashed).unwrap(), "bye");
     }
 
     #[test]
     fn commands_reject_path_traversal() {
+        let data = tempdir().expect("data");
         let dir = tempdir().expect("tempdir");
-        let trash = tempdir().expect("trash");
         let (registry, workspace_id) = registry_with_workspace(dir.path());
+        let metadata = MetadataStore::default();
+        metadata.init_from_dir(data.path()).expect("init metadata");
 
         assert!(read_file(&registry, &workspace_id, "../escape.md").is_err());
         assert!(write_file(&registry, &workspace_id, "../escape.md", "x", None).is_err());
         assert!(create_file(&registry, &workspace_id, "../escape.md", "x").is_err());
         assert!(rename_file(&registry, &workspace_id, "a.md", "../escape.md").is_err());
-        assert!(trash_file(&registry, &workspace_id, "../escape.md", trash.path()).is_err());
+        assert!(soft_delete(&registry, &metadata, &workspace_id, "../escape.md").is_err());
     }
 }

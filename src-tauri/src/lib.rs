@@ -36,6 +36,14 @@ pub fn run() {
             if let Err(error) = watchers.init(app_handle.clone()) {
                 eprintln!("watcher manager init failed: {error}");
             }
+            // Purge soft-deleted files past the trash retention window. Off the
+            // launch path on its own thread (nothing in the app waits on it),
+            // and only after metadata init above so the store is ready.
+            let sweep_handle = app_handle.clone();
+            std::thread::spawn(move || {
+                let metadata = sweep_handle.state::<db::MetadataStore>();
+                files::trash_sweep::run_startup_trash_sweep(&metadata);
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -140,13 +140,46 @@ early-return that skips the snapshot.
   writes the chosen version back via `write_and_record`. Restoring a
   soft-deleted file recreates it.
 
-## Recoverable trash (`files/trash.rs`)
+## Recoverable trash (`files/trash.rs`, `files/trash_sweep.rs`, `db/trash.rs`)
 
-`soft_delete` snapshots the file (so it stays in history), then `move_to_trash`
-moves the physical file to `<app-data>/trash/<vault_id>/<uuid>-<name>`
-(rename, copy-then-remove across devices) — **never** an `unlink`. The trash
-lives outside any workspace so it never syncs or clutters the vault. There is
-intentionally no "empty trash" UI in v1.
+`soft_delete` snapshots the file (so it stays in history), then moves the
+physical file to `<app-data>/trash/<vault_id>/<uuid>-<name>` (rename,
+copy-then-remove across devices) — **never** an `unlink`. The trash lives
+outside any workspace so it never syncs or clutters the vault. There is
+intentionally no "empty trash" UI yet.
+
+**Retention sweep.** Soft-deleted files are kept for `TRASH_RETENTION_DAYS`
+(30, matching the platform-Trash convention) and then *permanently* removed by a
+startup sweep (`files::trash_sweep::run_startup_trash_sweep`, spawned off the
+launch thread in `lib.rs` — nothing in the app waits on it). The window is a
+constant, not yet user-configurable, and there is no Trash browser — both
+deliberately deferred (the product call was "backend sweep only"). When a
+settings surface lands, source the window from `app_settings` in
+`run_startup_trash_sweep` and pass it through; `sweep_expired_trash` already
+takes it as a parameter.
+
+**Why the filesystem can't drive the sweep.** A `rename` preserves the file's
+content-mtime (which may be months old for a file deleted today), and the
+cross-device copy fallback stamps the copy time — neither is the deletion
+moment. So the deletion time is recorded explicitly in a `trash_entries` row
+(`db/trash.rs`) in the **global** db (one sweep query spans every vault),
+keyed by `vault_id`; the physical file is located by its recorded `trashed_name`.
+
+**The load-bearing invariant: every trashed file has a row.** `soft_delete`
+records the `trash_entries` row *before* the physical move (rolling it back if
+the move fails), because an orphan file with no row could never be swept and
+would leak forever — defeating the growth bound. The sweep is the inverse:
+purge the physical file *first*, then delete the row, so a delete that fails
+keeps its row and is retried next launch. A missing physical file counts as a
+successful purge, so a stale row never wedges the sweep.
+
+**Why permanent deletion here is still safe.** A soft-delete records a history
+snapshot *and* moves the physical file — two independent recovery paths.
+Purging the trash removes only the second; the file is still restorable from
+history via `workspace_restore_version` until snapshot retention prunes it.
+**Coherence invariant:** whoever lands snapshot retention (backlog item 1) must
+keep its window **≥ `TRASH_RETENTION_DAYS`**, or purging a trashed file could
+drop its last recovery path sooner than this window promises.
 
 ## Invariants to defend in review
 
@@ -179,10 +212,20 @@ treat them as follow-ups, not done:
    compression was never implemented), and nothing prunes old revisions. The
    baseline + apply paths add snapshots on every run, accelerating growth.
    Needs a retention policy (keep last N / time-windowed) + compression, taking
-   care not to prune a revision referenced by `llm_context_items`.
-2. **Trash grows unbounded.** Deleted files accumulate in `<app-data>/trash`
-   forever. Needs a retention policy — but that means *permanently* deleting
-   user data, so it's a deliberate product decision, not a silent default.
+   care not to prune a revision referenced by `llm_context_items`. **Keep the
+   window ≥ `TRASH_RETENTION_DAYS`** (item 2 / `files::trash_sweep`) so pruning
+   history never drops a soft-deleted file's last recovery path before its
+   trash entry was due to expire.
+2. **Trash retention is windowed; the UI and configurability are deferred.**
+   *Done:* a 30-day startup sweep (`files::trash_sweep`) permanently removes
+   files trashed longer ago than `TRASH_RETENTION_DAYS`, tracked by
+   `trash_entries` rows so the deletion time is exact (see "Recoverable trash"
+   above). *Still open:* the window is a hardcoded constant (no `app_settings`
+   wiring or Settings control yet), there is no Trash browser / "empty now" UI,
+   and the sweep only runs at launch (a long-running session won't purge until
+   restart). All three were a deliberate "backend sweep only" product scope, not
+   oversights — the seams (`sweep_expired_trash(retention_days)` param,
+   `TrashEntry.original_path` kept for a restore UI) are in place for them.
 3. **Pending review is in-memory only.** `ReviewSessionStore` is not persisted;
    quitting mid-review discards the sandbox (real files are safe, but the
    agent's work is lost and must be re-run). Acceptable for a safety gate;
@@ -200,7 +243,9 @@ treat them as follow-ups, not done:
 |---|---|
 | COW clone | [src-tauri/src/files/clone.rs](../src-tauri/src/files/clone.rs) |
 | Tree diff | [src-tauri/src/files/diff.rs](../src-tauri/src/files/diff.rs) |
-| Recoverable trash | [src-tauri/src/files/trash.rs](../src-tauri/src/files/trash.rs) |
+| Recoverable trash (move / purge / layout) | [src-tauri/src/files/trash.rs](../src-tauri/src/files/trash.rs) |
+| Trash retention sweep + `TRASH_RETENTION_DAYS` | [src-tauri/src/files/trash_sweep.rs](../src-tauri/src/files/trash_sweep.rs) |
+| `trash_entries` table + queries | [src-tauri/src/db/trash.rs](../src-tauri/src/db/trash.rs) |
 | Atomic write / write+record / soft-delete / version commands | [src-tauri/src/files/mod.rs](../src-tauri/src/files/mod.rs) |
 | Snapshot list / restore / baseline queries / snapshot backfill | [src-tauri/src/db/history.rs](../src-tauri/src/db/history.rs), [src-tauri/src/db/mod.rs](../src-tauri/src/db/mod.rs) |
 | Review session, EditGuard, clone+diff+apply orchestration | [src-tauri/src/review/mod.rs](../src-tauri/src/review/mod.rs) |
