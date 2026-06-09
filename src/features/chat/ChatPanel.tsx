@@ -65,6 +65,11 @@ export function ChatPanel() {
     : { ready: true, message: "" };
   const canSend = Boolean(chatThread.prompt.trim()) && !running && assistantReady.ready;
 
+  // The file currently attached as context (the open note) — named in the
+  // empty state's "I can already see …" line.
+  const contextFileLabel =
+    chatThread.contextItems.find((item) => item.kind === "file")?.label ?? null;
+
   // Header total: the thread's cumulative token + coin usage (compact,
   // human-readable), not a message count. "New chat" until anything's run.
   const totals = sumChatThreadStats(chatThread);
@@ -106,7 +111,9 @@ export function ChatPanel() {
 
       <ChatMessageList
         callbacks={callbacks}
+        contextFileLabel={contextFileLabel}
         messages={chatThread.messages}
+        onUseSuggestion={setChatPrompt}
         runState={chatThread.runState}
       />
 

@@ -1,21 +1,28 @@
 import { useEffect, useRef } from "react";
 
 import type { ChatRunState, WorkspaceChatMessage } from "../../app/workspaceModel";
+import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageRow, type MessageRowCallbacks } from "./MessageRow";
 
 /**
- * The scrollable transcript: empty-state prompt when there are no
- * messages, otherwise the message stack. Owns the pin-to-bottom behavior
+ * The scrollable transcript: the new-conversation empty state when there are
+ * no messages, otherwise the message stack. Owns the pin-to-bottom behavior
  * — it re-pins when the message set or run state changes (a streaming
  * turn appends content under the current run, which `runState` tracks).
  */
 export function ChatMessageList({
   callbacks,
+  contextFileLabel,
   messages,
+  onUseSuggestion,
   runState,
 }: {
   callbacks: MessageRowCallbacks;
+  /** The file currently in context, named in the empty state. */
+  contextFileLabel: string | null;
   messages: WorkspaceChatMessage[];
+  /** Prefill the composer from an empty-state suggestion. */
+  onUseSuggestion: (text: string) => void;
   runState: ChatRunState;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -31,10 +38,7 @@ export function ChatMessageList({
   return (
     <div ref={scrollRef} className="bob-chat-messages">
       {messages.length === 0 ? (
-        <div className="bob-chat-empty">
-          <p className="bob-chat-empty__title">Ask your assistant</p>
-          <p>Use the open note or a comment selection as context.</p>
-        </div>
+        <ChatEmptyState contextFileLabel={contextFileLabel} onUseSuggestion={onUseSuggestion} />
       ) : (
         <div className="bob-message-stack">
           {messages.map((message) => (
