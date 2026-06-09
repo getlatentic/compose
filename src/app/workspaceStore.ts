@@ -38,11 +38,18 @@ import {
   runHarnessStream,
   subscribeHarnessRun,
   DEFAULT_HARNESS_ID,
+  type EditGuard,
   type HarnessRunEvent,
   type HarnessCapabilities,
   type HarnessInfo,
   type ReasoningEffort,
 } from "../lib/ipc/bobClient";
+import {
+  applyReviewChange,
+  reviewCleanup,
+  reviewDiff,
+  type ReviewFileChange,
+} from "../lib/ipc/reviewClient";
 import { markWorkspaceOpened } from "../lib/ipc/workspaceClient";
 import {
   acceptWorkspaceSuggestion,
@@ -50,6 +57,8 @@ import {
   appendAssistantNotice,
   appendAssistantThinking,
   appendAssistantSuggestions,
+  appendReviewChangeSuggestions,
+  markWorkspaceSuggestion,
   setAssistantSession,
   setAssistantStats,
   startAssistantToolCall,
@@ -99,10 +108,12 @@ import {
   type WorkspacePane,
   type WorkspaceChatThread,
   type WorkspaceCommentThread,
+  type WorkspaceDocumentSuggestion,
   type WorkspaceFileBuffer,
   type WorkspaceFileEntry,
   type WorkspaceFsEvent,
   type WorkspaceListResult,
+  type WorkspaceReviewSuggestionDraft,
 } from "./workspaceModel";
 
 interface WorkspaceState {
@@ -304,6 +315,14 @@ export interface HarnessRunOptions {
   effort?: ReasoningEffort;
   /** Claude max agentic turns. */
   maxTurns?: number;
+  /**
+   * Review a write-capable harness's edits before they touch your files.
+   * Default ON: undefined is treated as enabled, so a fresh harness lands its
+   * edits in a sandbox you approve. Set false to let it edit directly (still
+   * undoable via a baseline snapshot). Ignored by harnesses that preview their
+   * own edits (bob). See `editGuardFor`.
+   */
+  reviewEdits?: boolean;
 }
 
 interface HarnessPrefs {
@@ -382,6 +401,157 @@ export function harnessCapabilitiesOf(
     supportsMaxTurns: false,
     supportsLogin: false,
   };
+}
+
+/**
+ * Pick the edit-review mode for a run. bob previews its own edits (no gate);
+ * a read-only plan/ask run makes no edits to guard; otherwise a write-capable
+ * harness runs under review by default — `clone` (sandbox + approve) unless the
+ * user turned review off, where `snapshot` still records an undo baseline.
+ */
+export function editGuardFor(
+  capabilities: HarnessCapabilities,
+  allowEdits: boolean,
+  options: HarnessRunOptions,
+): EditGuard {
+  if (capabilities.previewsEdits) {
+    return "none";
+  }
+  if (!allowEdits) {
+    return "none";
+  }
+  return options.reviewEdits === false ? "snapshot" : "clone";
+}
+
+/** Map a clone-diff file change into a pending review suggestion draft. */
+export function reviewChangeToDraft(change: ReviewFileChange): WorkspaceReviewSuggestionDraft {
+  const kind =
+    change.kind === "created" ? "create" : change.kind === "deleted" ? "delete" : "rewrite";
+  return {
+    kind,
+    filePath: change.relativePath,
+    originalText: change.originalText,
+    newText: change.newText,
+    originalSize: change.originalSize,
+    newSize: change.newSize,
+    previewOmitted: change.previewOmitted,
+    stale: change.stale,
+  };
+}
+
+/** Find a suggestion by id across a workspace's chat messages. */
+function findWorkspaceSuggestion(
+  workspace: BobWorkspace,
+  suggestionId: string,
+): WorkspaceDocumentSuggestion | null {
+  for (const message of workspace.chatThread.messages) {
+    const found = message.suggestions?.find((suggestion) => suggestion.id === suggestionId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+/** Count still-pending file-level (clone-gate) suggestions for a run. */
+function pendingReviewSuggestionCount(workspace: BobWorkspace, runId: string): number {
+  let count = 0;
+  for (const message of workspace.chatThread.messages) {
+    for (const suggestion of message.suggestions ?? []) {
+      if (
+        suggestion.runId === runId &&
+        suggestion.kind !== "replace" &&
+        suggestion.status === "pending"
+      ) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+/** Discard a run's review sandbox once no file-level changes remain pending. */
+function maybeCleanupReview(
+  get: StoreApi<WorkspaceState>["getState"],
+  workspaceId: string,
+  runId: string,
+) {
+  const workspace = get().workspaces.find((item) => item.id === workspaceId);
+  if (workspace && pendingReviewSuggestionCount(workspace, runId) === 0) {
+    void reviewCleanup(runId).catch(() => {
+      // best-effort — the sandbox is a temp dir the OS reclaims anyway
+    });
+  }
+}
+
+/**
+ * After a reviewed (clone-gate) run finishes, diff the sandbox against the
+ * live workspace and attach the file-level changes as pending suggestions. A
+ * cancelled run, an empty diff, or a diff failure tears the sandbox down
+ * instead.
+ */
+async function finishReviewRun(
+  set: StoreApi<WorkspaceState>["setState"],
+  workspaceId: string,
+  runId: string,
+  editGuard: EditGuard,
+  cancelled: boolean,
+): Promise<void> {
+  if (editGuard !== "clone") {
+    return;
+  }
+  if (cancelled) {
+    await reviewCleanup(runId).catch(() => {});
+    return;
+  }
+  let changes: ReviewFileChange[];
+  try {
+    changes = await reviewDiff(runId);
+  } catch (error) {
+    set({ saveError: errorMessage(error, "Could not compare the assistant's changes") });
+    await reviewCleanup(runId).catch(() => {});
+    return;
+  }
+  if (changes.length === 0) {
+    await reviewCleanup(runId).catch(() => {});
+    return;
+  }
+  const drafts = changes.map(reviewChangeToDraft);
+  set((state) => ({
+    workspaces: updateWorkspace(state.workspaces, workspaceId, (workspace) => ({
+      ...workspace,
+      chatThread: appendReviewChangeSuggestions(workspace.chatThread, runId, drafts, Date.now()),
+    })),
+  }));
+}
+
+/**
+ * Apply one approved file-level change to disk through the run's review
+ * session, then record the outcome on its suggestion (accepted, or stale if
+ * the file moved under us). Tears the sandbox down once nothing is pending.
+ */
+async function applyFileReviewChange(
+  set: StoreApi<WorkspaceState>["setState"],
+  get: StoreApi<WorkspaceState>["getState"],
+  workspaceId: string,
+  suggestion: WorkspaceDocumentSuggestion,
+): Promise<void> {
+  try {
+    await applyReviewChange(suggestion.runId, suggestion.filePath);
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspaceId, (workspace) =>
+        markWorkspaceSuggestion(workspace, suggestion.id, "accepted", null, Date.now()),
+      ),
+    }));
+  } catch (error) {
+    const message = errorMessage(error, "Could not apply this change");
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspaceId, (workspace) =>
+        markWorkspaceSuggestion(workspace, suggestion.id, "stale", message, Date.now()),
+      ),
+    }));
+  }
+  maybeCleanupReview(get, workspaceId, suggestion.runId);
 }
 
 function persistTabs(workspaces: BobWorkspace[], workspaceId: string) {
@@ -498,6 +668,7 @@ function handleHarnessRunEvent(
   runId: string,
   updateWorkspaceForRun: (updater: (current: BobWorkspace) => BobWorkspace) => void,
   finalize: (options: FinalizeBobRunOptions) => void,
+  onFinished?: (result: { cancelled: boolean }) => void,
 ) {
   if (event.runId !== runId) {
     return;
@@ -613,6 +784,10 @@ function handleHarnessRunEvent(
       return;
     case "exited":
       finalize({ cancelled: event.cancelled, exitCode: event.exitCode });
+      // Terminal: a reviewed run now diffs its sandbox and surfaces the
+      // changes for approval (or tears the sandbox down). `error` always
+      // precedes `exited`, so this fires exactly once per run.
+      onFinished?.({ cancelled: event.cancelled });
       return;
     default:
       return;
@@ -833,6 +1008,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   acceptSuggestedEdit: (suggestionId: string) => {
     const workspace = get().activeWorkspace();
     if (!workspace) {
+      return;
+    }
+    const suggestion = findWorkspaceSuggestion(workspace, suggestionId);
+    if (!suggestion || suggestion.status !== "pending") {
+      return;
+    }
+    // File-level changes (create / rewrite / delete) from the clone gate apply
+    // to disk through the run's review session; the file watcher then refreshes
+    // any open buffer. bob's byte-range `replace` applies to the in-memory
+    // buffer here as before.
+    if (suggestion.kind !== "replace") {
+      void applyFileReviewChange(set, get, workspace.id, suggestion);
       return;
     }
 
@@ -1622,8 +1809,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         return startBobRun({ ...current, messages }, runId, llmThreadId);
       });
 
+      // Resolve the run's capabilities + tuning + edit-review mode up front so
+      // the subscription's terminal hook (post-run diff) can close over it.
+      const capabilities = harnessCapabilitiesOf(get().harnessCatalog, harnessId);
+      const tuning = get().harnessOptions[harnessId] ?? {};
+      const editGuard = editGuardFor(capabilities, get().allowEdits, tuning);
+
       releaseSubscription = await subscribeHarnessRun(runId, (event) => {
-        handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize);
+        handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize, ({ cancelled }) => {
+          void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
+        });
       });
       activeRunSubscriptions.set(runId, releaseSubscription);
 
@@ -1633,15 +1828,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // allow-edits toggle is moot. Direct-edit harnesses (claude/codex)
       // map the toggle onto the run mode: allow → "code" (Edit),
       // otherwise "plan" (Ask). Capability-driven, not `id === "bob"`.
-      const chatMode = harnessCapabilitiesOf(get().harnessCatalog, harnessId).previewsEdits
+      const chatMode = capabilities.previewsEdits
         ? "plan"
         : get().allowEdits
           ? "code"
           : "plan";
-      // Per-harness tuning from the Settings picker. bob ignores these
-      // (it has its own chat-mode / coins); claude/codex honor the
-      // subset they support via run_via_harness → RunTuning.
-      const tuning = get().harnessOptions[harnessId] ?? {};
       await runHarnessStream({
         approvalMode: "default",
         chatMode,
@@ -1654,6 +1845,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         model: tuning.model,
         effort: tuning.effort,
         maxTurns: tuning.maxTurns,
+        editGuard,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "The assistant could not start";
@@ -1896,12 +2088,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!workspace) {
       return;
     }
+    const suggestion = findWorkspaceSuggestion(workspace, suggestionId);
 
     set((state) => ({
       workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
         rejectWorkspaceSuggestion(item, suggestionId, Date.now()),
       ),
     }));
+    // Discarding the last pending change of a reviewed run retires its sandbox.
+    if (suggestion && suggestion.kind !== "replace") {
+      maybeCleanupReview(get, workspace.id, suggestion.runId);
+    }
   },
   setBobAuthStatus: (status: BobAuthStatus) => {
     set({ bobAuthStatus: status });

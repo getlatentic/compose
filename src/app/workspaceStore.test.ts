@@ -8,7 +8,8 @@ import {
   _resetFallbackConversationsForTests,
   type ConversationMessageRecord,
 } from "../lib/ipc/conversationsClient";
-import { useWorkspaceStore } from "./workspaceStore";
+import { editGuardFor, reviewChangeToDraft, useWorkspaceStore } from "./workspaceStore";
+import type { HarnessCapabilities } from "../lib/ipc/bobClient";
 
 vi.mock("../lib/ipc/filesClient", () => ({
   createFile: vi.fn(),
@@ -376,6 +377,55 @@ describe("workspace store", () => {
       expect(useWorkspaceStore.getState().activeWorkspace()?.chatThread.conversationId).toBe(
         copy?.conversationId,
       );
+    });
+  });
+
+  describe("editGuardFor", () => {
+    const caps = (overrides: Partial<HarnessCapabilities> = {}): HarnessCapabilities => ({
+      credentialRequired: false,
+      previewsEdits: false,
+      models: [],
+      allowsCustomModel: false,
+      supportsEffort: false,
+      supportsMaxTurns: false,
+      supportsLogin: false,
+      ...overrides,
+    });
+
+    it("never gates a harness that previews its own edits (bob)", () => {
+      expect(editGuardFor(caps({ previewsEdits: true }), true, {})).toBe("none");
+      expect(editGuardFor(caps({ previewsEdits: true }), false, { reviewEdits: true })).toBe("none");
+    });
+
+    it("does not gate a read-only (plan/ask) run", () => {
+      expect(editGuardFor(caps(), false, {})).toBe("none");
+    });
+
+    it("reviews edits by default for a write-capable harness in edit mode", () => {
+      // Decision: review is ON by default — undefined reviewEdits → clone.
+      expect(editGuardFor(caps(), true, {})).toBe("clone");
+      expect(editGuardFor(caps(), true, { reviewEdits: true })).toBe("clone");
+    });
+
+    it("falls back to a baseline snapshot when the user turns review off", () => {
+      expect(editGuardFor(caps(), true, { reviewEdits: false })).toBe("snapshot");
+    });
+  });
+
+  describe("reviewChangeToDraft", () => {
+    it("maps clone-diff kinds onto suggestion kinds", () => {
+      const base = {
+        relativePath: "a.md",
+        originalText: null,
+        newText: null,
+        previewOmitted: false,
+        stale: false,
+        originalSize: 0,
+        newSize: 0,
+      };
+      expect(reviewChangeToDraft({ ...base, kind: "created" }).kind).toBe("create");
+      expect(reviewChangeToDraft({ ...base, kind: "modified" }).kind).toBe("rewrite");
+      expect(reviewChangeToDraft({ ...base, kind: "deleted" }).kind).toBe("delete");
     });
   });
 });
