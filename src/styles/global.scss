@@ -1974,6 +1974,128 @@ select {
   }
 }
 
+// --- Per-turn assistant author row: mark + "Assistant" + read pills ---
+// Makes each assistant turn legible at a glance — who's talking and what
+// files the answer drew on — without opening the agent trace.
+.bob-message-author {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+}
+
+.bob-message-author__mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1rem;
+  block-size: 1rem;
+  border-radius: 3px;
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-message-author__name {
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+}
+
+// A quiet "saw this file" pill — eye glyph + basename, on the subtle layer
+// (not the action blue): it's context, not a button.
+.bob-message-author__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-inline-size: 12rem;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 999px;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-message-author__pill svg {
+  flex-shrink: 0;
+}
+
+.bob-message-author__pill-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-message-author__more {
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+// --- File-operation cards: a create / edit the assistant made to a file ---
+// Prominent (a bordered card in the flow, not buried in the trace) because
+// changing the user's workspace is a significant action.
+.bob-message-fileops {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.bob-fileop {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-fileop__icon {
+  flex-shrink: 0;
+  margin-block-start: 0.0625rem;
+  color: var(--cds-icon-secondary, #8d8d8d);
+}
+
+// Running → the icon spins as a live "working" cue (replacing the status line).
+.bob-fileop--running .bob-fileop__icon {
+  animation: bob-fileop-spin 1s linear infinite;
+}
+
+.bob-fileop--done .bob-fileop__icon {
+  color: var(--cds-support-success, #24a148);
+}
+
+.bob-fileop--error .bob-fileop__icon {
+  color: var(--cds-support-error, #da1e28);
+}
+
+.bob-fileop__body {
+  display: grid;
+  gap: 0.0625rem;
+  min-inline-size: 0;
+}
+
+.bob-fileop__title {
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+}
+
+.bob-fileop__file {
+  padding: 0.0625rem 0.25rem;
+  border-radius: 4px;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.bob-fileop__sub {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.75rem;
+}
+
+@keyframes bob-fileop-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 // Meta row under an assistant turn: the "Agent trace" toggle on the left,
 // usage stats floated to the right.
 .bob-message-meta {

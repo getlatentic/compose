@@ -1,3 +1,5 @@
+import type { ToolKind } from "../../lib/ipc/bobClient";
+
 /**
  * Plain-language names for the agent's tools, so a non-technical reader
  * sees "Reading your notes" instead of `read_file {"path":"/abs/…"}`.
@@ -52,7 +54,12 @@ function basename(value: unknown): string | null {
 
 /** Pull a file name out of a tool's JSON input (path / file / file_path /
  * dir_path), returning just the basename. Best-effort — null on anything
- * unparseable. */
+ * unparseable. Exported as {@link toolFile} for the message-stream surfaces
+ * (read pills, file-op cards) that label a tool by the file it touched. */
+export function toolFile(input: string | undefined): string | null {
+  return fileFromInput(input);
+}
+
 function fileFromInput(input: string | undefined): string | null {
   if (!input) {
     return null;
@@ -88,4 +95,29 @@ export function toolActionLabel(name: string, input?: string): string {
 /** Past-tense noun phrase for the trace, e.g. "Read file". */
 export function toolName(name: string): string {
   return TOOL_LABELS[name]?.noun ?? deUnderscore(name);
+}
+
+/**
+ * Semantic class of a tool, so the message stream can surface it the right
+ * way: a `read` becomes a compact "saw this file" pill on the turn, a
+ * `write`/`edit` becomes a prominent file-operation card, everything else
+ * stays in the (collapsed) agent trace. Covers both bob's tool names and
+ * Codex's `--json` item types (`file_change`). */
+// Status-aware verbs for the file-op card title: present-continuous while it
+// runs, past tense once done, a plain failure phrase on error.
+const FILEOP_VERBS = {
+  write: { running: "Creating", done: "Created", error: "Couldn't create" },
+  edit: { running: "Editing", done: "Edited", error: "Couldn't edit" },
+} as const;
+
+/**
+ * Card verb for a file op, by neutral {@link ToolKind} + status — e.g.
+ * "Creating" / "Edited". A `write` reads as create; every other kind uses the
+ * edit verbs. The kind is sourced from the harness (agent-harness `ToolKind`),
+ * so there is deliberately no per-harness tool-name table to keep in sync —
+ * that classification now lives once, at the adapter, not here.
+ */
+export function fileOpVerb(kind: ToolKind, status: "running" | "done" | "error"): string {
+  const set = kind === "write" ? FILEOP_VERBS.write : FILEOP_VERBS.edit;
+  return set[status];
 }

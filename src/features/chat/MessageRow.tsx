@@ -8,9 +8,12 @@ import type {
 } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { AgentTrace } from "./AgentTrace";
+import { FileOpCard } from "./FileOpCard";
 import { MarkdownMessage } from "./MarkdownMessage";
+import { MessageAuthor } from "./MessageAuthor";
 import { SuggestionList } from "./SuggestionList";
 import { toolActionLabel } from "./toolLabels";
+import { fileOpsFromTrace } from "./traceFiles";
 import { useDwellValue } from "./useDwellValue";
 
 export interface MessageRowCallbacks {
@@ -44,6 +47,10 @@ export function MessageRow({
   // answer landed, or the run ended) — never while it's still working.
   const isFinal = Boolean(message.content) || !message.streaming;
   const hasTrace = isAssistant && Boolean(trace?.length);
+  // File create/edit ops surface as prominent cards. A running op's spinner
+  // is itself the live status, so it suppresses the generic status line.
+  const fileOps = isAssistant ? fileOpsFromTrace(trace) : [];
+  const opRunning = fileOps.some((tool) => tool.status === "running");
   const statsLabel = message.stats ? formatStats(message.stats) : "";
   const showMeta = isFinal && (hasTrace || Boolean(statsLabel));
   const [traceOpen, setTraceOpen] = useState(false);
@@ -55,8 +62,18 @@ export function MessageRow({
         isAssistant ? "bob-message-row--assistant" : "bob-message-row--user",
       ].join(" ")}
     >
+      {isAssistant ? <MessageAuthor trace={trace} /> : null}
+
       {isAssistant && message.activity ? (
         <div className="bob-message-activity">{message.activity}</div>
+      ) : null}
+
+      {fileOps.length ? (
+        <div className="bob-message-fileops">
+          {fileOps.map((tool) => (
+            <FileOpCard key={tool.id} tool={tool} />
+          ))}
+        </div>
       ) : null}
 
       {message.content ? (
@@ -67,9 +84,10 @@ export function MessageRow({
         ) : (
           <div className="bob-message-bubble bob-message-bubble--plain">{message.content}</div>
         )
-      ) : message.streaming ? (
-        // No answer yet — the transient status (derived from the trace)
-        // takes the slot and is replaced by the answer.
+      ) : message.streaming && !opRunning ? (
+        // No answer yet — the transient status (derived from the trace) takes
+        // the slot, unless a file-op card is already running (its spinner IS
+        // the status). Replaced by the answer when it lands.
         <StatusIndicator trace={trace} />
       ) : null}
 
