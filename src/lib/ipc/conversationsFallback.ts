@@ -40,9 +40,14 @@ const byWorkspace = new Map<string, FallbackRecord[]>();
 let idSeq = 0;
 let clock = 0;
 
-/** Monotonic, strictly-increasing logical timestamp. */
+/**
+ * Strictly-increasing timestamp tracking wall-clock time. Anchoring to
+ * `Date.now()` keeps the browser preview's relative times / date groups
+ * realistic (the desktop persists real `now_ms`); the `clock + 1` floor keeps
+ * it strictly monotonic so ordering stays total even within one millisecond.
+ */
 function tick(): number {
-  clock += 1;
+  clock = Math.max(clock + 1, Date.now());
   return clock;
 }
 
