@@ -2,7 +2,7 @@ import type { KeyboardEvent } from "react";
 import { Document, Send, StopFilledAlt } from "@carbon/react/icons";
 
 import type { BobRuntimeReadiness, WorkspaceContextItem } from "../../app/workspaceModel";
-import { ChatHarnessPicker } from "./ChatHarnessPicker";
+import { ChatComposerFooter } from "./ChatComposerFooter";
 import { useAutoGrowTextarea } from "./useAutoGrowTextarea";
 
 /**
@@ -95,10 +95,6 @@ export function MessageComposer({
         )}
       </div>
 
-      {/* Switch the active harness from the chat, like a model picker.
-          Hidden in the browser preview; disabled mid-run. */}
-      <ChatHarnessPicker disabled={running} />
-
       {!assistantReady.ready ? (
         <div className="bob-chat-error bob-chat-error--setup">
           <span>{assistantReady.message}</span>
@@ -108,6 +104,12 @@ export function MessageComposer({
         </div>
       ) : null}
       {runError ? <div className="bob-chat-error">{runError}</div> : null}
+
+      {/* The compact footer line: assistant + model selectors, token count,
+          and the send hint. Switches the harness from chat (like a model
+          picker). Hidden in the browser preview (no catalog); disabled
+          mid-run. */}
+      <ChatComposerFooter disabled={running} />
     </footer>
   );
 }
