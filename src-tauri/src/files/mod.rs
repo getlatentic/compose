@@ -6,6 +6,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 use walkdir::WalkDir;
 
+pub mod clone;
+pub mod diff;
+pub mod trash;
 pub mod watcher;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -196,9 +199,83 @@ pub fn workspace_delete_file(
 ) -> Result<(), FileError> {
     let root = registry.workspace_root(&workspace_id)?;
     ensure_vault_metadata(&metadata, &workspace_id, &root)?;
-    delete_file(&registry, &workspace_id, &relative_path)?;
+    // Preserve the file's content in version history before removing it, so it
+    // stays restorable. Non-text files can't be read as a string; they skip the
+    // snapshot but the physical trash copy below still recovers them.
+    if let Ok(existing) = read_file(&registry, &workspace_id, &relative_path) {
+        metadata.record_document_written(
+            &workspace_id,
+            &relative_path,
+            &existing.content,
+            existing.last_modified_ms,
+            existing.content.as_bytes().len() as u64,
+        )?;
+    }
+    // Move to recoverable trash instead of hard-deleting.
+    let trash_root = metadata.trash_root()?;
+    trash_file(&registry, &workspace_id, &relative_path, &trash_root)?;
     metadata.mark_document_deleted(&workspace_id, &relative_path)?;
     Ok(())
+}
+
+/// Recent restorable versions of a file (newest first). The live file's
+/// content hash is computed here so the UI can flag which version is current.
+#[tauri::command(async)]
+pub fn workspace_list_versions(
+    workspace_id: String,
+    relative_path: String,
+    limit: Option<u32>,
+    registry: State<'_, WorkspaceRegistry>,
+    metadata: State<'_, MetadataStore>,
+) -> Result<Vec<db::DocumentVersion>, FileError> {
+    let current_hash = read_file(&registry, &workspace_id, &relative_path)
+        .ok()
+        .map(|file| db::content_hash(&file.content));
+    metadata
+        .list_document_versions(
+            &workspace_id,
+            &relative_path,
+            current_hash.as_deref(),
+            limit.unwrap_or(50),
+        )
+        .map_err(FileError::from)
+}
+
+/// Restore a prior version of a file, writing it back atomically. The content
+/// being overwritten is snapshotted first, so a restore is itself reversible.
+/// Restoring a previously deleted file recreates it on disk.
+#[tauri::command(async)]
+pub fn workspace_restore_version(
+    workspace_id: String,
+    relative_path: String,
+    revision_id: String,
+    registry: State<'_, WorkspaceRegistry>,
+    metadata: State<'_, MetadataStore>,
+) -> Result<WorkspaceWriteResult, FileError> {
+    let root = registry.workspace_root(&workspace_id)?;
+    ensure_vault_metadata(&metadata, &workspace_id, &root)?;
+    // Capture the current on-disk content first so this restore can itself be
+    // undone. Absent (deleted) or non-text files simply skip the capture.
+    if let Ok(current) = read_file(&registry, &workspace_id, &relative_path) {
+        metadata.record_document_written(
+            &workspace_id,
+            &relative_path,
+            &current.content,
+            current.last_modified_ms,
+            current.content.as_bytes().len() as u64,
+        )?;
+    }
+    let content = metadata.document_version_content(&workspace_id, &relative_path, &revision_id)?;
+    // The user explicitly chose this version — overwrite unconditionally.
+    let result = write_file(&registry, &workspace_id, &relative_path, &content, None)?;
+    metadata.record_document_written(
+        &workspace_id,
+        &relative_path,
+        &content,
+        result.last_modified_ms,
+        content.as_bytes().len() as u64,
+    )?;
+    Ok(result)
 }
 
 pub(crate) fn read_file(
@@ -289,19 +366,17 @@ pub(crate) fn rename_file(
     Ok(())
 }
 
-pub(crate) fn delete_file(
+/// Move a workspace file into the recoverable trash, returning its trashed
+/// path. Resolution rejects path traversal (via `resolve_workspace_path`) just
+/// like every other file command.
+pub(crate) fn trash_file(
     registry: &WorkspaceRegistry,
     workspace_id: &str,
     relative_path: &str,
-) -> Result<(), FileError> {
+    trash_root: &Path,
+) -> Result<std::path::PathBuf, FileError> {
     let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
-    if !absolute.exists() {
-        return Err(FileError::NotFound {
-            message: format!("{relative_path} does not exist"),
-        });
-    }
-    std::fs::remove_file(&absolute)?;
-    Ok(())
+    trash::move_to_trash(trash_root, workspace_id, &absolute)
 }
 
 pub(crate) fn scan_markdown_files(root: &Path) -> Result<Vec<WorkspaceFileEntry>, FileError> {
@@ -549,24 +624,28 @@ mod tests {
     }
 
     #[test]
-    fn delete_removes_file() {
+    fn trash_moves_file_out_of_workspace() {
         let dir = tempdir().expect("tempdir");
+        let trash = tempdir().expect("trash");
         let (registry, workspace_id) = registry_with_workspace(dir.path());
         fs::write(dir.path().join("a.md"), "x").unwrap();
 
-        delete_file(&registry, &workspace_id, "a.md").expect("delete");
+        let trashed =
+            trash_file(&registry, &workspace_id, "a.md", trash.path()).expect("trash");
         assert!(!dir.path().join("a.md").exists());
+        assert_eq!(fs::read_to_string(&trashed).unwrap(), "x");
     }
 
     #[test]
     fn commands_reject_path_traversal() {
         let dir = tempdir().expect("tempdir");
+        let trash = tempdir().expect("trash");
         let (registry, workspace_id) = registry_with_workspace(dir.path());
 
         assert!(read_file(&registry, &workspace_id, "../escape.md").is_err());
         assert!(write_file(&registry, &workspace_id, "../escape.md", "x", None).is_err());
         assert!(create_file(&registry, &workspace_id, "../escape.md", "x").is_err());
         assert!(rename_file(&registry, &workspace_id, "a.md", "../escape.md").is_err());
-        assert!(delete_file(&registry, &workspace_id, "../escape.md").is_err());
+        assert!(trash_file(&registry, &workspace_id, "../escape.md", trash.path()).is_err());
     }
 }

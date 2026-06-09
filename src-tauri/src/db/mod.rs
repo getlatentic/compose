@@ -17,6 +17,7 @@ pub struct MetadataStore {
 struct MetadataPaths {
     app_db_path: PathBuf,
     vaults_dir: PathBuf,
+    trash_dir: PathBuf,
 }
 
 // The single coordinate type lives in the shared `workspace-index` core
@@ -30,6 +31,14 @@ pub use workspace_index::SourceRange;
 // keeps resolving; the Tauri commands are referenced via `db::conversations::*`.
 pub mod conversations;
 pub use conversations::{ConversationMessageRecord, ConversationSnapshot, ConversationSummary};
+
+// Git-free version history: list the snapshots recorded for a document and
+// read a chosen prior version back. Backs the "restore previous version"
+// UI. Lives in its own module so this file stays focused on persistence
+// primitives; the queries reuse the private `MetadataStore::vault_connection`
+// (a descendant module can see its ancestor's private items).
+pub mod history;
+pub use history::DocumentVersion;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -210,6 +219,10 @@ impl MetadataStore {
         let vaults_dir = data_dir.join("vaults");
         std::fs::create_dir_all(&vaults_dir)
             .map_err(|error| format!("could not create vault metadata dir: {error}"))?;
+        // Recoverable trash for soft-deleted files — outside any workspace so
+        // it never syncs or clutters the user's folder. Created lazily on the
+        // first delete (see `MetadataStore::trash_root`).
+        let trash_dir = data_dir.join("trash");
 
         migrate_global_database(&app_db_path)?;
         *self
@@ -218,8 +231,19 @@ impl MetadataStore {
             .map_err(|_| "metadata store lock was poisoned".to_owned())? = Some(MetadataPaths {
             app_db_path,
             vaults_dir,
+            trash_dir,
         });
         Ok(())
+    }
+
+    /// Absolute path to the recoverable-trash root (`<app data>/trash`),
+    /// created if missing. Soft-deleted files are moved here rather than
+    /// hard-deleted, so a deletion is always reversible.
+    pub fn trash_root(&self) -> Result<PathBuf, String> {
+        let trash_dir = self.paths()?.trash_dir;
+        std::fs::create_dir_all(&trash_dir)
+            .map_err(|error| format!("could not create trash dir: {error}"))?;
+        Ok(trash_dir)
     }
 
     pub fn ensure_vault(
@@ -1358,6 +1382,23 @@ fn record_revision_if_needed(
         .optional()?;
     if let Some((revision_id, latest_hash)) = latest.as_ref() {
         if latest_hash == content_hash {
+            // Content is unchanged since the latest revision. If the caller
+            // handed us a snapshot to preserve, make sure one actually exists
+            // for this revision: a prior sync-only pass records a revision
+            // with no snapshot blob, and callers like `record_document_written`
+            // promise the content stays recoverable. Without this backfill the
+            // "restore previous version" history would have a revision row but
+            // nothing to restore.
+            if let Some(snapshot_text) = snapshot_text {
+                ensure_snapshot_exists(
+                    transaction,
+                    doc_id,
+                    revision_id,
+                    content_hash,
+                    snapshot_text,
+                    now,
+                )?;
+            }
             return Ok(revision_id.clone());
         }
     }
@@ -1379,22 +1420,48 @@ fn record_revision_if_needed(
     )?;
 
     if let Some(snapshot_text) = snapshot_text {
-        transaction.execute(
-            "insert into document_snapshots
-             (snapshot_id, doc_id, revision_id, content_hash, compressed_text, created_at)
-             values (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                Uuid::new_v4().to_string(),
-                doc_id,
-                revision_id,
-                content_hash,
-                snapshot_text,
-                now,
-            ],
-        )?;
+        ensure_snapshot_exists(transaction, doc_id, &revision_id, content_hash, snapshot_text, now)?;
     }
 
     Ok(revision_id)
+}
+
+/// Insert a content snapshot for `revision_id` unless one already exists.
+/// Snapshots are addressed by revision, so this stays idempotent across
+/// repeated baseline passes over an unchanged document.
+fn ensure_snapshot_exists(
+    transaction: &Transaction<'_>,
+    doc_id: &str,
+    revision_id: &str,
+    content_hash: &str,
+    snapshot_text: &[u8],
+    now: i64,
+) -> rusqlite::Result<()> {
+    let exists = transaction
+        .query_row(
+            "select 1 from document_snapshots where revision_id = ?1 limit 1",
+            params![revision_id],
+            |_row| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    if exists {
+        return Ok(());
+    }
+    transaction.execute(
+        "insert into document_snapshots
+         (snapshot_id, doc_id, revision_id, content_hash, compressed_text, created_at)
+         values (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            Uuid::new_v4().to_string(),
+            doc_id,
+            revision_id,
+            content_hash,
+            snapshot_text,
+            now,
+        ],
+    )?;
+    Ok(())
 }
 
 fn parent_revision_for(

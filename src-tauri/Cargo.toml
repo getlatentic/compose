@@ -48,3 +48,9 @@ uuid = { version = "1", features = ["v4"] }
 # install-bob.sh to disk for `bash -l` to exec. Also reused in
 # dev-only tests, but the production code path needs it too.
 tempfile = "3"
+
+# clonefile(2) for copy-on-write workspace clones in the edit-review gate
+# (files::clone). macOS-only; other platforms use the recursive-copy
+# fallback and never link libc here.
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
