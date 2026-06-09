@@ -138,6 +138,11 @@ they encode hard-won constraints that are not obvious from the code.
 - **Tauri IPC + command threading** (why every `#[tauri::command]` is
   `async`, the main-thread beachball trap, why it is invisible in the
   browser-preview build): @docs/ipc-guide.md
+- **Edit-review gate + git-free version history** (the `EditGuard`
+  capability flow, copy-on-write workspace clone, clone↔real diff/apply,
+  the baseline-snapshot-for-undo invariant + snapshot backfill, the
+  recoverable trash; the correctness-over-speed full-hash diff and the
+  unbounded-growth hardening backlog): @docs/review-guide.md
 
 Add a new guide here when a subsystem accumulates enough non-obvious
 discipline (LLM context packets, IPC contract, file watcher
