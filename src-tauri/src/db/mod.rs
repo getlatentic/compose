@@ -24,6 +24,13 @@ struct MetadataPaths {
 // so `crate::db::SourceRange` and every metadata DTO below keep using it.
 pub use workspace_index::SourceRange;
 
+// Conversation persistence (the chat history layer) lives in its own module
+// — the OPEN / ARCHIVE / DELETE lifecycle, the history list, and the
+// per-conversation actions. Types are re-exported so `crate::db::Conversation*`
+// keeps resolving; the Tauri commands are referenced via `db::conversations::*`.
+pub mod conversations;
+pub use conversations::{ConversationMessageRecord, ConversationSnapshot, ConversationSummary};
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentAnchor {
@@ -129,34 +136,6 @@ pub struct LlmContextSnapshotRecord {
     pub selected_text_snapshot: Option<String>,
     pub source_range: Option<SourceRange>,
     pub surrounding_context_snapshot: Option<String>,
-}
-
-/// One persisted chat turn. `trace_json` / `stats_json` are opaque JSON
-/// owned by the TS layer (the consolidated `TraceEntry[]` and run stats);
-/// Rust just round-trips them. The answer / user text is `content`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ConversationMessageRecord {
-    pub message_id: String,
-    pub role: String,
-    pub content: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub trace_json: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stats_json: Option<String>,
-    pub created_at: i64,
-}
-
-/// A whole conversation (the active, non-archived one) restored on load.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ConversationSnapshot {
-    pub conversation_id: String,
-    pub title: Option<String>,
-    pub harness_id: Option<String>,
-    pub messages: Vec<ConversationMessageRecord>,
-    pub created_at: i64,
-    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -770,153 +749,6 @@ impl MetadataStore {
         })
     }
 
-    /// The most-recently-updated non-archived conversation for a workspace
-    /// (the one the chat panel shows), plus its messages in `seq` order.
-    /// `None` when the workspace has no active conversation yet.
-    pub fn load_active_conversation(
-        &self,
-        workspace_id: &str,
-    ) -> Result<Option<ConversationSnapshot>, String> {
-        validate_storage_id(workspace_id, "workspace id")?;
-        let connection = self.vault_connection(workspace_id)?;
-        let head = connection
-            .query_row(
-                "select conversation_id, title, harness_id, created_at, updated_at
-                 from conversations
-                 where archived_at is null
-                 order by updated_at desc, conversation_id desc
-                 limit 1",
-                [],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                        row.get::<_, i64>(3)?,
-                        row.get::<_, i64>(4)?,
-                    ))
-                },
-            )
-            .optional()
-            .map_err(|error| format!("could not load conversation: {error}"))?;
-
-        let Some((conversation_id, title, harness_id, created_at, updated_at)) = head else {
-            return Ok(None);
-        };
-
-        let messages = load_conversation_messages(&connection, &conversation_id)?;
-        Ok(Some(ConversationSnapshot {
-            conversation_id,
-            title,
-            harness_id,
-            messages,
-            created_at,
-            updated_at,
-        }))
-    }
-
-    /// Upsert a conversation and replace its full message set (the
-    /// delete-then-insert shape `save_comments` uses — the front-end owns
-    /// the authoritative list and re-saves it each turn). Bumps
-    /// `updated_at` so this becomes the active conversation on next load.
-    pub fn save_conversation(
-        &self,
-        workspace_id: &str,
-        conversation_id: &str,
-        messages: Vec<ConversationMessageRecord>,
-    ) -> Result<(), String> {
-        validate_storage_id(workspace_id, "workspace id")?;
-        validate_storage_id(conversation_id, "conversation id")?;
-        let now = now_ms();
-        let mut connection = self.vault_connection(workspace_id)?;
-        let transaction = connection
-            .transaction()
-            .map_err(|error| format!("could not start metadata transaction: {error}"))?;
-
-        // Upsert the conversation row, preserving created_at on update.
-        transaction
-            .execute(
-                "insert into conversations
-                   (conversation_id, title, harness_id, created_at, updated_at, archived_at)
-                 values (?1, null, null, ?2, ?2, null)
-                 on conflict(conversation_id) do update set updated_at = ?2",
-                params![conversation_id, now],
-            )
-            .map_err(|error| format!("could not upsert conversation: {error}"))?;
-
-        transaction
-            .execute(
-                "delete from conversation_messages where conversation_id = ?1",
-                params![conversation_id],
-            )
-            .map_err(|error| format!("could not replace conversation messages: {error}"))?;
-
-        for (seq, message) in messages.iter().enumerate() {
-            transaction
-                .execute(
-                    "insert into conversation_messages
-                       (message_id, conversation_id, seq, role, content, trace_json, stats_json, created_at)
-                     values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    params![
-                        message.message_id,
-                        conversation_id,
-                        seq as i64,
-                        message.role,
-                        message.content,
-                        message.trace_json,
-                        message.stats_json,
-                        message.created_at,
-                    ],
-                )
-                .map_err(|error| format!("could not save conversation message: {error}"))?;
-        }
-
-        transaction
-            .commit()
-            .map_err(|error| format!("could not commit conversation: {error}"))?;
-        Ok(())
-    }
-
-    /// Start a new conversation: archive the current active one (so it
-    /// drops out of `load_active_conversation` but survives for the future
-    /// history list) and return a fresh id stamped with the owning harness.
-    pub fn new_conversation(
-        &self,
-        workspace_id: &str,
-        harness_id: &str,
-    ) -> Result<String, String> {
-        validate_storage_id(workspace_id, "workspace id")?;
-        let now = now_ms();
-        let mut connection = self.vault_connection(workspace_id)?;
-        let transaction = connection
-            .transaction()
-            .map_err(|error| format!("could not start metadata transaction: {error}"))?;
-
-        transaction
-            .execute(
-                "update conversations set archived_at = ?1
-                 where archived_at is null",
-                params![now],
-            )
-            .map_err(|error| format!("could not archive conversations: {error}"))?;
-
-        let conversation_id = Uuid::new_v4().to_string();
-        let harness = (!harness_id.is_empty()).then(|| harness_id.to_owned());
-        transaction
-            .execute(
-                "insert into conversations
-                   (conversation_id, title, harness_id, created_at, updated_at, archived_at)
-                 values (?1, null, ?2, ?3, ?3, null)",
-                params![conversation_id, harness, now],
-            )
-            .map_err(|error| format!("could not create conversation: {error}"))?;
-
-        transaction
-            .commit()
-            .map_err(|error| format!("could not commit new conversation: {error}"))?;
-        Ok(conversation_id)
-    }
-
     pub fn document_ids_by_path(&self, vault_id: &str) -> Result<HashMap<String, String>, String> {
         validate_storage_id(vault_id, "vault id")?;
         let connection = self.vault_connection(vault_id)?;
@@ -1130,33 +962,6 @@ pub fn metadata_load_llm_thread(
     store.load_llm_thread(request)
 }
 
-#[tauri::command(async)]
-pub fn conversation_load_active(
-    workspace_id: String,
-    store: State<'_, MetadataStore>,
-) -> Result<Option<ConversationSnapshot>, String> {
-    store.load_active_conversation(&workspace_id)
-}
-
-#[tauri::command(async)]
-pub fn conversation_save(
-    workspace_id: String,
-    conversation_id: String,
-    messages: Vec<ConversationMessageRecord>,
-    store: State<'_, MetadataStore>,
-) -> Result<(), String> {
-    store.save_conversation(&workspace_id, &conversation_id, messages)
-}
-
-#[tauri::command(async)]
-pub fn conversation_new(
-    workspace_id: String,
-    harness_id: String,
-    store: State<'_, MetadataStore>,
-) -> Result<String, String> {
-    store.new_conversation(&workspace_id, &harness_id)
-}
-
 pub fn content_hash(text: &str) -> String {
     content_hash_bytes(text.as_bytes())
 }
@@ -1363,11 +1168,11 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
               harness_id text,
               created_at integer not null,
               updated_at integer not null,
-              archived_at integer
+              archived_at integer,
+              deleted_at integer,
+              last_opened_at integer,
+              context_files_json text
             );
-            create index if not exists idx_conversations_active
-              on conversations(updated_at desc)
-              where archived_at is null;
             create table if not exists conversation_messages (
               message_id text primary key,
               conversation_id text not null,
@@ -1434,6 +1239,11 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
             ",
         )
         .map_err(|error| format!("could not migrate vault metadata db: {error}"))?;
+
+    // `create table if not exists` above seeds the columns for fresh DBs;
+    // existing DBs from before the OPEN/ARCHIVE/DELETE split get the new
+    // columns (and the indexes that reference them) added in place here.
+    conversations::ensure_conversation_columns(&connection)?;
     Ok(())
 }
 
@@ -1703,35 +1513,6 @@ where
                 .map_err(|error| format!("could not decode {label}: {error}"))
         })
         .transpose()
-}
-
-fn load_conversation_messages(
-    connection: &Connection,
-    conversation_id: &str,
-) -> Result<Vec<ConversationMessageRecord>, String> {
-    let mut statement = connection
-        .prepare(
-            "select message_id, role, content, trace_json, stats_json, created_at
-             from conversation_messages
-             where conversation_id = ?1
-             order by seq asc",
-        )
-        .map_err(|error| format!("could not prepare conversation message load: {error}"))?;
-    let messages = statement
-        .query_map(params![conversation_id], |row| {
-            Ok(ConversationMessageRecord {
-                message_id: row.get(0)?,
-                role: row.get(1)?,
-                content: row.get(2)?,
-                trace_json: row.get(3)?,
-                stats_json: row.get(4)?,
-                created_at: row.get(5)?,
-            })
-        })
-        .map_err(|error| format!("could not query conversation messages: {error}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("could not read conversation messages: {error}"))?;
-    Ok(messages)
 }
 
 fn load_llm_messages(
@@ -2628,99 +2409,7 @@ mod tests {
         (backlinks, tags, frontmatter, graph_edges)
     }
 
-    fn conversation_message(id: &str, role: &str, content: &str) -> ConversationMessageRecord {
-        ConversationMessageRecord {
-            message_id: id.to_owned(),
-            role: role.to_owned(),
-            content: content.to_owned(),
-            trace_json: None,
-            stats_json: None,
-            created_at: 10,
-        }
-    }
-
-    #[test]
-    fn conversation_save_and_load_round_trips_trace_and_stats() {
-        let (_dir, store, vault_id) = synced_store();
-        let id = store.new_conversation(vault_id, "bob").expect("new conversation");
-
-        let user = conversation_message("m1", "user", "what is this about?");
-        let assistant = ConversationMessageRecord {
-            trace_json: Some(r#"[{"kind":"tool","tool":{"id":"t1","name":"read_file","status":"done"}}]"#.to_owned()),
-            stats_json: Some(r#"{"totalTokens":21956,"coins":0.05}"#.to_owned()),
-            ..conversation_message("m2", "assistant", "It's a relocation plan.")
-        };
-        store
-            .save_conversation(vault_id, &id, vec![user, assistant])
-            .expect("save conversation");
-
-        let loaded = store
-            .load_active_conversation(vault_id)
-            .expect("load")
-            .expect("an active conversation");
-        assert_eq!(loaded.conversation_id, id);
-        assert_eq!(loaded.harness_id.as_deref(), Some("bob"));
-        assert_eq!(loaded.messages.len(), 2);
-        // seq order preserved.
-        assert_eq!(loaded.messages[0].content, "what is this about?");
-        assert_eq!(loaded.messages[1].role, "assistant");
-        // opaque JSON round-trips verbatim.
-        assert!(loaded.messages[1].trace_json.as_deref().unwrap().contains("read_file"));
-        assert_eq!(
-            loaded.messages[1].stats_json.as_deref(),
-            Some(r#"{"totalTokens":21956,"coins":0.05}"#)
-        );
-    }
-
-    #[test]
-    fn save_conversation_replaces_the_message_set() {
-        let (_dir, store, vault_id) = synced_store();
-        let id = store.new_conversation(vault_id, "bob").expect("new conversation");
-        store
-            .save_conversation(vault_id, &id, vec![conversation_message("m1", "user", "first")])
-            .expect("save 1");
-        store
-            .save_conversation(
-                vault_id,
-                &id,
-                vec![
-                    conversation_message("m1", "user", "first"),
-                    conversation_message("m2", "assistant", "answer"),
-                ],
-            )
-            .expect("save 2");
-        let loaded = store
-            .load_active_conversation(vault_id)
-            .expect("load")
-            .expect("active");
-        assert_eq!(loaded.messages.len(), 2);
-    }
-
-    #[test]
-    fn new_conversation_archives_the_prior_active_one() {
-        let (_dir, store, vault_id) = synced_store();
-        let first = store.new_conversation(vault_id, "bob").expect("first");
-        store
-            .save_conversation(vault_id, &first, vec![conversation_message("m1", "user", "hi")])
-            .expect("save first");
-
-        let second = store.new_conversation(vault_id, "claude").expect("second");
-        let loaded = store
-            .load_active_conversation(vault_id)
-            .expect("load")
-            .expect("active");
-        // The new (empty) conversation is active; the first is archived out.
-        assert_eq!(loaded.conversation_id, second);
-        assert_eq!(loaded.harness_id.as_deref(), Some("claude"));
-        assert!(loaded.messages.is_empty());
-    }
-
-    #[test]
-    fn load_active_conversation_is_none_when_empty() {
-        let (_dir, store, vault_id) = synced_store();
-        assert!(store
-            .load_active_conversation(vault_id)
-            .expect("load")
-            .is_none());
-    }
+    // Conversation persistence tests live with their module in
+    // `db/conversations.rs` (the OPEN / ARCHIVE / DELETE lifecycle, list
+    // derivation, rename / duplicate, soft-delete, and migration idempotence).
 }
