@@ -115,6 +115,14 @@ export interface BobRunSuggestedEdit {
  * harness-neutral vocabulary — it never parses a harness's wire
  * format. Adding a harness adds a Rust-side parser, not a TS branch.
  */
+/**
+ * Neutral, cross-harness classification of what a tool call does — sourced
+ * from the harness adapter (agent-harness `ToolKind`), never re-derived from
+ * the tool `name` downstream. The UI routes on this: `read` → a context pill,
+ * `write`/`edit` → a file-op card.
+ */
+export type ToolKind = "read" | "write" | "edit" | "search" | "execute" | "other";
+
 export type HarnessRunEvent =
   | { kind: "started"; runId: string }
   /** A chunk of the *answer* → the message bubble. For bob this is only
@@ -124,7 +132,14 @@ export type HarnessRunEvent =
    * answer. bob's plain assistant messages; Claude/Codex don't emit it. */
   | { kind: "notice"; runId: string; message: string }
   | { kind: "thinking"; runId: string; delta: string }
-  | { kind: "toolStart"; runId: string; toolCallId: string; name: string; input: string | null }
+  | {
+      kind: "toolStart";
+      runId: string;
+      toolCallId: string;
+      name: string;
+      input: string | null;
+      toolKind: ToolKind;
+    }
   | { kind: "toolEnd"; runId: string; toolCallId: string; ok: boolean; output: string | null }
   /** Harness session identity (bob's `init`) → trace. */
   | { kind: "session"; runId: string; sessionId: string; model: string | null }

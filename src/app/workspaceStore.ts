@@ -454,6 +454,7 @@ function handleHarnessRunEvent(
           runId,
           event.toolCallId,
           event.name,
+          event.toolKind,
           event.input,
         ),
       }));

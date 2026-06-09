@@ -484,7 +484,7 @@ describe("workspace model", () => {
     const runId = "run-1";
     let thread = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
     thread = appendAssistantNotice(thread, runId, "Reading the notes.");
-    thread = startAssistantToolCall(thread, runId, "t1", "read_file", "{}");
+    thread = startAssistantToolCall(thread, runId, "t1", "read_file", "read", "{}");
     thread = endAssistantToolCall(thread, runId, "t1", true, "ok");
     thread = appendAssistantNotice(thread, runId, "\n\n"); // the bob filler
     const trace = thread.messages[thread.messages.length - 1]?.trace ?? [];
@@ -502,7 +502,7 @@ describe("workspace model", () => {
     thread = appendAssistantThinking(thread, runId, "Let me ");
     thread = appendAssistantThinking(thread, runId, "look.");
     thread = appendAssistantNotice(thread, runId, "Reading the notes.");
-    thread = startAssistantToolCall(thread, runId, "t1", "read_file", '{"path":"a.md"}');
+    thread = startAssistantToolCall(thread, runId, "t1", "read_file", "read", '{"path":"a.md"}');
     thread = endAssistantToolCall(thread, runId, "t1", true, "ok: 10 lines");
 
     const trace = thread.messages[thread.messages.length - 1]?.trace;
@@ -515,6 +515,7 @@ describe("workspace model", () => {
         tool: {
           id: "t1",
           name: "read_file",
+          kind: "read",
           status: "done",
           input: '{"path":"a.md"}',
           output: "ok: 10 lines",
@@ -696,7 +697,7 @@ describe("workspace model", () => {
       runId,
     );
     thread = appendAssistantThinking(thread, runId, "Let me look.");
-    thread = startAssistantToolCall(thread, runId, "t1", "read_file", '{"path":"a.md"}');
+    thread = startAssistantToolCall(thread, runId, "t1", "read_file", "read", '{"path":"a.md"}');
     thread = endAssistantToolCall(thread, runId, "t1", true, "ok: 10 lines");
     thread = appendAssistantText(thread, runId, "It is a relocation plan.");
     thread = setAssistantStats(thread, runId, { totalTokens: 21956, coins: 0.05 });
@@ -730,6 +731,7 @@ describe("workspace model", () => {
         tool: {
           id: "t1",
           name: "read_file",
+          kind: "read",
           status: "done",
           input: '{"path":"a.md"}',
           output: "ok: 10 lines",

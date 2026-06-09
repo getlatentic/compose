@@ -8,6 +8,7 @@ import {
   type SourceRange,
   type WorkspaceCommentThread,
 } from "../features/comments/commentModel";
+import type { ToolKind } from "../lib/ipc/bobClient";
 import type {
   ConversationMessageRecord,
   ConversationSnapshot,
@@ -132,6 +133,10 @@ export interface WorkspaceToolCall {
   status: "running" | "done" | "error";
   input?: string;
   output?: string;
+  /** Neutral behaviour class from the harness (read / write / edit / …),
+   * carried on the run event so the UI routes on it without re-deriving from
+   * `name`. Optional only for traces persisted before this field existed. */
+  kind?: ToolKind;
 }
 
 /** Terminal run stats from the harness (bob's `result.stats`). */
@@ -1076,6 +1081,7 @@ export function startAssistantToolCall(
   runId: string,
   toolCallId: string,
   name: string,
+  kind: ToolKind,
   input?: string | null,
 ): WorkspaceChatThread {
   if (chatThread.activeRunId !== runId) {
@@ -1095,6 +1101,7 @@ export function startAssistantToolCall(
       const tool: WorkspaceToolCall = {
         id: toolCallId,
         name,
+        kind,
         status: "running",
         ...(input ? { input } : {}),
       };

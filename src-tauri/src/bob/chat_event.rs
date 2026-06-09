@@ -35,7 +35,7 @@
 //! `kind`-tagged, camelCase union. Keep the two in lockstep.
 
 use bob_rs::ProcessEvent;
-use harness::{parse_raw_line, RunEvent, SuggestedEdit};
+use harness::{bob_tool_kind, parse_raw_line, RunEvent, SuggestedEdit, ToolKind};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -59,12 +59,15 @@ pub enum ChatEvent {
     Thinking { run_id: String, delta: String },
     /// A tool call began. `input` is the tool's arguments: bob's
     /// `parameters` and codex's `command`; `null` for Claude (it streams
-    /// args incrementally, so they don't arrive inline).
+    /// args incrementally, so they don't arrive inline). `tool_kind` is the
+    /// neutral behaviour class (read / write / edit / …) the front-end routes
+    /// on — sourced from the harness, never re-derived from `name` downstream.
     ToolStart {
         run_id: String,
         tool_call_id: String,
         name: String,
         input: Option<String>,
+        tool_kind: ToolKind,
     },
     /// A tool call finished. `output` is the tool's result text — bob's
     /// `tool_result.output`, codex's `aggregated_output`, Claude's
@@ -134,11 +137,13 @@ pub fn run_event_to_chat(event: RunEvent) -> Option<ChatEvent> {
             tool_call_id,
             name,
             input,
+            tool_kind,
         } => ChatEvent::ToolStart {
             run_id,
             tool_call_id,
             name,
             input,
+            tool_kind,
         },
         RunEvent::ToolEnd {
             run_id,
@@ -309,6 +314,9 @@ impl BobChatMapper {
                             .to_owned(),
                         name: tool_name.to_owned(),
                         input: parameters_to_input(obj.get("parameters")),
+                        // bob's raw path doesn't go through RunEvent, so classify
+                        // here via the harness's own table (not a Compose copy).
+                        tool_kind: bob_tool_kind(tool_name),
                     });
                 }
             }
@@ -619,12 +627,15 @@ mod tests {
             tool_call_id,
             name,
             input,
+            tool_kind,
         }] = out.as_slice() else {
             panic!("expected one ToolStart, got {out:?}");
         };
         assert_eq!(run_id, "r");
         assert_eq!(tool_call_id, "t1");
         assert_eq!(name, "list_files");
+        // Neutral class comes from the harness's bob table (list_files → Search).
+        assert_eq!(*tool_kind, ToolKind::Search);
         // input is the parameters object as JSON (pretty-printed).
         let input = input.as_ref().expect("input present");
         assert!(input.contains("dir_path"));
@@ -791,12 +802,14 @@ mod tests {
                 tool_call_id: "t".to_owned(),
                 name: "shell".to_owned(),
                 input: Some("ls -la".to_owned()),
+                tool_kind: ToolKind::Execute,
             }),
             Some(ChatEvent::ToolStart {
                 run_id: "r".to_owned(),
                 tool_call_id: "t".to_owned(),
                 name: "shell".to_owned(),
                 input: Some("ls -la".to_owned()),
+                tool_kind: ToolKind::Execute,
             })
         );
         assert_eq!(
@@ -855,6 +868,7 @@ mod tests {
             tool_call_id: "tc".to_owned(),
             name: "list_files".to_owned(),
             input: Some("{}".to_owned()),
+            tool_kind: ToolKind::Search,
         })
         .unwrap();
         assert_eq!(json["kind"], "toolStart");
@@ -862,6 +876,9 @@ mod tests {
         assert_eq!(json["toolCallId"], "tc");
         assert_eq!(json["name"], "list_files");
         assert_eq!(json["input"], "{}");
+        // Neutral class rides as `toolKind` (camelCase enum) — the key the
+        // front-end reads; distinct from the `kind` event discriminator.
+        assert_eq!(json["toolKind"], "search");
 
         // Optional fields serialize as null (not omitted) to match the
         // `T | null` front-end types.
