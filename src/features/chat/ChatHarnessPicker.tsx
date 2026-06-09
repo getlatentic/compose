@@ -1,4 +1,4 @@
-import { Select, SelectItem } from "@carbon/react";
+import { Dropdown } from "@carbon/react";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { HarnessInfo } from "../../lib/ipc/bobClient";
@@ -6,8 +6,8 @@ import type { HarnessInfo } from "../../lib/ipc/bobClient";
 /**
  * Pure view for the in-composer harness switcher — props-driven so it's
  * trivially testable, with the store read isolated in the wrapper below.
- * Uses Carbon's inline `Select` so it matches the rest of the app's controls
- * (and the model/effort selects in Settings).
+ * Uses Carbon's inline `Dropdown` — the compact picker control — so it reads
+ * as a tight "Assistant ▾" rather than a wide form select.
  *
  * Renders nothing when there's no catalog: the browser preview is bob-only
  * (`harness_list` is empty there), so there's nothing to switch between.
@@ -27,22 +27,27 @@ export function ChatHarnessPickerView({
     return null;
   }
 
+  const selectedItem = harnesses.find((harness) => harness.id === selectedId) ?? null;
+
   return (
     <div className="bob-chat-toolbar">
-      <Select
+      <Dropdown
         id="chat-harness-picker"
-        inline
+        type="inline"
         size="sm"
-        labelText="Assistant"
-        value={selectedId}
+        titleText="Assistant"
+        label="Choose assistant"
+        items={harnesses}
+        itemToString={(item) => item?.displayName ?? ""}
+        selectedItem={selectedItem}
         // A run is bound to the harness that started it — can't switch mid-run.
         disabled={disabled}
-        onChange={(event) => onSelect(event.target.value)}
-      >
-        {harnesses.map((harness) => (
-          <SelectItem key={harness.id} value={harness.id} text={harness.displayName} />
-        ))}
-      </Select>
+        onChange={({ selectedItem: next }) => {
+          if (next) {
+            onSelect(next.id);
+          }
+        }}
+      />
     </div>
   );
 }

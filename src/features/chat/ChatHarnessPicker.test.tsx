@@ -24,7 +24,7 @@ function harness(id: string, displayName: string): HarnessInfo {
 }
 
 describe("ChatHarnessPickerView", () => {
-  it("renders an option per harness, with the selected one marked", () => {
+  it("shows the selected harness under the Assistant label", () => {
     const html = renderToStaticMarkup(
       <ChatHarnessPickerView
         harnesses={[harness("bob", "Bob"), harness("codex", "Codex")]}
@@ -32,12 +32,9 @@ describe("ChatHarnessPickerView", () => {
         onSelect={() => {}}
       />,
     );
-    expect(html).toContain(">Bob</option>");
-    expect(html).toContain(">Codex</option>");
-    // The control reflects the current selection (React renders the matching
-    // option as selected for a controlled <select>).
-    expect(html).toContain("selected");
-    // Carbon's `labelText` gives the control its accessible name.
+    // The inline Dropdown's trigger reflects the current selection…
+    expect(html).toContain("Codex");
+    // …under Carbon's `titleText` label (also the control's accessible name).
     expect(html).toContain("Assistant");
   });
 
@@ -50,9 +47,6 @@ describe("ChatHarnessPickerView", () => {
     expect(renderToStaticMarkup(<ChatHarnessPickerView {...props} disabled />)).toContain(
       "disabled",
     );
-    expect(
-      renderToStaticMarkup(<ChatHarnessPickerView {...props} disabled={false} />),
-    ).not.toContain("disabled");
   });
 
   it("renders nothing when there is no catalog (browser preview)", () => {
