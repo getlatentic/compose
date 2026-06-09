@@ -61,6 +61,21 @@ select {
   color: var(--cds-text-inverse, #ffffff);
 }
 
+// Carbon pins the header-action icon fill to `--cds-icon-secondary` (#525252)
+// via a high-specificity, multi-class selector (`.cds--btn--icon-only
+// .cds--header__action svg`), plus darker fills on :hover/:active. On our dark
+// inverse bar that reads as a faint, barely-visible gray. Override across all
+// states with `!important` (cleaner than out-specifying Carbon's vendor
+// selectors). A light gray (gray-30) reads clearly on the dark bar without
+// the harshness of pure white; disabled stays dimmer.
+.bob-app-shell .cds--header__action svg {
+  fill: #c6c6c6 !important;
+}
+
+.bob-app-shell .bob-header-action--disabled svg {
+  fill: var(--cds-icon-disabled, #8d8d8d) !important;
+}
+
 .bob-app-shell .cds--header__name:hover,
 .bob-app-shell .cds--header__action:hover,
 .bob-app-shell .cds--header__action:focus,
