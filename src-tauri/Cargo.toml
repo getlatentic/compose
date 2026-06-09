@@ -28,8 +28,8 @@ tauri = { version = "2", features = ["devtools"] }
 # identical logic. `agent-harness` (imported as `harness`) — the framework:
 # the registry, the Harness trait, RunEvent + request/metadata types, and
 # the bob adapter's `normalize_bob_event`.
-bob-rs = "0.1"
-agent-harness = "0.1"
+bob-rs = "0.2"
+agent-harness = "0.2"
 # Pure markdown index/search core, shared with the browser (WASM). The
 # Tauri command scans the disk and calls this; `db::SourceRange` is
 # re-exported from it so there is one coordinate type.
