@@ -10,6 +10,7 @@ import {
 } from "../lib/ipc/conversationsClient";
 import { editGuardFor, reviewChangeToDraft, useWorkspaceStore } from "./workspaceStore";
 import type { HarnessCapabilities } from "../lib/ipc/bobClient";
+import { FileConflictError, readFile, writeFile } from "../lib/ipc/filesClient";
 
 vi.mock("../lib/ipc/filesClient", () => ({
   createFile: vi.fn(),
@@ -41,8 +42,10 @@ vi.mock("../lib/ipc/settingsClient", () => ({
 }));
 
 vi.mock("../lib/ipc/workspaceClient", () => ({
-  markWorkspaceOpened: vi.fn(),
-  saveWorkspaceTabs: vi.fn(),
+  // Both return Promise<void> in real life; `persistTabs` chains `.catch` on
+  // the result, so the mocks must resolve rather than return undefined.
+  markWorkspaceOpened: vi.fn(() => Promise.resolve()),
+  saveWorkspaceTabs: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("../lib/ipc/bobClient", () => ({
@@ -377,6 +380,78 @@ describe("workspace store", () => {
       expect(useWorkspaceStore.getState().activeWorkspace()?.chatThread.conversationId).toBe(
         copy?.conversationId,
       );
+    });
+  });
+
+  describe("file management (safety paths)", () => {
+    it("selectFile opens, loads, and activates a file — the cross-file-link landing", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "# Hello", lastModifiedMs: 100 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+
+      await useWorkspaceStore.getState().selectFile("notes/a.md");
+
+      const workspace = useWorkspaceStore.getState().activeWorkspace();
+      expect(workspace?.activeFilePath).toBe("notes/a.md");
+      expect(workspace?.openFilePaths).toContain("notes/a.md");
+      expect(workspace?.fileContents["notes/a.md"]?.content).toBe("# Hello");
+      expect(readFile).toHaveBeenCalledWith(workspaceId, "notes/a.md");
+    });
+
+    it("selectFile does not re-read a file whose content is already loaded", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+
+      await useWorkspaceStore.getState().selectFile("a.md");
+      await useWorkspaceStore.getState().selectFile("a.md");
+
+      expect(readFile).toHaveBeenCalledTimes(1);
+    });
+
+    it("selectFile surfaces a read failure as saveError", async () => {
+      vi.mocked(readFile).mockRejectedValue(new Error("disk gone"));
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+
+      await useWorkspaceStore.getState().selectFile("missing.md");
+
+      expect(useWorkspaceStore.getState().saveError).toBe("disk gone");
+    });
+
+    it("saveActiveFile guards on the buffer's mtime and marks it saved on success", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "old", lastModifiedMs: 100 });
+      vi.mocked(writeFile).mockResolvedValue({ lastModifiedMs: 200 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      useWorkspaceStore.getState().updateActiveContent("new content");
+
+      await useWorkspaceStore.getState().saveActiveFile();
+
+      // The pre-edit mtime is sent as the conflict guard (don't clobber newer disk state).
+      expect(writeFile).toHaveBeenCalledWith(
+        workspaceId,
+        "a.md",
+        "new content",
+        100,
+        expect.anything(),
+      );
+      const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
+      expect(buffer?.dirty).toBe(false);
+      expect(buffer?.lastModifiedMs).toBe(200);
+      expect(useWorkspaceStore.getState().saveError).toBeNull();
+    });
+
+    it("saveActiveFile refuses to clobber a file changed on disk, keeping local edits", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "old", lastModifiedMs: 100 });
+      vi.mocked(writeFile).mockRejectedValue(new FileConflictError(200));
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      useWorkspaceStore.getState().updateActiveContent("local edits");
+
+      await useWorkspaceStore.getState().saveActiveFile();
+
+      const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
+      expect(buffer?.conflict).toBe(true);
+      expect(buffer?.content).toBe("local edits");
+      expect(useWorkspaceStore.getState().saveError).toContain("changed on disk");
     });
   });
 

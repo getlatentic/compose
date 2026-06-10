@@ -260,10 +260,17 @@ agent-skill export route are deferred (re-open below if wanted).
       actual count-based retention (`SNAPSHOT_RETENTION_LIMIT = 50`) and why a
       trashed file's recovery snapshot (the protected latest revision) outlives
       the sweep.
-- [ ] **Frontend test gaps:** `setup/`, `history/`, `settings/`, `workspace/`,
-      `dashboard/`, `file-tree/` have **zero** unit tests. Prioritize
-      history-restore and onboarding (safety / first-impression critical).
-      (Rust side is well covered — ~126 tests.)
+- [~] **Frontend test gaps.** Added store-level tests for the file-management
+      **safety paths** — `selectFile` (the cross-file-link landing: opens, loads,
+      activates; caches; surfaces read errors) and `saveActiveFile` (sends the
+      pre-edit mtime as the conflict guard; on a `FileConflictError` keeps local
+      edits + flags the conflict instead of clobbering). The pure model safety
+      logic (`applyFsEvent` dirty→conflict / clean→reload, etc.) was already
+      well-covered (~40 model tests). *Still thin:* the `VersionHistory` and
+      `SetupScreen` **components** have no tests — but in this node-env /
+      static-render setup, effect-driven interactive components are awkward to
+      test meaningfully; the load-bearing logic lives in the (tested) store +
+      model. (Rust side well covered — 136 tests.)
 - [ ] **Strip dev-only CSP entries** (`ws://localhost:142x`, dev URLs in
       `tauri.conf.json`) from the production build.
 - [x] **Dev sample-path constant** — `browserPreviewWorkspacePath` now reads
