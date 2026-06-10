@@ -1,8 +1,8 @@
 # Compose — product & architecture spec (current)
 
 This is the current, code-accurate overview of what Compose is and how it is
-built. It replaces the archived `vellum-*` production specs (see
-[`docs/archive/`](archive/)), which describe a removed Canvas/WASM editor and a
+built. It replaces the earlier production specs now in
+[`docs/archive/`](archive/), which describe a removed Canvas/WASM editor and a
 pre-streaming agent.
 
 This doc is the **map**; the **terrain** is the three domain guides, which carry

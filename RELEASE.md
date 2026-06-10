@@ -9,11 +9,10 @@ editor; an agent (bob / Claude Code / Codex) reads and edits your files, every
 edit gated through a review-or-snapshot safety layer with undo history. App
 metadata lives in app-data SQLite, never inside the vault.
 
-> **Doc hygiene note:** the files under `docs/` (`handoff-*`, the `vellum-*`
-> spec) are **partially stale** — they describe a removed Canvas/WASM editor
-> and a pre-streaming Bob. The code is the source of truth; this file
-> reconciles to the code as of the audit. The `docs/*-guide.md` files are
-> current.
+> **Doc hygiene note:** the design docs now in `docs/archive/` are **stale** —
+> they describe a removed Canvas/WASM editor and a pre-streaming agent. The code
+> is the source of truth; this file reconciles to the code as of the audit. The
+> current docs are `docs/spec.md` + the `docs/*-guide.md` files.
 
 ---
 
@@ -82,17 +81,45 @@ these are product work; they're the ship vehicle.
 
 ## 2. P0 — Feature holes that read as "broken"
 
-- [ ] **Remove or hide the Terminal pane.** `src/features/terminal/
-      TerminalPanel.tsx` is a static stub ("planned command"). Docs call
-      terminal an explicit non-goal → **remove from the shell** for v1 (cleaner
-      than wiring a real PTY). Confirm no header/menu path reaches it.
+- [ ] **Delete the Terminal stub.** `src/features/terminal/TerminalPanel.tsx`
+      is a ~10-line **static React component** that prints the workspace path and
+      a hardcoded fake command string. There is **no PTY at all** — not node-pty,
+      not a Rust/WASM PTY; `src-tauri/src/pty/mod.rs` is just an unused
+      `PtySessionDescriptor` struct (no spawn, no command, not registered). The
+      component is also **never imported/mounted**. For v1, **delete both**
+      (`features/terminal/` + `src-tauri/src/pty/`) — terminal is an explicit
+      non-goal. (Building a *real* terminal later = a Rust PTY via `portable-pty`
+      → Tauri channel → xterm.js; a separate project, not a stub to finish.)
 - [ ] **Generic pane fallback.** `AppShell.tsx` renders "This pane type isn't
       available yet" for any non-Settings pane. Audit that no user action can
       open one; otherwise gate it.
-- [~] **Prove the Bob auth round-trip in the packaged `.app`.** Streaming path
-      is built but never verified end-to-end with a live key (handoff #2). Drive
-      `pnpm tauri build` once: save a real key → send a prompt → confirm a real
-      edit lands and review/apply works. This is a verification gap, not code.
+- [~] **Prove the agent auth + edit round-trip in the packaged `.app`.**
+      Streaming path is built but never verified end-to-end with a live key.
+      Drive `pnpm tauri build` once: save a real key → send a prompt → confirm a
+      real edit lands and review/apply works. This is a verification gap, not
+      code.
+
+## 2a. P1 — Onboarding: auto-discover installed harnesses
+
+Today onboarding is **connect-centric** (it walks the user through saving a bob
+key). For a multi-harness product the app should **detect which agent CLIs are
+already on the system** and offer them, instead of assuming bob.
+
+The backend primitives already exist: `harness_list` (the full catalog) and
+`harness_readiness(id)` (probe installed / version / auth) —
+[`src/lib/ipc/bobClient.ts`](../src/lib/ipc/bobClient.ts) `harnessList()` /
+`harnessReadiness()`. What's missing is the discovery *flow*.
+
+- [ ] (Optional backend) add `harness_discover()` that probes the whole catalog
+      in parallel and returns `[{ info, readiness }]` — or do it client-side with
+      `Promise.all` over `harnessList()` + `harnessReadiness()`.
+- [ ] New onboarding step **"Choose your AI"**: show every catalog harness with
+      its detected state (✓ installed / sign-in needed / not installed / needs
+      key), auto-select the first ready one, and let the user pick. Drive each
+      row off `HarnessCapabilities` (credential vs login-managed) — **no
+      `harnessId === "bob"` checks**.
+- [ ] Re-run discovery when returning to Settings so newly-installed CLIs appear.
+- [ ] Browser preview stays bob-only (no catalog) — keep the existing fallback.
 
 ---
 
@@ -193,6 +220,13 @@ system Pandoc.** Plan:
       (Rust side is well covered — ~126 tests.)
 - [ ] **Strip dev-only CSP entries** (`ws://localhost:142x`, dev URLs in
       `tauri.conf.json`) from the production build.
+- [ ] **Dev sample-path constant.** `browserPreviewWorkspacePath` is hardcoded
+      to `/Users/dev/workspace/bob4everyone` in `SetupScreen.tsx` and
+      `DashboardScreen.tsx` (browser-preview "open sample" only). Parameterize via
+      an env var (e.g. `VITE_SAMPLE_WORKSPACE`) so no machine-specific path lives
+      in source. *(Done already: archived the legacy `vellum-*`/`bob4everyone`
+      branding, removed dead `vellum-*` CSS, deleted the stale
+      `src-tauri/Cargo.lock` leftover.)*
 
 ---
 

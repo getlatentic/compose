@@ -52,8 +52,8 @@ indexing or search, change it once, in the core crate; do not add a
 parallel TS path "just for the browser." `SourceRange` lives in this
 crate too (re-exported by `crate::db`), so there is one coordinate type.
 
-(The old `vellum_engine` WASM — a parser/rope engine for the
-canvas editor Tiptap replaced — has been removed entirely.)
+(The old custom WASM parser/rope engine for the canvas editor that
+Tiptap replaced has been removed entirely.)
 
 ### Browser files: the virtual workspace (OPFS)
 
