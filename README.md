@@ -6,8 +6,11 @@ Your documents are plain Markdown files in a folder you choose. The assistant ed
 
 > **Status:** early alpha (`0.0.1-alpha.1`), macOS (Apple Silicon). [Download below.](#download)
 
-<!-- For the best first impression, add a hero screenshot or short GIF here:
-     ![Compose](.github/screenshot.png) -->
+## An AI-native editor
+
+Compose isn't a text editor with a chatbot bolted on — the AI lives *inside* your workspace. It already sees the document you're looking at, edits it in place, follows the `[[links]]` between your notes, and shows you every change before it sticks.
+
+![Compose — an AI-native Markdown editor with the assistant working alongside your notes](.github/screenshot.png)
 
 ## Why Compose
 
