@@ -53,19 +53,30 @@ metadata lives in app-data SQLite, never inside the vault.
 Without these the app cannot reach a non-technical macOS user cleanly. None of
 these are product work; they're the ship vehicle.
 
-- [ ] **Code signing + notarization.** `tauri.conf.json` has no Developer ID
-      identity or entitlements (only `scripts/setup-dev-signing.sh` for local).
-      Unsigned/un-notarized → Gatekeeper blocks first launch.
-      **Requires a paid Apple Developer Program membership ($99/yr)** — a free
-      Apple ID only does local/ad-hoc signing, which is not distributable.
-      Notarization is included in the program (no extra cost).
+> **⛔ Blocked on the Apple Developer Program ($99/yr) — deferred until enrolled.**
+> Signing, notarization, the auto-updater, and every "verify in the packaged
+> `.app`" pass below all depend on it. (The updater is coupled too: it installs a
+> downloaded `.app`, which macOS quarantines/Gatekeeper-blocks unless it's
+> notarized — so there's no point wiring the updater until signing exists.)
+> Everything *not* in this block is actionable now; see §2–§6.
+
+- [ ] **[Apple] Code signing + notarization.** `tauri.conf.json` has no Developer
+      ID identity or entitlements (only `scripts/setup-dev-signing.sh` for local).
+      Unsigned/un-notarized → Gatekeeper blocks first launch. A free Apple ID only
+      does local/ad-hoc signing, which is not distributable; notarization is
+      included in the program (no extra cost).
   - [ ] Enroll in the Apple Developer Program; create a **Developer ID
         Application** certificate.
   - [ ] Add `bundle.macOS` signing identity + hardened-runtime entitlements.
   - [ ] Wire notarization (notarytool) + stapling into the build/release script.
   - [ ] Verify a downloaded `.dmg` opens clean on a machine that never built it.
-- [ ] **Auto-updater.** No `tauri-plugin-updater`, no `updater` config. Without
-      an update channel you cannot ship a single fix post-release.
+- [ ] **[Apple] Auto-updater.** No `tauri-plugin-updater`, no `updater` config.
+      How it works: the app checks a static manifest you host (GitHub Releases /
+      S3 — no backend), and if there's a newer version downloads + verifies +
+      swaps the bundle and relaunches. Update artifacts are signed with Tauri's
+      own keypair (`tauri signer generate`) — separate from Apple signing — but
+      the installed bundle still must be Apple-notarized to launch, so this is
+      gated on the item above.
   - [ ] Add `tauri-plugin-updater` + signing keypair; host an update manifest.
   - [ ] Add an in-app "update available / restart to update" surface.
 - [x] **Real README** — replaced the Tauri boilerplate with a proper
