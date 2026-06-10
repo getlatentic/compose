@@ -289,40 +289,15 @@ export function AppShell() {
     return "Worker parsing";
   }, [preview]);
 
-  if (!onboardingComplete) {
-    return <SetupScreen />;
-  }
-
-  // No workspace yet — just the Dashboard. There's nothing
-  // workspace-related to keep mounted, so the simple early-return
-  // is fine.
-  if (!activeWorkspace) {
-    return (
-      <>
-        <DashboardScreen
-          onOpenSettings={() => openSettings()}
-          onOpenWorkspace={(workspaceId) => switchWorkspace(workspaceId)}
-        />
-        {settingsOpen ? <SettingsDialog onClose={() => closeSettings()} /> : null}
-      </>
-    );
-  }
-
-  // Workspace exists. Render BOTH the dashboard and the workspace
-  // shell, gating visibility with CSS. This is the
-  // perf-critical optimisation flagged by the audit: previously
-  // clicking the Home icon flipped `viewMode` to "dashboard" and
-  // unmounted the entire workspace tree (TipTap editor, chat
-  // panel, file watcher). The TipTap remount alone is a
-  // multi-hundred-millisecond stall on a non-trivial document.
-  // Keeping the tree mounted under `display: none` preserves all
-  // in-memory state and snaps back instantly when the user
-  // returns to the workspace.
-  const dashboardVisible = viewMode === "dashboard";
-
   // Cross-file link navigation: the set of workspace files a link can resolve
   // to, and the action to open one. Shared by the editor (modifier-click) and
   // chat replies (click) so a `[text](other.md)` link opens the file in a tab.
+  //
+  // These hooks (and runDocumentExport) MUST stay ABOVE the early returns
+  // below: React requires the same hooks in the same order every render, and
+  // the onboarding / no-workspace branches return early. (A blank-screen crash
+  // — "Rendered more hooks than during the previous render" — is what moving
+  // them below caused.)
   const linkTargets = useMemo(
     () => new Set((activeWorkspace?.files ?? []).map((file) => file.relativePath)),
     [activeWorkspace?.files],
@@ -365,6 +340,37 @@ export function AppShell() {
     },
     [activeFileEntry, activeFileBuffer, activeWorkspaceId],
   );
+
+  if (!onboardingComplete) {
+    return <SetupScreen />;
+  }
+
+  // No workspace yet — just the Dashboard. There's nothing
+  // workspace-related to keep mounted, so the simple early-return
+  // is fine.
+  if (!activeWorkspace) {
+    return (
+      <>
+        <DashboardScreen
+          onOpenSettings={() => openSettings()}
+          onOpenWorkspace={(workspaceId) => switchWorkspace(workspaceId)}
+        />
+        {settingsOpen ? <SettingsDialog onClose={() => closeSettings()} /> : null}
+      </>
+    );
+  }
+
+  // Workspace exists. Render BOTH the dashboard and the workspace
+  // shell, gating visibility with CSS. This is the
+  // perf-critical optimisation flagged by the audit: previously
+  // clicking the Home icon flipped `viewMode` to "dashboard" and
+  // unmounted the entire workspace tree (TipTap editor, chat
+  // panel, file watcher). The TipTap remount alone is a
+  // multi-hundred-millisecond stall on a non-trivial document.
+  // Keeping the tree mounted under `display: none` preserves all
+  // in-memory state and snaps back instantly when the user
+  // returns to the workspace.
+  const dashboardVisible = viewMode === "dashboard";
 
   const statusDirty = Boolean(activeFileBuffer?.dirty);
   const statusMeta = activeFileEntry
