@@ -359,12 +359,14 @@ function TiptapMarkdownEditorInner({
     void insertImagesIntoEditor(files);
   }
 
-  // Follow a link on modifier-click (⌘/Ctrl). A plain click is left to
-  // ProseMirror so it just places the caret — the editor is always editable, so
-  // following must be the deliberate, modified gesture. An internal link opens
-  // the target file; an external one opens in the browser.
+  // Follow a link on a plain click — like a reading view (this is what a
+  // non-technical user expects; ⌘-click is not discoverable). Skipped while the
+  // user is selecting text (a drag that ends on a link), so selection still
+  // works. To EDIT the link's text, use Source mode. Internal links open the
+  // target file in a tab; external links open in the browser.
   function handleLinkClick(event: ReactMouseEvent<HTMLDivElement>) {
-    if (!(event.metaKey || event.ctrlKey)) return;
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) return; // mid-selection — don't navigate
     const element = event.target as HTMLElement | null;
     const targets = linkTargets ?? NO_LINK_TARGETS;
 
@@ -375,7 +377,6 @@ function TiptapMarkdownEditorInner({
       const path = target ? resolveWikilinkTarget(target, { fromPath: filePath, knownPaths: targets }) : null;
       if (path) {
         event.preventDefault();
-        event.stopPropagation();
         onNavigateToLink?.(path);
       }
       return;
@@ -387,7 +388,6 @@ function TiptapMarkdownEditorInner({
     const resolved = resolveWorkspaceLink(href, { fromPath: filePath, knownPaths: targets });
     if (!resolved) return;
     event.preventDefault();
-    event.stopPropagation();
     if (resolved.kind === "internal") {
       onNavigateToLink?.(resolved.path);
     } else {

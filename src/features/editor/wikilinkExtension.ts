@@ -60,14 +60,35 @@ function buildDecorations(doc: ProseMirrorNode): DecorationSet {
     WIKILINK.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = WIKILINK.exec(text)) !== null) {
-      const { target } = parseWikilinkBody(match[1] ?? "");
+      const body = match[1] ?? "";
+      const { target } = parseWikilinkBody(body);
       if (target === "") {
         continue;
       }
       const from = pos + match.index;
       const to = from + match[0].length;
+      const bodyStart = from + 2; // after `[[`
+      const bodyEnd = to - 2; // before `]]`
+
+      // Render cleanly: hide the `[[`, the `target|` (when an alias is given),
+      // and the `]]`, leaving only the visible title styled as a link. The
+      // literal text stays in the document, so markdown round-trips unchanged;
+      // raw editing is available in Source mode.
+      const pipe = body.indexOf("|");
+      let titleStart = bodyStart;
+      let titleEnd = bodyEnd;
+      if (pipe !== -1) {
+        if (body.slice(pipe + 1).trim() !== "") {
+          titleStart = bodyStart + pipe + 1; // alias is the visible title
+        } else {
+          titleEnd = bodyStart + pipe; // empty alias → show the target
+        }
+      }
+
+      decorations.push(Decoration.inline(from, titleStart, SYNTAX));
+      decorations.push(Decoration.inline(titleEnd, to, SYNTAX));
       decorations.push(
-        Decoration.inline(from, to, {
+        Decoration.inline(titleStart, titleEnd, {
           class: "bob-wikilink",
           "data-wikilink-target": target,
         }),
@@ -76,3 +97,6 @@ function buildDecorations(doc: ProseMirrorNode): DecorationSet {
   });
   return DecorationSet.create(doc, decorations);
 }
+
+/** Hides the `[[ … ]]` syntax characters (see `.bob-wikilink-syntax`). */
+const SYNTAX = { class: "bob-wikilink-syntax" };
