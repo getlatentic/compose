@@ -209,9 +209,10 @@ fn percent_decode(input: &str) -> String {
 fn wrap_document(title: &str, body: &str) -> String {
     format!(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
-         <title>{title}</title>\n<style>{css}</style>\n</head>\n\
+         <title>{title}</title>\n<style>{fonts}{css}</style>\n</head>\n\
          <body class=\"compose-export\">\n{body}\n</body>\n</html>",
         title = escape_html(title),
+        fonts = super::fonts::font_face_css(),
         css = PRINT_CSS,
         body = body,
     )
@@ -239,8 +240,9 @@ body.compose-export {
   margin: 0;
   padding: 2.4cm 2.2cm;
   color: #1a1a1a;
-  font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
-  font-size: 11.5pt;
+  /* Bundled Computer Modern (see export::fonts) for the classic LaTeX look. */
+  font-family: "CMU Serif", Georgia, "Times New Roman", serif;
+  font-size: 12pt;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -293,6 +295,14 @@ mod tests {
 
     fn doc_dir() -> std::path::PathBuf {
         tempdir().expect("tempdir").keep()
+    }
+
+    #[test]
+    fn embeds_cmu_serif_font() {
+        let html = render_markdown_to_html("hello", "doc", &doc_dir());
+        assert!(html.contains("@font-face"), "font faces embedded");
+        assert!(html.contains("font-family: \"CMU Serif\""), "body uses CMU Serif: {html:.400}");
+        assert!(html.contains("data:font/ttf;base64,"), "font inlined as data URI");
     }
 
     #[test]

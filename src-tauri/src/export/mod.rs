@@ -11,6 +11,7 @@
 //! registry's path-safety seam (`resolve_workspace_path`); the destination is a
 //! user-chosen save location outside the vault.
 
+mod fonts;
 mod html;
 mod pdf;
 
