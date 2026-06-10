@@ -197,17 +197,20 @@ delete. See [`review-guide.md`](review-guide.md).
 
 ## 9. Document export (v1 scope)
 
-Markdown is canonical and LLM-editable. Export is a v1 feature with three routes
-(see [`RELEASE.md`](../RELEASE.md) §3 for status and the Pandoc-bundling
-decision):
+Markdown is canonical and LLM-editable. v1 ships **PDF export** via **macOS
+WebKit** — no Pandoc, no LaTeX, no bundled engine. The concern lives in one
+module ([`src-tauri/src/export`](../src-tauri/src/export)):
 
-- **HTML** — always available, via the existing remark/rehype pipeline (no
-  external dependency).
-- **DOCX / PDF** — via Pandoc, **without depending on a user-installed Pandoc**
-  (bundle as a sidecar, or detect + fall back). PDF avoids a LaTeX dependency by
-  going HTML → webview print-to-PDF.
-- **Agent-skill export** — ask the active harness to convert via its built-in
-  document skills; doubles as the no-Pandoc fallback.
+- `export::html` renders the document's current markdown → a self-contained HTML
+  document (comrak GFM + a print stylesheet; YAML frontmatter dropped; raw HTML
+  escaped; local images inlined as `data:` URIs).
+- `export::pdf` loads that HTML into an **offscreen `WKWebView`** and uses
+  WebKit's native `createPDFWithConfiguration:` to produce the PDF — full CSS
+  fidelity, offline, no external process. WKWebView is main-thread-only, so the
+  work runs through `run_on_main_thread` while the async command blocks a worker.
+
+HTML/DOCX export and an agent-skill ("export with AI") route are deferred (see
+[`RELEASE.md`](../RELEASE.md) §3).
 
 ---
 

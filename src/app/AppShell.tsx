@@ -4,6 +4,7 @@ import {
   HeaderGlobalBar,
   HeaderName,
   SkipToContent,
+  ToastNotification,
 } from "@carbon/react";
 import {
   ChatBot,
@@ -11,6 +12,7 @@ import {
   Code,
   DocumentAdd,
   DocumentExport,
+  DocumentPdf,
   Home,
   Save,
   Settings,
@@ -33,6 +35,7 @@ import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { SetupScreen } from "../features/setup/SetupScreen";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import { exportMarkdownFile } from "../lib/export/markdownExport";
+import { exportDocumentToPdf } from "../lib/export/pdfExport";
 import { subscribeToWorkspaceFs } from "../lib/ipc/fileWatcherClient";
 import { checkBobInstall, getBobAuthStatus } from "../lib/ipc/settingsClient";
 import { getOnboarding, listWorkspaces } from "../lib/ipc/workspaceClient";
@@ -94,6 +97,10 @@ export function AppShell() {
       : null;
   const preview = useMarkdownPreview(activeFileBuffer?.content ?? "");
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [exportNotice, setExportNotice] = useState<{
+    kind: "success" | "error";
+    text: string;
+  } | null>(null);
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen);
   const openSettings = useWorkspaceStore((state) => state.openSettings);
   const closeSettings = useWorkspaceStore((state) => state.closeSettings);
@@ -309,6 +316,25 @@ export function AppShell() {
   // returns to the workspace.
   const dashboardVisible = viewMode === "dashboard";
 
+  const handleExportPdf = useCallback(async () => {
+    if (!activeFileEntry || !activeFileBuffer || !activeWorkspaceId) {
+      return;
+    }
+    const result = await exportDocumentToPdf({
+      workspaceId: activeWorkspaceId,
+      relativePath: activeFileEntry.relativePath,
+      content: activeFileBuffer.content,
+    });
+    if (result.status === "cancelled") {
+      return;
+    }
+    setExportNotice(
+      result.status === "exported"
+        ? { kind: "success", text: `Saved to ${result.path}` }
+        : { kind: "error", text: result.message },
+    );
+  }, [activeFileEntry, activeFileBuffer, activeWorkspaceId]);
+
   const statusDirty = Boolean(activeFileBuffer?.dirty);
   const statusMeta = activeFileEntry
     ? statusDirty
@@ -318,6 +344,26 @@ export function AppShell() {
 
   return (
     <>
+      {exportNotice ? (
+        <ToastNotification
+          kind={exportNotice.kind}
+          lowContrast
+          title={exportNotice.kind === "success" ? "PDF exported" : "Export failed"}
+          subtitle={exportNotice.text}
+          timeout={6000}
+          onClose={() => {
+            setExportNotice(null);
+            return true;
+          }}
+          style={{
+            position: "fixed",
+            right: "1rem",
+            bottom: "1rem",
+            zIndex: 9000,
+            maxWidth: "28rem",
+          }}
+        />
+      ) : null}
       {/* Dashboard rendered alongside, hidden via CSS so its
         * state survives the toggle. `display: none` drops it
         * out of layout without unmounting. */}
@@ -388,6 +434,19 @@ export function AppShell() {
             tooltipAlignment="end"
           >
             <DocumentExport size={20} />
+          </HeaderGlobalAction>
+          <HeaderGlobalAction
+            aria-label="Export PDF"
+            aria-disabled={!activeFileEntry}
+            className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
+            onClick={() => {
+              if (activeFileEntry) {
+                void handleExportPdf();
+              }
+            }}
+            tooltipAlignment="end"
+          >
+            <DocumentPdf size={20} />
           </HeaderGlobalAction>
           <HeaderGlobalAction
             aria-label="Settings"

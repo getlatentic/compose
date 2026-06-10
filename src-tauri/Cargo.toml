@@ -56,6 +56,13 @@ uuid = { version = "1", features = ["v4"] }
 # install-bob.sh to disk for `bash -l` to exec. Also reused in
 # dev-only tests, but the production code path needs it too.
 tempfile = "3"
+# GFM markdown -> HTML for PDF export (export::html). Pure Rust, no native
+# build. The export concern owns its own renderer rather than reaching into
+# the front-end preview pipeline.
+comrak = "0.52"
+# Base64-encodes local images into data: URIs so the export HTML is fully
+# self-contained (the PDF webview needs no filesystem access).
+base64 = "0.22"
 
 [dev-dependencies]
 # Pulls in `tauri::test` (mock_builder / MockRuntime / get_ipc_response) so the
@@ -67,5 +74,27 @@ tauri = { version = "2", features = ["test"] }
 # clonefile(2) for copy-on-write workspace clones in the edit-review gate
 # (files::clone). macOS-only; other platforms use the recursive-copy
 # fallback and never link libc here.
+#
+# objc2 + objc2-web-kit drive native PDF export (export::pdf): an offscreen
+# WKWebView renders the export HTML and macOS WebKit generates the PDF. These
+# are already in the tree transitively (wry/Tauri); declaring them direct with
+# the WKWebView/PDF features keeps the build correct on its own. PDF export is
+# macOS-only in v1 — other platforms get a "not supported" error.
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = [
+  "NSString",
+  "NSData",
+  "NSURL",
+  "NSError",
+] }
+objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
+block2 = "0.6"
+objc2-web-kit = { version = "0.3", features = [
+  "WKWebView",
+  "WKWebViewConfiguration",
+  "WKPDFConfiguration",
+  "WKNavigation",
+  "block2",
+] }
