@@ -4,6 +4,7 @@ import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 
 import { remarkHardBreaks } from "./remarkHardBreaks";
+import { remarkWikilink } from "./remarkWikilink";
 
 export interface MarkdownProcessorOptions {
   /**
@@ -13,6 +14,13 @@ export interface MarkdownProcessorOptions {
    * markdown semantics. See [remarkHardBreaks](remarkHardBreaks.ts).
    */
   hardBreaks?: boolean;
+  /**
+   * Turn `[[Note]]` into navigable links. The chat renderer enables this so an
+   * agent's wikilinks open the target file; the document preview leaves them as
+   * plain text (the editor decorates them itself). See
+   * [remarkWikilink](remarkWikilink.ts).
+   */
+  wikilinks?: boolean;
 }
 
 /**
@@ -35,6 +43,9 @@ export function createMarkdownProcessor(options: MarkdownProcessorOptions = {}) 
   const processor = unified().use(remarkParse);
   if (options.hardBreaks) {
     processor.use(remarkHardBreaks);
+  }
+  if (options.wikilinks) {
+    processor.use(remarkWikilink);
   }
   return processor.use(remarkRehype).use(rehypeSanitize);
 }

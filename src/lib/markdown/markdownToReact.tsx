@@ -16,9 +16,10 @@ import { createMarkdownProcessor } from "./processor";
  * streaming chat bubble) wrap it in a `memo`'d component keyed by the
  * source string; see `MarkdownMessage`.
  */
-// Chat renders the assistant's reply: single newlines are intentional
-// line breaks, so `hardBreaks` is on (unlike the document preview).
-const processor = createMarkdownProcessor({ hardBreaks: true });
+// Chat renders the assistant's reply: single newlines are intentional line
+// breaks (`hardBreaks`), and `[[Note]]` wikilinks become navigable links
+// (`wikilinks`) — both unlike the document preview.
+const processor = createMarkdownProcessor({ hardBreaks: true, wikilinks: true });
 
 export function renderMarkdownToReact(
   markdown: string,

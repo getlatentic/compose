@@ -20,6 +20,8 @@ import {
 } from "react";
 import { openExternalUrl } from "../../lib/links/openExternal";
 import { resolveWorkspaceLink } from "../../lib/links/workspaceLink";
+import { resolveWikilinkTarget } from "../../lib/links/wikilink";
+import { WikiLink } from "./wikilinkExtension";
 import {
   type DocumentTextChange,
   type SourceRange,
@@ -203,6 +205,9 @@ function TiptapMarkdownEditorInner({
       TableCell,
       TaskList,
       TaskItem.configure({ nested: true }),
+      // Decorate `[[Note]]` spans as clickable links (the text stays literal,
+      // so markdown round-trips unchanged); click handled in handleLinkClick.
+      WikiLink,
       // Official markdown extension — handles both directions of
       // the round trip. Editor accepts `contentType: 'markdown'`
       // in setContent and the editor instance gains a
@@ -360,13 +365,26 @@ function TiptapMarkdownEditorInner({
   // the target file; an external one opens in the browser.
   function handleLinkClick(event: ReactMouseEvent<HTMLDivElement>) {
     if (!(event.metaKey || event.ctrlKey)) return;
-    const anchor = (event.target as HTMLElement | null)?.closest("a");
-    const href = anchor?.getAttribute("href");
+    const element = event.target as HTMLElement | null;
+    const targets = linkTargets ?? NO_LINK_TARGETS;
+
+    // A decorated `[[Note]]` span (see wikilinkExtension).
+    const wikilink = element?.closest("[data-wikilink-target]");
+    if (wikilink) {
+      const target = wikilink.getAttribute("data-wikilink-target");
+      const path = target ? resolveWikilinkTarget(target, { fromPath: filePath, knownPaths: targets }) : null;
+      if (path) {
+        event.preventDefault();
+        event.stopPropagation();
+        onNavigateToLink?.(path);
+      }
+      return;
+    }
+
+    // A normal markdown link.
+    const href = element?.closest("a")?.getAttribute("href");
     if (!href) return;
-    const resolved = resolveWorkspaceLink(href, {
-      fromPath: filePath,
-      knownPaths: linkTargets ?? NO_LINK_TARGETS,
-    });
+    const resolved = resolveWorkspaceLink(href, { fromPath: filePath, knownPaths: targets });
     if (!resolved) return;
     event.preventDefault();
     event.stopPropagation();

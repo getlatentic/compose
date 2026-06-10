@@ -178,15 +178,31 @@ agent-skill export route are deferred (re-open below if wanted).
 - [ ] **Verify click-navigation in the packaged app** against a real vault with
       linked notes (the browser preview's virtual workspace has no files to link
       between).
-- [ ] **Wikilinks `[[Note]]` are NOT yet clickable.** Tiptap renders `[[…]]` as
-      literal text and remark doesn't parse it, so wikilink *navigation* needs
-      rendering first: a Tiptap node + an input rule + markdown round-trip for
-      the editor, and a remark plugin for chat. The index already resolves
-      wikilink edges (`graphEdges`), so resolution is solved — only rendering is
-      missing. Follow-on increment.
-- [ ] Optional polish: a discoverable affordance for editor links (cmd-click is
-      non-obvious for non-technical users — e.g. a hover hint), and distinct
-      styling for internal vs external links (`.bob-internal-link`).
+- [x] **Wikilinks `[[Note]]` are now clickable** in both surfaces.
+      *Editor* — a ProseMirror decoration
+      ([`wikilinkExtension.ts`](../src/features/editor/wikilinkExtension.ts))
+      marks `[[…]]` spans clickable while leaving the text **literal**, so
+      markdown round-trips byte-for-byte (no custom node/serializer — verified
+      `@tiptap/markdown` doesn't escape `[`). *Chat* — a remark plugin
+      ([`remarkWikilink.ts`](../src/lib/markdown/remarkWikilink.ts)) turns
+      `[[…]]` into a `#wikilink:` link (a fragment href, so it survives
+      `rehype-sanitize`) that `MarkdownLink` resolves. Resolution
+      ([`wikilink.ts`](../src/lib/links/wikilink.ts)) **mirrors the crate's
+      rule** (`splitn('|')`, `#`-strip, path-like vs stem/slug match) so the
+      editor/chat agree with the sidebar backlinks.
+- [x] Verified: 14 new unit tests (resolver + remark transform incl. sanitize
+      survival + inline-code exclusion), typecheck, 246 vitest, and runtime in
+      the browser (modules load; `[[Daily Note|today]]` → `#wikilink:Daily%20Note`
+      with alias text; `resolveWikilinkTarget('Plan')` → `notes/Plan.md`).
+- [ ] **Desktop check:** confirm the editor decoration renders + ⌘-click
+      navigates, and chat wikilinks navigate, against a real vault (the browser
+      preview has no files/editor to exercise interactively).
+- [ ] Known gap: a broken `[[Note]]` in the *editor* still looks like a link
+      (the decoration doesn't resolve at paint time, only on click) — it's inert
+      on click. Resolving at paint would need the file list in the plugin
+      (reconfigured on change). Minor; the chat side already dims broken ones.
+- [ ] Optional polish: a discoverable affordance for editor links (⌘-click is
+      non-obvious for non-technical users — e.g. a hover hint).
 
 ---
 

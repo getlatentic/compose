@@ -3,6 +3,11 @@ import type { Components } from "hast-util-to-jsx-runtime";
 
 import { openExternalUrl } from "../links/openExternal";
 import { resolveWorkspaceLink } from "../links/workspaceLink";
+import { resolveWikilinkTarget } from "../links/wikilink";
+
+/** Href prefix the wikilink remark plugin emits (`#wikilink:<encoded-target>`);
+ * a fragment URL, so it survives `rehype-sanitize`. */
+const WIKILINK_HREF_PREFIX = "#wikilink:";
 
 /**
  * Makes markdown links rendered by {@link renderMarkdownToReact} navigate the
@@ -25,37 +30,64 @@ const NO_PATHS: ReadonlySet<string> = new Set();
 
 function MarkdownLink({ href, children }: { href?: string; children?: ReactNode }) {
   const context = useContext(MarkdownLinkContext);
-  const resolved = href
-    ? resolveWorkspaceLink(href, {
-        fromPath: context?.fromPath,
-        knownPaths: context?.knownPaths ?? NO_PATHS,
-      })
-    : null;
+  const knownPaths = context?.knownPaths ?? NO_PATHS;
+
+  // Classify the href into one navigation action. A `#wikilink:` href is an
+  // agent's `[[Note]]`; everything else is a normal markdown link.
+  let internalPath: string | null = null;
+  let externalHref: string | null = null;
+  let isWikilink = false;
+  if (href?.startsWith(WIKILINK_HREF_PREFIX)) {
+    isWikilink = true;
+    internalPath = resolveWikilinkTarget(decodeWikilinkTarget(href), {
+      fromPath: context?.fromPath,
+      knownPaths,
+    });
+  } else if (href) {
+    const resolved = resolveWorkspaceLink(href, { fromPath: context?.fromPath, knownPaths });
+    if (resolved?.kind === "internal") {
+      internalPath = resolved.path;
+    } else if (resolved?.kind === "external") {
+      externalHref = resolved.href;
+    }
+  }
 
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    // We own navigation for resolved links; let truly-unresolved hrefs fall
-    // through as inert (a broken relative path shouldn't navigate the webview).
+    // We own navigation; unresolved hrefs (a broken relative path or a wikilink
+    // pointing at no file) stay inert rather than navigating the webview.
     event.preventDefault();
-    if (!resolved) {
-      return;
-    }
-    if (resolved.kind === "internal") {
-      context?.navigate(resolved.path);
-    } else {
-      void openExternalUrl(resolved.href);
+    if (internalPath) {
+      context?.navigate(internalPath);
+    } else if (externalHref) {
+      void openExternalUrl(externalHref);
     }
   };
+
+  const className = internalPath
+    ? "bob-internal-link"
+    : isWikilink
+      ? "bob-wikilink bob-wikilink--broken"
+      : undefined;
 
   return (
     <a
       href={href ?? undefined}
-      className={resolved?.kind === "internal" ? "bob-internal-link" : undefined}
-      rel={resolved?.kind === "external" ? "noopener noreferrer" : undefined}
+      className={className}
+      rel={externalHref ? "noopener noreferrer" : undefined}
       onClick={handleClick}
     >
       {children}
     </a>
   );
+}
+
+function decodeWikilinkTarget(href: string): string {
+  const encoded = href.slice(WIKILINK_HREF_PREFIX.length);
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
 }
 
 /**
