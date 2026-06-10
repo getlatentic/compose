@@ -11,14 +11,16 @@
 //! A soft-delete records a content snapshot in version history *and* moves the
 //! physical file to the trash — two independent recovery paths. Purging the
 //! trash only removes the second; the file is still restorable from history via
-//! `workspace_restore_version` until snapshot retention prunes that. Snapshot
-//! retention is not implemented yet (snapshots are unbounded), so today a
-//! purged file is always still recoverable from history.
+//! `workspace_restore_version` until snapshot retention prunes that.
 //!
-//! **Coherence invariant for whoever lands snapshot retention:** keep the
-//! snapshot-retention window **≥ [`TRASH_RETENTION_DAYS`]**. If history were
-//! pruned *sooner* than the trash, purging a trashed file could remove its last
-//! recovery path earlier than this window promises.
+//! **Coherence invariant (held by `db::snapshot`):** snapshot retention is
+//! count-based (newest `SNAPSHOT_RETENTION_LIMIT` revisions) but always
+//! protects a document's *latest* revision, and `soft_delete` records the
+//! deleted file's final content as that latest revision — so a trashed file's
+//! recovery snapshot is never pruned and outlives this sweep. If history ever
+//! switches to a *time-windowed* policy, keep the window
+//! **≥ [`TRASH_RETENTION_DAYS`]** so purging a trashed file can't drop its last
+//! recovery path early.
 //!
 //! ## Scope (backend-only, by product decision)
 //!

@@ -31,7 +31,10 @@ import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceSto
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { HarnessPicker } from "../settings/HarnessPicker";
 
-const browserPreviewWorkspacePath = "/Users/dev/workspace/bob4everyone";
+// Browser-preview only: the virtual "sample workspace" id (the path is just an
+// identifier in the browser — no disk access). Overridable for local dev.
+const browserPreviewWorkspacePath =
+  import.meta.env.VITE_SAMPLE_WORKSPACE ?? "/sample-vault";
 
 type Screen = "welcome" | "value" | "choose" | "folder";
 const SCREENS: Screen[] = ["welcome", "value", "choose", "folder"];

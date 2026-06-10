@@ -1,6 +1,6 @@
 # Editor lag baseline
 
-Captured: `2026-05-29T08:06:07.182Z`
+Captured: `2026-06-10T06:10:16.559Z`
 Machine: `darwin` / 10 CPUs
 
 ## Measurement caveats
@@ -14,63 +14,63 @@ Machine: `darwin` / 10 CPUs
 
 | Operation | Samples | Median (ms) | p95 (ms) | Mean (ms) |
 |---|---:|---:|---:|---:|
-| `positionMapperBuild` | 20 | 0.03 | 0.05 | 0.03 |
-| `positionMapperLookup10k` | 10 | 13.29 | 14.66 | 13.38 |
-| `commentOverlay1` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentOverlay1_indexed` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentAnchorUpdate1` | 8 | 0.01 | 0.13 | 0.03 |
-| `commentOverlay10` | 8 | 0.01 | 0.59 | 0.12 |
+| `positionMapperBuild` | 20 | 0.02 | 0.02 | 0.01 |
+| `positionMapperLookup10k` | 10 | 5.15 | 5.16 | 5.15 |
+| `commentOverlay1` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentOverlay1_indexed` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentAnchorUpdate1` | 8 | 0.00 | 0.01 | 0.00 |
+| `commentOverlay10` | 8 | 0.01 | 0.01 | 0.01 |
 | `commentOverlay10_indexed` | 8 | 0.00 | 0.00 | 0.00 |
-| `commentAnchorUpdate10` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentOverlay100` | 8 | 0.02 | 0.15 | 0.04 |
-| `commentOverlay100_indexed` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentAnchorUpdate100` | 8 | 0.12 | 0.13 | 0.11 |
-| `commentOverlay1000` | 8 | 0.08 | 0.08 | 0.08 |
-| `commentOverlay1000_indexed` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentAnchorUpdate1000` | 8 | 0.50 | 0.62 | 0.52 |
-| `commentCreate100` | 8 | 0.69 | 1.20 | 0.79 |
-| `commentCreate1000` | 8 | 6.32 | 7.76 | 6.64 |
+| `commentAnchorUpdate10` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentOverlay100` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentOverlay100_indexed` | 8 | 0.00 | 0.01 | 0.00 |
+| `commentAnchorUpdate100` | 8 | 0.04 | 0.04 | 0.04 |
+| `commentOverlay1000` | 8 | 0.01 | 0.02 | 0.01 |
+| `commentOverlay1000_indexed` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentAnchorUpdate1000` | 8 | 0.09 | 0.12 | 0.10 |
+| `commentCreate100` | 8 | 0.23 | 0.26 | 0.24 |
+| `commentCreate1000` | 8 | 2.44 | 2.57 | 2.46 |
 
 ### `large` — 8,533 lines, 300.2 KB
 
 | Operation | Samples | Median (ms) | p95 (ms) | Mean (ms) |
 |---|---:|---:|---:|---:|
-| `positionMapperBuild` | 20 | 2.16 | 3.21 | 2.34 |
-| `positionMapperLookup10k` | 10 | 63.81 | 193.94 | 94.36 |
-| `commentOverlay1` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentOverlay1_indexed` | 8 | 0.01 | 0.02 | 0.01 |
+| `positionMapperBuild` | 20 | 0.83 | 0.84 | 0.83 |
+| `positionMapperLookup10k` | 10 | 15.18 | 15.21 | 15.18 |
+| `commentOverlay1` | 8 | 0.00 | 0.02 | 0.01 |
+| `commentOverlay1_indexed` | 8 | 0.00 | 0.00 | 0.00 |
 | `commentAnchorUpdate1` | 8 | 0.00 | 0.00 | 0.00 |
-| `commentOverlay10` | 8 | 0.01 | 0.02 | 0.01 |
-| `commentOverlay10_indexed` | 8 | 0.06 | 0.17 | 0.08 |
-| `commentAnchorUpdate10` | 8 | 0.00 | 0.03 | 0.01 |
-| `commentOverlay100` | 8 | 0.04 | 0.06 | 0.04 |
-| `commentOverlay100_indexed` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentAnchorUpdate100` | 8 | 0.02 | 0.06 | 0.03 |
-| `commentOverlay1000` | 8 | 0.59 | 0.59 | 0.59 |
-| `commentOverlay1000_indexed` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentAnchorUpdate1000` | 8 | 0.22 | 0.25 | 0.22 |
-| `commentCreate100` | 8 | 3.78 | 4.32 | 3.90 |
-| `commentCreate1000` | 8 | 18.54 | 19.64 | 18.38 |
+| `commentOverlay10` | 8 | 0.01 | 0.01 | 0.01 |
+| `commentOverlay10_indexed` | 8 | 0.00 | 0.01 | 0.00 |
+| `commentAnchorUpdate10` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentOverlay100` | 8 | 0.07 | 0.07 | 0.07 |
+| `commentOverlay100_indexed` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentAnchorUpdate100` | 8 | 0.01 | 0.01 | 0.01 |
+| `commentOverlay1000` | 8 | 0.18 | 0.19 | 0.18 |
+| `commentOverlay1000_indexed` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentAnchorUpdate1000` | 8 | 0.07 | 0.08 | 0.07 |
+| `commentCreate100` | 8 | 1.43 | 1.44 | 1.43 |
+| `commentCreate1000` | 8 | 6.63 | 6.67 | 6.63 |
 
 ### `xlarge` — 14,104 lines, 500.0 KB
 
 | Operation | Samples | Median (ms) | p95 (ms) | Mean (ms) |
 |---|---:|---:|---:|---:|
-| `positionMapperBuild` | 20 | 3.67 | 4.31 | 3.78 |
-| `positionMapperLookup10k` | 10 | 43.15 | 45.60 | 43.32 |
-| `commentOverlay1` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentOverlay1_indexed` | 8 | 0.01 | 0.01 | 0.01 |
+| `positionMapperBuild` | 20 | 1.38 | 1.39 | 1.38 |
+| `positionMapperLookup10k` | 10 | 15.21 | 15.24 | 15.21 |
+| `commentOverlay1` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentOverlay1_indexed` | 8 | 0.00 | 0.00 | 0.00 |
 | `commentAnchorUpdate1` | 8 | 0.00 | 0.00 | 0.00 |
-| `commentOverlay10` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentOverlay10_indexed` | 8 | 0.01 | 0.01 | 0.01 |
-| `commentAnchorUpdate10` | 8 | 0.00 | 0.01 | 0.00 |
-| `commentOverlay100` | 8 | 0.04 | 0.07 | 0.05 |
-| `commentOverlay100_indexed` | 8 | 0.01 | 0.03 | 0.01 |
-| `commentAnchorUpdate100` | 8 | 0.02 | 0.02 | 0.02 |
-| `commentOverlay1000` | 8 | 0.59 | 0.72 | 0.62 |
+| `commentOverlay10` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentOverlay10_indexed` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentAnchorUpdate10` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentOverlay100` | 8 | 0.01 | 0.01 | 0.01 |
+| `commentOverlay100_indexed` | 8 | 0.00 | 0.00 | 0.00 |
+| `commentAnchorUpdate100` | 8 | 0.01 | 0.01 | 0.01 |
+| `commentOverlay1000` | 8 | 0.24 | 0.24 | 0.24 |
 | `commentOverlay1000_indexed` | 8 | 0.00 | 0.00 | 0.00 |
-| `commentAnchorUpdate1000` | 8 | 0.21 | 0.26 | 0.21 |
-| `commentCreate100` | 8 | 5.22 | 5.39 | 5.20 |
-| `commentCreate1000` | 8 | 19.72 | 20.49 | 19.60 |
+| `commentAnchorUpdate1000` | 8 | 0.08 | 0.09 | 0.08 |
+| `commentCreate100` | 8 | 1.97 | 1.97 | 1.97 |
+| `commentCreate1000` | 8 | 7.22 | 7.40 | 7.25 |
 
 _Re-run with `pnpm bench:baseline`. Compare post-change numbers against this file._

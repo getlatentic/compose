@@ -4,7 +4,6 @@ pub mod events;
 pub mod export;
 pub mod files;
 pub mod index;
-pub mod pty;
 pub mod review;
 mod settings;
 mod workspace;

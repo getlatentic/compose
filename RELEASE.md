@@ -81,18 +81,15 @@ these are product work; they're the ship vehicle.
 
 ## 2. P0 — Feature holes that read as "broken"
 
-- [ ] **Delete the Terminal stub.** `src/features/terminal/TerminalPanel.tsx`
-      is a ~10-line **static React component** that prints the workspace path and
-      a hardcoded fake command string. There is **no PTY at all** — not node-pty,
-      not a Rust/WASM PTY; `src-tauri/src/pty/mod.rs` is just an unused
-      `PtySessionDescriptor` struct (no spawn, no command, not registered). The
-      component is also **never imported/mounted**. For v1, **delete both**
-      (`features/terminal/` + `src-tauri/src/pty/`) — terminal is an explicit
-      non-goal. (Building a *real* terminal later = a Rust PTY via `portable-pty`
-      → Tauri channel → xterm.js; a separate project, not a stub to finish.)
-- [ ] **Generic pane fallback.** `AppShell.tsx` renders "This pane type isn't
-      available yet" for any non-Settings pane. Audit that no user action can
-      open one; otherwise gate it.
+- [x] **Deleted the Terminal stub.** Removed `src/features/terminal/` (a static
+      placeholder, never mounted) and the dead `src-tauri/src/pty/` module (an
+      unused `PtySessionDescriptor` struct — `BobRunMode::InteractivePty`, bob's
+      `-i` command builder, is unrelated and stays). A real terminal later = a
+      Rust PTY (`portable-pty`) → Tauri channel → xterm.js; a separate project.
+- [x] **Generic pane fallback — audited, no change.** Only `{ kind: "settings" }`
+      panes are ever constructed (workspaceStore), so the "isn't available yet"
+      branch is unreachable; it stays as correct defensive code for a future
+      pane kind.
 - [~] **Prove the agent auth + edit round-trip in the packaged `.app`.**
       Streaming path is built but never verified end-to-end with a live key.
       Drive `pnpm tauri build` once: save a real key → send a prompt → confirm a
@@ -211,10 +208,11 @@ agent-skill export route are deferred (re-open below if wanted).
 - [ ] **Accessibility + IME pass (spec R10).** No evidence of screen-reader /
       keyboard-only / non-Latin IME testing. Real for "AI for everyone" — at
       least a smoke pass on VoiceOver + an IME (e.g. Japanese/Pinyin).
-- [ ] **Re-run the perf baseline on the current editor.** `pnpm bench:baseline`
-      exists but `docs/benchmarks/baseline.*` was measured on the **removed**
-      Canvas engine. Re-baseline against Tiptap so the gate is meaningful; land
-      the new `baseline.json`.
+- [~] **Perf baseline.** Correction: the benchmark + `baseline.json` are already
+      post-Canvas (ops are `positionMapper*` / `comment*`; no Canvas ops), so the
+      gate is meaningful as-is. Re-ran `pnpm bench:baseline` to refresh the
+      numbers on the current machine. (The editor itself is Tiptap-owned; the
+      benchmark covers the comment + coordinate hot paths it relies on, DOM-less.)
 - [ ] **Metadata export / import / purge UI (spec R12).** Backend pieces exist;
       no user surface to back up or delete all app data. P1 for a trust story
       ("your data, your control"), but can be a thin first cut.
@@ -238,24 +236,22 @@ agent-skill export route are deferred (re-open below if wanted).
 
 ## 6. Quality / hygiene
 
-- [ ] **Fix stale doc:** `src-tauri/src/files/trash_sweep.rs` (module header,
-      ~L14–16) still says "snapshot retention is not implemented yet (snapshots
-      are unbounded)" — but it **is** implemented (`SNAPSHOT_RETENTION_LIMIT =
-      50`, `prune_document_history` in `db/snapshot.rs`). The comment now
-      contradicts the code; correct it and the coherence note it carries.
+- [x] **Fixed stale doc:** `src-tauri/src/files/trash_sweep.rs`'s header no
+      longer claims snapshot retention is unimplemented — it now describes the
+      actual count-based retention (`SNAPSHOT_RETENTION_LIMIT = 50`) and why a
+      trashed file's recovery snapshot (the protected latest revision) outlives
+      the sweep.
 - [ ] **Frontend test gaps:** `setup/`, `history/`, `settings/`, `workspace/`,
       `dashboard/`, `file-tree/` have **zero** unit tests. Prioritize
       history-restore and onboarding (safety / first-impression critical).
       (Rust side is well covered — ~126 tests.)
 - [ ] **Strip dev-only CSP entries** (`ws://localhost:142x`, dev URLs in
       `tauri.conf.json`) from the production build.
-- [ ] **Dev sample-path constant.** `browserPreviewWorkspacePath` is hardcoded
-      to `/Users/dev/workspace/bob4everyone` in `SetupScreen.tsx` and
-      `DashboardScreen.tsx` (browser-preview "open sample" only). Parameterize via
-      an env var (e.g. `VITE_SAMPLE_WORKSPACE`) so no machine-specific path lives
-      in source. *(Done already: archived the legacy `vellum-*`/`bob4everyone`
-      branding, removed dead `vellum-*` CSS, deleted the stale
-      `src-tauri/Cargo.lock` leftover.)*
+- [x] **Dev sample-path constant** — `browserPreviewWorkspacePath` now reads
+      `import.meta.env.VITE_SAMPLE_WORKSPACE ?? "/sample-vault"` in both
+      `SetupScreen.tsx` and `DashboardScreen.tsx`; no machine-specific path in
+      source. *(Earlier: archived the legacy `vellum-*`/`bob4everyone` branding,
+      removed dead `vellum-*` CSS, deleted the stale `src-tauri/Cargo.lock`.)*
 
 ---
 
