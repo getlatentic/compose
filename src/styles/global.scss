@@ -1,0 +1,4185 @@
+@use "@carbon/react" with (
+  $css--font-face: false
+);
+
+:root {
+  color: var(--cds-text-primary, #161616);
+  background: var(--cds-background, #ffffff);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  block-size: 100%;
+  min-inline-size: 320px;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.truncate {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-app-shell {
+  display: flex;
+  block-size: 100%;
+  flex-direction: column;
+  color: var(--cds-text-primary, #161616);
+  background: var(--cds-background, #ffffff);
+}
+
+.bob-app-shell > .cds--header {
+  position: relative;
+  z-index: 20;
+  flex: 0 0 3rem;
+  border-block-end: 0;
+  background: var(--cds-background-inverse, #393939);
+  box-shadow: 0 1px 0 var(--cds-border-strong-01, #8d8d8d),
+    0 2px 4px rgba(0, 0, 0, 0.18);
+}
+
+.bob-app-shell .cds--header__name,
+.bob-app-shell .cds--header__action {
+  color: var(--cds-text-inverse, #ffffff);
+}
+
+// Carbon pins the header-action icon fill to `--cds-icon-secondary` (#525252)
+// via a high-specificity, multi-class selector (`.cds--btn--icon-only
+// .cds--header__action svg`), plus darker fills on :hover/:active. On our dark
+// inverse bar that reads as a faint, barely-visible gray. Override across all
+// states with `!important` (cleaner than out-specifying Carbon's vendor
+// selectors). A light gray (gray-30) reads clearly on the dark bar without
+// the harshness of pure white; disabled stays dimmer.
+.bob-app-shell .cds--header__action svg {
+  fill: #c6c6c6 !important;
+}
+
+.bob-app-shell .bob-header-action--disabled svg {
+  fill: var(--cds-icon-disabled, #8d8d8d) !important;
+}
+
+.bob-app-shell .cds--header__name:hover,
+.bob-app-shell .cds--header__action:hover,
+.bob-app-shell .cds--header__action:focus,
+.bob-header-action--open {
+  background: var(--cds-background-inverse-hover, #4c4c4c);
+}
+
+.bob-app-shell .cds--header__action:focus {
+  outline-color: var(--cds-focus-inset, #ffffff);
+}
+
+.bob-app-shell .cds--header__action--active::after,
+.bob-app-shell .cds--header__action[aria-expanded="true"]::after {
+  display: none;
+}
+
+.bob-header-action--disabled {
+  color: var(--cds-icon-disabled, #8d8d8d);
+  cursor: not-allowed;
+}
+
+.bob-header-action--disabled:hover {
+  background: transparent;
+}
+
+.bob-workspace {
+  display: grid;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.bob-sidebar {
+  display: flex;
+  min-block-size: 0;
+  max-block-size: 36vh;
+  flex-direction: column;
+  overflow: hidden;
+  border-inline-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.bob-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 0.5rem 0.5rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-sidebar-files {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 0.5rem 0.5rem;
+}
+
+.bob-chat-context {
+  padding: var(--cds-spacing-05, 1rem);
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-inline: 0.5rem;
+  block-size: 1.75rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03125rem;
+  line-height: 1rem;
+  text-transform: uppercase;
+}
+
+.bob-section-label--compact {
+  block-size: 1.25rem;
+  padding-inline: 0;
+}
+
+.bob-section-meta {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-weight: 400;
+  text-transform: none;
+}
+
+// Properties section — Obsidian-style frontmatter editor in the
+// left sidebar. Shows up below the file tree when a markdown
+// file is active. Edits push back through `updateActiveContent`
+// → store → editor's value sync.
+.bob-sidebar-properties {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-properties-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bob-property-row {
+  display: grid;
+  grid-template-columns: minmax(0, 6rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+
+  &:hover {
+    background: var(--cds-layer-hover-01, #e8e8e8);
+  }
+}
+
+.bob-property-row__key {
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-property-row__input {
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.75rem;
+  color: var(--cds-text-primary, #161616);
+  padding: 0.125rem 0.25rem;
+  border-radius: 2px;
+  inline-size: 100%;
+  min-inline-size: 0;
+
+  &:focus {
+    background: var(--cds-field-01, #f4f4f4);
+    outline: 1px solid var(--cds-focus, #0f62fe);
+  }
+}
+
+.bob-property-row__checkbox {
+  cursor: pointer;
+  justify-self: start;
+}
+
+.bob-property-row__remove {
+  background: transparent;
+  border: 0;
+  color: var(--cds-text-helper, #6f6f6f);
+  padding: 0.125rem;
+  border-radius: 2px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 80ms ease;
+
+  &:hover {
+    color: var(--cds-support-error, #da1e28);
+  }
+}
+
+.bob-property-row:hover .bob-property-row__remove {
+  opacity: 1;
+}
+
+.bob-properties-empty {
+  margin: 0;
+  padding: 0.5rem 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  line-height: 1.3;
+}
+
+.bob-properties-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.bob-properties-add__key {
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-field-01, #f4f4f4);
+  font-family: inherit;
+  font-size: 0.75rem;
+  color: var(--cds-text-primary, #161616);
+  padding: 0.25rem 0.375rem;
+  border-radius: 3px;
+  min-inline-size: 0;
+  inline-size: 100%;
+
+  &:focus {
+    outline: 1px solid var(--cds-focus, #0f62fe);
+  }
+}
+
+.bob-workspace-list {
+  display: grid;
+  gap: 1px;
+}
+
+.bob-workspace-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.bob-workspace-item .bob-icon-button--quiet {
+  opacity: 0;
+  transition: opacity 80ms ease;
+}
+
+.bob-workspace-item:hover .bob-icon-button--quiet,
+.bob-workspace-item:focus-within .bob-icon-button--quiet {
+  opacity: 1;
+}
+
+.bob-workspace-button,
+.bob-icon-button,
+.bob-file-row {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bob-workspace-button {
+  position: relative;
+  block-size: 1.75rem;
+  min-inline-size: 0;
+  padding-inline: 0.5rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  line-height: 1.75rem;
+  text-align: start;
+  border-radius: 2px;
+}
+
+.bob-workspace-button:hover,
+.bob-icon-button:hover,
+.bob-file-row:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-workspace-button--active {
+  color: var(--cds-text-primary, #161616);
+  background: var(--cds-layer-selected-01, #e0e0e0);
+  font-weight: 600;
+}
+
+.bob-workspace-button--active::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.25rem;
+  inset-inline-start: -0.375rem;
+  inline-size: 3px;
+  background: var(--cds-focus, #0f62fe);
+  border-radius: 0 2px 2px 0;
+}
+
+.bob-icon-button {
+  display: grid;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  place-items: center;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 2px;
+}
+
+.bob-icon-button:disabled {
+  color: var(--cds-icon-disabled, #c6c6c6);
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.bob-icon-button--quiet {
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-setup-step__form .cds--btn,
+.bob-settings-form .cds--btn {
+  max-inline-size: none;
+}
+
+.bob-sidebar .cds--inline-notification,
+.bob-chat-panel .cds--inline-notification,
+.bob-setup-step .cds--inline-notification {
+  min-inline-size: 0;
+  max-inline-size: none;
+  margin-block: 0.25rem 0;
+}
+
+.bob-file-tree {
+  display: flex;
+  align-content: start;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.bob-sidebar-index {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0.5rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-search-field {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  block-size: 2rem;
+  padding-inline: 0.5rem;
+  background: var(--cds-field-01, #ffffff);
+  border-block-end: 1px solid var(--cds-border-strong-01, #8d8d8d);
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-search-field:focus-within {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+.bob-search-field input {
+  min-inline-size: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+}
+
+.bob-search-field input:disabled {
+  color: var(--cds-text-disabled, #a8a8a8);
+  cursor: not-allowed;
+}
+
+.bob-index-message {
+  margin: 0;
+  padding-inline: 0.5rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.bob-search-results,
+.bob-backlinks {
+  display: grid;
+  gap: 1px;
+  min-block-size: 0;
+}
+
+.bob-search-results {
+  max-block-size: 12rem;
+  overflow: auto;
+}
+
+.bob-search-result,
+.bob-backlink {
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 0;
+  border: 0;
+  padding: 0.5rem;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  text-align: start;
+  cursor: pointer;
+}
+
+.bob-search-result:hover,
+.bob-search-result:focus-visible,
+.bob-backlink:hover,
+.bob-backlink:focus-visible {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  outline: none;
+}
+
+.bob-search-result__title,
+.bob-backlink__path {
+  overflow: hidden;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-search-result__path,
+.bob-backlink__label {
+  overflow: hidden;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-search-result__snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.bob-file-row {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: center;
+  block-size: 1.75rem;
+  gap: 0.5rem;
+  padding-inline: 0.5rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  line-height: 1.75rem;
+  text-align: start;
+}
+
+.bob-file-row--folder {
+  color: var(--cds-text-primary, #161616);
+  font-weight: 500;
+}
+
+.bob-file-row svg {
+  color: var(--cds-icon-secondary, #6f6f6f);
+}
+
+.bob-file-row--active {
+  color: var(--cds-text-primary, #161616);
+  background: var(--cds-layer-selected-01, #e0e0e0);
+  font-weight: 600;
+}
+
+.bob-file-row--active svg {
+  color: var(--cds-icon-primary, #161616);
+}
+
+.bob-dirty-dot {
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  margin-inline-start: 0.25rem;
+  border-radius: 50%;
+  background: var(--cds-button-primary, #0f62fe);
+}
+
+.bob-editor-region,
+.bob-chat-region {
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-chat-region {
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-pane-header {
+  display: flex;
+  flex: 0 0 2.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-inline-size: 0;
+  padding-inline: 0.75rem;
+  background: var(--cds-layer-02, #ffffff);
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-pane-title {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+  gap: 0.5rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03125rem;
+  text-transform: uppercase;
+}
+
+.bob-pane-title span {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-pane-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bob-pane-meta {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  letter-spacing: 0.03125rem;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+.bob-status-bar {
+  display: flex;
+  flex: 0 0 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-inline: 0.75rem;
+  background: var(--cds-layer-01, #f4f4f4);
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  letter-spacing: 0.015625rem;
+}
+
+.bob-status-bar__path {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-status-bar__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.bob-status-bar__dot {
+  display: inline-block;
+  inline-size: 0.3125rem;
+  block-size: 0.3125rem;
+  border-radius: 50%;
+  background: var(--cds-border-strong-01, #8d8d8d);
+}
+
+.bob-status-bar__dot--dirty {
+  background: var(--cds-button-primary, #0f62fe);
+}
+
+.bob-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  border-radius: 3px;
+  // Status bar is 24px tall; the toggle has to fit inside without
+  // pushing the bar height up. Internal padding stays tight.
+  block-size: 1.125rem;
+}
+
+.bob-mode-toggle__option {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  block-size: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.03125rem;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.bob-mode-toggle__option:hover {
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-mode-toggle__option--active {
+  background: var(--cds-layer-selected-01, #e0e0e0);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-mode-toggle__option:focus-visible {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+.bob-tab-strip {
+  display: flex;
+  flex: 0 0 2.125rem;
+  min-inline-size: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--cds-layer-02, #ffffff);
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-tab-strip::-webkit-scrollbar {
+  block-size: 0.1875rem;
+}
+
+.bob-editor-tab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.5rem;
+  align-items: center;
+  flex: 0 0 auto;
+  min-inline-size: 6.5rem;
+  max-inline-size: 14rem;
+  padding-inline-end: 0.125rem;
+  border-inline-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-02, #ffffff);
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-editor-tab:hover {
+  background: var(--cds-layer-hover-02, #e8e8e8);
+}
+
+.bob-editor-tab--active {
+  background: var(--cds-layer-01, #f4f4f4);
+  color: var(--cds-text-primary, #161616);
+  box-shadow: inset 0 2px 0 var(--cds-focus, #0f62fe);
+}
+
+.bob-editor-tab--active:hover {
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.bob-tab-button,
+.bob-tab-close {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bob-tab-button {
+  display: grid;
+  grid-template-columns: 0.875rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  padding-inline: 0.75rem 0.25rem;
+  font-size: 0.8125rem;
+  line-height: 2.125rem;
+  text-align: start;
+}
+
+.bob-editor-tab--active .bob-tab-button {
+  font-weight: 500;
+}
+
+.bob-tab-close {
+  display: grid;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  margin-block: auto;
+  place-items: center;
+  border-radius: 2px;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-tab-close:hover {
+  background: var(--cds-layer-hover-01, #d0d0d0);
+}
+
+.bob-tab-button:focus-visible,
+.bob-tab-close:focus-visible {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+.bob-editor-body {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+// Host for a non-file pane (Settings, …) shown in place of the editor.
+// Fills the editor body and scrolls its own content.
+.bob-pane-host {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.bob-document-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-block-size: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-editor-host {
+  min-block-size: 0;
+  flex: 1 1 auto;
+}
+
+.bob-tiptap-editor {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-tiptap-editor__scroll {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.bob-tiptap-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 2.25rem;
+  gap: 2px;
+  padding: 4px 0.75rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+// Pushes the current-file group to the right edge of the (shared) toolbar.
+.bob-tiptap-toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.bob-tiptap-toolbar__file-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+// The Carbon OverflowMenu "Export" trigger, sized to match the toolbar's icon
+// buttons and tinted to match their resting colour.
+.bob-tiptap-toolbar__export.cds--overflow-menu {
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-tiptap-toolbar__button {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.bob-tiptap-toolbar__button:hover {
+  background: var(--cds-layer-hover-02, #e8e8e8);
+  color: var(--cds-icon-primary, #161616);
+}
+
+.bob-tiptap-toolbar__button--active {
+  background: var(--cds-layer-selected-01, #e0e0e0);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-tiptap-toolbar__button:focus-visible,
+.bob-tiptap-toolbar__heading:focus-visible {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+.bob-tiptap-toolbar__divider {
+  display: inline-block;
+  inline-size: 1px;
+  block-size: 1.125rem;
+  margin: 0 0.25rem;
+  background: var(--cds-border-subtle-02, #c6c6c6);
+}
+
+.bob-tiptap-toolbar__heading-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.bob-tiptap-toolbar__heading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 1.875rem;
+  block-size: 1.75rem;
+  padding: 0 0.375rem;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03125rem;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.bob-tiptap-toolbar__heading:hover {
+  background: var(--cds-layer-hover-02, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-tiptap-toolbar__heading--active {
+  background: var(--cds-layer-selected-01, #e0e0e0);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-tiptap-editor__content {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  padding: 2rem 3rem;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--cds-text-primary, #161616);
+
+  // ProseMirror's editable container.
+  .ProseMirror {
+    min-block-size: 12rem;
+    outline: none;
+  }
+
+  // Typographic hierarchy mirrors the canvas-era look so docs feel
+  // continuous across the migration.
+  h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 1.5rem 0 0.75rem;
+    color: var(--cds-text-primary, #161616);
+  }
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 1.25rem 0 0.5rem;
+    color: var(--cds-text-primary, #161616);
+  }
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 1rem 0 0.5rem;
+  }
+  p {
+    margin: 0.5rem 0;
+  }
+  // Tailwind's preflight strips `list-style` from ul/ol globally
+  // (it's part of their CSS reset). Restore inside the editor so
+  // bullets and numbers render for the user.
+  ul {
+    margin: 0.5rem 0;
+    padding-inline-start: 1.5rem;
+    list-style: disc outside;
+  }
+  ol {
+    margin: 0.5rem 0;
+    padding-inline-start: 1.5rem;
+    list-style: decimal outside;
+  }
+  li {
+    margin: 0.125rem 0;
+  }
+  // Nested lists get a different bullet style for visual hierarchy.
+  ul ul {
+    list-style: circle outside;
+  }
+  ul ul ul {
+    list-style: square outside;
+  }
+  blockquote {
+    margin: 0.5rem 0;
+    padding-inline-start: 1rem;
+    border-inline-start: 3px solid var(--cds-border-subtle-02, #c6c6c6);
+    color: var(--cds-text-secondary, #525252);
+  }
+  hr {
+    border: 0;
+    border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+    margin: 1.5rem 0;
+  }
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.9em;
+    padding: 0.125rem 0.25rem;
+    background: var(--cds-layer-01, #f4f4f4);
+    border-radius: 2px;
+  }
+  pre {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    background: var(--cds-layer-01, #f4f4f4);
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+  pre code {
+    padding: 0;
+    background: transparent;
+  }
+  a {
+    color: var(--cds-link-primary, #0f62fe);
+    text-decoration: underline;
+  }
+  img {
+    max-inline-size: 100%;
+    height: auto;
+    display: block;
+    margin: 0.5rem 0;
+  }
+  table {
+    border-collapse: collapse;
+    margin: 0.75rem 0;
+  }
+  th,
+  td {
+    border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+    padding: 0.375rem 0.625rem;
+    text-align: start;
+  }
+  th {
+    background: var(--cds-layer-01, #f4f4f4);
+    font-weight: 600;
+  }
+  // Task list checkboxes.
+  ul[data-type="taskList"] {
+    list-style: none;
+    padding-inline-start: 0.25rem;
+    li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    li > label {
+      flex: 0 0 auto;
+      user-select: none;
+    }
+    li > div {
+      flex: 1 1 auto;
+    }
+  }
+}
+
+.bob-tiptap-source {
+  display: flex;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-tiptap-source__textarea {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  padding: 2rem 3rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--cds-text-primary, #161616);
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+  white-space: pre-wrap;
+}
+
+.bob-tiptap-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+.bob-tiptap-bubble__button {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 28px;
+  block-size: 28px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+
+.bob-tiptap-bubble__button:hover {
+  background: var(--cds-layer-hover-02, #e8e8e8);
+  color: var(--cds-icon-primary, #161616);
+}
+
+.bob-selection-actions {
+  position: fixed;
+  z-index: 90;
+  display: inline-flex;
+  align-items: stretch;
+  padding: 2px;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  animation: bob-selection-actions-in 100ms ease-out;
+}
+
+.bob-selection-actions__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.bob-selection-actions__button:hover {
+  background: var(--cds-layer-hover-02, #f4f4f4);
+}
+
+.bob-selection-actions__button--edit:hover {
+  color: var(--cds-link-primary, #0f62fe);
+}
+
+.bob-selection-actions__button--ask:hover {
+  color: var(--cds-link-primary, #0f62fe);
+}
+
+.bob-selection-actions__button:focus-visible {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+.bob-selection-actions__divider {
+  display: inline-block;
+  inline-size: 1px;
+  block-size: 1rem;
+  align-self: center;
+  background: var(--cds-border-subtle-02, #c6c6c6);
+  margin: 0 2px;
+}
+
+@keyframes bob-selection-actions-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bob-selection-composer {
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+.bob-selection-composer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bob-selection-composer__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03125rem;
+  text-transform: uppercase;
+}
+
+.bob-selection-composer__close {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.bob-selection-composer__close:hover {
+  background: var(--cds-layer-hover-02, #e8e8e8);
+  color: var(--cds-icon-primary, #161616);
+}
+
+.bob-selection-composer__selection {
+  margin: 0;
+  padding: 0.375rem 0.5rem;
+  border-inline-start: 3px solid var(--cds-border-subtle-02, #c6c6c6);
+  background: var(--cds-layer-01, #f4f4f4);
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+  font-style: italic;
+  max-block-size: 5rem;
+  overflow: hidden;
+}
+
+.bob-selection-composer__textarea {
+  display: block;
+  inline-size: 100%;
+  min-block-size: 4.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 4px;
+  background: var(--cds-field-01, #ffffff);
+  color: var(--cds-text-primary, #161616);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.bob-selection-composer__textarea:focus {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+.bob-selection-composer__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.bob-selection-composer__hint {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  letter-spacing: 0.015625rem;
+}
+
+.bob-selection-composer__secondary,
+.bob-selection-composer__primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border: 0;
+  border-radius: 3px;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.bob-selection-composer__secondary {
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-selection-composer__secondary:hover {
+  background: var(--cds-layer-hover-02, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-selection-composer__primary {
+  background: var(--cds-button-primary, #0f62fe);
+  color: #ffffff;
+}
+
+.bob-selection-composer__primary:hover:not(:disabled) {
+  background: var(--cds-button-primary-hover, #0353e9);
+}
+
+.bob-selection-composer__primary:disabled {
+  background: var(--cds-button-disabled, #c6c6c6);
+  color: var(--cds-text-on-color-disabled, #8d8d8d);
+  cursor: not-allowed;
+}
+
+// Inline "Bob isn't connected — Set up Bob →" banner inside the
+// Edit/Ask composer. Shown when the boot-time readiness probe says
+// the CLI / key / Node aren't in place. Keeps the composer open
+// (the user can still draft) and offers a one-click path into
+// Settings without forcing a context switch.
+.bob-selection-composer__notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.625rem;
+  background: var(--cds-notification-background-warning, #fdf6dd);
+  border-left: 3px solid var(--cds-support-warning, #f1c21b);
+  border-radius: 3px;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.bob-selection-composer__setup {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  padding: 0.25rem 0.375rem;
+  color: var(--cds-link-primary, #0f62fe);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 80ms ease;
+}
+
+.bob-selection-composer__setup:hover {
+  background: rgba(15, 98, 254, 0.08);
+  text-decoration: underline;
+}
+
+// Chat-panel-footer variant of the same affordance. Same intent
+// (Bob isn't ready → CTA to fix it) but laid out across the
+// available width since the footer row is wider than the composer.
+.bob-chat-error--setup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.bob-chat-setup-link {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  padding: 0.25rem 0.375rem;
+  color: var(--cds-link-primary, #0f62fe);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 80ms ease;
+}
+
+.bob-chat-setup-link:hover {
+  background: rgba(15, 98, 254, 0.08);
+  text-decoration: underline;
+}
+
+.bob-format-toolbar {
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  // Subtle slide-in cued by the placement attribute. Keeps the
+  // toolbar from feeling like a popover that "snaps" in place.
+  animation: bob-format-toolbar-in 90ms ease-out;
+}
+
+.bob-format-toolbar[data-placement="below"] {
+  // No visual difference today; reserved for future arrow / caret
+  // pointing up at the selection.
+}
+
+.bob-format-toolbar__button {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+
+.bob-format-toolbar__button:hover {
+  background: var(--cds-layer-hover-02, #e8e8e8);
+  color: var(--cds-icon-primary, #161616);
+}
+
+.bob-format-toolbar__button:focus-visible {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+@keyframes bob-format-toolbar-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cm-editor {
+  block-size: 100%;
+}
+
+.cm-scroller {
+  font-family: "JetBrains Mono", "IBM Plex Mono", SFMono-Regular, ui-monospace, monospace;
+}
+
+.bob-empty-state {
+  display: grid;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  place-items: center;
+  padding: var(--cds-spacing-06, 1.5rem);
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  text-align: center;
+}
+
+.bob-empty-state__title {
+  margin: 0 0 var(--cds-spacing-02, 0.25rem);
+  color: var(--cds-text-primary, #161616);
+  font-weight: 600;
+}
+
+.bob-chat-header {
+  display: flex;
+  flex: 0 0 2.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-inline: 0.75rem;
+  background: var(--cds-layer-02, #ffffff);
+  border-block-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+}
+
+.bob-chat-header__title {
+  display: flex;
+  min-inline-size: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bob-chat-header__meta {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.bob-chat-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bob-chat-header__new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-chat-header__new:disabled {
+  color: var(--cds-icon-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
+.bob-mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  border-radius: 3px;
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-chat-panel {
+  position: relative;
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.bob-chat-messages {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: auto;
+  padding: 1rem 0.75rem;
+}
+
+// The new-conversation empty state: a left-aligned stack (mark, heading,
+// context line, suggested prompts) rather than a centered notice.
+.bob-chat-empty {
+  display: grid;
+  gap: 0.625rem;
+  align-content: start;
+  flex: 1 1 auto;
+  padding: 1.25rem 1rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  line-height: 1.375rem;
+}
+
+.bob-chat-empty__mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: 6px;
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-chat-empty__title {
+  margin: 0;
+  color: var(--cds-text-primary, #161616);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.bob-chat-empty__hint {
+  margin: 0;
+  max-inline-size: 22rem;
+}
+
+.bob-chat-empty__suggestions {
+  display: grid;
+  gap: 0.375rem;
+  margin-block-start: 0.25rem;
+}
+
+.bob-chat-empty__suggestion {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cds-layer-02, #ffffff);
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: start;
+  cursor: pointer;
+}
+
+.bob-chat-empty__suggestion:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-chat-empty__suggestion svg {
+  flex-shrink: 0;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-message-stack {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.bob-message-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bob-message-row--user {
+  align-items: flex-end;
+}
+
+.bob-message-row--assistant {
+  align-items: flex-start;
+}
+
+.bob-message-activity {
+  max-inline-size: min(32rem, 85%);
+  padding-inline: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--cds-text-helper, #525252);
+}
+
+.bob-message-bubble {
+  // `min-inline-size: 0` lets the bubble shrink inside the flex column so
+  // a wide child (a code block, a long URL) scrolls/wraps within it
+  // instead of forcing the bubble — and the panel — wider.
+  min-inline-size: 0;
+  max-inline-size: min(32rem, 85%);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  // Unitless so every element (headings included) keeps the same rhythm
+  // relative to its own size.
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+}
+
+// User turns (and the streaming placeholder) are plain text — preserve
+// the newlines the user typed. Assistant turns render markdown and must
+// not be pre-wrapped, or block elements inherit collapsed whitespace.
+.bob-message-bubble--plain {
+  white-space: pre-wrap;
+}
+
+// Your own turn: a quiet outlined card, not a filled primary button. Primary
+// blue is reserved for actions (Send, suggestion CTAs); painting the message
+// text in it makes the user's words read like a button and out-shout the
+// assistant's answer. White surface + subtle border, right-aligned.
+.bob-message-row--user .bob-message-bubble {
+  color: var(--cds-text-primary, #161616);
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+// The assistant's answer is the main content — let it breathe as open prose
+// rather than boxing it. No border/fill; it spans the panel width and aligns
+// to the conversation's left edge. The contrast with the right-aligned,
+// outlined user card is what tells the two turns apart — not a competing box.
+.bob-message-row--assistant .bob-message-bubble {
+  max-inline-size: 100%;
+  padding-inline: 0;
+  padding-block: 0.25rem;
+  color: var(--cds-text-primary, #161616);
+}
+
+// Rendered markdown inside an assistant bubble. The bubble owns the
+// padding; the markdown's outer blocks collapse their edge margins so
+// the text hugs that padding rather than doubling it. Font + line-height
+// are inherited from the bubble so every block reads as one consistent
+// type system; `overflow-wrap` keeps long words/URLs inside the panel.
+.bob-markdown {
+  display: flow-root;
+  overflow-wrap: anywhere;
+  // One uniform type ramp for the whole reply: a single line-height,
+  // letter-spacing and kerning that every child inherits. The ONLY visual
+  // variation is bold (strong), italic (em) and link colour — font size,
+  // line spacing, kerning and colour stay identical across paragraphs,
+  // list items and headings.
+  line-height: 1.5;
+  letter-spacing: normal;
+  font-kerning: normal;
+}
+
+// Cross-file links. An internal link (a markdown link or a resolved wikilink)
+// gets the accent colour and a pointer; an editor `[[…]]` decoration reads as a
+// link token; a chat wikilink that resolves to no file is shown muted.
+.bob-internal-link {
+  color: var(--cds-link-primary, #0f62fe);
+  cursor: pointer;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// One uniform link look across the editor — markdown links (`<a>`) AND
+// wikilinks (`.bob-wikilink`): accent colour, no underline at rest, underline
+// on hover, pointer cursor. A plain click follows them (see handleLinkClick).
+.bob-tiptap-editor a,
+.bob-wikilink {
+  color: var(--cds-link-primary, #0f62fe);
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// The `[[ … ]]` (and `target|`) syntax characters are hidden in the editor's
+// WYSIWYG view; the literal text stays in the document for round-tripping.
+.bob-wikilink-syntax {
+  display: none;
+}
+
+.bob-wikilink--broken {
+  color: var(--cds-text-helper, #6f6f6f);
+  text-decoration: underline dotted;
+  cursor: default;
+}
+
+// Carbon styles bare h1–h6 / p / a / lists globally with its own type
+// tokens — a different font-family chain (Plex isn't loaded, so they fall
+// back to other system fonts), token letter-spacing, and per-element sizes
+// AND line-heights. That per-element drift is what makes raw markdown render
+// "uneven". Force the bubble's own typography back onto every text element so
+// size / line spacing / kerning / colour are uniform; only weight, style and
+// link colour vary. Code keeps its monospace stack (set on `.bob-markdown code`).
+.bob-markdown p,
+.bob-markdown h1,
+.bob-markdown h2,
+.bob-markdown h3,
+.bob-markdown h4,
+.bob-markdown h5,
+.bob-markdown h6,
+.bob-markdown ul,
+.bob-markdown ol,
+.bob-markdown li,
+.bob-markdown a,
+.bob-markdown strong,
+.bob-markdown em,
+.bob-markdown blockquote,
+.bob-markdown th,
+.bob-markdown td {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+.bob-markdown > :first-child {
+  margin-block-start: 0;
+}
+
+.bob-markdown > :last-child {
+  margin-block-end: 0;
+}
+
+// Same gap above/below every block, so paragraphs, lists and headings share
+// one rhythm — no heading "section break" larger than a paragraph break.
+.bob-markdown p,
+.bob-markdown ul,
+.bob-markdown ol,
+.bob-markdown h1,
+.bob-markdown h2,
+.bob-markdown h3,
+.bob-markdown h4,
+.bob-markdown h5,
+.bob-markdown h6,
+.bob-markdown blockquote,
+.bob-markdown pre,
+.bob-markdown table {
+  margin-block: 0.5rem;
+}
+
+// Headings carry no type scale of their own — same size + line-height as
+// body (inherited above); only the weight marks them, matching inline bold.
+.bob-markdown h1,
+.bob-markdown h2,
+.bob-markdown h3,
+.bob-markdown h4,
+.bob-markdown h5,
+.bob-markdown h6 {
+  font-weight: 600;
+}
+
+// Bold and italic are the only inline variations.
+.bob-markdown strong {
+  font-weight: 600;
+}
+
+.bob-markdown em {
+  font-style: italic;
+}
+
+.bob-markdown ul,
+.bob-markdown ol {
+  padding-inline-start: 1.25rem;
+}
+
+// Tailwind's preflight strips `list-style` from ul/ol globally (same reset the
+// editor works around at `.bob-editor`). Restore it so chat lists actually
+// show bullets / numbers instead of bare hanging indents.
+.bob-markdown ul {
+  list-style: disc outside;
+}
+.bob-markdown ol {
+  list-style: decimal outside;
+}
+.bob-markdown li {
+  display: list-item;
+}
+
+.bob-markdown li {
+  margin-block: 0.25rem;
+}
+
+.bob-markdown a {
+  color: var(--cds-link-primary, #0f62fe);
+  text-decoration: underline;
+}
+
+.bob-markdown code {
+  padding: 0.0625rem 0.25rem;
+  border-radius: 4px;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  // Slightly smaller than body so monospace doesn't look oversized, but
+  // breakable so a long token can't widen the bubble.
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.bob-markdown pre {
+  // Long code lines scroll within the block rather than stretch the
+  // bubble; `max-inline-size: 100%` keeps the block itself contained.
+  max-inline-size: 100%;
+  overflow-x: auto;
+  padding: 0.625rem 0.75rem;
+  border-radius: 6px;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+}
+
+.bob-markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.85em;
+  // Don't break inside a code block — preserve lines and scroll instead.
+  overflow-wrap: normal;
+  line-height: 1.45;
+}
+
+.bob-markdown blockquote {
+  // Structural indent only — the text colour stays the body colour (colour is
+  // uniform everywhere except links).
+  margin-inline: 0;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 3px solid var(--cds-border-subtle-02, #c6c6c6);
+}
+
+.bob-markdown table {
+  // `display: block` + overflow lets a wide table scroll inside the
+  // bubble instead of forcing the panel wider.
+  display: block;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.bob-markdown th,
+.bob-markdown td {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  text-align: start;
+}
+
+.bob-markdown hr {
+  margin-block: 0.75rem;
+  border: 0;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-markdown img {
+  max-inline-size: 100%;
+  height: auto;
+}
+
+// Transient status indicator shown in the message slot while a turn is
+// running and the answer is still pending. Deliberately NOT styled like
+// the answer bubble (no border/background) — it must not read as a real
+// response. It rewrites itself as events arrive and is removed once the
+// answer lands.
+.bob-message-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-inline-size: min(32rem, 85%);
+  padding-block: 0.25rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
+.bob-message-status__dot {
+  flex-shrink: 0;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--cds-icon-secondary, #8d8d8d);
+  animation: bob-status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes bob-status-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+// --- Per-turn assistant author row: mark + "Assistant" + read pills ---
+// Makes each assistant turn legible at a glance — who's talking and what
+// files the answer drew on — without opening the agent trace.
+.bob-message-author {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+}
+
+.bob-message-author__mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1rem;
+  block-size: 1rem;
+  border-radius: 3px;
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-message-author__name {
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+}
+
+// A quiet "saw this file" pill — eye glyph + basename, on the subtle layer
+// (not the action blue): it's context, not a button.
+.bob-message-author__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-inline-size: 12rem;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 999px;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-message-author__pill svg {
+  flex-shrink: 0;
+}
+
+.bob-message-author__pill-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-message-author__more {
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+// --- File-operation cards: a create / edit the assistant made to a file ---
+// Prominent (a bordered card in the flow, not buried in the trace) because
+// changing the user's workspace is a significant action.
+.bob-message-fileops {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.bob-fileop {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-fileop__icon {
+  flex-shrink: 0;
+  margin-block-start: 0.0625rem;
+  color: var(--cds-icon-secondary, #8d8d8d);
+}
+
+// Running → the icon spins as a live "working" cue (replacing the status line).
+.bob-fileop--running .bob-fileop__icon {
+  animation: bob-fileop-spin 1s linear infinite;
+}
+
+.bob-fileop--done .bob-fileop__icon {
+  color: var(--cds-support-success, #24a148);
+}
+
+.bob-fileop--error .bob-fileop__icon {
+  color: var(--cds-support-error, #da1e28);
+}
+
+.bob-fileop__body {
+  display: grid;
+  gap: 0.0625rem;
+  min-inline-size: 0;
+}
+
+.bob-fileop__title {
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+}
+
+.bob-fileop__file {
+  padding: 0.0625rem 0.25rem;
+  border-radius: 4px;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.bob-fileop__sub {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.75rem;
+}
+
+@keyframes bob-fileop-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Meta row under an assistant turn: the "Agent trace" toggle on the left,
+// usage stats floated to the right.
+.bob-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-self: stretch;
+  max-inline-size: min(32rem, 85%);
+}
+
+.bob-message-stats {
+  color: var(--cds-text-helper, #8d8d8d);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+// The trace toggle reveals the reasoning + tool calls below.
+.bob-message-trace__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 0;
+  padding: 0.125rem 0.25rem;
+  background: transparent;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.bob-message-trace__toggle:hover,
+.bob-message-trace__toggle:focus-visible {
+  color: var(--cds-text-primary, #161616);
+  outline: none;
+}
+
+.bob-message-trace__chevron {
+  flex-shrink: 0;
+  transition: transform 0.12s ease;
+}
+
+.bob-message-trace__toggle[aria-expanded="true"] .bob-message-trace__chevron {
+  transform: rotate(180deg);
+}
+
+.bob-agent-trace {
+  display: grid;
+  gap: 0.5rem;
+  margin-block-start: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+// The ordered timeline: reasoning, narration, and tool calls in arrival
+// order, connected by a left rail so it reads as a sequence.
+.bob-trace-timeline {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bob-trace-step {
+  position: relative;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--cds-border-subtle-02, #c6c6c6);
+}
+
+// Narration step — the agent's own words, plain text.
+.bob-trace-notice {
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: var(--cds-text-secondary, #525252);
+  overflow-wrap: anywhere;
+}
+
+// Reasoning — a collapsed accordion so a long chain doesn't bury the rest.
+.bob-trace-thinking__summary {
+  cursor: pointer;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-trace-thinking__body {
+  margin-block-start: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: var(--cds-text-secondary, #525252);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+// Tool call — a status head, then input → output when captured.
+.bob-trace-tool {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-trace-tool__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+// When the tool has input/output it's an accordion; the summary carries
+// the head and a pointer affordance.
+.bob-trace-tool__summary {
+  cursor: pointer;
+}
+
+.bob-trace-tool__summary:focus-visible {
+  outline: none;
+  text-decoration: underline;
+}
+
+.bob-trace-tool__icon {
+  flex-shrink: 0;
+}
+
+.bob-trace-tool--running .bob-trace-tool__icon {
+  color: var(--cds-icon-secondary, #8d8d8d);
+}
+
+.bob-trace-tool--done .bob-trace-tool__icon {
+  color: var(--cds-support-success, #24a148);
+}
+
+.bob-trace-tool--error {
+  color: var(--cds-text-error, #da1e28);
+}
+
+.bob-trace-tool--error .bob-trace-tool__icon {
+  color: var(--cds-support-error, #da1e28);
+}
+
+.bob-trace-tool__name {
+  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-weight: 600;
+}
+
+.bob-trace-tool__io {
+  max-block-size: 8rem;
+  margin: 0;
+  padding: 0.25rem 0.375rem;
+  overflow-y: auto;
+  border-radius: 4px;
+  background: var(--cds-layer-02, #ffffff);
+  font-size: 0.6875rem;
+  line-height: 1.125rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bob-trace-tool__io--out {
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-suggestion-list {
+  display: grid;
+  gap: 0.5rem;
+  inline-size: min(32rem, 85%);
+}
+
+.bob-suggestion {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  padding: 0.625rem;
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.bob-suggestion__header,
+.bob-suggestion__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.bob-suggestion__title {
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.125rem;
+}
+
+.bob-suggestion__path {
+  border: 0;
+  padding: 0;
+  color: var(--cds-link-primary, #0f62fe);
+  background: transparent;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-align: start;
+  cursor: pointer;
+}
+
+.bob-suggestion__status {
+  flex: 0 0 auto;
+  padding: 0.125rem 0.375rem;
+  color: var(--cds-text-secondary, #525252);
+  background: var(--cds-layer-accent-01, #e0e0e0);
+  font-size: 0.6875rem;
+  text-transform: capitalize;
+}
+
+.bob-suggestion__status--accepted {
+  color: var(--cds-support-success, #198038);
+  background: #defbe6;
+}
+
+.bob-suggestion__status--rejected {
+  color: var(--cds-text-secondary, #525252);
+  background: #e0e0e0;
+}
+
+.bob-suggestion__status--stale {
+  color: var(--cds-support-warning, #f1c21b);
+  background: #fcf4d6;
+}
+
+.bob-suggestion__diff {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.bob-suggestion__before,
+.bob-suggestion__after {
+  min-block-size: 3rem;
+  max-block-size: 8rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.5rem;
+  border-inline-start: 3px solid var(--cds-border-strong-01, #8d8d8d);
+  background: var(--cds-layer-02, #ffffff);
+  color: var(--cds-text-primary, #161616);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: pre-wrap;
+}
+
+.bob-suggestion__before {
+  border-inline-start-color: var(--cds-support-error, #da1e28);
+}
+
+.bob-suggestion__after {
+  border-inline-start-color: var(--cds-support-success, #198038);
+}
+
+.bob-suggestion__message {
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.bob-suggestion__actions {
+  justify-content: flex-start;
+}
+
+.bob-suggestion__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-block-size: 1.75rem;
+  border: 1px solid var(--cds-border-strong-01, #8d8d8d);
+  padding-inline: 0.5rem;
+  background: var(--cds-layer-02, #ffffff);
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.bob-suggestion__action--accept {
+  border-color: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-button-primary, #0f62fe);
+}
+
+.bob-suggestion__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.bob-chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  background: var(--cds-layer-01, #f4f4f4);
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-chat-context-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.bob-chat-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  align-self: start;
+  max-inline-size: 100%;
+  padding: 0.125rem 0.5rem;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-chat-context-chip svg {
+  flex-shrink: 0;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-chat-context-chip span {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-chat-context-chip--empty {
+  background: transparent;
+  border: 1px dashed var(--cds-border-subtle-02, #c6c6c6);
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-chat-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.25rem;
+  align-items: end;
+  gap: 0.375rem;
+}
+
+.bob-chat-input-row textarea {
+  // Auto-grown by `useAutoGrowTextarea`: it sets an inline `height` from
+  // `scrollHeight`, which `min`/`max-block-size` clamp. `border-box` so
+  // the scrollHeight math lines up exactly with the padding (the global
+  // reset doesn't set box-sizing, so set it here).
+  box-sizing: border-box;
+  min-block-size: 2.5rem;
+  max-block-size: 12rem;
+  resize: none;
+  border: 0;
+  border-block-end: 1px solid var(--cds-border-strong-01, #8d8d8d);
+  outline: none;
+  padding: 0.5rem 0.625rem;
+  background: var(--cds-field-01, #ffffff);
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+  overflow-y: auto;
+}
+
+.bob-chat-input-row textarea:focus {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+.bob-chat-input-row textarea:disabled {
+  color: var(--cds-text-disabled, #a8a8a8);
+}
+
+.bob-chat-send {
+  display: grid;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border: 0;
+  place-items: center;
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-chat-send:hover {
+  background: var(--cds-button-primary-hover, #0353e9);
+}
+
+.bob-chat-send:disabled {
+  background: var(--cds-button-disabled, #c6c6c6);
+  color: var(--cds-text-on-color-disabled, #8d8d8d);
+  cursor: not-allowed;
+}
+
+.bob-chat-error {
+  color: var(--cds-text-error, #da1e28);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+// The composer footer line — compact assistant/model selectors + token count
+// + send hint, on one row. Replaces the old Carbon-Dropdown harness picker,
+// whose form-field chrome shifted the layout.
+.bob-chat-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-block-start: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-chat-footer__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-inline-size: 0;
+}
+
+.bob-chat-footer__tokens {
+  white-space: nowrap;
+}
+
+.bob-chat-footer__hint {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+// --- The inline popover selector (harness / model) ---
+.bob-footer-menu {
+  position: relative;
+  display: inline-flex;
+  min-inline-size: 0;
+}
+
+.bob-footer-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  min-inline-size: 0;
+  padding: 0.125rem 0.25rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  cursor: pointer;
+}
+
+.bob-footer-menu__trigger:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-footer-menu__trigger:disabled {
+  color: var(--cds-text-disabled, #a8a8a8);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.bob-footer-menu__trigger svg {
+  flex-shrink: 0;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-footer-menu__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Opens UPWARD — the footer sits at the panel's bottom edge.
+.bob-footer-menu__list {
+  position: absolute;
+  inset-block-end: calc(100% + 4px);
+  inset-inline-start: 0;
+  z-index: 20;
+  min-inline-size: 10rem;
+  max-block-size: 14rem;
+  margin: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  list-style: none;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+}
+
+.bob-footer-menu__item {
+  display: block;
+  inline-size: 100%;
+  padding: 0.375rem 0.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bob-footer-menu__item:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-footer-menu__item--selected {
+  font-weight: 600;
+}
+
+// --- Conversation switcher (chat header) -----------------------------------
+
+// The history dropdown trigger: the open conversation's title + a chevron.
+.bob-conv-history {
+  position: relative;
+  display: flex;
+  min-inline-size: 0;
+}
+
+.bob-conv-history__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-inline-size: 0;
+  max-inline-size: 14rem;
+  padding: 0.125rem 0.375rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bob-conv-history__trigger:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-conv-history__trigger svg {
+  flex-shrink: 0;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-conv-history__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Opens DOWNWARD — the header sits at the panel's top edge.
+.bob-conv-history__panel {
+  position: absolute;
+  inset-block-start: calc(100% + 4px);
+  inset-inline-start: 0;
+  z-index: 30;
+  inline-size: 19rem;
+  max-inline-size: 80vw;
+  padding: 0.25rem;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.bob-conv-history__empty {
+  margin: 0;
+  padding: 0.75rem 0.5rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.8125rem;
+}
+
+.bob-conv-history__list {
+  margin: 0;
+  padding: 0;
+  max-block-size: 18rem;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.bob-conv-history__item {
+  display: grid;
+  gap: 0.125rem;
+  inline-size: 100%;
+  padding: 0.4375rem 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.bob-conv-history__item:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-conv-history__item.is-active {
+  background: var(--cds-layer-selected-01, #e0e0e0);
+}
+
+.bob-conv-history__item-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.bob-conv-history__item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bob-conv-history__item-time {
+  flex-shrink: 0;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+}
+
+.bob-conv-history__item-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+}
+
+.bob-conv-history__footer {
+  display: flex;
+  gap: 0.25rem;
+  margin-block-start: 0.25rem;
+  padding-block-start: 0.25rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-conv-history__action {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.bob-conv-history__action:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-conv-history__action svg {
+  color: var(--cds-icon-secondary, #525252);
+}
+
+// Inline title editor (⋮ Rename / replaces the trigger while editing).
+.bob-conv-title-input {
+  min-inline-size: 0;
+  max-inline-size: 14rem;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--cds-border-strong-01, #8d8d8d);
+  border-radius: 4px;
+  background: var(--cds-field-01, #ffffff);
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bob-conv-title-input:focus {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+// Per-conversation ⋮ actions menu.
+.bob-conv-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.bob-conv-menu__trigger {
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-conv-menu__list {
+  position: absolute;
+  inset-block-start: calc(100% + 4px);
+  z-index: 30;
+  min-inline-size: 12rem;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.bob-conv-menu__list--end {
+  inset-inline-end: 0;
+}
+
+.bob-conv-menu__list--start {
+  inset-inline-start: 0;
+}
+
+.bob-conv-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  padding: 0.4375rem 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: start;
+  cursor: pointer;
+}
+
+.bob-conv-menu__item:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-conv-menu__item svg {
+  flex-shrink: 0;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-conv-menu__item--danger {
+  color: var(--cds-text-error, #da1e28);
+}
+
+.bob-conv-menu__item--danger svg {
+  color: var(--cds-text-error, #da1e28);
+}
+
+.bob-conv-menu__item--danger:hover {
+  background: var(--cds-button-danger-secondary-hover, #ffd7d9);
+}
+
+// --- All-conversations overlay ---------------------------------------------
+
+.bob-all-conv {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.bob-all-conv__header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: var(--cds-layer-02, #ffffff);
+  border-block-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+}
+
+.bob-all-conv__title {
+  margin: 0;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.bob-all-conv__search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--cds-field-01, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+}
+
+.bob-all-conv__search svg {
+  flex-shrink: 0;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-all-conv__search-input {
+  inline-size: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.bob-all-conv__search-input:focus {
+  outline: none;
+}
+
+.bob-all-conv__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding-inline: 0.75rem;
+  padding-block-end: 0.5rem;
+}
+
+.bob-all-conv__pill {
+  max-inline-size: 14rem;
+  overflow: hidden;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 999px;
+  background: var(--cds-layer-02, #ffffff);
+  color: var(--cds-text-secondary, #525252);
+  font: inherit;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.bob-all-conv__pill:hover {
+  background: var(--cds-layer-hover-02, #e0e0e0);
+}
+
+.bob-all-conv__pill.is-active {
+  background: var(--cds-button-primary, #0f62fe);
+  border-color: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-all-conv__body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: 0 0.75rem 0.75rem;
+}
+
+.bob-all-conv__empty {
+  margin: 1.5rem 0;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.bob-all-conv__section {
+  margin-block-start: 0.75rem;
+}
+
+.bob-all-conv__section-title {
+  margin: 0 0 0.375rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bob-all-conv__list {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// A conversation row (all-conversations view).
+.bob-conv-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+}
+
+.bob-conv-row__main {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  background: var(--cds-layer-02, #ffffff);
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.bob-conv-row__main:hover {
+  background: var(--cds-layer-hover-02, #e0e0e0);
+}
+
+.bob-conv-row__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.bob-conv-row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bob-conv-row__time {
+  flex-shrink: 0;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+}
+
+.bob-conv-row__preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+}
+
+.bob-conv-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin-block-start: 0.125rem;
+}
+
+.bob-conv-row__count {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+}
+
+.bob-conv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-inline-size: 10rem;
+  padding: 0.0625rem 0.375rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 999px;
+  background: var(--cds-layer-01, #f4f4f4);
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.6875rem;
+}
+
+.bob-conv-chip svg {
+  flex-shrink: 0;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-conv-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// --- Post-delete undo toast ------------------------------------------------
+
+.bob-conv-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0.75rem 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--cds-background-inverse, #393939);
+  color: var(--cds-text-inverse, #ffffff);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.bob-conv-toast__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-conv-toast__undo {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1875rem 0.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-link-inverse, #78a9ff);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bob-conv-toast__undo:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.bob-comments-panel {
+  display: flex;
+  min-block-size: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.bob-comments-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-comments-eyebrow {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03125rem;
+  text-transform: uppercase;
+}
+
+.bob-comments-file {
+  max-inline-size: 12rem;
+  overflow: hidden;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-comments-count {
+  display: grid;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  place-items: center;
+  background: var(--cds-layer-accent-01, #e0e0e0);
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+}
+
+.bob-comment-compose,
+.bob-comment-card,
+.bob-comments-empty {
+  margin: 0.75rem;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-comment-compose {
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.75rem;
+}
+
+.bob-comment-compose__title,
+.bob-comment-card__meta,
+.bob-comment-send {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.bob-comment-compose__title {
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bob-comment-selection,
+.bob-comment-card blockquote {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-inline-start: 3px solid var(--cds-button-primary, #0f62fe);
+  background: var(--cds-highlight, #d0e2ff);
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.bob-comment-compose textarea {
+  min-block-size: 4.5rem;
+  resize: vertical;
+  border: 0;
+  border-block-end: 1px solid var(--cds-border-strong-01, #8d8d8d);
+  outline: none;
+  padding: 0.625rem;
+  background: var(--cds-field-01, #ffffff);
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.bob-comment-compose textarea:focus {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+}
+
+.bob-comment-primary,
+.bob-comment-send {
+  min-block-size: 2rem;
+  border: 0;
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bob-comment-primary:disabled {
+  background: var(--cds-button-disabled, #c6c6c6);
+  color: var(--cds-text-on-color-disabled, #8d8d8d);
+  cursor: not-allowed;
+}
+
+.bob-comment-list {
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.bob-comment-card {
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.75rem;
+}
+
+.bob-comment-card__meta {
+  justify-content: space-between;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+}
+
+.bob-comment-card__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--cds-text-error, #da1e28);
+}
+
+.bob-comment-card p,
+.bob-comment-empty-copy,
+.bob-comments-empty {
+  margin: 0;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.bob-comment-send {
+  justify-content: space-between;
+  padding-inline: 0.75rem;
+}
+
+.bob-comments-empty {
+  padding: 0.75rem;
+}
+
+.bob-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(0 0 0 / 38%);
+}
+
+.bob-settings-dialog {
+  inline-size: min(100%, 30rem);
+  background: var(--cds-layer-02, #ffffff);
+  box-shadow: 0 1rem 4rem rgb(0 0 0 / 22%);
+}
+
+.bob-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-settings-header h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.375rem;
+}
+
+.bob-settings-form {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.bob-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.bob-settings-runtime .cds--inline-notification__subtitle {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bob-settings-dialog {
+  // The install log + key form together exceed the original 30rem
+  // viewport on smaller screens. Cap the dialog at ~40rem and let
+  // it scroll internally so the close button + headers stay in
+  // view while a long install log streams below.
+  inline-size: min(100%, 40rem);
+  max-block-size: calc(100vh - 4rem);
+  overflow-y: auto;
+}
+
+// Fixed region for the per-provider detail. Always rendered (content
+// swaps in place per provider) with a reserved height that clears the
+// tallest provider's steady-state content (Bob's install + key form), so
+// switching the AI provider never resizes the panel or shifts the cards
+// above it. Shorter providers (Claude/Codex) simply top-align in the
+// reserved space.
+.bob-settings-provider-detail {
+  min-block-size: 24rem;
+}
+
+.bob-settings-section {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-settings-section:last-child {
+  border-block-end: 0;
+}
+
+.bob-settings-section h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-settings-helper {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-settings-install-log {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  max-block-size: 14rem;
+  overflow-y: auto;
+  background: var(--cds-layer-01, #f4f4f4);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 3px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.2rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bob-settings-install-log__line {
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-settings-install-log__line--step {
+  color: var(--cds-text-primary, #161616);
+  font-weight: 600;
+}
+
+.bob-settings-install-log__line--stderr {
+  color: var(--cds-support-warning, #b28600);
+}
+
+.bob-setup-page {
+  block-size: 100%;
+  overflow: auto;
+  color: var(--cds-text-primary, #161616);
+  background: var(--cds-background, #ffffff);
+}
+
+.bob-onboard {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  block-size: 100vh;
+  background: var(--cds-background, #ffffff);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-onboard__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-onboard__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-onboard__mark {
+  display: grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border-radius: 0.375rem;
+  background: var(--cds-background-inverse, #161616);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-onboard__stage {
+  display: grid;
+  place-items: center;
+  padding: 2rem 1.5rem;
+  overflow: auto;
+}
+
+.bob-onboard__screen {
+  display: grid;
+  gap: 1rem;
+  inline-size: min(100%, 34rem);
+  text-align: start;
+  animation: bob-onboard-in 220ms ease-out both;
+}
+
+@keyframes bob-onboard-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bob-onboard__hero-mark {
+  display: grid;
+  place-items: center;
+  inline-size: 3.5rem;
+  block-size: 3.5rem;
+  border-radius: 1rem;
+  margin-block-end: 0.5rem;
+  background: var(--cds-background-inverse, #161616);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-onboard__eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.0625rem;
+  text-transform: uppercase;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-onboard__title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.bob-onboard__lead {
+  margin: 0;
+  max-inline-size: 32rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.bob-onboard__small {
+  margin: 0;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.8125rem;
+}
+
+.bob-onboard__cta-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-block-start: 1rem;
+}
+
+.bob-onboard__value-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-block-start: 0.5rem;
+}
+
+.bob-onboard__value {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem 0.875rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.bob-onboard__value-icon {
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: 0.5rem;
+  background: var(--cds-layer-01, #f4f4f4);
+  color: var(--cds-text-primary, #161616);
+  grid-row: span 2;
+}
+
+.bob-onboard__value h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.bob-onboard__value p {
+  margin: 0;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.bob-onboard__form {
+  display: grid;
+  gap: 1rem;
+  margin-block-start: 0.5rem;
+}
+
+.bob-onboard__folder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.bob-onboard__nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block-start: 0.5rem;
+}
+
+.bob-onboard__footer {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 1.5rem 1.5rem;
+}
+
+.bob-onboard__dots {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+}
+
+.bob-onboard__dot {
+  inline-size: 0.4375rem;
+  block-size: 0.4375rem;
+  border-radius: 50%;
+  background: var(--cds-border-subtle-01, #e0e0e0);
+  transition: inline-size 150ms ease, background 150ms ease;
+}
+
+.bob-onboard__dot--current {
+  inline-size: 1.25rem;
+  border-radius: 999px;
+  background: var(--cds-button-primary, #0f62fe);
+}
+
+.bob-onboard__dot--past {
+  background: var(--cds-text-primary, #161616);
+}
+
+.bob-setup {
+  display: grid;
+  inline-size: min(100%, 36rem);
+  min-block-size: 100%;
+  align-content: start;
+  gap: 1.75rem;
+  margin-inline: auto;
+  padding: 4rem 1.5rem 3rem;
+}
+
+.bob-setup-hero {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.bob-setup-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.0625rem;
+  text-transform: uppercase;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-setup-hero h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-setup-hero p {
+  margin: 0;
+  max-inline-size: 32rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+
+.bob-install-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  inline-size: fit-content;
+  padding: 0.3125rem 0.625rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+}
+
+.bob-install-pill__dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--cds-text-helper, #6f6f6f);
+  animation: bob-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes bob-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.bob-install-pill--checking {
+  background: var(--cds-layer-01, #f4f4f4);
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-install-pill--ok {
+  background: #defbe6;
+  color: #0e6027;
+}
+
+.bob-install-pill--ok svg {
+  color: #24a148;
+}
+
+.bob-install-pill--warn {
+  background: #fdf6dd;
+  color: #6b5800;
+}
+
+.bob-install-pill--warn svg {
+  color: #d4a017;
+  flex-shrink: 0;
+}
+
+.bob-setup-steps {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bob-setup-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1.25rem 1.25rem 1.5rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-02, #ffffff);
+  transition: border-color 120ms ease, opacity 120ms ease;
+}
+
+.bob-setup-step--active {
+  border-color: var(--cds-border-strong, #8d8d8d);
+}
+
+.bob-setup-step--done {
+  border-color: var(--cds-support-success, #24a148);
+  background: #f6fcf8;
+}
+
+.bob-setup-step--pending {
+  opacity: 0.55;
+}
+
+.bob-setup-step__marker {
+  display: grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: 50%;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-feature-settings: "tnum";
+}
+
+.bob-setup-step--active .bob-setup-step__marker {
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-setup-step--pending .bob-setup-step__marker {
+  background: var(--cds-layer-01, #f4f4f4);
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-setup-step--done .bob-setup-step__marker {
+  background: var(--cds-support-success, #24a148);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-setup-step__body {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+.bob-setup-step__header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.375rem;
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-setup-step__header p {
+  margin: 0.25rem 0 0;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.bob-setup-step__form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.bob-folder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (min-width: 48rem) {
+  .bob-workspace {
+    grid-template-columns: 15rem minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .bob-workspace--chat-open {
+    grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
+  }
+
+  .bob-sidebar {
+    max-block-size: none;
+    border-block-end: 0;
+  }
+
+  .bob-chat-region {
+    border-block-start: 0;
+    border-inline-start: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  }
+
+  .bob-document-workspace {
+    // Default: editor takes the full width. The grid only expands
+    // to two columns when the user explicitly opens the comments
+    // panel via the header toggle (`commentsOpen` state).
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bob-document-workspace--comments-open {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 18rem);
+  }
+
+  .bob-comments-panel {
+    border-block-start: 0;
+    border-inline-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  }
+}
+
+@media (max-width: 47.98rem) {
+  .bob-setup {
+    padding: 2rem 1rem 2rem;
+  }
+
+  .bob-pane-header {
+    padding-inline: 0.75rem;
+  }
+
+  .bob-chat-input-row {
+    grid-template-columns: minmax(0, 1fr) 2.5rem;
+  }
+
+  .bob-chat-input-row .cds--btn {
+    inline-size: 2.5rem;
+  }
+}
+
+.bob-file-row-wrapper {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.bob-file-row-wrapper:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-file-row-wrapper--active {
+  background: var(--cds-layer-selected-01, #e0e0e0);
+}
+
+.bob-file-row-wrapper .bob-file-row {
+  background: transparent;
+}
+
+.bob-file-row-wrapper .bob-file-row:hover {
+  background: transparent;
+}
+
+.bob-file-row-wrapper .cds--overflow-menu {
+  block-size: 1.75rem;
+  inline-size: 1.75rem;
+  opacity: 0;
+  transition: opacity 80ms ease;
+}
+
+.bob-file-row-wrapper:hover .cds--overflow-menu,
+.bob-file-row-wrapper--active .cds--overflow-menu,
+.bob-file-row-wrapper .cds--overflow-menu--open {
+  opacity: 1;
+}
+
+.bob-file-tree--empty {
+  padding: 0.75rem 0.5rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  display: grid;
+  gap: 0.125rem;
+}
+
+.bob-file-tree--empty p {
+  margin: 0;
+}
+
+.bob-conflict-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--cds-notification-background-warning, #fdf6dd);
+  color: var(--cds-text-primary, #161616);
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  font-size: 0.8125rem;
+}
+
+.bob-conflict-banner__actions {
+  display: inline-flex;
+  gap: 0.75rem;
+}
+
+.bob-link-button {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--cds-link-primary, #0f62fe);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.bob-link-button:hover {
+  color: var(--cds-link-primary-hover, #0043ce);
+}
+
+/* === Dashboard === */
+/* Carbon-disciplined: black/white/gray, single blue accent for primary action.
+   No bespoke pill backgrounds, no decorative tint, no border-radius beyond
+   what Carbon components already render. */
+
+.bob-dashboard {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  block-size: 100vh;
+  background: var(--cds-background, #ffffff);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-dashboard__rail {
+  display: flex;
+  flex-direction: column;
+  border-inline-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-background, #ffffff);
+  padding: 1rem 0.5rem;
+  gap: 1rem;
+}
+
+.bob-dashboard__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.bob-dashboard__brand-mark {
+  display: grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  background: var(--cds-background-inverse, #161616);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
+.bob-dashboard__brand-text {
+  display: grid;
+  line-height: 1.1;
+}
+
+.bob-dashboard__brand-text strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bob-dashboard__brand-text span {
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.bob-dashboard__nav {
+  display: grid;
+}
+
+.bob-dashboard__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-inline-start: 2px solid transparent;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  text-align: start;
+}
+
+.bob-dashboard__nav-item:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-dashboard__nav-item--active {
+  border-inline-start-color: var(--cds-border-interactive, #0f62fe);
+  background: var(--cds-layer-selected-01, #e0e0e0);
+  color: var(--cds-text-primary, #161616);
+  font-weight: 600;
+}
+
+.bob-dashboard__rail-footer {
+  display: grid;
+  gap: 0.25rem;
+  margin-block-start: auto;
+  padding-block-start: 0.5rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-dashboard__rail-help {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: start;
+}
+
+.bob-dashboard__rail-help:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-dashboard__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18rem);
+  gap: 2rem;
+  padding: 2.5rem 2rem 3rem;
+  overflow: auto;
+}
+
+@media (max-width: 60rem) {
+  .bob-dashboard__main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+.bob-dashboard__content {
+  display: grid;
+  gap: 2rem;
+  align-content: start;
+  max-inline-size: 40rem;
+}
+
+.bob-dashboard__hero {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.bob-dashboard__hero h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-dashboard__hero p {
+  margin: 0;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+
+.bob-dashboard__cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-start: 0.5rem;
+}
+
+.bob-dashboard__section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.bob-dashboard__section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.bob-dashboard__section-header h2 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-dashboard__empty.cds--tile {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 1.5rem;
+  border: 1px dashed var(--cds-border-subtle-02, #c6c6c6);
+  background: var(--cds-layer-01, #f4f4f4);
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.8125rem;
+}
+
+.bob-dashboard__empty p {
+  margin: 0;
+}
+
+.bob-dashboard__recent {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-dashboard__recent-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-background, #ffffff);
+}
+
+.bob-dashboard__recent-row:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-dashboard__recent-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  min-inline-size: 0;
+}
+
+.bob-dashboard__recent-icon {
+  display: grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-dashboard__recent-meta {
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.bob-dashboard__recent-meta strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.bob-dashboard__recent-meta span {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-dashboard__recent-time {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.75rem;
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+}
+
+.bob-dashboard__aside {
+  display: grid;
+  align-content: start;
+}
+
+.bob-dashboard__aside-card.cds--tile {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--cds-layer-01, #f4f4f4);
+  border: 0;
+}
+
+.bob-dashboard__aside-card h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.bob-dashboard__guide-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.bob-dashboard__guide-num {
+  display: grid;
+  place-items: center;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  margin-block-start: 0.0625rem;
+  background: var(--cds-background, #ffffff);
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.bob-dashboard__guide-item strong {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bob-dashboard__guide-item p {
+  margin: 0.125rem 0 0;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}

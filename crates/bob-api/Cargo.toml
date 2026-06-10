@@ -1,0 +1,43 @@
+[package]
+name = "bob-api"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP+SSE dev server exposing bob-rs to the browser preview."
+# Dev-only host binary — not published.
+publish = false
+
+[[bin]]
+name = "bob-api"
+path = "src/main.rs"
+
+[dependencies]
+# The unofficial bob SDK — an external crate, published to crates.io
+# (repo: https://github.com/getlatentic/agent-harness).
+bob-rs = "0.3.1"
+# Web framework — async, type-driven routes, first-class SSE via
+# `axum::response::sse`. Pinned to a recent 0.8.x; track tower 0.5.
+axum = "0.8"
+# axum requires a tokio runtime. The `rt-multi-thread` feature
+# gives us the work-stealing scheduler; we don't need it (single-
+# threaded would also work for our load) but the multi-thread
+# default is cheap and matches axum's documented setup.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "sync"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `futures` is needed for SSE event streams. `futures-util` is
+# the small dep that gives us the `stream` and `Sink` shims;
+# pulling the umbrella `futures` crate is heavier than needed.
+futures-util = "0.3"
+# CORS not strictly required when Vite proxies same-origin, but
+# included so we can also serve directly from a different port
+# during local exploration if needed.
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+# Loads `.env` at server boot so `BOBSHELL_API_KEY=...` in the
+# repo's gitignored `.env` keeps working in browser-dev. Matches
+# the behaviour the old Vite plugin had.
+dotenvy = "0.15"
+# Used by `/api/bob/run` to mint a run id for each spawn. The
+# TS side echoes the id back in the `ready` event; clients don't
+# rely on it being a UUID specifically.
+uuid = { version = "1", features = ["v4"] }

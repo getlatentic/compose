@@ -1,0 +1,13 @@
+[package]
+name = "workspace-index"
+version = "0.1.0"
+edition = "2021"
+description = "Pure markdown workspace index + search core. No Tauri, no filesystem, no SQLite — compiles to both native (src-tauri) and WASM (browser)."
+# Compose-internal; not part of the published harness family.
+publish = false
+
+[lib]
+name = "workspace_index"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
