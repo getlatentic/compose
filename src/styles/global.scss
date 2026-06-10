@@ -1675,10 +1675,18 @@ select {
   }
 }
 
+// One uniform link look across the editor — markdown links (`<a>`) AND
+// wikilinks (`.bob-wikilink`): accent colour, no underline at rest, underline
+// on hover, pointer cursor. A plain click follows them (see handleLinkClick).
+.bob-tiptap-editor a,
 .bob-wikilink {
   color: var(--cds-link-primary, #0f62fe);
   text-decoration: none;
   cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 // The `[[ … ]]` (and `target|`) syntax characters are hidden in the editor's
@@ -1691,12 +1699,6 @@ select {
   color: var(--cds-text-helper, #6f6f6f);
   text-decoration: underline dotted;
   cursor: default;
-}
-
-// Links in the editor read as — and click like — links (a plain click follows
-// them; see handleLinkClick).
-.bob-tiptap-editor a {
-  cursor: pointer;
 }
 
 // Carbon styles bare h1–h6 / p / a / lists globally with its own type
