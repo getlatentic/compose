@@ -34,13 +34,23 @@ capabilities + the user's toggle (`editGuardFor` in
 | Mode | When | Backend behavior |
 |---|---|---|
 | `none` | harness previews its own edits (bob), or a read-only plan/ask run | nothing — bob's `suggestedEdits` path is unchanged |
-| `clone` | write-capable harness, review **ON** (the default) | snapshot a baseline, clone the vault, run in the clone, diff + review after |
-| `snapshot` | write-capable harness, review **OFF** | snapshot a baseline first; the agent edits real files directly, but every edit stays undoable |
+| `snapshot` | write-capable harness, review **OFF** (the default) | snapshot a baseline first; the agent edits real files directly, but every edit stays undoable from version history |
+| `clone` | write-capable harness, review **ON** (opt-in) | snapshot a baseline, clone the vault, run in the clone, diff + review after |
 
-**Review is ON by default for write-capable harnesses.** `reviewEdits`
-undefined ⇒ `clone`; only an explicit `false` ⇒ `snapshot`. This is encoded in
-`editGuardFor` and is the single source of that policy — change it there, not
-in scattered conditionals.
+**Write-capable CLI harnesses run in the real folder by default (`snapshot`).**
+`reviewEdits` undefined ⇒ `snapshot`; only an explicit `true` ⇒ `clone`. This is
+encoded in `editGuardFor` and is the single source of that policy — change it
+there, not in scattered conditionals.
+
+**Why `snapshot` is the default, not `clone`.** A clone runs the agent against a
+*copy* in a throwaway temp dir, which is fatal for a CLI agent like Claude/Codex:
+it only sees the copy (never the user's real folder), its tools/skills that
+target real paths break, and — because Claude Code keys its own session history
+by cwd — every run lands under a different `.tmpXXXX` project, so session
+continuity and `CLAUDE.md` project memory are lost and its history is littered.
+Running in the real folder fixes all of that; the pre-run baseline + version
+history is the undo safety net. `clone` (strict pre-approval, agent isolated) is
+kept as an opt-in for users who want "nothing touches my files until I approve."
 
 **The gate is the non-bob path only.** bob previews + records its own edits via
 `workspace_write_file`, so it needs neither a clone nor a baseline. The entire

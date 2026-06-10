@@ -250,21 +250,24 @@ function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
       </p>
 
       <div style={{ display: "grid", gap: "1rem", maxWidth: "22rem", marginBlockStart: "0.75rem" }}>
-        {/* The headline safety control: review the assistant's edits before
-            they touch your files. On by default. Off still records a version
-            you can restore, so an edit is never unrecoverable. */}
+        {/* Edit-safety control. Off by default: {name} works in your real
+            folder (so its paths, skills, and memory line up), and a pre-run
+            baseline makes every edit undoable. On is strict pre-approval —
+            {name} works on a throwaway copy and you approve the diff first,
+            at the cost of isolating it from your real folder. */}
         <Toggle
           id={`${harnessId}-review-edits`}
           size="sm"
           labelText="Review changes before applying"
-          labelA="Off — apply changes directly"
-          labelB="On — show me changes to approve"
-          toggled={options.reviewEdits ?? true}
+          labelA="Off — work in my folder (undo anytime)"
+          labelB="On — work on a copy, approve first"
+          toggled={options.reviewEdits ?? false}
           onToggle={(checked) => setHarnessOptions(harnessId, { reviewEdits: checked })}
         />
         <p className="bob-settings-helper" style={{ marginBlockStart: "-0.5rem" }}>
-          When on, {name} works on a copy and you approve each change. When off, changes apply
-          straight to your files — you can still undo them from a file's “Previous versions”.
+          Off (default): changes apply to your files as {name} works, and you can undo any of them
+          from a file's “Previous versions”. On: {name} works on a copy and you approve each change
+          before it lands — safer to preview, but {name} can't see your real folder or its tools.
         </p>
 
         {caps.allowsCustomModel ? (

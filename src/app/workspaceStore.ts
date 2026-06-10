@@ -406,9 +406,13 @@ export function harnessCapabilitiesOf(
 
 /**
  * Pick the edit-review mode for a run. bob previews its own edits (no gate);
- * a read-only plan/ask run makes no edits to guard; otherwise a write-capable
- * harness runs under review by default — `clone` (sandbox + approve) unless the
- * user turned review off, where `snapshot` still records an undo baseline.
+ * a read-only plan/ask run makes no edits to guard. A write-capable CLI harness
+ * (Claude/Codex) runs in your REAL folder by default (`snapshot` — a pre-run
+ * baseline makes every edit undoable from version history), so the agent sees
+ * real paths, keeps one stable project identity, and its skills/memory line up.
+ * Cloning to a throwaway copy fragments all of that (see review-guide). Strict
+ * pre-approval (`clone` — work on a copy, approve the diff before it lands) is
+ * opt-in via the per-harness "Review changes before applying" toggle.
  */
 export function editGuardFor(
   capabilities: HarnessCapabilities,
@@ -421,7 +425,7 @@ export function editGuardFor(
   if (!allowEdits) {
     return "none";
   }
-  return options.reviewEdits === false ? "snapshot" : "clone";
+  return options.reviewEdits === true ? "clone" : "snapshot";
 }
 
 /** Map a clone-diff file change into a pending review suggestion draft. */

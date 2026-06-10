@@ -476,14 +476,16 @@ describe("workspace store", () => {
       expect(editGuardFor(caps(), false, {})).toBe("none");
     });
 
-    it("reviews edits by default for a write-capable harness in edit mode", () => {
-      // Decision: review is ON by default — undefined reviewEdits → clone.
-      expect(editGuardFor(caps(), true, {})).toBe("clone");
-      expect(editGuardFor(caps(), true, { reviewEdits: true })).toBe("clone");
+    it("runs in the real folder by default for a write-capable harness", () => {
+      // Decision: CLI harnesses run in your real folder by default so paths /
+      // skills / memory line up — undefined reviewEdits → snapshot (undo via a
+      // pre-run baseline). See editGuardFor + review-guide.
+      expect(editGuardFor(caps(), true, {})).toBe("snapshot");
+      expect(editGuardFor(caps(), true, { reviewEdits: false })).toBe("snapshot");
     });
 
-    it("falls back to a baseline snapshot when the user turns review off", () => {
-      expect(editGuardFor(caps(), true, { reviewEdits: false })).toBe("snapshot");
+    it("uses the clone sandbox only when the user opts into pre-approval", () => {
+      expect(editGuardFor(caps(), true, { reviewEdits: true })).toBe("clone");
     });
   });
 
