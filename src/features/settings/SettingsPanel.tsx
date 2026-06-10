@@ -16,6 +16,7 @@ import {
 import {
   useWorkspaceStore,
   harnessCapabilitiesOf,
+  supportsPermissionMode,
   type HarnessRunOptions,
 } from "../../app/workspaceStore";
 import {
@@ -293,6 +294,24 @@ function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
             {caps.models.map((model) => (
               <SelectItem key={model.value} value={model.value} text={model.label} />
             ))}
+          </Select>
+        ) : null}
+
+        {supportsPermissionMode(harnessId) ? (
+          <Select
+            id={`${harnessId}-permission-mode`}
+            labelText="How much it can do on its own"
+            helperText="Default runs autonomously in your folder; every change is undoable from a file's “Previous versions”."
+            value={options.permissionMode ?? ""}
+            onChange={(event) =>
+              setHarnessOptions(harnessId, { permissionMode: event.target.value || undefined })
+            }
+          >
+            {/* Only headless-safe modes: "" (Compose's bypass default) and auto
+                both run without an unanswerable prompt. acceptEdits/default
+                would deadlock a headless run on the first Bash call. */}
+            <SelectItem value="" text="Autonomous — no prompts (recommended)" />
+            <SelectItem value="auto" text="Guarded — vet risky actions (Sonnet/Opus 4.6+)" />
           </Select>
         ) : null}
 

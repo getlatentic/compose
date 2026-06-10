@@ -79,6 +79,12 @@ pub struct HarnessRunRequest {
     /// against a sandbox the user approves. Only the non-bob path acts on it.
     #[serde(default)]
     pub edit_guard: EditGuard,
+    /// Extra CLI args the frontend builds from config (the per-harness
+    /// permission-mode setting + Compose's default) and threads to the harness
+    /// via `RunTuning.extra_args`. Run *policy* lives in the frontend; the
+    /// backend just passes it through. Empty → the adapter's own defaults.
+    #[serde(default)]
+    pub extra_args: Vec<String>,
 }
 
 fn default_harness_id() -> String {
@@ -515,6 +521,10 @@ fn run_via_harness(
             .map(str::to_owned),
         effort: request.effort,
         max_turns: request.max_turns,
+        // Pass-through: the frontend already resolved per-harness policy
+        // (permission mode etc.) into these flags. See harnessExtraArgs in the
+        // store. The adapter appends them, overriding its own defaults.
+        extra_args: request.extra_args,
     };
 
     let run_request = RunRequest {
@@ -662,6 +672,7 @@ mod tests {
             effort: None,
             max_turns: None,
             edit_guard: EditGuard::None,
+            extra_args: Vec::new(),
         };
 
         assert!(prepare_bob_spawn(&request, &registry)
@@ -691,6 +702,7 @@ mod tests {
             effort: None,
             max_turns: None,
             edit_guard: EditGuard::None,
+            extra_args: Vec::new(),
         };
 
         assert!(prepare_bob_spawn(&request, &registry)
@@ -714,6 +726,7 @@ mod tests {
             effort: None,
             max_turns: None,
             edit_guard: EditGuard::None,
+            extra_args: Vec::new(),
         };
 
         assert!(prepare_bob_spawn(&request, &registry)
@@ -757,6 +770,7 @@ mod tests {
             effort: None,
             max_turns: None,
             edit_guard: EditGuard::None,
+            extra_args: Vec::new(),
         };
 
         let prepared = prepare_bob_spawn_with_dependencies(

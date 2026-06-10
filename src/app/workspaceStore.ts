@@ -324,6 +324,40 @@ export interface HarnessRunOptions {
    * own edits (bob). See `editGuardFor`.
    */
   reviewEdits?: boolean;
+  /**
+   * Permission mode passed to a CLI harness that supports one (Claude Code's
+   * `--permission-mode`). Unset → Compose's per-harness default (Claude runs
+   * fully headless, so `bypassPermissions`; the edit-review gate is the undo
+   * net). Set it to take over: `acceptEdits`, `auto`, `default`, … Threaded to
+   * the harness via `extraArgs`, so it's config, never hardcoded.
+   */
+  permissionMode?: string;
+}
+
+/** Compose's default permission mode per harness — its run policy, overridable
+ * by the per-harness `permissionMode` setting. Claude runs fully headless (no
+ * one to answer a prompt), so it bypasses; other harnesses use their own. A
+ * default that lives at the Compose level, not baked into the adapter. */
+function defaultPermissionMode(harnessId: string): string | undefined {
+  return harnessId === "claude" ? "bypassPermissions" : undefined;
+}
+
+/**
+ * Build a run's extra CLI args from config: the permission-mode setting (or
+ * Compose's default), threaded to any harness through `RunTuning.extra_args`.
+ * Returns the empty list when no mode applies, so the adapter keeps its default.
+ */
+export function harnessExtraArgs(harnessId: string, options: HarnessRunOptions): string[] {
+  const mode = options.permissionMode ?? defaultPermissionMode(harnessId);
+  return mode ? ["--permission-mode", mode] : [];
+}
+
+/** Whether a harness exposes a permission-mode control in Settings. Only Claude
+ * Code has `--permission-mode` today (Codex uses `--full-auto`, bob its own
+ * approval mode); a `supportsPermissionMode` capability on the catalog would
+ * replace this id check once agent-harness declares it. */
+export function supportsPermissionMode(harnessId: string): boolean {
+  return harnessId === "claude";
 }
 
 interface HarnessPrefs {
@@ -1852,6 +1886,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         effort: tuning.effort,
         maxTurns: tuning.maxTurns,
         editGuard,
+        extraArgs: harnessExtraArgs(harnessId, tuning),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "The assistant could not start";

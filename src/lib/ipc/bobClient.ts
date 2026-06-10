@@ -46,6 +46,13 @@ export interface HarnessRunRequest {
    * harnesses depending on the user's review toggle.
    */
   editGuard?: EditGuard;
+  /**
+   * Extra CLI args appended verbatim to the harness's argv (via
+   * `RunTuning.extra_args`). The frontend builds these from per-harness config
+   * — e.g. the permission-mode setting — so run policy stays host-side and
+   * configurable, not hardcoded in the adapter. Omitted/empty → adapter defaults.
+   */
+  extraArgs?: string[];
 }
 
 /** The default harness id when nothing is selected / the catalog is
