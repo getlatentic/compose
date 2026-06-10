@@ -14,6 +14,7 @@ import {
   DocumentExport,
   DocumentPdf,
   Home,
+  Html,
   Save,
   Settings,
   Time,
@@ -36,6 +37,8 @@ import { SetupScreen } from "../features/setup/SetupScreen";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import { exportMarkdownFile } from "../lib/export/markdownExport";
 import { exportDocumentToPdf } from "../lib/export/pdfExport";
+import { exportDocumentToHtml } from "../lib/export/htmlExport";
+import type { FileExportResult } from "../lib/export/documentExport";
 import { MarkdownLinkContext } from "../lib/markdown/workspaceLinks";
 import { subscribeToWorkspaceFs } from "../lib/ipc/fileWatcherClient";
 import { checkBobInstall, getBobAuthStatus } from "../lib/ipc/settingsClient";
@@ -335,24 +338,33 @@ export function AppShell() {
     [navigateToFile, linkTargets],
   );
 
-  const handleExportPdf = useCallback(async () => {
-    if (!activeFileEntry || !activeFileBuffer || !activeWorkspaceId) {
-      return;
-    }
-    const result = await exportDocumentToPdf({
-      workspaceId: activeWorkspaceId,
-      relativePath: activeFileEntry.relativePath,
-      content: activeFileBuffer.content,
-    });
-    if (result.status === "cancelled") {
-      return;
-    }
-    setExportNotice(
-      result.status === "exported"
-        ? { kind: "success", text: `Saved to ${result.path}` }
-        : { kind: "error", text: result.message },
-    );
-  }, [activeFileEntry, activeFileBuffer, activeWorkspaceId]);
+  const runDocumentExport = useCallback(
+    async (
+      exporter: (args: {
+        workspaceId: string;
+        relativePath: string;
+        content: string;
+      }) => Promise<FileExportResult>,
+    ) => {
+      if (!activeFileEntry || !activeFileBuffer || !activeWorkspaceId) {
+        return;
+      }
+      const result = await exporter({
+        workspaceId: activeWorkspaceId,
+        relativePath: activeFileEntry.relativePath,
+        content: activeFileBuffer.content,
+      });
+      if (result.status === "cancelled") {
+        return;
+      }
+      setExportNotice(
+        result.status === "exported"
+          ? { kind: "success", text: `Saved to ${result.path}` }
+          : { kind: "error", text: result.message },
+      );
+    },
+    [activeFileEntry, activeFileBuffer, activeWorkspaceId],
+  );
 
   const statusDirty = Boolean(activeFileBuffer?.dirty);
   const statusMeta = activeFileEntry
@@ -455,12 +467,25 @@ export function AppShell() {
             <DocumentExport size={20} />
           </HeaderGlobalAction>
           <HeaderGlobalAction
+            aria-label="Export HTML"
+            aria-disabled={!activeFileEntry}
+            className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
+            onClick={() => {
+              if (activeFileEntry) {
+                void runDocumentExport(exportDocumentToHtml);
+              }
+            }}
+            tooltipAlignment="end"
+          >
+            <Html size={20} />
+          </HeaderGlobalAction>
+          <HeaderGlobalAction
             aria-label="Export PDF"
             aria-disabled={!activeFileEntry}
             className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
             onClick={() => {
               if (activeFileEntry) {
-                void handleExportPdf();
+                void runDocumentExport(exportDocumentToPdf);
               }
             }}
             tooltipAlignment="end"

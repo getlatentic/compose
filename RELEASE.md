@@ -152,10 +152,13 @@ agent-skill export route are deferred (re-open below if wanted).
 - [ ] **Tune** if needed after first run: page size/margins (`@page` in
       `html.rs` `PRINT_CSS`), readiness timing (`pdf.rs` poll/timeout).
 
-### 3b. Deferred export formats (re-open if wanted)
+### 3b. HTML export — done; DOCX deferred
 
-- [ ] **HTML export** — trivial follow-on: `export::html` already produces a
-      standalone HTML doc; add a "save .html" path.
+- [x] **HTML export** — header "Export HTML" action → `workspace_export_html`
+      writes the same self-contained HTML the PDF path renders (GFM, print CSS,
+      inlined images) directly — no WebKit, works on any platform. The
+      dialog→save→open flow is now shared (`documentExport.ts`) between PDF and
+      HTML. Unit-tested (render + path-safety); typecheck + 246 vitest.
 - [ ] **DOCX** — would need Pandoc (sidecar ~150 MB) or a pure-Rust docx writer.
 - [ ] **Agent-skill export** — "Export with AI" via a harness's docx/pdf skill;
       a power path and a fallback if native export ever can't cover a format.

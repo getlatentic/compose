@@ -95,7 +95,8 @@ pub fn run() {
             index::workspace_index_snapshot,
             index::workspace_rebuild_index,
             index::workspace_search_index,
-            export::workspace_export_pdf
+            export::workspace_export_pdf,
+            export::workspace_export_html
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
