@@ -38,8 +38,6 @@ artifacts
 # Throwaway agent run artifacts (screenshots, etc.)
 .codex-artifacts/
 
-# Machine-local Claude Code settings (permissions, launch config)
-.claude/settings.local.json
-
-# Agent worktrees (live, uncommitted work)
-.claude/worktrees/
+# Agent tooling + internal dev docs — not part of the public repo.
+.claude/
+docs/
