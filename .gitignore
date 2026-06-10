@@ -41,3 +41,5 @@ artifacts
 # Agent tooling + internal dev docs — not part of the public repo.
 .claude/
 docs/
+AGENTS.md
+CLAUDE.md
