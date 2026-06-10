@@ -44,7 +44,74 @@ fn markdown_to_body(markdown: &str) -> String {
     // `render.unsafe_` stays false: raw inline HTML is escaped rather than
     // passed through, so a document can never inject a runnable <script> into
     // the export webview.
-    comrak::markdown_to_html(markdown, &options)
+    let prepared = convert_wikilinks_to_links(markdown);
+    comrak::markdown_to_html(&prepared, &options)
+}
+
+/// Convert `[[target]]` / `[[target|alias]]` into markdown links so the export
+/// renders them cleanly (as the editor does) instead of leaving raw `[[…]]`
+/// brackets. comrak doesn't understand wikilinks, so we rewrite them to
+/// `[alias](<target.md>)` before parsing. Fenced code blocks are skipped so a
+/// documented `[[…]]` stays literal.
+fn convert_wikilinks_to_links(markdown: &str) -> String {
+    let mut out = String::with_capacity(markdown.len());
+    let mut in_fence = false;
+    for line in markdown.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            out.push_str(line);
+        } else if in_fence {
+            out.push_str(line);
+        } else {
+            convert_wikilinks_in_line(line, &mut out);
+        }
+    }
+    out
+}
+
+fn convert_wikilinks_in_line(line: &str, out: &mut String) {
+    let mut rest = line;
+    while let Some(start) = rest.find("[[") {
+        out.push_str(&rest[..start]);
+        let after_open = &rest[start + 2..];
+        let Some(end) = after_open.find("]]") else {
+            out.push_str(&rest[start..]);
+            return;
+        };
+        let (target, label) = wikilink_target_and_label(&after_open[..end]);
+        if target.is_empty() {
+            out.push_str("[[");
+            rest = after_open;
+            continue;
+        }
+        // `[label](<href>)` — angle brackets allow spaces in the destination.
+        out.push('[');
+        out.push_str(label);
+        out.push_str("](<");
+        out.push_str(&wikilink_href(target));
+        out.push_str(">)");
+        rest = &after_open[end + 2..];
+    }
+    out.push_str(rest);
+}
+
+/// Mirror of the index crate's `wikilink_target_and_label`.
+fn wikilink_target_and_label(body: &str) -> (&str, &str) {
+    let mut parts = body.splitn(2, '|');
+    let target = parts.next().unwrap_or("").trim();
+    let label = parts.next().map(str::trim).filter(|l| !l.is_empty()).unwrap_or(target);
+    (target, label)
+}
+
+/// Best-effort href for a wikilink target: strip any `#anchor`, ensure `.md`.
+fn wikilink_href(target: &str) -> String {
+    let base = target.split('#').next().unwrap_or(target).trim().replace('\\', "/");
+    if base.to_ascii_lowercase().ends_with(".md") {
+        base
+    } else {
+        format!("{base}.md")
+    }
 }
 
 /// Rewrite `<img src="…">` whose source is a local path to an inline base64
@@ -161,10 +228,16 @@ fn escape_html(text: &str) -> String {
 /// Print stylesheet for the exported PDF. Optimized for A4/Letter pages: roomy
 /// margins, readable system typography, page-break-aware blocks.
 const PRINT_CSS: &str = r#"
-@page { margin: 2.4cm 2cm; }
+/* `@page` margins are honoured when printing from a browser, but WebKit's
+   createPDF (the PDF-export path) ignores them — so the real page margin is the
+   body padding below. @page margin is zeroed to avoid doubling on browser
+   print. (Per-page top/bottom margins on long multi-page docs are a known
+   limitation of this approach.) */
+@page { margin: 0; }
 * { box-sizing: border-box; }
 body.compose-export {
   margin: 0;
+  padding: 2.4cm 2.2cm;
   color: #1a1a1a;
   font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
   font-size: 11.5pt;
@@ -220,6 +293,21 @@ mod tests {
 
     fn doc_dir() -> std::path::PathBuf {
         tempdir().expect("tempdir").keep()
+    }
+
+    #[test]
+    fn renders_wikilinks_as_links_not_raw_brackets() {
+        let html =
+            render_markdown_to_html("See [[Daily Note]] and [[plan|the plan]].", "doc", &doc_dir());
+        assert!(html.contains(">Daily Note</a>"), "{html}");
+        assert!(html.contains(">the plan</a>"), "{html}");
+        assert!(!html.contains("[[Daily Note]]"), "raw brackets must be gone: {html}");
+    }
+
+    #[test]
+    fn leaves_wikilinks_in_fenced_code_alone() {
+        let html = render_markdown_to_html("```\n[[Literal]]\n```", "doc", &doc_dir());
+        assert!(html.contains("[[Literal]]"), "code-fenced wikilink stays literal: {html}");
     }
 
     #[test]
