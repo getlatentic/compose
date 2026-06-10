@@ -36,6 +36,7 @@ import { SetupScreen } from "../features/setup/SetupScreen";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import { exportMarkdownFile } from "../lib/export/markdownExport";
 import { exportDocumentToPdf } from "../lib/export/pdfExport";
+import { MarkdownLinkContext } from "../lib/markdown/workspaceLinks";
 import { subscribeToWorkspaceFs } from "../lib/ipc/fileWatcherClient";
 import { checkBobInstall, getBobAuthStatus } from "../lib/ipc/settingsClient";
 import { getOnboarding, listWorkspaces } from "../lib/ipc/workspaceClient";
@@ -316,6 +317,24 @@ export function AppShell() {
   // returns to the workspace.
   const dashboardVisible = viewMode === "dashboard";
 
+  // Cross-file link navigation: the set of workspace files a link can resolve
+  // to, and the action to open one. Shared by the editor (modifier-click) and
+  // chat replies (click) so a `[text](other.md)` link opens the file in a tab.
+  const linkTargets = useMemo(
+    () => new Set((activeWorkspace?.files ?? []).map((file) => file.relativePath)),
+    [activeWorkspace?.files],
+  );
+  const navigateToFile = useCallback(
+    (path: string) => {
+      void selectFile(path);
+    },
+    [selectFile],
+  );
+  const chatLinkContext = useMemo(
+    () => ({ navigate: navigateToFile, knownPaths: linkTargets }),
+    [navigateToFile, linkTargets],
+  );
+
   const handleExportPdf = useCallback(async () => {
     if (!activeFileEntry || !activeFileBuffer || !activeWorkspaceId) {
       return;
@@ -564,6 +583,8 @@ export function AppShell() {
                   workspaceId={activeWorkspaceId ?? undefined}
                   workspaceRoot={activeWorkspace?.path ?? undefined}
                   filePath={activeWorkspace?.activeFilePath ?? undefined}
+                  linkTargets={linkTargets}
+                  onNavigateToLink={navigateToFile}
                   onChange={updateActiveContent}
                   onSelectionChange={setSelectionSnapshot}
                   onAskAboutSelection={handleAskAboutSelection}
@@ -659,7 +680,9 @@ export function AppShell() {
 
         {chatOpen ? (
           <aside className="bob-chat-region">
-            <ChatPanel />
+            <MarkdownLinkContext.Provider value={chatLinkContext}>
+              <ChatPanel />
+            </MarkdownLinkContext.Provider>
           </aside>
         ) : null}
       </div>

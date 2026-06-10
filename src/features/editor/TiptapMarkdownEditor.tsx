@@ -16,7 +16,10 @@ import {
   useState,
   type ClipboardEvent as ReactClipboardEvent,
   type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
+import { openExternalUrl } from "../../lib/links/openExternal";
+import { resolveWorkspaceLink } from "../../lib/links/workspaceLink";
 import {
   type DocumentTextChange,
   type SourceRange,
@@ -85,7 +88,15 @@ export interface TiptapMarkdownEditorProps {
   /** Workspace-relative path of the file being edited; relative image
    * references resolve against this file's directory. */
   filePath?: string;
+  /** Every workspace-relative file path, used to resolve a clicked link to a
+   * navigable target. */
+  linkTargets?: ReadonlySet<string>;
+  /** Open another workspace file (a cross-file link followed with the modifier
+   * key). The caller routes this to the workspace store's `selectFile`. */
+  onNavigateToLink?: (path: string) => void;
 }
+
+const NO_LINK_TARGETS: ReadonlySet<string> = new Set();
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
 
@@ -110,6 +121,8 @@ function TiptapMarkdownEditorInner({
   workspaceId,
   workspaceRoot,
   filePath,
+  linkTargets,
+  onNavigateToLink,
 }: TiptapMarkdownEditorProps) {
   // YAML frontmatter separation. The editor renders **only the
   // body** — the user shouldn't see raw `key: value` lines
@@ -341,6 +354,29 @@ function TiptapMarkdownEditorInner({
     void insertImagesIntoEditor(files);
   }
 
+  // Follow a link on modifier-click (⌘/Ctrl). A plain click is left to
+  // ProseMirror so it just places the caret — the editor is always editable, so
+  // following must be the deliberate, modified gesture. An internal link opens
+  // the target file; an external one opens in the browser.
+  function handleLinkClick(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!(event.metaKey || event.ctrlKey)) return;
+    const anchor = (event.target as HTMLElement | null)?.closest("a");
+    const href = anchor?.getAttribute("href");
+    if (!href) return;
+    const resolved = resolveWorkspaceLink(href, {
+      fromPath: filePath,
+      knownPaths: linkTargets ?? NO_LINK_TARGETS,
+    });
+    if (!resolved) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (resolved.kind === "internal") {
+      onNavigateToLink?.(resolved.path);
+    } else {
+      void openExternalUrl(resolved.href);
+    }
+  }
+
   async function insertImagesIntoEditor(blobs: Blob[]) {
     if (!editor) return;
     for (const blob of blobs) {
@@ -486,6 +522,7 @@ function TiptapMarkdownEditorInner({
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
       onPaste={handlePaste}
+      onClick={handleLinkClick}
     >
       <TiptapToolbar editor={editor} onInsertImage={pickImageFile} />
       <div className="bob-tiptap-editor__scroll">

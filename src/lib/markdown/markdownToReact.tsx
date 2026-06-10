@@ -1,5 +1,5 @@
 import type { Root } from "hast";
-import { toJsxRuntime } from "hast-util-to-jsx-runtime";
+import { toJsxRuntime, type Components } from "hast-util-to-jsx-runtime";
 import type { ReactNode } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 
@@ -20,7 +20,10 @@ import { createMarkdownProcessor } from "./processor";
 // line breaks, so `hardBreaks` is on (unlike the document preview).
 const processor = createMarkdownProcessor({ hardBreaks: true });
 
-export function renderMarkdownToReact(markdown: string): ReactNode {
+export function renderMarkdownToReact(
+  markdown: string,
+  components?: Partial<Components>,
+): ReactNode {
   const tree = processor.runSync(processor.parse(markdown)) as Root;
-  return toJsxRuntime(tree, { Fragment, jsx, jsxs });
+  return toJsxRuntime(tree, { Fragment, jsx, jsxs, components });
 }

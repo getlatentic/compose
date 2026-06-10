@@ -163,11 +163,30 @@ agent-skill export route are deferred (re-open below if wanted).
 - [ ] **Agent-skill export** — "Export with AI" via a harness's docx/pdf skill;
       a power path and a fallback if native export ever can't cover a format.
 
-### 3c. Cross-file linking — P1 (your "can link to other file")
+### 3c. Cross-file linking — markdown links done; wikilinks next
 
-- [~] The index already extracts markdown + wikilinks and computes backlinks.
-      **Verify/wire click-to-navigate** from a link in the editor (`[text](
-      other.md)` and `[[wikilink]]`) to open that file. Surface broken links.
+- [x] **Markdown links navigate** in both the editor (⌘/Ctrl-click) and chat
+      replies (click). A pure resolver
+      ([`workspaceLink.ts`](../src/lib/links/workspaceLink.ts), unit-tested)
+      classifies an href as internal (resolves to a workspace file → opens in a
+      tab via `selectFile`) or external (→ browser); unresolved relative paths
+      are inert. Editor wired via an `onClick` handler on the editor surface;
+      chat via a `components.a` override + `MarkdownLinkContext`. Sidebar
+      backlinks already navigated — that's unchanged.
+- [x] Verified: 11 resolver unit tests, typecheck, 231 vitest, browser render
+      (no console errors).
+- [ ] **Verify click-navigation in the packaged app** against a real vault with
+      linked notes (the browser preview's virtual workspace has no files to link
+      between).
+- [ ] **Wikilinks `[[Note]]` are NOT yet clickable.** Tiptap renders `[[…]]` as
+      literal text and remark doesn't parse it, so wikilink *navigation* needs
+      rendering first: a Tiptap node + an input rule + markdown round-trip for
+      the editor, and a remark plugin for chat. The index already resolves
+      wikilink edges (`graphEdges`), so resolution is solved — only rendering is
+      missing. Follow-on increment.
+- [ ] Optional polish: a discoverable affordance for editor links (cmd-click is
+      non-obvious for non-technical users — e.g. a hover hint), and distinct
+      styling for internal vs external links (`.bob-internal-link`).
 
 ---
 
