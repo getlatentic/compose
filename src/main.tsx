@@ -1,7 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./app/App";
+import { installGlobalErrorReporter } from "./lib/diagnostics/errorReporter";
 import "./styles/global.scss";
+
+// Capture uncaught errors / rejections to the local log before anything renders.
+installGlobalErrorReporter();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

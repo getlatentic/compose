@@ -72,10 +72,13 @@ these are product work; they're the ship vehicle.
       Compose README (what it is, features, dev setup, layout, docs, license).
 - [x] **LICENSE file** — MIT (`LICENSE`), `license: "MIT"` added to
       `package.json`.
-- [ ] **Minimal crash / error capture.** Nothing surfaces a panic or failed run
-      to you today. At least log uncaught errors + agent-run failures to a local
-      file the user can attach to a report. (Telemetry can stay off by default
-      for privacy — see §5.)
+- [x] **Local crash / error capture.** `compose::logging` appends uncaught
+      front-end errors, unhandled rejections, failed agent runs, and back-end
+      panics (a panic hook) to `<app-data>/logs/errors.log` — bounded (trimmed to
+      its tail past 512 KB). **Local-only, never sent anywhere**, so no consent
+      needed. Settings → *Report a problem* → "Open error log" reveals it in
+      Finder to attach. Installed before render in `main.tsx`. Unit-tested
+      (append + trim + newline-safety).
 
 ---
 
@@ -232,8 +235,10 @@ agent-skill export route are deferred (re-open below if wanted).
       launch — wire to `app_settings` when a settings surface lands.
 - [ ] Binary files aren't in text history.
 - [ ] Table-insert toolbar dropdown (keyboard insert works today).
-- [ ] Privacy/telemetry stance: if any crash capture (§1) phones home, make it
-      opt-in and document it — the product promise is local-first.
+- [x] Privacy/telemetry stance: crash capture (§1) is **local-only** (a file on
+      disk, never transmitted), so it honors the local-first promise with no
+      opt-in. If a future "send report" ever transmits the log, make that the
+      opt-in step.
 
 ---
 

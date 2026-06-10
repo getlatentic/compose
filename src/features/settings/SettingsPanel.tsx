@@ -26,6 +26,8 @@ import {
   type BobRuntimeVerification,
 } from "../../lib/ipc/settingsClient";
 import { installBob, type BobInstallEvent } from "../../lib/ipc/bobShellClient";
+import { revealErrorLog } from "../../lib/diagnostics/errorReporter";
+import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { HarnessPicker } from "./HarnessPicker";
 
 /**
@@ -182,6 +184,18 @@ export function SettingsPanel() {
               <p className="bob-settings-helper">Runtime: Node.js {bobInstallStatus.nodeVersion}</p>
             ) : null}
           </div>
+          {isTauriRuntime() ? (
+            <div className="bob-settings-section">
+              <h3>Report a problem</h3>
+              <p className="bob-settings-helper">
+                Compose keeps a local error log on your computer — it's never sent anywhere. If
+                something goes wrong, open it and attach it to your report.
+              </p>
+              <Button size="sm" kind="tertiary" onClick={() => void revealErrorLog()}>
+                Open error log
+              </Button>
+            </div>
+          ) : null}
         </TabPanel>
       </TabPanels>
     </Tabs>

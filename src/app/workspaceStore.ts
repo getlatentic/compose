@@ -32,6 +32,7 @@ import {
   type BobInstallStatus,
 } from "../lib/ipc/settingsClient";
 import { saveWorkspaceTabs } from "../lib/ipc/workspaceClient";
+import { reportClientError } from "../lib/diagnostics/errorReporter";
 import {
   cancelHarnessRun as cancelHarnessRunIpc,
   harnessList,
@@ -781,6 +782,7 @@ function handleHarnessRunEvent(
       return;
     case "error":
       finalize({ errorMessage: event.message });
+      void reportClientError("agentRun", event.message);
       return;
     case "exited":
       finalize({ cancelled: event.cancelled, exitCode: event.exitCode });

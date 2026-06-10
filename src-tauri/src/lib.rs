@@ -4,6 +4,7 @@ pub mod events;
 pub mod export;
 pub mod files;
 pub mod index;
+pub mod logging;
 pub mod review;
 mod settings;
 mod workspace;
@@ -23,6 +24,22 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
+            // Capture back-end panics into the local error log (best-effort),
+            // then chain to the default hook. Resolve the path once here so the
+            // hook needs no AppHandle.
+            if let Ok(log_path) = logging::error_log_path(&app_handle) {
+                let default_hook = std::panic::take_hook();
+                std::panic::set_hook(Box::new(move |info| {
+                    let _ = logging::append_error_line(
+                        &log_path,
+                        "panic",
+                        &info.to_string(),
+                        None,
+                        logging::now_ms(),
+                    );
+                    default_hook(info);
+                }));
+            }
             let registry = app_handle.state::<workspace::WorkspaceRegistry>();
             if let Err(error) = registry.init_from_app(&app_handle) {
                 eprintln!("workspace registry init failed: {error}");
@@ -96,7 +113,9 @@ pub fn run() {
             index::workspace_rebuild_index,
             index::workspace_search_index,
             export::workspace_export_pdf,
-            export::workspace_export_html
+            export::workspace_export_html,
+            logging::report_client_error,
+            logging::open_error_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
