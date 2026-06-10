@@ -9,15 +9,9 @@ import {
 import {
   ChatBot,
   Chat,
-  Code,
   DocumentAdd,
-  DocumentExport,
-  DocumentPdf,
   Home,
-  Html,
-  Save,
   Settings,
-  Time,
 } from "@carbon/react/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "../features/chat/ChatPanel";
@@ -38,7 +32,7 @@ import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import { exportMarkdownFile } from "../lib/export/markdownExport";
 import { exportDocumentToPdf } from "../lib/export/pdfExport";
 import { exportDocumentToHtml } from "../lib/export/htmlExport";
-import type { FileExportResult } from "../lib/export/documentExport";
+import type { DocumentExportFormat } from "../features/editor/EditorFileActions";
 import { MarkdownLinkContext } from "../lib/markdown/workspaceLinks";
 import { subscribeToWorkspaceFs } from "../lib/ipc/fileWatcherClient";
 import { checkBobInstall, getBobAuthStatus } from "../lib/ipc/settingsClient";
@@ -313,33 +307,32 @@ export function AppShell() {
     [navigateToFile, linkTargets],
   );
 
-  const runDocumentExport = useCallback(
-    async (
-      exporter: (args: {
-        workspaceId: string;
-        relativePath: string;
-        content: string;
-      }) => Promise<FileExportResult>,
-    ) => {
-      if (!activeFileEntry || !activeFileBuffer || !activeWorkspaceId) {
-        return;
-      }
-      const result = await exporter({
-        workspaceId: activeWorkspaceId,
-        relativePath: activeFileEntry.relativePath,
-        content: activeFileBuffer.content,
-      });
-      if (result.status === "cancelled") {
-        return;
-      }
-      setExportNotice(
-        result.status === "exported"
-          ? { kind: "success", text: `Saved to ${result.path}` }
-          : { kind: "error", text: result.message },
-      );
-    },
-    [activeFileEntry, activeFileBuffer, activeWorkspaceId],
-  );
+  // File-action callbacks passed into the (memoized) editor toolbar. They MUST
+  // be referentially stable, so they read live state via the store rather than
+  // close over the per-keystroke buffer.
+  const handleShowVersionHistory = useCallback(() => setVersionHistoryOpen(true), []);
+  const handleExport = useCallback(async (format: DocumentExportFormat) => {
+    const workspace = useWorkspaceStore.getState().activeWorkspace();
+    const relativePath = workspace?.activeFilePath;
+    const buffer = relativePath ? workspace.fileContents[relativePath] : undefined;
+    if (!workspace || !relativePath || !buffer) {
+      return;
+    }
+    if (format === "markdown") {
+      exportMarkdownFile({ filePath: relativePath, markdown: buffer.content });
+      return;
+    }
+    const exporter = format === "html" ? exportDocumentToHtml : exportDocumentToPdf;
+    const result = await exporter({ workspaceId: workspace.id, relativePath, content: buffer.content });
+    if (result.status === "cancelled") {
+      return;
+    }
+    setExportNotice(
+      result.status === "exported"
+        ? { kind: "success", text: `Saved to ${result.path}` }
+        : { kind: "error", text: result.message },
+    );
+  }, []);
 
   if (!onboardingComplete) {
     return <SetupScreen />;
@@ -435,87 +428,11 @@ export function AppShell() {
             <DocumentAdd size={20} />
           </HeaderGlobalAction>
           <HeaderGlobalAction
-            aria-disabled={!activeFileEntry}
-            aria-label="Save note"
-            className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
-            onClick={() => void saveActiveFile()}
-            tooltipAlignment="end"
-          >
-            <Save size={20} />
-          </HeaderGlobalAction>
-          <HeaderGlobalAction
-            aria-label="Previous versions"
-            aria-disabled={!activeFileEntry}
-            className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
-            onClick={() => {
-              if (activeFileEntry) {
-                setVersionHistoryOpen(true);
-              }
-            }}
-            tooltipAlignment="end"
-          >
-            <Time size={20} />
-          </HeaderGlobalAction>
-          <HeaderGlobalAction
-            aria-label="Export Markdown"
-            aria-disabled={!activeFileEntry}
-            className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
-            onClick={() => {
-              if (activeFileEntry && activeFileBuffer) {
-                exportMarkdownFile({
-                  filePath: activeFileEntry.relativePath,
-                  markdown: activeFileBuffer.content,
-                });
-              }
-            }}
-            tooltipAlignment="end"
-          >
-            <DocumentExport size={20} />
-          </HeaderGlobalAction>
-          <HeaderGlobalAction
-            aria-label="Export HTML"
-            aria-disabled={!activeFileEntry}
-            className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
-            onClick={() => {
-              if (activeFileEntry) {
-                void runDocumentExport(exportDocumentToHtml);
-              }
-            }}
-            tooltipAlignment="end"
-          >
-            <Html size={20} />
-          </HeaderGlobalAction>
-          <HeaderGlobalAction
-            aria-label="Export PDF"
-            aria-disabled={!activeFileEntry}
-            className={!activeFileEntry ? "bob-header-action--disabled" : undefined}
-            onClick={() => {
-              if (activeFileEntry) {
-                void runDocumentExport(exportDocumentToPdf);
-              }
-            }}
-            tooltipAlignment="end"
-          >
-            <DocumentPdf size={20} />
-          </HeaderGlobalAction>
-          <HeaderGlobalAction
             aria-label="Settings"
             onClick={() => openSettings()}
             tooltipAlignment="end"
           >
             <Settings size={20} />
-          </HeaderGlobalAction>
-          <HeaderGlobalAction
-            aria-label={
-              editorMode === "source"
-                ? "Switch to formatted view"
-                : "Switch to markdown source view"
-            }
-            className={editorMode === "source" ? "bob-header-action--open" : undefined}
-            onClick={toggleEditorMode}
-            tooltipAlignment="end"
-          >
-            <Code size={20} />
           </HeaderGlobalAction>
           <HeaderGlobalAction
             aria-label={
@@ -619,6 +536,9 @@ export function AppShell() {
                   onChange={updateActiveContent}
                   onSelectionChange={setSelectionSnapshot}
                   onAskAboutSelection={handleAskAboutSelection}
+                  onSave={saveActiveFile}
+                  onShowVersionHistory={handleShowVersionHistory}
+                  onExport={handleExport}
                 />
                 {commentsOpen ? (
                   <CommentsPanel

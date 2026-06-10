@@ -22,6 +22,7 @@ import { openExternalUrl } from "../../lib/links/openExternal";
 import { resolveWorkspaceLink } from "../../lib/links/workspaceLink";
 import { resolveWikilinkTarget } from "../../lib/links/wikilink";
 import { WikiLink } from "./wikilinkExtension";
+import { EditorFileActions, type DocumentExportFormat } from "./EditorFileActions";
 import {
   type DocumentTextChange,
   type SourceRange,
@@ -96,6 +97,13 @@ export interface TiptapMarkdownEditorProps {
   /** Open another workspace file (a cross-file link followed with the modifier
    * key). The caller routes this to the workspace store's `selectFile`. */
   onNavigateToLink?: (path: string) => void;
+  /** Current-file actions, rendered right-aligned in the editor toolbar. All
+   * MUST be referentially stable (this component is memoized) — the caller
+   * should read live state inside them (e.g. via the store) rather than close
+   * over per-keystroke values. */
+  onSave?: () => void;
+  onShowVersionHistory?: () => void;
+  onExport?: (format: DocumentExportFormat) => void;
 }
 
 const NO_LINK_TARGETS: ReadonlySet<string> = new Set();
@@ -125,6 +133,9 @@ function TiptapMarkdownEditorInner({
   filePath,
   linkTargets,
   onNavigateToLink,
+  onSave,
+  onShowVersionHistory,
+  onExport,
 }: TiptapMarkdownEditorProps) {
   // YAML frontmatter separation. The editor renders **only the
   // body** — the user shouldn't see raw `key: value` lines
@@ -420,25 +431,45 @@ function TiptapMarkdownEditorInner({
     }
   }
 
-  // Source mode: plain textarea bound to the buffer. No syntax
-  // highlighting, no canvas, no preview leaks — exactly the
-  // "normal text editor nothing fancy" we agreed on.
+  // The toolbar bar — shared by both modes (formatting shows in WYSIWYG only;
+  // the file actions show in both so Save / History / Export stay reachable).
+  const fileActions =
+    onSave && onShowVersionHistory && onExport ? (
+      <EditorFileActions
+        onSave={onSave}
+        onShowVersionHistory={onShowVersionHistory}
+        onExport={onExport}
+      />
+    ) : undefined;
+  const toolbar = (
+    <TiptapToolbar
+      editor={editor}
+      mode={mode}
+      onInsertImage={pickImageFile}
+      fileActions={fileActions}
+    />
+  );
+
+  // Source mode: plain textarea bound to the buffer. No syntax highlighting, no
+  // preview leaks — the "normal text editor, nothing fancy" we agreed on.
   if (mode === "source") {
     return (
-      <div className="bob-tiptap-source">
-        <textarea
-          className="bob-tiptap-source__textarea"
-          spellCheck={false}
-          value={value}
-          onChange={(event) => {
-            // Mark our own hash so when this value comes back
-            // through the `value` prop, the editor doesn't
-            // re-render via setContent (already in sync).
-            lastEmittedHashRef.current = hashString(event.target.value);
-            currentMarkdownRef.current = event.target.value;
-            onChange(event.target.value, []);
-          }}
-        />
+      <div className="bob-tiptap-editor" onClick={handleLinkClick}>
+        {toolbar}
+        <div className="bob-tiptap-source">
+          <textarea
+            className="bob-tiptap-source__textarea"
+            spellCheck={false}
+            value={value}
+            onChange={(event) => {
+              // Mark our own hash so when this value comes back through the
+              // `value` prop, the editor doesn't re-render via setContent.
+              lastEmittedHashRef.current = hashString(event.target.value);
+              currentMarkdownRef.current = event.target.value;
+              onChange(event.target.value, []);
+            }}
+          />
+        </div>
       </div>
     );
   }
@@ -542,7 +573,7 @@ function TiptapMarkdownEditorInner({
       onPaste={handlePaste}
       onClick={handleLinkClick}
     >
-      <TiptapToolbar editor={editor} onInsertImage={pickImageFile} />
+      {toolbar}
       <div className="bob-tiptap-editor__scroll">
         <EditorContent editor={editor} className="bob-tiptap-editor__content" />
       </div>

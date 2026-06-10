@@ -10,9 +10,18 @@ import {
   TextStrikethrough,
 } from "@carbon/react/icons";
 import type { Editor } from "@tiptap/react";
+import type { ReactNode } from "react";
+import type { TiptapEditorMode } from "./TiptapMarkdownEditor";
 
 /**
- * Persistent rich-text toolbar above the TipTap editor.
+ * The editor's toolbar bar: a formatting group on the left (WYSIWYG only) and a
+ * right-aligned current-file group (`fileActions`) — one element, one
+ * background. The file group renders in Source mode too (no formatting there),
+ * so Save / History / Export stay reachable in both modes.
+ *
+ * (Formatting group below.)
+ *
+ * Original rich-text toolbar.
  *
  * Design rules:
  *   * Always visible in WYSIWYG mode — discoverability over
@@ -32,14 +41,34 @@ import type { Editor } from "@tiptap/react";
  */
 export interface TiptapToolbarProps {
   editor: Editor | null;
+  mode: TiptapEditorMode;
   onInsertImage?: () => void;
+  /** Right-aligned current-file actions (Save / History / Export). Shown in
+   * both modes so they share the bar's background with the formatting group. */
+  fileActions?: ReactNode;
 }
 
-export function TiptapToolbar({ editor, onInsertImage }: TiptapToolbarProps) {
-  if (!editor) return null;
-
+export function TiptapToolbar({ editor, mode, onInsertImage, fileActions }: TiptapToolbarProps) {
   return (
-    <div className="bob-tiptap-toolbar" role="toolbar" aria-label="Formatting">
+    <div className="bob-tiptap-toolbar" role="toolbar" aria-label="Editor">
+      {mode === "wysiwyg" && editor ? (
+        <FormattingButtons editor={editor} onInsertImage={onInsertImage} />
+      ) : null}
+      <span className="bob-tiptap-toolbar__spacer" aria-hidden="true" />
+      {fileActions}
+    </div>
+  );
+}
+
+function FormattingButtons({
+  editor,
+  onInsertImage,
+}: {
+  editor: Editor;
+  onInsertImage?: () => void;
+}) {
+  return (
+    <>
       <HeadingGroup editor={editor} />
       <Divider />
       <Button
@@ -137,7 +166,7 @@ export function TiptapToolbar({ editor, onInsertImage }: TiptapToolbarProps) {
         }}
         icon={<ImageIcon size={16} />}
       />
-    </div>
+    </>
   );
 }
 

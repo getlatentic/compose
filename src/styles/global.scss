@@ -823,6 +823,25 @@ select {
   background: var(--cds-layer-01, #f4f4f4);
 }
 
+// Pushes the current-file group to the right edge of the (shared) toolbar.
+.bob-tiptap-toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.bob-tiptap-toolbar__file-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+// The Carbon OverflowMenu "Export" trigger, sized to match the toolbar's icon
+// buttons and tinted to match their resting colour.
+.bob-tiptap-toolbar__export.cds--overflow-menu {
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  color: var(--cds-icon-secondary, #525252);
+}
+
 .bob-tiptap-toolbar__button {
   display: inline-grid;
   place-items: center;
