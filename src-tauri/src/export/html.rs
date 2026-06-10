@@ -302,7 +302,7 @@ mod tests {
         let html = render_markdown_to_html("hello", "doc", &doc_dir());
         assert!(html.contains("@font-face"), "font faces embedded");
         assert!(html.contains("font-family: \"CMU Serif\""), "body uses CMU Serif: {html:.400}");
-        assert!(html.contains("data:font/ttf;base64,"), "font inlined as data URI");
+        assert!(html.contains("data:font/woff2;base64,"), "font inlined as data URI");
     }
 
     #[test]

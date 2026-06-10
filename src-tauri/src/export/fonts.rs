@@ -6,8 +6,10 @@
 //! what fonts are installed on the machine that opens them.
 //!
 //! Cost model: the PDF embeds only the glyph subset it actually uses, so the
-//! PDF stays small. A standalone HTML export carries the full ~1 MB of font
-//! data — the deliberate price of being self-contained and portable.
+//! PDF stays small. A standalone HTML export carries the full ~390 KB of WOFF2
+//! font data — the deliberate price of being self-contained and portable, and
+//! the reason we bundle (not CDN-load): a CDN can't serve the PDF generator at
+//! render time offline, and would leak a network request from a local-first app.
 //!
 //! CMU (Computer Modern Unicode, by Andrey V. Panov) is freely redistributable;
 //! see `src-tauri/fonts/cmu/LICENSE.md`.
@@ -17,10 +19,10 @@ use std::sync::OnceLock;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 
-const ROMAN: &[u8] = include_bytes!("../../fonts/cmu/CMU-Serif-Roman.ttf");
-const BOLD: &[u8] = include_bytes!("../../fonts/cmu/CMU-Serif-Bold.ttf");
-const ITALIC: &[u8] = include_bytes!("../../fonts/cmu/CMU-Serif-Italic.ttf");
-const BOLD_ITALIC: &[u8] = include_bytes!("../../fonts/cmu/CMU-Serif-BoldItalic.ttf");
+const ROMAN: &[u8] = include_bytes!("../../fonts/cmu/CMU-Serif-Roman.woff2");
+const BOLD: &[u8] = include_bytes!("../../fonts/cmu/CMU-Serif-Bold.woff2");
+const ITALIC: &[u8] = include_bytes!("../../fonts/cmu/CMU-Serif-Italic.woff2");
+const BOLD_ITALIC: &[u8] = include_bytes!("../../fonts/cmu/CMU-Serif-BoldItalic.woff2");
 
 /// The four `@font-face` rules embedding CMU Serif as base64 data URIs. Built
 /// once and cached — base64-encoding ~1 MB on every export would be wasteful.
@@ -42,9 +44,9 @@ fn push_face(css: &mut String, weight: u16, style: &str, bytes: &[u8]) {
     css.push_str(&weight.to_string());
     css.push_str(";font-style:");
     css.push_str(style);
-    css.push_str(";src:url(data:font/ttf;base64,");
+    css.push_str(";src:url(data:font/woff2;base64,");
     css.push_str(&STANDARD.encode(bytes));
-    css.push_str(") format(\"truetype\");}\n");
+    css.push_str(") format(\"woff2\");}\n");
 }
 
 #[cfg(test)]
@@ -57,6 +59,6 @@ mod tests {
         assert_eq!(css.matches("@font-face").count(), 4, "{css:.200}");
         assert_eq!(css.matches("font-style:italic").count(), 2);
         assert_eq!(css.matches("font-weight:700").count(), 2);
-        assert!(css.contains("data:font/ttf;base64,"));
+        assert!(css.contains("data:font/woff2;base64,"));
     }
 }
