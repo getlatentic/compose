@@ -99,27 +99,31 @@ these are product work; they're the ship vehicle.
       real edit lands and review/apply works. This is a verification gap, not
       code.
 
-## 2a. P1 — Onboarding: auto-discover installed harnesses
+## 2a. Onboarding: auto-discover installed harnesses — done
 
-Today onboarding is **connect-centric** (it walks the user through saving a bob
-key). For a multi-harness product the app should **detect which agent CLIs are
-already on the system** and offer them, instead of assuming bob.
+Onboarding was **connect-centric** (it forced saving a bob key before you could
+open a folder). Now it **detects which agent CLIs are already on the system** and
+offers them.
 
-The backend primitives already exist: `harness_list` (the full catalog) and
-`harness_readiness(id)` (probe installed / version / auth) —
-[`src/lib/ipc/bobClient.ts`](../src/lib/ipc/bobClient.ts) `harnessList()` /
-`harnessReadiness()`. What's missing is the discovery *flow*.
-
-- [ ] (Optional backend) add `harness_discover()` that probes the whole catalog
-      in parallel and returns `[{ info, readiness }]` — or do it client-side with
-      `Promise.all` over `harnessList()` + `harnessReadiness()`.
-- [ ] New onboarding step **"Choose your AI"**: show every catalog harness with
-      its detected state (✓ installed / sign-in needed / not installed / needs
-      key), auto-select the first ready one, and let the user pick. Drive each
-      row off `HarnessCapabilities` (credential vs login-managed) — **no
-      `harnessId === "bob"` checks**.
-- [ ] Re-run discovery when returning to Settings so newly-installed CLIs appear.
-- [ ] Browser preview stays bob-only (no catalog) — keep the existing fallback.
+- [x] **Discovery is client-side** over the existing `harness_list` +
+      `harness_readiness` (the `HarnessPicker` probes the whole catalog in
+      parallel). No new backend command needed.
+- [x] **New onboarding step "Choose your AI"** ([`SetupScreen.tsx`](../src/features/setup/SetupScreen.tsx))
+      reuses the detection-driven [`HarnessPicker`](../src/features/settings/HarnessPicker.tsx):
+      each harness shows Ready ✓ / Needs sign-in / Not installed / Add a key, with
+      inline install + OAuth login. Capability-driven (`harnessCapabilitiesOf`), no
+      `harnessId === "bob"` checks; an inline bob-key field appears only when a
+      credential-required harness is selected.
+- [x] **Bob-auth gating removed from the folder step** — a user with Claude/Codex
+      ready is no longer forced to configure bob; the step is non-blocking (finish
+      any AI sign-in later in Settings).
+- [x] Settings keeps re-probing on auth/install change (existing `HarnessPicker`
+      behavior); browser preview keeps the bob-only fallback.
+- [x] Verified in the browser preview (flow renders + navigates, no console
+      errors) + typecheck + 220 vitest tests.
+- [ ] **Desktop check:** confirm the discovery list renders in onboarding on the
+      packaged app (the picker is `isTauriRuntime`-gated, so browser shows the
+      fallback; the picker itself is already shipped/used in Settings).
 
 ---
 

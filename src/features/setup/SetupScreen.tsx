@@ -13,6 +13,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
 import {
   setBobApiKey,
+  type BobAuthStatus,
   type BobInstallStatus,
 } from "../../lib/ipc/settingsClient";
 import {
@@ -26,19 +27,18 @@ import {
   importFolderFromPicker,
   type ImportedFile,
 } from "../../lib/workspace/folderImport";
-import { useWorkspaceStore } from "../../app/workspaceStore";
+import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceStore";
+import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
+import { HarnessPicker } from "../settings/HarnessPicker";
 
 const browserPreviewWorkspacePath = "/Users/dev/workspace/bob4everyone";
 
-type Screen = "welcome" | "value" | "key" | "folder";
-const SCREENS: Screen[] = ["welcome", "value", "key", "folder"];
+type Screen = "welcome" | "value" | "choose" | "folder";
+const SCREENS: Screen[] = ["welcome", "value", "choose", "folder"];
 
 export function SetupScreen() {
-  const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
   const hydrateWorkspaces = useWorkspaceStore((state) => state.hydrateWorkspaces);
-  const setBobAuthStatus = useWorkspaceStore((state) => state.setBobAuthStatus);
   const setOnboarding = useWorkspaceStore((state) => state.setOnboarding);
-  const workspaces = useWorkspaceStore((state) => state.workspaces);
 
   async function finishOnboarding() {
     try {
@@ -49,16 +49,9 @@ export function SetupScreen() {
     }
   }
 
-  const [screen, setScreen] = useState<Screen>(() => {
-    if (!bobAuthStatus.configured) return "welcome";
-    if (workspaces.length === 0) return "folder";
-    return "welcome";
-  });
-  const [apiKey, setApiKey] = useState("");
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [screen, setScreen] = useState<Screen>("welcome");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
-  const [savingApiKey, setSavingApiKey] = useState(false);
   const [addingWorkspace, setAddingWorkspace] = useState(false);
   // Read install status from the store — populated by AppShell's
   // single boot-time probe. Avoids the duplicate IPC fan-out that
@@ -68,22 +61,6 @@ export function SetupScreen() {
     (state) => state.bobInstallStatus,
   );
   const installChecking = installStatus === null;
-
-  async function handleSaveApiKey(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setApiKeyError(null);
-    setSavingApiKey(true);
-    try {
-      const status = await setBobApiKey(apiKey);
-      setBobAuthStatus(status);
-      setApiKey("");
-      setScreen("folder");
-    } catch (error) {
-      setApiKeyError(error instanceof Error ? error.message : "Bob API key could not be saved");
-    } finally {
-      setSavingApiKey(false);
-    }
-  }
 
   async function handleChooseFolder() {
     setWorkspaceError(null);
@@ -155,23 +132,13 @@ export function SetupScreen() {
           <ValueScreen onBack={goBack} onNext={goNext} />
         ) : null}
 
-        {screen === "key" ? (
-          <KeyScreen
-            apiKey={apiKey}
-            apiKeyError={apiKeyError}
-            authError={bobAuthStatus.errorMessage}
-            isConfigured={bobAuthStatus.configured}
-            onBack={goBack}
-            onChange={setApiKey}
-            onSubmit={handleSaveApiKey}
-            saving={savingApiKey}
-          />
+        {screen === "choose" ? (
+          <ChooseAiScreen onBack={goBack} onNext={goNext} />
         ) : null}
 
         {screen === "folder" ? (
           <FolderScreen
             adding={addingWorkspace}
-            authConfigured={bobAuthStatus.configured}
             error={workspaceError}
             notice={workspaceNotice}
             onBack={goBack}
@@ -221,12 +188,12 @@ function ValueScreen({ onBack, onNext }: { onBack: () => void; onNext: () => voi
         <ValueProp
           icon={<Document size={20} />}
           title="Your files, on disk"
-          body="Pick a folder. Bob reads and writes Markdown there directly — no upload, no sync."
+          body="Pick a folder. Your AI assistant reads and writes Markdown there directly — no upload, no sync."
         />
         <ValueProp
           icon={<ChatBot size={20} />}
-          title="Bob in the side panel"
-          body="Ask about the file you're editing. Bob streams responses without leaving the editor."
+          title="AI in the side panel"
+          body="Ask about the file you're editing. Answers stream in without leaving the editor."
         />
         <ValueProp
           icon={<Folder size={20} />}
@@ -239,80 +206,120 @@ function ValueScreen({ onBack, onNext }: { onBack: () => void; onNext: () => voi
   );
 }
 
-function KeyScreen({
-  apiKey,
-  apiKeyError,
-  authError,
-  isConfigured,
-  onBack,
-  onChange,
-  onSubmit,
-  saving,
-}: {
-  apiKey: string;
-  apiKeyError: string | null;
-  authError?: string;
-  isConfigured: boolean;
-  onBack: () => void;
-  onChange: (value: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  saving: boolean;
-}) {
+/**
+ * "Choose your AI" — the harness auto-discovery step. The detection-driven
+ * {@link HarnessPicker} lists the registered harnesses and probes each one's
+ * readiness, so a user sees the AI agents already on their machine ("Ready ✓")
+ * versus ones to install or sign into — no assumption that they use bob. When
+ * the selected harness stores its credential with Compose (bob), an inline key
+ * field appears; everything else (Claude Code / Codex login) is handled inside
+ * the picker. This step never blocks: a user can finish setup now and complete
+ * any AI sign-in later from Settings.
+ */
+function ChooseAiScreen({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  const desktop = isTauriRuntime();
+  const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
+  const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
+  const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
+  const setBobAuthStatus = useWorkspaceStore((state) => state.setBobAuthStatus);
+
+  // Capability-driven, never an id check: a harness whose credential Compose
+  // stores (bob) needs a key here. `harnessCapabilitiesOf` falls back to the
+  // default harness's capabilities when the catalog is empty (browser preview),
+  // so the bob key field still appears there.
+  const needsKey =
+    harnessCapabilitiesOf(harnessCatalog, selectedHarnessId).credentialRequired &&
+    !bobAuthStatus.configured;
+
   return (
     <ScreenShell>
       <span className="bob-onboard__eyebrow">Step 1 of 2</span>
-      <h1 className="bob-onboard__title">Save your Bob API key</h1>
+      <h1 className="bob-onboard__title">Choose your AI</h1>
       <p className="bob-onboard__lead">
-        Stored locally in your OS keychain. We never see it. Generate one at your Bob console.
+        Compose works with the AI agents already on your computer. We checked for the ones we
+        support — pick one below. You can change this anytime in Settings.
       </p>
 
-      <form className="bob-onboard__form" onSubmit={onSubmit}>
-        {authError ? (
-          <InlineNotification
-            hideCloseButton
-            kind="error"
-            lowContrast
-            subtitle={authError}
-            title="Credential status"
-          />
-        ) : null}
-        <PasswordInput
-          id="bob-api-key"
-          labelText=""
-          hideLabel
-          helperText={
-            isConfigured
-              ? "Saved. Paste a new key to replace it."
-              : "Paste your Bob API key to continue."
-          }
-          value={apiKey}
-          onChange={(event) => onChange(event.currentTarget.value)}
-          placeholder="bob_sk_…"
-          size="lg"
+      {desktop ? (
+        <HarnessPicker />
+      ) : (
+        <InlineNotification
+          hideCloseButton
+          kind="info"
+          lowContrast
+          title="Browser preview"
+          subtitle="Browser preview works with bob. The desktop app also detects Claude Code and Codex on your machine."
         />
-        {apiKeyError ? (
-          <InlineNotification
-            hideCloseButton
-            kind="error"
-            lowContrast
-            subtitle={apiKeyError}
-            title="Save failed"
-          />
-        ) : null}
-        <NavRow
-          onBack={onBack}
-          nextLabel={saving ? "Saving" : isConfigured ? "Update and continue" : "Save and continue"}
-          nextDisabled={saving || apiKey.trim().length === 0}
-          nextType="submit"
-        />
-      </form>
+      )}
+
+      {needsKey ? <BobKeyForm onSaved={setBobAuthStatus} /> : null}
+
+      <NavRow onBack={onBack} onNext={onNext} nextLabel="Continue" />
     </ScreenShell>
+  );
+}
+
+/**
+ * Inline bob API-key entry, shown on the "Choose your AI" step only when the
+ * selected harness stores its credential with Compose and none is saved yet.
+ * Optional — the user can also add it later in Settings.
+ */
+function BobKeyForm({ onSaved }: { onSaved: (status: BobAuthStatus) => void }) {
+  const [apiKey, setApiKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const status = await setBobApiKey(apiKey);
+      onSaved(status);
+      setApiKey("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Bob API key could not be saved");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="bob-onboard__form" onSubmit={submit}>
+      <PasswordInput
+        id="bob-api-key"
+        labelText="bob API key"
+        helperText="Stored in your OS keychain — we never see it. Generate one in your bob console."
+        value={apiKey}
+        onChange={(event) => setApiKey(event.currentTarget.value)}
+        placeholder="bob_sk_…"
+        size="md"
+      />
+      {error ? (
+        <InlineNotification
+          hideCloseButton
+          kind="error"
+          lowContrast
+          subtitle={error}
+          title="Save failed"
+        />
+      ) : null}
+      <div>
+        <Button
+          kind="tertiary"
+          size="md"
+          type="submit"
+          disabled={saving || apiKey.trim().length === 0}
+        >
+          {saving ? "Saving…" : "Save key"}
+        </Button>
+      </div>
+    </form>
   );
 }
 
 function FolderScreen({
   adding,
-  authConfigured,
   error,
   notice,
   onBack,
@@ -320,7 +327,6 @@ function FolderScreen({
   onUseSample,
 }: {
   adding: boolean;
-  authConfigured: boolean;
   error: string | null;
   notice: string | null;
   onBack: () => void;
@@ -332,8 +338,8 @@ function FolderScreen({
       <span className="bob-onboard__eyebrow">Step 2 of 2</span>
       <h1 className="bob-onboard__title">Pick a folder for your notes</h1>
       <p className="bob-onboard__lead">
-        Bob reads and writes Markdown files in this folder. You can switch or add more later from
-        the sidebar.
+        Your AI assistant reads and writes Markdown files in this folder. You can switch or add
+        more later from the sidebar.
       </p>
 
       <div className="bob-onboard__form">
@@ -342,18 +348,13 @@ function FolderScreen({
             kind="primary"
             onClick={onChoose}
             renderIcon={FolderOpen}
-            disabled={!authConfigured || adding}
+            disabled={adding}
             size="lg"
           >
             Choose folder
           </Button>
           {!canUseNativeFolderPicker() ? (
-            <Button
-              disabled={adding || !authConfigured}
-              kind="tertiary"
-              onClick={onUseSample}
-              size="lg"
-            >
+            <Button disabled={adding} kind="tertiary" onClick={onUseSample} size="lg">
               {adding ? "Opening" : "Use sample workspace"}
             </Button>
           ) : null}
