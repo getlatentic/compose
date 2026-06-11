@@ -72,6 +72,26 @@ export function byteOffsetToCodeUnitIndex(text: string, byteOffset: number): num
   return text.length;
 }
 
+/**
+ * 1-based line/column of a UTF-8 byte offset in `text` (markdown source). For a
+ * one-off display label (a comment chip), not a hot loop — walks once, no slice.
+ */
+export function byteOffsetToLineColumn(
+  text: string,
+  byteOffset: number,
+): { line: number; column: number } {
+  const codeUnit = byteOffsetToCodeUnitIndex(text, byteOffset);
+  let line = 1;
+  let lineStart = 0;
+  for (let index = 0; index < codeUnit && index < text.length; index += 1) {
+    if (text.charCodeAt(index) === 10 /* \n */) {
+      line += 1;
+      lineStart = index + 1;
+    }
+  }
+  return { line, column: codeUnit - lineStart + 1 };
+}
+
 export function sliceByByteRange(text: string, range: SourceRange): string {
   const startByte = Math.max(0, range.start);
   const endByte = Math.max(startByte, range.end);

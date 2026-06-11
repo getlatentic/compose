@@ -92,11 +92,30 @@ export interface WorkspaceChatThread {
   runState: ChatRunState;
 }
 
+/**
+ * A commented/highlighted passage a user message was created from — rendered as
+ * a chip (file + line:col + excerpt + note) instead of raw quoted text.
+ */
+export interface ChatExcerptRef {
+  filePath: string;
+  /** 1-based line of the highlight start in the markdown source. */
+  line: number;
+  /** 1-based column of the highlight start. */
+  column: number;
+  /** The highlighted text. */
+  text: string;
+  /** The user's note on it. */
+  note: string;
+}
+
 export interface WorkspaceChatMessage {
   activity: string | null;
   /** The *answer* shown in the bubble. For bob this is fed only by the
    * `attempt_completion` result; narration goes to `notices`/`status`. */
   content: string;
+  /** Set when this user message was made from a commented passage — renders as
+   * a chip (file + line:col + excerpt + note) instead of the raw quoted text. */
+  excerpt?: ChatExcerptRef;
   id: string;
   llmThreadId?: string;
   role: "assistant" | "user";
@@ -984,6 +1003,7 @@ export function appendUserChatMessage(
   userContent: string,
   preparedCommand: string | null,
   llmThreadId: string | null = null,
+  excerpt: ChatExcerptRef | null = null,
 ): WorkspaceChatThread {
   const trimmedUserContent = userContent.trim();
   if (!trimmedUserContent) {
@@ -1001,6 +1021,7 @@ export function appendUserChatMessage(
         content: trimmedUserContent,
         id: `message-${nextMessageNumber}`,
         ...(llmThreadId ? { llmThreadId } : {}),
+        ...(excerpt ? { excerpt } : {}),
         role: "user",
       },
     ],

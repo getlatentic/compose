@@ -14,6 +14,7 @@ import {
 } from "../lib/ipc/commentsClient";
 import { rebuildWorkspaceIndex as rebuildWorkspaceIndexIpc } from "../lib/ipc/indexClient";
 import { appendLlmMessage, recordLlmThread } from "../lib/ipc/llmContextClient";
+import { byteOffsetToLineColumn } from "../features/text/positionMapper";
 import {
   archiveConversation as archiveConversationIpc,
   deleteConversation as deleteConversationIpc,
@@ -108,6 +109,7 @@ import {
   type OnboardingState,
   type SourceRange,
   type WorkspacePane,
+  type ChatExcerptRef,
   type WorkspaceChatThread,
   type WorkspaceCommentThread,
   type WorkspaceDocumentSuggestion,
@@ -2024,6 +2026,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const userMessage =
       `About this excerpt from \`${filePath}\`:\n\n${quotedSelection}\n\n${trimmedQuestion}`;
 
+    // The chat renders this message as a chip (file + line:col + excerpt + note)
+    // via the `excerpt` metadata; `userMessage` above stays the model's prompt.
+    const fileContent = workspace.activeFilePath
+      ? (workspace.fileContents[workspace.activeFilePath]?.content ?? "")
+      : "";
+    const lineColumn = byteOffsetToLineColumn(fileContent, selection.range.start);
+    const excerpt: ChatExcerptRef | null = workspace.activeFilePath
+      ? {
+          filePath: workspace.activeFilePath,
+          line: lineColumn.line,
+          column: lineColumn.column,
+          text: selection.text,
+          note: trimmedQuestion,
+        }
+      : null;
+
     // Batched setter (one set() per animation frame) so per-token
     // deltas don't saturate React. finalize() flushes + disposes at the
     // tail of the stream (terminal event) or in the catch path.
@@ -2052,7 +2070,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
         ...item,
         chatThread: startBobRun(
-          appendUserChatMessage(item.chatThread, userMessage, null, null),
+          appendUserChatMessage(item.chatThread, userMessage, null, null, excerpt),
           runId,
           null,
         ),
