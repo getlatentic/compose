@@ -15,7 +15,7 @@ import { MarkdownMessage } from "./MarkdownMessage";
 import { MessageAuthor } from "./MessageAuthor";
 import { SuggestionList } from "./SuggestionList";
 import { toolActionLabel } from "./toolLabels";
-import { fileOpsFromTrace } from "./traceFiles";
+import { appliedChangeBasenames, fileOpsFromTrace } from "./traceFiles";
 import { useDwellValue } from "./useDwellValue";
 
 export interface MessageRowCallbacks {
@@ -51,7 +51,12 @@ export function MessageRow({
   const hasTrace = isAssistant && Boolean(trace?.length);
   // File create/edit ops surface as prominent cards. A running op's spinner
   // is itself the live status, so it suppresses the generic status line.
-  const fileOps = isAssistant ? fileOpsFromTrace(trace) : [];
+  // When an applied-diff card (snapshot mode) already covers a file, it owns
+  // the create-vs-edit headline — so suppress the redundant per-tool card for
+  // that same file (otherwise an overwrite shows a "Created" card beside an
+  // "Edited" diff). See `fileOpsFromTrace`.
+  const coveredFiles = appliedChangeBasenames(message.appliedChanges);
+  const fileOps = isAssistant ? fileOpsFromTrace(trace, coveredFiles) : [];
   const opRunning = fileOps.some((tool) => tool.status === "running");
   const statsLabel = message.stats ? formatStats(message.stats) : "";
   const showMeta = isFinal && (hasTrace || Boolean(statsLabel));

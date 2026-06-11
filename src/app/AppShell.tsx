@@ -78,6 +78,7 @@ export function AppShell() {
   const viewMode = useWorkspaceStore((state) => state.viewMode);
   const showDashboard = useWorkspaceStore((state) => state.showDashboard);
   const toggleChat = useWorkspaceStore((state) => state.toggleChat);
+  const requestComposerFocus = useWorkspaceStore((state) => state.requestComposerFocus);
   const updateActiveContent = useWorkspaceStore((state) => state.updateActiveContent);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const activeWorkspace = useMemo(
@@ -593,6 +594,7 @@ export function AppShell() {
                 onNewNote={() => void createNote()}
                 onAskAssistant={() => {
                   if (!chatOpen) toggleChat();
+                  requestComposerFocus();
                 }}
               />
             ) : (
