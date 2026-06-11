@@ -2345,7 +2345,8 @@ select {
 .bob-suggestion-list {
   display: grid;
   gap: 0.5rem;
-  inline-size: min(32rem, 85%);
+  align-self: stretch;
+  inline-size: 100%;
 }
 
 /* Binary / oversized change — a size-only note in place of a diff. */
@@ -2356,11 +2357,15 @@ select {
   font-size: 0.75rem;
 }
 
-/* Informational "the assistant already changed these files" diffs. */
+/* Informational "the assistant already changed these files" diffs. The list
+   spans the full message column (same width the assistant prose uses) so diff
+   lines get maximum room before wrapping — the row is `align-items: flex-start`,
+   so without this stretch the grid would shrink to its content. */
 .bob-applied-list {
   display: grid;
   gap: 0.5rem;
-  inline-size: min(32rem, 85%);
+  align-self: stretch;
+  inline-size: 100%;
 }
 
 .bob-applied {
@@ -2554,15 +2559,19 @@ select {
 }
 
 .bob-diff__line {
+  // Compact line-number gutters: just wide enough for ~4-digit line numbers
+  // (tabular-nums keeps them aligned) so the code text gets the room. The
+  // marker column is a single glyph; the text takes the rest.
   display: grid;
-  grid-template-columns: 2.5rem 2.5rem 1rem minmax(0, 1fr);
+  grid-template-columns: 2ch 2ch 1rem minmax(0, 1fr);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .bob-diff__gutter {
-  padding-inline-end: 0.25rem;
+  padding-inline: 0.125rem;
   color: var(--cds-text-placeholder, #a8a8a8);
+  font-variant-numeric: tabular-nums;
   text-align: end;
   user-select: none;
 }
