@@ -105,9 +105,18 @@ export function toolName(name: string): string {
  * Codex's `--json` item types (`file_change`). */
 // Status-aware verbs for the file-op card title: present-continuous while it
 // runs, past tense once done, a plain failure phrase on error.
+//
+// The *running* verb is deliberately neutral ("Writing…"), not "Creating…":
+// mid-run the per-tool card cannot know whether the file pre-existed, so it
+// must not assert create-vs-edit. The applied-diff card (which compares against
+// the pre-run baseline and *does* know) owns the final "Created"/"Edited"
+// headline; once it lands, the tool card for that file is deduped away
+// (`fileOpsFromTrace`). Asserting "Creating…" here is exactly what made an
+// overwrite flicker "Created" → "Edited". A `write` op never covered by an
+// applied diff (no diff to contradict it) still settles to "Created"/"Wrote".
 const FILEOP_VERBS = {
-  write: { running: "Creating", done: "Created", error: "Couldn't create" },
-  edit: { running: "Editing", done: "Edited", error: "Couldn't edit" },
+  write: { running: "Writing", done: "Wrote", error: "Couldn't write" },
+  edit: { running: "Writing", done: "Edited", error: "Couldn't edit" },
 } as const;
 
 /**
