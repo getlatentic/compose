@@ -15,10 +15,7 @@ import {
 } from "@carbon/react/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "../features/chat/ChatPanel";
-import {
-  CommentsPanel,
-  type EditorSelectionSnapshot,
-} from "../features/comments/CommentsPanel";
+import { CommentsPanel } from "../features/comments/CommentsPanel";
 import type { SourceRange } from "../features/comments/commentModel";
 import { TiptapMarkdownEditor } from "../features/editor/TiptapMarkdownEditor";
 import { PaneTabs, type EditorTab } from "../features/editor/PaneTabs";
@@ -57,7 +54,8 @@ export function AppShell() {
   const reloadActiveFile = useWorkspaceStore((state) => state.reloadActiveFile);
   const saveActiveFile = useWorkspaceStore((state) => state.saveActiveFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
-  const sendCommentToChat = useWorkspaceStore((state) => state.sendCommentToChat);
+  const sendCommentsToChat = useWorkspaceStore((state) => state.sendCommentsToChat);
+  const setCommentResolved = useWorkspaceStore((state) => state.setCommentResolved);
   const saveError = useWorkspaceStore((state) => state.saveError);
   const clearSaveError = useWorkspaceStore((state) => state.clearSaveError);
   const askBobAboutSelectionStream = useWorkspaceStore(
@@ -110,7 +108,6 @@ export function AppShell() {
   const activePaneId = activeWorkspace?.activePaneId ?? null;
   const activePane =
     activeWorkspace?.openPanes.find((pane) => pane.id === activePaneId) ?? null;
-  const [selectionSnapshot, setSelectionSnapshot] = useState<EditorSelectionSnapshot | null>(null);
   // Stabilize the editor's Ask callback so `React.memo` on
   // <TiptapMarkdownEditor /> can short-circuit re-renders. Without
   // useCallback, every render of AppShell creates a fresh arrow
@@ -129,6 +126,16 @@ export function AppShell() {
     return activeWorkspace.comments.filter(
       (comment) =>
         comment.filePath === activeWorkspace.activeFilePath && comment.status === "open",
+    );
+  }, [activeWorkspace?.activeFilePath, activeWorkspace?.comments]);
+  // All comments for the active file (open + resolved) — the panel shows the
+  // resolved ones in their own "done" section.
+  const activeFileAllComments = useMemo(() => {
+    if (!activeWorkspace?.activeFilePath) {
+      return [];
+    }
+    return activeWorkspace.comments.filter(
+      (comment) => comment.filePath === activeWorkspace.activeFilePath,
     );
   }, [activeWorkspace?.activeFilePath, activeWorkspace?.comments]);
   const openTabs = useMemo<EditorTab[]>(() => {
@@ -194,10 +201,6 @@ export function AppShell() {
     }
     void loadActiveWorkspaceFiles();
   }, [activeWorkspaceId, loadActiveWorkspaceFiles]);
-
-  useEffect(() => {
-    setSelectionSnapshot(null);
-  }, [activeWorkspace?.activeFilePath]);
 
   useEffect(() => {
     if (!activeWorkspaceId) {
@@ -556,25 +559,25 @@ export function AppShell() {
                   linkTargets={linkTargets}
                   onNavigateToLink={navigateToFile}
                   onChange={updateActiveContent}
-                  onSelectionChange={setSelectionSnapshot}
                   onAskAboutSelection={handleAskAboutSelection}
+                  onQueueComment={(note, selection) =>
+                    addCommentToActiveFile({
+                      body: note,
+                      range: selection.range,
+                      selectedText: selection.text,
+                    })
+                  }
                   onSave={saveActiveFile}
                   onShowVersionHistory={handleShowVersionHistory}
                   onExport={handleExport}
                 />
                 {commentsOpen ? (
                   <CommentsPanel
-                    comments={activeFileComments}
+                    comments={activeFileAllComments}
                     filePath={activeWorkspace.activeFilePath}
-                    selection={selectionSnapshot}
-                    onCreateComment={(body, selection) =>
-                      addCommentToActiveFile({
-                        body,
-                        range: selection.range,
-                        selectedText: selection.text,
-                      })
-                    }
-                    onSendComment={(commentId) => void sendCommentToChat(commentId)}
+                    onSendComments={(commentIds) => void sendCommentsToChat(commentIds)}
+                    onResolveComment={(commentId) => setCommentResolved(commentId, true)}
+                    onReopenComment={(commentId) => setCommentResolved(commentId, false)}
                   />
                 ) : null}
               </div>

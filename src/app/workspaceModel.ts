@@ -624,6 +624,27 @@ export function addWorkspaceComment(
     return workspace;
   }
 
+  // One comment per highlight: if an open comment on this file overlaps the
+  // selection, edit its note in place instead of stacking a duplicate. The
+  // anchor stays put — you're editing the existing comment, not re-pinning it.
+  const overlapping = workspace.comments.find(
+    (existing) =>
+      existing.filePath === input.filePath
+      && existing.status === "open"
+      && input.range.start < existing.anchor.range.end
+      && existing.anchor.range.start < input.range.end,
+  );
+  if (overlapping) {
+    return {
+      ...workspace,
+      comments: workspace.comments.map((existing) =>
+        existing.id === overlapping.id
+          ? { ...existing, body: input.body.trim(), updatedAt: input.timestamp }
+          : existing,
+      ),
+    };
+  }
+
   const comment = createCommentThread({
     body: input.body,
     filePath: input.filePath,
@@ -723,36 +744,79 @@ export function moveWorkspaceComments(
   };
 }
 
+/** Flip a comment open ↔ resolved (the "done" state shown in the panel). */
+export function setWorkspaceCommentStatus(
+  workspace: BobWorkspace,
+  commentId: string,
+  status: "open" | "resolved",
+  timestamp: number,
+): BobWorkspace {
+  return {
+    ...workspace,
+    comments: workspace.comments.map((comment) =>
+      comment.id === commentId ? { ...comment, status, updatedAt: timestamp } : comment,
+    ),
+  };
+}
+
+function fileContextItem(workspaceId: string, filePath: string): WorkspaceContextItem {
+  return {
+    id: createContextId(workspaceId, filePath),
+    kind: "file",
+    label: filePath,
+    path: filePath,
+    workspaceId,
+  };
+}
+
+function commentContextItem(
+  workspaceId: string,
+  comment: WorkspaceCommentThread,
+): WorkspaceContextItem {
+  return {
+    anchor: comment.anchor,
+    commentBody: comment.body,
+    filePath: comment.filePath,
+    id: `${workspaceId}:${comment.id}`,
+    kind: "comment",
+    label: `Comment on ${comment.filePath}`,
+    path: comment.filePath,
+    range: comment.anchor.range,
+    selectedText: comment.anchor.selectedText,
+    surroundingContext: `${comment.anchor.prefix}${comment.anchor.selectedText}${comment.anchor.suffix}`,
+    workspaceId,
+  };
+}
+
+/**
+ * Attach one or more comments (with their files, deduped) as the chat's
+ * context — the basis for "Send N comments to chat". `createPromptWithContext`
+ * already renders multiple comment blocks, so N just works downstream.
+ */
+export function setCommentsChatContext(
+  chatThread: WorkspaceChatThread,
+  workspaceId: string,
+  comments: WorkspaceCommentThread[],
+): WorkspaceChatThread {
+  const seenFiles = new Set<string>();
+  const fileItems: WorkspaceContextItem[] = [];
+  const commentItems: WorkspaceContextItem[] = [];
+  for (const comment of comments) {
+    if (!seenFiles.has(comment.filePath)) {
+      seenFiles.add(comment.filePath);
+      fileItems.push(fileContextItem(workspaceId, comment.filePath));
+    }
+    commentItems.push(commentContextItem(workspaceId, comment));
+  }
+  return { ...chatThread, contextItems: [...fileItems, ...commentItems] };
+}
+
 export function setCommentChatContext(
   chatThread: WorkspaceChatThread,
   workspaceId: string,
   comment: WorkspaceCommentThread,
 ): WorkspaceChatThread {
-  return {
-    ...chatThread,
-    contextItems: [
-      {
-        id: createContextId(workspaceId, comment.filePath),
-        kind: "file",
-        label: comment.filePath,
-        path: comment.filePath,
-        workspaceId,
-      },
-      {
-        anchor: comment.anchor,
-        commentBody: comment.body,
-        filePath: comment.filePath,
-        id: `${workspaceId}:${comment.id}`,
-        kind: "comment",
-        label: `Comment on ${comment.filePath}`,
-        path: comment.filePath,
-        range: comment.anchor.range,
-        selectedText: comment.anchor.selectedText,
-        surroundingContext: `${comment.anchor.prefix}${comment.anchor.selectedText}${comment.anchor.suffix}`,
-        workspaceId,
-      },
-    ],
-  };
+  return setCommentsChatContext(chatThread, workspaceId, [comment]);
 }
 
 export function createLlmContextSnapshots(

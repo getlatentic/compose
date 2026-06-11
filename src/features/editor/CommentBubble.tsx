@@ -1,4 +1,4 @@
-import { ChatBot, Close, Edit, Send } from "@carbon/react/icons";
+import { AddComment, Close, ListBulleted, Send } from "@carbon/react/icons";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -7,75 +7,49 @@ import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { SourceRange } from "../comments/commentModel";
 
 /**
- * Selection-anchored Bob trigger — what you see when you highlight
- * text in WYSIWYG mode.
+ * Selection-anchored comment trigger — what you see when you highlight text.
  *
- * Two distinct user intents:
- *   * **Edit** — "rewrite this", "make it shorter", "translate to
- *     French". Bob receives the selection + instruction, returns
- *     a new chunk of markdown that REPLACES the selection. The
- *     document changes; the chat panel may also surface the
- *     thread for later reference.
- *   * **Ask** — "what does this mean?", "is this consistent with
- *     section 3?", "find a citation for this claim". Bob
- *     receives the selection + question and streams a response
- *     into the chat panel. The document doesn't change.
+ * A comment is a note on the highlighted passage. You don't pre-pick "edit" vs
+ * "ask": you write the note and the assistant decides (answer or edit) from it.
+ * Two destinations:
+ *   * **Send to chat** — one-off; the note + selection go to the chat now and
+ *     the assistant responds (answering or editing). The panel isn't involved.
+ *   * **Queue** — stage the note as a comment in the panel, to batch-send later.
  *
- * Both share the same anchor (the user's text selection) and
- * both treat the markdown source as the canonical context. The
- * split is about intent, not infrastructure.
- *
- * UX shape mirrors Google Docs / Notion: a small floating
- * affordance appears at the right edge of the selection; click
- * it and an inline composer pops up below.
+ * UX mirrors Google Docs / Notion: a small "Comment" affordance at the edge of
+ * the selection; click it and an inline composer pops up below.
  */
 export interface CommentBubbleProps {
   editor: Editor | null;
   selection: { text: string; range: SourceRange } | null;
-  /**
-   * Apply Bob's edit to the selection. Caller is responsible for
-   * the round trip — sending the prompt + selection to Bob,
-   * collecting Bob's response, and using the editor to replace
-   * the selected text. The bubble fires-and-forgets.
-   */
-  onEditSelection?: (instruction: string, selection: { text: string; range: SourceRange }) => void;
-  /**
-   * Open a chat thread anchored to this selection. Caller routes
-   * the message + selection context through the chat pipeline.
-   */
-  onAskAboutSelection?: (question: string, selection: { text: string; range: SourceRange }) => void;
+  /** Send the note + selection to the chat now (assistant answers or edits). */
+  onSendToChat?: (note: string, selection: { text: string; range: SourceRange }) => void;
+  /** Stage the note as a comment in the panel queue (batch-send later). */
+  onQueueComment?: (note: string, selection: { text: string; range: SourceRange }) => void;
 }
-
-type ComposeMode = "idle" | "edit" | "ask";
 
 export function CommentBubble({
   editor,
   selection,
-  onEditSelection,
-  onAskAboutSelection,
+  onSendToChat,
+  onQueueComment,
 }: CommentBubbleProps) {
-  const [mode, setMode] = useState<ComposeMode>("idle");
+  const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  // Bob readiness — drives the "Set up Bob first" notice inside the
-  // composer when the CLI / key / Node aren't all in place. We
-  // still let the user open the composer and draft a question so
-  // they can pick up where they left off after setup completes.
+  // Readiness drives the "set up the assistant" notice; the send still works
+  // through the run's own preflight, so the buttons don't hard-gate on it.
   const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
   const bobInstallStatus = useWorkspaceStore((state) => state.bobInstallStatus);
   const openSettings = useWorkspaceStore((state) => state.openSettings);
   const bobReady = bobRuntimeReadiness(bobAuthStatus, bobInstallStatus);
 
   // Recompute the anchor rect when the editor selection changes.
-  // We read from window.getSelection() rather than ProseMirror
-  // coords because the rect is already laid out by the browser
-  // (works during scroll without re-derivation; matches how
-  // Google Docs / Notion compute the same anchor).
   useEffect(() => {
     if (!editor || !selection) {
       setAnchorRect(null);
-      if (mode !== "idle") setMode("idle");
+      if (composing) setComposing(false);
       return;
     }
     const win = typeof window !== "undefined" ? window.getSelection() : null;
@@ -90,51 +64,56 @@ export function CommentBubble({
       return;
     }
     setAnchorRect(rect);
-    // Eslint thinks `mode` is missing from deps, but adding it
-    // would create a loop: leaving compose mode → anchorRect
-    // re-fires → mode resets → infinite.
+    // Adding `composing` would loop: closing the composer re-fires this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, selection]);
 
-  // Focus the textarea on compose-mode entry.
+  // Focus the textarea when the composer opens.
   useEffect(() => {
-    if (mode !== "idle" && textareaRef.current) {
+    if (composing && textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [mode]);
+  }, [composing]);
 
   // Escape closes the composer.
   useEffect(() => {
-    if (mode === "idle") return;
+    if (!composing) return;
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setMode("idle");
+        setComposing(false);
         setDraft("");
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode]);
+  }, [composing]);
 
   if (!anchorRect || !selection) return null;
   if (typeof document === "undefined") return null;
 
   const BUBBLE_OFFSET = 6;
 
-  function submit() {
-    const body = draft.trim();
-    if (!body || !selection) return;
-    if (mode === "edit") {
-      onEditSelection?.(body, selection);
-    } else if (mode === "ask") {
-      onAskAboutSelection?.(body, selection);
-    }
+  function close() {
+    setComposing(false);
     setDraft("");
-    setMode("idle");
   }
 
-  // ---------- Idle: two-action pill ----------
-  if (mode === "idle") {
+  function sendToChat() {
+    const note = draft.trim();
+    if (!note || !selection) return;
+    onSendToChat?.(note, selection);
+    close();
+  }
+
+  function queue() {
+    const note = draft.trim();
+    if (!note || !selection) return;
+    onQueueComment?.(note, selection);
+    close();
+  }
+
+  // ---------- Pill: a single "Comment" trigger ----------
+  if (!composing) {
     const top = anchorRect.top - 36;
     const left = anchorRect.right + BUBBLE_OFFSET;
     return createPortal(
@@ -146,35 +125,23 @@ export function CommentBubble({
       >
         <button
           type="button"
-          className="bob-selection-actions__button bob-selection-actions__button--edit"
-          aria-label="Ask the assistant to edit this selection"
-          title="Edit with the assistant"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setMode("edit")}
-        >
-          <Edit size={14} />
-          <span>Edit</span>
-        </button>
-        <span className="bob-selection-actions__divider" aria-hidden="true" />
-        <button
-          type="button"
           className="bob-selection-actions__button bob-selection-actions__button--ask"
-          aria-label="Ask the assistant about this selection"
-          title="Ask the assistant"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setMode("ask")}
+          aria-label="Comment on this selection"
+          title="Comment"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setComposing(true)}
         >
-          <ChatBot size={14} />
-          <span>Ask</span>
+          <AddComment size={14} />
+          <span>Comment</span>
         </button>
       </div>,
       document.body,
     );
   }
 
-  // ---------- Compose: edit or ask popover ----------
+  // ---------- Composer: a note → Send to chat / Queue ----------
   const COMPOSER_WIDTH = 360;
-  const COMPOSER_HEIGHT_ESTIMATE = 200;
+  const COMPOSER_HEIGHT_ESTIMATE = 220;
   const viewportHeight = window.innerHeight;
   const viewportWidth = window.innerWidth;
   let composerTop = anchorRect.bottom + BUBBLE_OFFSET;
@@ -186,30 +153,26 @@ export function CommentBubble({
   if (composerLeft + COMPOSER_WIDTH > viewportWidth - 16) {
     composerLeft = viewportWidth - COMPOSER_WIDTH - 16;
   }
-
-  const isEdit = mode === "edit";
+  const hasDraft = Boolean(draft.trim());
 
   return createPortal(
     <div
       className="bob-selection-composer"
       role="dialog"
-      aria-label={isEdit ? "Ask the assistant to edit selection" : "Ask the assistant about selection"}
+      aria-label="Comment on selection"
       style={{ top: composerTop, left: composerLeft, width: COMPOSER_WIDTH }}
-      onMouseDown={(e) => e.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
     >
       <div className="bob-selection-composer__header">
         <span className="bob-selection-composer__title">
-          {isEdit ? <Edit size={14} /> : <ChatBot size={14} />}
-          {isEdit ? "Edit with the assistant" : "Ask the assistant"}
+          <AddComment size={14} />
+          Comment
         </span>
         <button
           type="button"
           className="bob-selection-composer__close"
           aria-label="Cancel"
-          onClick={() => {
-            setMode("idle");
-            setDraft("");
-          }}
+          onClick={close}
         >
           <Close size={14} />
         </button>
@@ -220,18 +183,14 @@ export function CommentBubble({
       <textarea
         ref={textareaRef}
         className="bob-selection-composer__textarea"
-        placeholder={
-          isEdit
-            ? "What change should the assistant make? e.g. 'shorter', 'as a list', 'translate to French'…"
-            : "Ask the assistant about this selection…"
-        }
+        placeholder="Leave a note — the assistant answers or edits based on what you write…"
         rows={3}
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-            e.preventDefault();
-            submit();
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            event.preventDefault();
+            sendToChat();
           }
         }}
       />
@@ -248,25 +207,24 @@ export function CommentBubble({
         </div>
       ) : null}
       <div className="bob-selection-composer__actions">
-        <span className="bob-selection-composer__hint">⌘+Enter to send</span>
+        <button
+          type="button"
+          className="bob-selection-composer__secondary"
+          disabled={!hasDraft}
+          onClick={queue}
+          title="Add to the comment queue in the panel"
+        >
+          <ListBulleted size={14} />
+          Queue
+        </button>
         <button
           type="button"
           className="bob-selection-composer__primary"
-          disabled={!draft.trim() || !bobReady.ready}
-          onClick={submit}
-          title={bobReady.ready ? undefined : (bobReady.message ?? "The assistant isn't connected yet.")}
+          disabled={!hasDraft}
+          onClick={sendToChat}
         >
-          {isEdit ? (
-            <>
-              <Edit size={14} />
-              Apply edit
-            </>
-          ) : (
-            <>
-              <Send size={14} />
-              Send to chat
-            </>
-          )}
+          <Send size={14} />
+          Send to chat
         </button>
       </div>
     </div>,
