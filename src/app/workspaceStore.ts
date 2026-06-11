@@ -230,6 +230,8 @@ interface WorkspaceState {
   renameActiveFile: (toRelativePath: string) => Promise<void>;
   saveActiveFile: () => Promise<void>;
   saveError: string | null;
+  /** Dismiss the global save/IO error toast. */
+  clearSaveError: () => void;
   selectFile: (path: string) => Promise<void>;
   rejectSuggestedEdit: (suggestionId: string) => void;
   sendChatPrompt: () => Promise<void>;
@@ -1679,6 +1681,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
   saveError: null,
+  clearSaveError: () => set({ saveError: null }),
   sendChatPrompt: async () => {
     const workspace = get().activeWorkspace();
     if (!workspace) {
@@ -2085,7 +2088,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         activeFilePath: comment.filePath,
         chatThread: {
           ...setCommentChatContext(item.chatThread, item.id, comment),
-          prompt: comment.body || "Help me with this selection.",
+          // Use `.trim()`, not just `||`: a whitespace-only note is truthy here
+          // but trims to empty in `sendChatPrompt`, which then silently drops
+          // the send (the "comment does nothing while normal chat works" bug).
+          prompt: comment.body?.trim() ? comment.body : "Help me with this selection.",
         },
         openFilePaths: item.openFilePaths.includes(comment.filePath)
           ? item.openFilePaths

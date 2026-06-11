@@ -56,7 +56,7 @@ export function CommentsPanel({
           disabled={!selection}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="Ask Bob or leave a note..."
+          placeholder="Ask the assistant or leave a note..."
           rows={3}
         />
         <button
@@ -72,7 +72,7 @@ export function CommentsPanel({
       <div className="bob-comment-list">
         {comments.length === 0 ? (
           <div className="bob-comments-empty">
-            Local comments stay out of the Markdown file and can be sent to Bob when needed.
+            Local comments stay out of the Markdown file and can be sent to the assistant when needed.
           </div>
         ) : (
           comments.map((comment) => (
@@ -96,7 +96,7 @@ export function CommentsPanel({
                 onClick={() => onSendComment(comment.id)}
               >
                 <ChatBot size={16} />
-                Send to Bob
+                Send to chat
                 <Send size={16} />
               </button>
             </article>
