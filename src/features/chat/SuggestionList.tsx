@@ -1,6 +1,7 @@
 import { Checkmark, Close } from "@carbon/react/icons";
 
 import type { WorkspaceDocumentSuggestion } from "../../app/workspaceModel";
+import { ChangePreview } from "../diff/ChangePreview";
 
 /**
  * The previewable changes attached to an assistant message, awaiting the
@@ -86,59 +87,48 @@ function isStale(suggestion: WorkspaceDocumentSuggestion): boolean {
   return (suggestion.kind === "rewrite" || suggestion.kind === "delete") && suggestion.stale;
 }
 
-/** The before/after preview, shaped to the change kind. */
+/** The change preview as a collapsible unified diff, shaped to the kind. */
 function SuggestionPreview({ suggestion }: { suggestion: WorkspaceDocumentSuggestion }) {
   switch (suggestion.kind) {
     case "replace":
       return (
-        <div className="bob-suggestion__diff" aria-label="Suggested edit preview">
-          <pre className="bob-suggestion__before">{suggestion.originalText || "(empty)"}</pre>
-          <pre className="bob-suggestion__after">{suggestion.replacement || "(delete)"}</pre>
-        </div>
+        <ChangePreview
+          before={suggestion.originalText}
+          after={suggestion.replacement}
+          previewOmitted={false}
+          omittedLabel=""
+          omittedSize={0}
+        />
       );
     case "rewrite":
-      if (suggestion.previewOmitted) {
-        return <OmittedPreview label="Updated file" size={suggestion.newSize} />;
-      }
       return (
-        <div className="bob-suggestion__diff" aria-label="Suggested edit preview">
-          <pre className="bob-suggestion__before">{suggestion.originalText ?? ""}</pre>
-          <pre className="bob-suggestion__after">{suggestion.newText ?? ""}</pre>
-        </div>
+        <ChangePreview
+          before={suggestion.originalText ?? ""}
+          after={suggestion.newText ?? ""}
+          previewOmitted={suggestion.previewOmitted}
+          omittedLabel="Updated file"
+          omittedSize={suggestion.newSize}
+        />
       );
     case "create":
-      if (suggestion.previewOmitted) {
-        return <OmittedPreview label="New file" size={suggestion.newSize} />;
-      }
       return (
-        <div className="bob-suggestion__diff" aria-label="New file preview">
-          <pre className="bob-suggestion__after">{suggestion.newText ?? "(empty file)"}</pre>
-        </div>
+        <ChangePreview
+          before=""
+          after={suggestion.newText ?? ""}
+          previewOmitted={suggestion.previewOmitted}
+          omittedLabel="New file"
+          omittedSize={suggestion.newSize}
+        />
       );
     case "delete":
-      if (suggestion.previewOmitted) {
-        return <OmittedPreview label="File to delete" size={suggestion.originalSize} />;
-      }
       return (
-        <div className="bob-suggestion__diff" aria-label="File to delete">
-          <pre className="bob-suggestion__before">{suggestion.originalText ?? ""}</pre>
-        </div>
+        <ChangePreview
+          before={suggestion.originalText ?? ""}
+          after=""
+          previewOmitted={suggestion.previewOmitted}
+          omittedLabel="File to delete"
+          omittedSize={suggestion.originalSize}
+        />
       );
   }
-}
-
-/** Shown when content is binary or too large to inline. */
-function OmittedPreview({ label, size }: { label: string; size: number }) {
-  return (
-    <div className="bob-suggestion__omitted">
-      {label} · {formatBytes(size)} · preview not shown
-    </div>
-  );
-}
-
-function formatBytes(size: number): string {
-  if (size < 1024) {
-    return `${size} bytes`;
-  }
-  return `${Math.round(size / 1024)} KB`;
 }

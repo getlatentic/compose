@@ -122,6 +122,10 @@ export interface WorkspaceChatMessage {
   runId?: string;
   streaming?: boolean;
   suggestions?: WorkspaceDocumentSuggestion[];
+  /** File changes a `snapshot`-mode run already applied to disk, shown as an
+   * informational diff. Transient UI state — not persisted (see
+   * `serializeChatMessages`). */
+  appliedChanges?: WorkspaceAppliedChange[];
   /** Harness session id (bob's `init`). Trace-only. */
   sessionId?: string;
   /** The agent's process as an *ordered* timeline — reasoning, narration,
@@ -266,6 +270,19 @@ export interface WorkspaceReviewSuggestionDraft {
   newSize: number;
   previewOmitted: boolean;
   stale: boolean;
+}
+
+/** A file-level change a `snapshot`-mode run already made on disk — shown in
+ *  the chat as an informational diff (undo via version history), never an
+ *  accept/reject. No `stale`: there is nothing pending to overwrite. */
+export interface WorkspaceAppliedChange {
+  kind: "create" | "rewrite" | "delete";
+  filePath: string;
+  originalText: string | null;
+  newText: string | null;
+  originalSize: number;
+  newSize: number;
+  previewOmitted: boolean;
 }
 
 export interface BobSuggestedEditInput {
@@ -1416,6 +1433,53 @@ export function appendReviewChangeSuggestions(
         ...message,
         activity: `${total} change${total === 1 ? "" : "s"} to review`,
         suggestions: [...existing, ...next],
+      };
+    }),
+  };
+}
+
+/**
+ * Attach the file changes a `snapshot`-mode run already made to its assistant
+ * message as informational `appliedChanges` (a diff to read, not approve). The
+ * draft's `stale` flag is irrelevant here and dropped. Mirrors
+ * `appendReviewChangeSuggestions`, minus the pending/accept machinery.
+ */
+export function appendAppliedChanges(
+  chatThread: WorkspaceChatThread,
+  runId: string,
+  drafts: WorkspaceReviewSuggestionDraft[],
+): WorkspaceChatThread {
+  if (drafts.length === 0) {
+    return chatThread;
+  }
+  const target = [...chatThread.messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.runId === runId);
+  if (!target) {
+    return chatThread;
+  }
+  const messageId = target.id;
+  return {
+    ...chatThread,
+    messages: chatThread.messages.map((message) => {
+      if (message.id !== messageId) {
+        return message;
+      }
+      const existing = message.appliedChanges ?? [];
+      const next: WorkspaceAppliedChange[] = drafts.map((draft) => ({
+        kind: draft.kind,
+        filePath: draft.filePath,
+        originalText: draft.originalText,
+        newText: draft.newText,
+        originalSize: draft.originalSize,
+        newSize: draft.newSize,
+        previewOmitted: draft.previewOmitted,
+      }));
+      const total = existing.length + next.length;
+      return {
+        ...message,
+        activity: `${total} file${total === 1 ? "" : "s"} changed`,
+        appliedChanges: [...existing, ...next],
       };
     }),
   };

@@ -34,6 +34,8 @@ import {
 } from "../lib/ipc/settingsClient";
 import { saveWorkspaceTabs } from "../lib/ipc/workspaceClient";
 import { reportClientError } from "../lib/diagnostics/errorReporter";
+import { playCompletionChime } from "../lib/audio/completionChime";
+import { loadUiPrefs, persistUiPrefs } from "../lib/prefs/uiPrefs";
 import {
   cancelHarnessRun as cancelHarnessRunIpc,
   harnessList,
@@ -50,6 +52,7 @@ import {
   applyReviewChange,
   reviewCleanup,
   reviewDiff,
+  snapshotDiff,
   type ReviewFileChange,
 } from "../lib/ipc/reviewClient";
 import { markWorkspaceOpened } from "../lib/ipc/workspaceClient";
@@ -59,6 +62,7 @@ import {
   appendAssistantNotice,
   appendAssistantThinking,
   appendAssistantSuggestions,
+  appendAppliedChanges,
   appendReviewChangeSuggestions,
   markWorkspaceSuggestion,
   setAssistantSession,
@@ -284,6 +288,9 @@ interface WorkspaceState {
   setAllowEdits: (allow: boolean) => void;
   /** Merge a partial options patch into one harness's stored options. */
   setHarnessOptions: (harnessId: string, options: Partial<HarnessRunOptions>) => void;
+  /** Play a subtle chime when a run finishes. Persisted (UI prefs). */
+  soundOnComplete: boolean;
+  setSoundOnComplete: (enabled: boolean) => void;
   /**
    * Declarative capabilities for every registered harness, loaded once
    * at bootstrap. The source of truth for credential gating and the
@@ -417,6 +424,7 @@ function persistHarnessPrefs(prefs: HarnessPrefs) {
 }
 
 const INITIAL_HARNESS_PREFS = loadHarnessPrefs();
+const INITIAL_UI_PREFS = loadUiPrefs();
 
 /**
  * Capabilities for a harness, read from the loaded catalog. When the
@@ -532,10 +540,15 @@ function maybeCleanupReview(
 }
 
 /**
- * After a reviewed (clone-gate) run finishes, diff the sandbox against the
- * live workspace and attach the file-level changes as pending suggestions. A
- * cancelled run, an empty diff, or a diff failure tears the sandbox down
- * instead.
+ * After an edit-guarded run finishes, surface what it changed in the chat:
+ *  - `clone`: diff the sandbox against the live workspace and attach the
+ *    changes as **pending** accept/reject suggestions (nothing has touched the
+ *    real files yet);
+ *  - `snapshot`: the agent already edited the real files, so diff the pre-run
+ *    baseline against them and attach the changes as **informational** applied
+ *    diffs (undo via version history).
+ * A cancelled run, an empty diff, or a diff failure tears the run's review
+ * state down instead. `none` (bob / read-only) does nothing.
  */
 async function finishReviewRun(
   set: StoreApi<WorkspaceState>["setState"],
@@ -544,9 +557,20 @@ async function finishReviewRun(
   editGuard: EditGuard,
   cancelled: boolean,
 ): Promise<void> {
-  if (editGuard !== "clone") {
-    return;
+  if (editGuard === "clone") {
+    await finishCloneReview(set, workspaceId, runId, cancelled);
+  } else if (editGuard === "snapshot") {
+    await finishSnapshotReview(set, workspaceId, runId, cancelled);
   }
+}
+
+/** Clone gate: real files untouched mid-run; the diff becomes pending edits. */
+async function finishCloneReview(
+  set: StoreApi<WorkspaceState>["setState"],
+  workspaceId: string,
+  runId: string,
+  cancelled: boolean,
+): Promise<void> {
   if (cancelled) {
     await reviewCleanup(runId).catch(() => {});
     return;
@@ -568,6 +592,43 @@ async function finishReviewRun(
     workspaces: updateWorkspace(state.workspaces, workspaceId, (workspace) => ({
       ...workspace,
       chatThread: appendReviewChangeSuggestions(workspace.chatThread, runId, drafts, Date.now()),
+    })),
+  }));
+}
+
+/**
+ * Snapshot mode: the agent already edited the real files. Diff the pre-run
+ * baseline against them and show the result as informational applied changes.
+ * The baseline is freed once read. A diff failure is silent — the edits have
+ * landed regardless, so there is no safety action to prompt; we just can't draw
+ * the diff. (No-op in the browser, where `snapshotDiff` returns `[]`.)
+ */
+async function finishSnapshotReview(
+  set: StoreApi<WorkspaceState>["setState"],
+  workspaceId: string,
+  runId: string,
+  cancelled: boolean,
+): Promise<void> {
+  if (cancelled) {
+    await reviewCleanup(runId).catch(() => {});
+    return;
+  }
+  let changes: ReviewFileChange[];
+  try {
+    changes = await snapshotDiff(runId);
+  } catch {
+    await reviewCleanup(runId).catch(() => {});
+    return;
+  }
+  await reviewCleanup(runId).catch(() => {});
+  if (changes.length === 0) {
+    return;
+  }
+  const drafts = changes.map(reviewChangeToDraft);
+  set((state) => ({
+    workspaces: updateWorkspace(state.workspaces, workspaceId, (workspace) => ({
+      ...workspace,
+      chatThread: appendAppliedChanges(workspace.chatThread, runId, drafts),
     })),
   }));
 }
@@ -1909,6 +1970,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
       releaseSubscription = await subscribeHarnessRun(runId, (event) => {
         handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize, ({ cancelled }) => {
+          if (!cancelled && get().soundOnComplete) {
+            void playCompletionChime();
+          }
           void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
         });
       });
@@ -2104,6 +2168,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
       releaseSubscription = await subscribeHarnessRun(runId, (event) => {
         handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize, ({ cancelled }) => {
+          if (!cancelled && get().soundOnComplete) {
+            void playCompletionChime();
+          }
           void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
         });
       });
@@ -2334,6 +2401,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       allowEdits: get().allowEdits,
       harnessOptions: get().harnessOptions,
     });
+  },
+  soundOnComplete: INITIAL_UI_PREFS.soundOnComplete,
+  setSoundOnComplete: (enabled: boolean) => {
+    set({ soundOnComplete: enabled });
+    persistUiPrefs({ soundOnComplete: enabled });
   },
   harnessCatalog: [],
   loadHarnessCatalog: async () => {

@@ -45,6 +45,8 @@ export function SettingsPanel() {
   const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
   const setBobAuthStatus = useWorkspaceStore((state) => state.setBobAuthStatus);
   const setBobInstallStatus = useWorkspaceStore((state) => state.setBobInstallStatus);
+  const soundOnComplete = useWorkspaceStore((state) => state.soundOnComplete);
+  const setSoundOnComplete = useWorkspaceStore((state) => state.setSoundOnComplete);
   const [apiKey, setApiKey] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [runtimeCheck, setRuntimeCheck] = useState<BobRuntimeVerification | null>(null);
@@ -169,6 +171,22 @@ export function SettingsPanel() {
             ) : (
               <ExternalHarnessSetup harnessId={selectedHarnessId} />
             )}
+          </div>
+
+          <div className="bob-settings-section">
+            <h3>Preferences</h3>
+            <Toggle
+              id="sound-on-complete"
+              size="sm"
+              labelText="Sound when a run finishes"
+              labelA="Off"
+              labelB="On"
+              toggled={soundOnComplete}
+              onToggle={(checked) => setSoundOnComplete(checked)}
+            />
+            <p className="bob-settings-helper">
+              Play a subtle chime when the assistant finishes a run.
+            </p>
           </div>
         </TabPanel>
 

@@ -9,6 +9,7 @@ import type {
 } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { AgentTrace } from "./AgentTrace";
+import { AppliedChanges } from "./AppliedChanges";
 import { FileOpCard } from "./FileOpCard";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { MessageAuthor } from "./MessageAuthor";
@@ -102,6 +103,13 @@ export function MessageRow({
           onAccept={callbacks.onAccept}
           onOpenDocument={callbacks.onOpenDocument}
           onReject={callbacks.onReject}
+        />
+      ) : null}
+
+      {message.appliedChanges?.length ? (
+        <AppliedChanges
+          changes={message.appliedChanges}
+          onOpenDocument={callbacks.onOpenDocument}
         />
       ) : null}
 
