@@ -147,8 +147,8 @@ export function CommentBubble({
         <button
           type="button"
           className="bob-selection-actions__button bob-selection-actions__button--edit"
-          aria-label="Ask Bob to edit this selection"
-          title="Edit with Bob"
+          aria-label="Ask the assistant to edit this selection"
+          title="Edit with the assistant"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setMode("edit")}
         >
@@ -159,8 +159,8 @@ export function CommentBubble({
         <button
           type="button"
           className="bob-selection-actions__button bob-selection-actions__button--ask"
-          aria-label="Ask Bob about this selection"
-          title="Ask Bob"
+          aria-label="Ask the assistant about this selection"
+          title="Ask the assistant"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setMode("ask")}
         >
@@ -193,14 +193,14 @@ export function CommentBubble({
     <div
       className="bob-selection-composer"
       role="dialog"
-      aria-label={isEdit ? "Ask Bob to edit selection" : "Ask Bob about selection"}
+      aria-label={isEdit ? "Ask the assistant to edit selection" : "Ask the assistant about selection"}
       style={{ top: composerTop, left: composerLeft, width: COMPOSER_WIDTH }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="bob-selection-composer__header">
         <span className="bob-selection-composer__title">
           {isEdit ? <Edit size={14} /> : <ChatBot size={14} />}
-          {isEdit ? "Edit with Bob" : "Ask Bob"}
+          {isEdit ? "Edit with the assistant" : "Ask the assistant"}
         </span>
         <button
           type="button"
@@ -222,8 +222,8 @@ export function CommentBubble({
         className="bob-selection-composer__textarea"
         placeholder={
           isEdit
-            ? "What change should Bob make? e.g. 'shorter', 'as a list', 'translate to French'…"
-            : "Ask Bob about this selection…"
+            ? "What change should the assistant make? e.g. 'shorter', 'as a list', 'translate to French'…"
+            : "Ask the assistant about this selection…"
         }
         rows={3}
         value={draft}
@@ -237,13 +237,13 @@ export function CommentBubble({
       />
       {!bobReady.ready ? (
         <div className="bob-selection-composer__notice" role="status">
-          <span>{bobReady.message ?? "Bob isn't connected yet."}</span>
+          <span>{bobReady.message ?? "The assistant isn't connected yet."}</span>
           <button
             type="button"
             className="bob-selection-composer__setup"
             onClick={() => openSettings()}
           >
-            Set up Bob →
+            Set up the assistant →
           </button>
         </div>
       ) : null}
@@ -254,7 +254,7 @@ export function CommentBubble({
           className="bob-selection-composer__primary"
           disabled={!draft.trim() || !bobReady.ready}
           onClick={submit}
-          title={bobReady.ready ? undefined : (bobReady.message ?? "Bob isn't connected yet.")}
+          title={bobReady.ready ? undefined : (bobReady.message ?? "The assistant isn't connected yet.")}
         >
           {isEdit ? (
             <>
