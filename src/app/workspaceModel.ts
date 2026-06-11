@@ -974,6 +974,15 @@ export function dismissBufferConflict(
 export function applyFsEvent(
   workspace: BobWorkspace,
   event: WorkspaceFsEvent,
+  /**
+   * Whether this disk change is attributable to a just-run agent (a
+   * `snapshot`-mode run editing the user's real files — see
+   * `agentEditWindow.ts`). When true, an agent's edit to a file the user has
+   * unsaved changes in **auto-reloads** instead of raising a conflict banner:
+   * the edit is intended, already reviewed in-chat, and undoable via version
+   * history. A genuine external edit (no agent run in flight) still conflicts.
+   */
+  agentEdit = false,
 ): { workspace: BobWorkspace; effect: FsEventEffect } {
   if (event.kind === "created" || event.kind === "removed") {
     return { workspace, effect: { type: "rescan" } };
@@ -1002,7 +1011,10 @@ export function applyFsEvent(
     };
   }
 
-  if (buffer.dirty) {
+  // A dirty buffer changing on disk is a conflict — *unless* the change is the
+  // agent's own intended edit, in which case we auto-reload to the new content
+  // (the conflict prompt would be redundant with the in-chat applied diff).
+  if (buffer.dirty && !agentEdit) {
     return {
       workspace: markBufferConflict({ ...workspace, files: updatedFiles }, event.relativePath),
       effect: { type: "noop" },

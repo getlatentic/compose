@@ -57,6 +57,11 @@ import {
 } from "../lib/ipc/reviewClient";
 import { markWorkspaceOpened } from "../lib/ipc/workspaceClient";
 import {
+  beginAgentEditWindow,
+  endAgentEditWindow,
+  isAgentEditActive,
+} from "./agentEditWindow";
+import {
   acceptWorkspaceSuggestion,
   appendAssistantText,
   appendAssistantNotice,
@@ -204,6 +209,17 @@ interface WorkspaceState {
   viewMode: "dashboard" | "workspace";
   loadActiveWorkspaceFiles: () => Promise<void>;
   openChat: () => void;
+  /**
+   * Monotonic nonce the chat composer watches to imperatively focus its
+   * textarea. Incrementing it (via {@link requestComposerFocus}) signals
+   * "focus the input now" without the store holding a DOM ref — the
+   * composer subscribes and calls `.focus()` on each change. Starts at 0
+   * (the composer skips that initial value), so only an explicit request
+   * focuses.
+   */
+  composerFocusNonce: number;
+  /** Ask the chat composer to focus its input (bumps `composerFocusNonce`). */
+  requestComposerFocus: () => void;
   newChat: () => Promise<void>;
   /**
    * Per-workspace conversation history, newest activity first, *including*
@@ -1318,7 +1334,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return;
     }
 
-    const { workspace: updated, effect } = applyFsEvent(workspace, event);
+    // A disk change while a snapshot-mode agent run is in flight (or just
+    // finished) is the agent's own intended edit, not a conflict — auto-reload
+    // rather than prompt. See `agentEditWindow.ts`.
+    const { workspace: updated, effect } = applyFsEvent(
+      workspace,
+      event,
+      isAgentEditActive(workspaceId),
+    );
     set((state) => ({
       workspaces: updateWorkspace(state.workspaces, workspaceId, () => updated),
     }));
@@ -1445,6 +1468,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return;
     }
     set({ chatOpen: true });
+  },
+  composerFocusNonce: 0,
+  requestComposerFocus: () => {
+    set((state) => ({ composerFocusNonce: state.composerFocusNonce + 1 }));
   },
   newChat: async () => {
     const workspace = get().activeWorkspace();
@@ -1906,7 +1933,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     let releaseSubscription: (() => void) | null = null;
     let llmThreadId: string | null = null;
     let completionPersisted = false;
+    // Set when a snapshot-mode run opens the agent-edit window (below); closed
+    // here on the run's terminal event so the window can't leak on error.
+    let agentEditWindowOpen = false;
     const finalize = (options: FinalizeBobRunOptions) => {
+      if (agentEditWindowOpen) {
+        agentEditWindowOpen = false;
+        endAgentEditWindow(workspaceId);
+      }
       // Flush queued stream events synchronously so persistedRunBody
       // sees every token. Then queue the terminal finalize updater
       // and flush again so it lands in the same tick — no dangling
@@ -1968,6 +2002,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const tuning = get().harnessOptions[harnessId] ?? {};
       const editGuard = editGuardFor(capabilities, get().allowEdits, tuning);
 
+      // Snapshot mode edits the user's real files mid-run; open the agent-edit
+      // window so the file watcher attributes those changes to this run (and
+      // auto-reloads instead of conflicting). Closed on the run's terminal
+      // event (`finalize`, which fires on exit/error/cancel) — idempotent, so
+      // the trailing `exited` after an `error` won't double-close.
+      if (editGuard === "snapshot") {
+        beginAgentEditWindow(workspaceId);
+        agentEditWindowOpen = true;
+      }
+
       releaseSubscription = await subscribeHarnessRun(runId, (event) => {
         handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize, ({ cancelled }) => {
           if (!cancelled && get().soundOnComplete) {
@@ -2014,6 +2058,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         // The run never started — no streaming events to drain, but
         // still flush + dispose so the error state lands in this tick
         // and the batcher doesn't leak a pending rAF.
+        if (agentEditWindowOpen) {
+          agentEditWindowOpen = false;
+          endAgentEditWindow(workspaceId);
+        }
         updateThread((current) => ({ ...current, runError: message, runState: "error" }));
         batched.flushNow();
         batched.dispose();
@@ -2114,7 +2162,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const updateWorkspaceForRun = batched.updateWorkspaceForRun;
 
     let releaseSubscription: (() => void) | null = null;
+    // Set when a snapshot-mode run opens the agent-edit window (below); closed
+    // on the terminal event so it can't leak on error.
+    let agentEditWindowOpen = false;
     const finalize = (options: FinalizeBobRunOptions) => {
+      if (agentEditWindowOpen) {
+        agentEditWindowOpen = false;
+        endAgentEditWindow(workspaceId);
+      }
       batched.flushNow();
       updateThread((current) => finalizeBobRun(current, runId, options));
       batched.flushNow();
@@ -2166,6 +2221,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const editGuard = editGuardFor(capabilities, get().allowEdits, tuning);
       const chatMode = capabilities.previewsEdits ? "plan" : get().allowEdits ? "code" : "plan";
 
+      // Snapshot mode edits real files mid-run — attribute the watcher's events
+      // to this run so they auto-reload instead of conflicting (see the main
+      // send path + `agentEditWindow.ts`).
+      if (editGuard === "snapshot") {
+        beginAgentEditWindow(workspaceId);
+        agentEditWindowOpen = true;
+      }
+
       releaseSubscription = await subscribeHarnessRun(runId, (event) => {
         handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize, ({ cancelled }) => {
           if (!cancelled && get().soundOnComplete) {
@@ -2200,6 +2263,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         // The run never started — no streaming events to drain, but
         // still flush + dispose so the error state lands in this tick
         // and the batcher doesn't leak a pending rAF.
+        if (agentEditWindowOpen) {
+          agentEditWindowOpen = false;
+          endAgentEditWindow(workspaceId);
+        }
         updateThread((current) => ({ ...current, runError: message, runState: "error" }));
         batched.flushNow();
         batched.dispose();

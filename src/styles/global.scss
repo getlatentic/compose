@@ -2760,6 +2760,57 @@ select {
   white-space: nowrap;
 }
 
+.bob-chat-footer__end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+// The inline review/auto-apply toggle — mirrors the Settings "Review changes
+// before applying" option. A compact pill, not a Carbon Toggle (its chrome
+// would dwarf the footer line). The dot reads green when edits apply directly
+// (auto), amber when they're held for review.
+.bob-chat-footer__review {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bob-chat-footer__review:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-chat-footer__review:disabled {
+  color: var(--cds-text-disabled, #a8a8a8);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.bob-chat-footer__review-dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--cds-support-success, #24a148);
+  flex-shrink: 0;
+}
+
+.bob-chat-footer__review--on .bob-chat-footer__review-dot {
+  background: var(--cds-support-warning, #f1c21b);
+}
+
+.bob-chat-footer__review:disabled .bob-chat-footer__review-dot {
+  background: var(--cds-icon-disabled, #c6c6c6);
+}
+
 // --- The inline popover selector (harness / model) ---
 .bob-footer-menu {
   position: relative;

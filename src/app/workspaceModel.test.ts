@@ -279,6 +279,26 @@ describe("workspace model", () => {
     expect(next.fileContents["a.md"].content).toBe("# A edited");
   });
 
+  it("applyFsEvent auto-reloads a dirty buffer when the change is agent-driven", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+    const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {
+      content: "# A",
+      lastModifiedMs: 1_000,
+    });
+    const dirty = markBufferDirty(opened, "a.md", "# A edited");
+
+    // agentEdit = true ⇒ the agent's own intended edit, so no conflict banner;
+    // we reload to the new content instead (undoable via version history).
+    const { workspace: next, effect } = applyFsEvent(
+      dirty,
+      { kind: "modified", lastModifiedMs: 5_000, relativePath: "a.md" },
+      true,
+    );
+
+    expect(effect).toEqual({ type: "reloadFile", relativePath: "a.md" });
+    expect(next.fileContents["a.md"].conflict).toBe(false);
+  });
+
   it("applyFsEvent on a clean buffer requests a reload", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
     const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {

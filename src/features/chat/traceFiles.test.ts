@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TraceEntry } from "../../app/workspaceModel";
 import type { ToolKind } from "../../lib/ipc/bobClient";
-import { fileOpsFromTrace, readFilesFromTrace } from "./traceFiles";
+import { appliedChangeBasenames, fileOpsFromTrace, readFilesFromTrace } from "./traceFiles";
 
 /** A tool trace entry carrying a neutral `kind` (as the harness now supplies)
  * — the routing key these helpers read, independent of the tool's `name`. */
@@ -75,5 +75,45 @@ describe("fileOpsFromTrace", () => {
       tool("edit", { id: "e2", input: JSON.stringify({ path: "/a/x.md" }) }),
     ];
     expect(fileOpsFromTrace(trace).map((entry) => entry.id)).toEqual(["e1", "e2"]);
+  });
+
+  it("suppresses write/edit cards for files an applied diff already covers", () => {
+    const trace: TraceEntry[] = [
+      // a write_to_file overwrite — the applied diff (which knows the file
+      // pre-existed) owns this headline, so the per-tool "Created" card drops.
+      tool("write", { id: "w1", input: JSON.stringify({ path: "/vault/notes/x.md" }) }),
+      // an edit to a file the diff does NOT cover — its card survives.
+      tool("edit", { id: "e1", input: JSON.stringify({ path: "/vault/notes/y.md" }) }),
+    ];
+    const covered = appliedChangeBasenames([{ filePath: "notes/x.md" }]);
+    expect(fileOpsFromTrace(trace, covered).map((entry) => entry.id)).toEqual(["e1"]);
+  });
+
+  it("keeps a card when the op has no resolvable filename to match", () => {
+    const trace: TraceEntry[] = [tool("write", { id: "w1", input: "not json" })];
+    const covered = appliedChangeBasenames([{ filePath: "notes/x.md" }]);
+    expect(fileOpsFromTrace(trace, covered).map((entry) => entry.id)).toEqual(["w1"]);
+  });
+
+  it("ignores an empty covered set (no dedupe)", () => {
+    const trace: TraceEntry[] = [
+      tool("write", { id: "w1", input: JSON.stringify({ path: "/vault/notes/x.md" }) }),
+    ];
+    expect(fileOpsFromTrace(trace, new Set()).map((entry) => entry.id)).toEqual(["w1"]);
+  });
+});
+
+describe("appliedChangeBasenames", () => {
+  it("reduces workspace-relative paths to basenames", () => {
+    const names = appliedChangeBasenames([
+      { filePath: "notes/x.md" },
+      { filePath: "deep/nested/dir/report.md" },
+    ]);
+    expect(names.has("x.md")).toBe(true);
+    expect(names.has("report.md")).toBe(true);
+  });
+
+  it("returns an empty set for undefined", () => {
+    expect(appliedChangeBasenames(undefined).size).toBe(0);
   });
 });

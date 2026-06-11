@@ -63,4 +63,26 @@ describe("ChatComposerFooterView", () => {
   it("renders nothing without a catalog (browser preview)", () => {
     expect(renderToStaticMarkup(<ChatComposerFooterView {...base} harnesses={[]} />)).toBe("");
   });
+
+  it("hides the review/auto-apply toggle by default", () => {
+    const html = renderToStaticMarkup(<ChatComposerFooterView {...base} />);
+    expect(html).not.toContain('role="switch"');
+  });
+
+  it("shows an Auto-apply pill (switch off) for a write-capable harness", () => {
+    const html = renderToStaticMarkup(
+      <ChatComposerFooterView {...base} showReviewToggle reviewEdits={false} />,
+    );
+    expect(html).toContain('role="switch"');
+    expect(html).toContain('aria-checked="false"');
+    expect(html).toContain("Auto-apply");
+  });
+
+  it("shows a Review edits pill (switch on) when reviewEdits is set", () => {
+    const html = renderToStaticMarkup(
+      <ChatComposerFooterView {...base} showReviewToggle reviewEdits />,
+    );
+    expect(html).toContain('aria-checked="true"');
+    expect(html).toContain("Review edits");
+  });
 });

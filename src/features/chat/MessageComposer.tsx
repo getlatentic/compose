@@ -1,7 +1,8 @@
-import type { KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import { Document, Send, StopFilledAlt } from "@carbon/react/icons";
 
 import type { BobRuntimeReadiness, WorkspaceContextItem } from "../../app/workspaceModel";
+import { useWorkspaceStore } from "../../app/workspaceStore";
 import { ChatComposerFooter } from "./ChatComposerFooter";
 import { useAutoGrowTextarea } from "./useAutoGrowTextarea";
 
@@ -37,6 +38,23 @@ export function MessageComposer({
   running: boolean;
 }) {
   const textareaRef = useAutoGrowTextarea(prompt);
+
+  // Imperative focus: the store bumps `composerFocusNonce` to ask us to focus
+  // the input (e.g. the empty-folder "Ask the assistant" button). We focus on
+  // every change *after* mount — the ref to skip the initial value keeps a
+  // fresh load from stealing focus into the composer.
+  const composerFocusNonce = useWorkspaceStore((state) => state.composerFocusNonce);
+  const lastFocusNonce = useRef(composerFocusNonce);
+  useEffect(() => {
+    if (composerFocusNonce === lastFocusNonce.current) {
+      return;
+    }
+    lastFocusNonce.current = composerFocusNonce;
+    const element = textareaRef.current;
+    if (element && !element.disabled) {
+      element.focus();
+    }
+  }, [composerFocusNonce, textareaRef]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) {

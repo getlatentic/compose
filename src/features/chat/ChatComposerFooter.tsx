@@ -32,6 +32,9 @@ export function ChatComposerFooterView({
   modelLabel,
   onSelectModel,
   tokenLabel,
+  showReviewToggle = false,
+  reviewEdits = false,
+  onToggleReviewEdits,
   disabled = false,
 }: {
   harnesses: HarnessInfo[];
@@ -43,6 +46,12 @@ export function ChatComposerFooterView({
   modelLabel: string;
   onSelectModel: (value: string) => void;
   tokenLabel: string | null;
+  /** Whether the inline review/auto-apply toggle applies to this harness
+   * (only write-capable harnesses go through the edit-review gate). */
+  showReviewToggle?: boolean;
+  /** Mirror of the per-harness `reviewEdits` option Settings owns. */
+  reviewEdits?: boolean;
+  onToggleReviewEdits?: (next: boolean) => void;
   disabled?: boolean;
 }) {
   if (harnesses.length === 0) {
@@ -91,7 +100,32 @@ export function ChatComposerFooterView({
           </>
         ) : null}
       </div>
-      <span className="bob-chat-footer__hint">↵ to send</span>
+      <div className="bob-chat-footer__end">
+        {showReviewToggle ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={reviewEdits}
+            className={[
+              "bob-chat-footer__review",
+              reviewEdits ? "bob-chat-footer__review--on" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            disabled={disabled}
+            title={
+              reviewEdits
+                ? "Edits land in a copy you approve before they touch your files"
+                : "Edits apply to your files as the assistant works (undo from version history)"
+            }
+            onClick={() => onToggleReviewEdits?.(!reviewEdits)}
+          >
+            <span className="bob-chat-footer__review-dot" aria-hidden />
+            <span>{reviewEdits ? "Review edits" : "Auto-apply"}</span>
+          </button>
+        ) : null}
+        <span className="bob-chat-footer__hint">↵ to send</span>
+      </div>
     </div>
   );
 }
@@ -138,6 +172,15 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
   const totalTokens = chatThread ? sumChatThreadStats(chatThread).totalTokens : undefined;
   const tokenLabel = totalTokens ? `${formatCompact(totalTokens)} tokens` : null;
 
+  // The inline review/auto-apply toggle mirrors the *same* per-harness
+  // `reviewEdits` option Settings owns (`setHarnessOptions`), so the two stay
+  // in sync. It shows for write-capable harnesses — the ones that write files
+  // directly (`previews_edits: false` — bob, Claude, Codex) and so run through
+  // the edit-review gate. A harness that previewed its own edits in-stream
+  // would skip the gate, hiding the toggle (none do today).
+  const showReviewToggle = !caps.previewsEdits;
+  const reviewEdits = options.reviewEdits ?? false;
+
   return (
     <ChatComposerFooterView
       harnesses={harnessCatalog}
@@ -148,6 +191,9 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
       modelLabel={modelLabel}
       onSelectModel={(value) => setHarnessOptions(selectedHarnessId, { model: value || undefined })}
       tokenLabel={tokenLabel}
+      showReviewToggle={showReviewToggle}
+      reviewEdits={reviewEdits}
+      onToggleReviewEdits={(next) => setHarnessOptions(selectedHarnessId, { reviewEdits: next })}
       disabled={disabled}
     />
   );
