@@ -21,9 +21,9 @@ dependencies = [
 
 [[package]]
 name = "agent-harness"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "747f25c800a21603c41611f64fa503159132ebbb563ba14da33eb7fbc86df681"
+checksum = "5667d53908a5fd3cb2cfe848f067869667567290125ea0de85eade4e21b0044d"
 dependencies = [
  "bob-rs",
  "cli-stream",
@@ -460,9 +460,9 @@ dependencies = [
 
 [[package]]
 name = "bob-rs"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4675ee80bb63d9a3ca914e9eece60b56ffe019c4254fcf6bb86697e038b354c"
+checksum = "ca11424e69d90226336edf2d76e02d79f591978b67732ec9ef136a7bc75ceb36"
 dependencies = [
  "cli-stream",
  "dirs 5.0.1",
@@ -754,9 +754,9 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "cli-stream"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8181a8d9e055819114d30a6f02b708b73a0f0e1c114e9baca2093d546dd8766c"
+checksum = "805683f9dca9f3cf472f16f198da7fc516d6e416e65adbe8430557a4e203537b"
 dependencies = [
  "libc",
  "serde",
@@ -2831,7 +2831,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 3.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -4625,7 +4625,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
