@@ -8,6 +8,7 @@ use walkdir::WalkDir;
 
 pub mod clone;
 pub mod diff;
+pub mod starter;
 pub mod trash;
 pub mod trash_sweep;
 pub mod watcher;

@@ -20,6 +20,7 @@ import type { SourceRange } from "../features/comments/commentModel";
 import { TiptapMarkdownEditor } from "../features/editor/TiptapMarkdownEditor";
 import { PaneTabs, type EditorTab } from "../features/editor/PaneTabs";
 import { VersionHistory } from "../features/history/VersionHistory";
+import { WorkspaceWelcome } from "../features/workspace/WorkspaceWelcome";
 import { SettingsPanel } from "../features/settings/SettingsPanel";
 import { useMarkdownPreview } from "../features/editor/useMarkdownPreview";
 import { DashboardScreen } from "../features/dashboard/DashboardScreen";
@@ -587,6 +588,13 @@ export function AppShell() {
                   <p className="bob-empty-state__title">Loading file…</p>
                 </div>
               </div>
+            ) : (activeWorkspace?.files.length ?? 0) === 0 ? (
+              <WorkspaceWelcome
+                onNewNote={() => void createNote()}
+                onAskAssistant={() => {
+                  if (!chatOpen) toggleChat();
+                }}
+              />
             ) : (
               <div className="bob-empty-state">
                 <div>

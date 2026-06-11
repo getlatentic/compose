@@ -22,16 +22,31 @@ import {
  * the run's Ask vs Edit mode, scoped to the workspace folder.
  *
  * Lives in Settings (the canonical, change-anytime home) and is
- * reused by the onboarding flow.
+ * reused by the onboarding flow, which passes `autoSuggestDefault` so a
+ * first-time user lands on a sensible pick they can just accept.
  */
-const RECOMMENDED_ID = "bob";
-
 interface HarnessRow {
   info: HarnessInfo;
   readiness: HarnessReadiness | null;
 }
 
-export function HarnessPicker() {
+/**
+ * The harness to recommend as the default, chosen from what discovery
+ * actually found — the agent that works *right now* (ready, zero setup),
+ * else one that's installed (just needs sign-in / a key), else the first
+ * registered harness (which has an install path). No hardcoded id, so a
+ * machine with Claude ready isn't told to use bob.
+ */
+function suggestedDefaultId(rows: HarnessRow[]): string | null {
+  return (
+    rows.find((row) => row.readiness?.ready)?.info.id ??
+    rows.find((row) => row.readiness?.installed)?.info.id ??
+    rows[0]?.info.id ??
+    null
+  );
+}
+
+export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefault?: boolean } = {}) {
   const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
   const setSelectedHarness = useWorkspaceStore((state) => state.setSelectedHarness);
   const allowEdits = useWorkspaceStore((state) => state.allowEdits);
@@ -49,6 +64,16 @@ export function HarnessPicker() {
   const [installLog, setInstallLog] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const logRef = useRef<HTMLPreElement | null>(null);
+  // One-time onboarding auto-pick: fires after the first probe, and never
+  // once the user has chosen for themselves (so a re-probe — e.g. after a key
+  // save — can't yank their selection back to the suggested default).
+  const autoSuggestedRef = useRef(false);
+  const userPickedRef = useRef(false);
+
+  const pickHarness = (id: string) => {
+    userPickedRef.current = true;
+    setSelectedHarness(id);
+  };
 
   async function refresh(options?: { quiet?: boolean }) {
     // A re-probe after a key save shouldn't flash skeletons over an
@@ -68,6 +93,15 @@ export function HarnessPicker() {
         })),
       );
       setRows(withReadiness);
+      // Onboarding only: land the first-time user on the agent discovery
+      // suggests, so they can accept it with one click. Once.
+      if (autoSuggestDefault && !autoSuggestedRef.current && !userPickedRef.current) {
+        const suggested = suggestedDefaultId(withReadiness);
+        if (suggested) {
+          setSelectedHarness(suggested);
+        }
+        autoSuggestedRef.current = true;
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load AI assistants");
     } finally {
@@ -141,6 +175,9 @@ export function HarnessPicker() {
   // before apply) vs writes directly — a declared capability.
   const selectedPreviewsEdits =
     rows.find((row) => row.info.id === selectedHarnessId)?.info.capabilities.previewsEdits ?? false;
+  // Discovery-driven recommendation (not a hardcoded id) — tags the agent
+  // that's the best ready-to-use pick on *this* machine.
+  const suggestedId = suggestedDefaultId(rows);
 
   return (
     <div className="bob-settings-section">
@@ -183,7 +220,7 @@ export function HarnessPicker() {
               >
                 <button
                   type="button"
-                  onClick={() => setSelectedHarness(info.id)}
+                  onClick={() => pickHarness(info.id)}
                   aria-pressed={selected}
                   style={{
                     flex: 1,
@@ -200,7 +237,7 @@ export function HarnessPicker() {
                   <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
                     <span aria-hidden style={{ fontSize: "0.9rem" }}>{selected ? "●" : "○"}</span>
                     <strong style={{ fontSize: "0.8125rem" }}>{info.displayName}</strong>
-                    {info.id === RECOMMENDED_ID ? (
+                    {info.id === suggestedId ? (
                       <Tag size="sm" type="blue">Recommended</Tag>
                     ) : null}
                     {ready ? (
