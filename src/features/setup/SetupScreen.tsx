@@ -2,20 +2,16 @@ import { Button, InlineNotification, PasswordInput } from "@carbon/react";
 import {
   ArrowLeft,
   ArrowRight,
-  CheckmarkFilled,
   ChatBot,
   Document,
+  DocumentAdd,
   Folder,
   FolderOpen,
-  WarningAltFilled,
 } from "@carbon/react/icons";
 import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
-import {
-  setBobApiKey,
-  type BobAuthStatus,
-  type BobInstallStatus,
-} from "../../lib/ipc/settingsClient";
+import { setBobApiKey, type BobAuthStatus } from "../../lib/ipc/settingsClient";
+import { createStarterFolder } from "../../lib/ipc/filesClient";
 import {
   addWorkspace,
   canUseNativeFolderPicker,
@@ -54,39 +50,26 @@ export function SetupScreen() {
 
   const [screen, setScreen] = useState<Screen>("welcome");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
   const [addingWorkspace, setAddingWorkspace] = useState(false);
-  // Read install status from the store — populated by AppShell's
-  // single boot-time probe. Avoids the duplicate IPC fan-out that
-  // previously fired the bob-detection probe from every screen
-  // that wanted to display its state.
-  const installStatus: BobInstallStatus | null = useWorkspaceStore(
-    (state) => state.bobInstallStatus,
-  );
-  const installChecking = installStatus === null;
 
   async function handleChooseFolder() {
     setWorkspaceError(null);
-    setWorkspaceNotice(null);
     if (canUseNativeFolderPicker()) {
       const selectedPath = await selectWorkspaceFolder();
       if (!selectedPath) return;
       await openWorkspacePath(selectedPath);
       return;
     }
-    // Browser: copy a real folder into the persisted virtual workspace.
+    // Browser: copy a real folder into the persisted virtual workspace. An
+    // empty folder opens too — the editor's welcome state invites the first
+    // note rather than turning the user away.
     const imported = await importFolderFromPicker();
     if (!imported) return;
-    if (imported.files.length === 0) {
-      setWorkspaceNotice("No Markdown files were found in that folder.");
-      return;
-    }
     await openWorkspacePath(`/${imported.folderName}`, imported.files);
   }
 
   async function openWorkspacePath(path: string, importedFiles?: ImportedFile[]) {
     setWorkspaceError(null);
-    setWorkspaceNotice(null);
     setAddingWorkspace(true);
     try {
       const workspaceList = await addWorkspace(path);
@@ -102,6 +85,24 @@ export function SetupScreen() {
     } finally {
       setAddingWorkspace(false);
     }
+  }
+
+  // The zero-friction default: open a notes folder Compose makes for the user
+  // (`~/Documents/Compose`, seeded with a Welcome note) so a first-timer never
+  // has to navigate a file dialog. In the browser there's no real filesystem,
+  // so fall back to the in-memory sample workspace.
+  async function handleStarterFolder() {
+    setWorkspaceError(null);
+    let starterPath: string | null;
+    try {
+      starterPath = await createStarterFolder();
+    } catch (error) {
+      setWorkspaceError(
+        error instanceof Error ? error.message : "Could not create your notes folder",
+      );
+      return;
+    }
+    await openWorkspacePath(starterPath ?? browserPreviewWorkspacePath);
   }
 
   const screenIndex = SCREENS.indexOf(screen);
@@ -123,7 +124,6 @@ export function SetupScreen() {
           </span>
           <span>Compose</span>
         </div>
-        <InstallPill checking={installChecking} status={installStatus} />
       </header>
 
       <main className="bob-onboard__stage">
@@ -143,10 +143,9 @@ export function SetupScreen() {
           <FolderScreen
             adding={addingWorkspace}
             error={workspaceError}
-            notice={workspaceNotice}
             onBack={goBack}
+            onStarter={() => void handleStarterFolder()}
             onChoose={() => void handleChooseFolder()}
-            onUseSample={() => void openWorkspacePath(browserPreviewWorkspacePath)}
           />
         ) : null}
       </main>
@@ -236,7 +235,7 @@ function ChooseAiScreen({ onBack, onNext }: { onBack: () => void; onNext: () => 
 
   return (
     <ScreenShell>
-      <span className="bob-onboard__eyebrow">Step 1 of 2</span>
+      <span className="bob-onboard__eyebrow">Step 3 of 4</span>
       <h1 className="bob-onboard__title">Choose your AI</h1>
       <p className="bob-onboard__lead">
         Compose works with the AI agents already on your computer. We checked for the ones we
@@ -244,7 +243,7 @@ function ChooseAiScreen({ onBack, onNext }: { onBack: () => void; onNext: () => 
       </p>
 
       {desktop ? (
-        <HarnessPicker />
+        <HarnessPicker autoSuggestDefault />
       ) : (
         <InlineNotification
           hideCloseButton
@@ -324,53 +323,46 @@ function BobKeyForm({ onSaved }: { onSaved: (status: BobAuthStatus) => void }) {
 function FolderScreen({
   adding,
   error,
-  notice,
   onBack,
+  onStarter,
   onChoose,
-  onUseSample,
 }: {
   adding: boolean;
   error: string | null;
-  notice: string | null;
   onBack: () => void;
+  onStarter: () => void;
   onChoose: () => void;
-  onUseSample: () => void;
 }) {
   return (
     <ScreenShell>
-      <span className="bob-onboard__eyebrow">Step 2 of 2</span>
-      <h1 className="bob-onboard__title">Pick a folder for your notes</h1>
+      <span className="bob-onboard__eyebrow">Step 4 of 4</span>
+      <h1 className="bob-onboard__title">Where your notes live</h1>
       <p className="bob-onboard__lead">
-        Your AI assistant reads and writes Markdown files in this folder. You can switch or add
-        more later from the sidebar.
+        Compose can set up a notes folder for you, or you can use one you already have. Either way
+        your files stay on your computer, and you can add more folders later.
       </p>
 
       <div className="bob-onboard__form">
         <div className="bob-onboard__folder-actions">
           <Button
             kind="primary"
+            onClick={onStarter}
+            renderIcon={DocumentAdd}
+            disabled={adding}
+            size="lg"
+          >
+            {adding ? "Setting up…" : "Start with a starter folder"}
+          </Button>
+          <Button
+            kind="tertiary"
             onClick={onChoose}
             renderIcon={FolderOpen}
             disabled={adding}
             size="lg"
           >
-            Choose folder
+            Add your own folder
           </Button>
-          {!canUseNativeFolderPicker() ? (
-            <Button disabled={adding} kind="tertiary" onClick={onUseSample} size="lg">
-              {adding ? "Opening" : "Use sample workspace"}
-            </Button>
-          ) : null}
         </div>
-        {notice ? (
-          <InlineNotification
-            hideCloseButton
-            kind="info"
-            lowContrast
-            subtitle={notice}
-            title="Browser preview"
-          />
-        ) : null}
         {error ? (
           <InlineNotification
             hideCloseButton
@@ -461,47 +453,3 @@ function ProgressDots({ count, index }: { count: number; index: number }) {
   );
 }
 
-function InstallPill({
-  checking,
-  status,
-}: {
-  checking: boolean;
-  status: BobInstallStatus | null;
-}) {
-  if (checking) {
-    return (
-      <div className="bob-install-pill bob-install-pill--checking" role="status">
-        <span className="bob-install-pill__dot" />
-        <span>Checking Bob CLI</span>
-      </div>
-    );
-  }
-  if (!status) return null;
-  if (status.requiresDesktopRuntime) {
-    return (
-      <div className="bob-install-pill bob-install-pill--warn" role="status">
-        <WarningAltFilled size={14} />
-        <span>Desktop app required</span>
-      </div>
-    );
-  }
-  if (status.installed) {
-    const versionLabel = status.version
-      ? /^\d/.test(status.version)
-        ? `v${status.version}`
-        : status.version
-      : "detected";
-    return (
-      <div className="bob-install-pill bob-install-pill--ok" role="status" title={status.path}>
-        <CheckmarkFilled size={14} />
-        <span>Bob CLI {versionLabel}</span>
-      </div>
-    );
-  }
-  return (
-    <div className="bob-install-pill bob-install-pill--warn" role="status">
-      <WarningAltFilled size={14} />
-      <span>Bob CLI missing</span>
-    </div>
-  );
-}

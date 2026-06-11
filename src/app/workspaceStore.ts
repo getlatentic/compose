@@ -14,6 +14,7 @@ import {
 } from "../lib/ipc/commentsClient";
 import { rebuildWorkspaceIndex as rebuildWorkspaceIndexIpc } from "../lib/ipc/indexClient";
 import { appendLlmMessage, recordLlmThread } from "../lib/ipc/llmContextClient";
+import { byteOffsetToLineColumn } from "../features/text/positionMapper";
 import {
   archiveConversation as archiveConversationIpc,
   deleteConversation as deleteConversationIpc,
@@ -33,6 +34,8 @@ import {
 } from "../lib/ipc/settingsClient";
 import { saveWorkspaceTabs } from "../lib/ipc/workspaceClient";
 import { reportClientError } from "../lib/diagnostics/errorReporter";
+import { playCompletionChime } from "../lib/audio/completionChime";
+import { loadUiPrefs, persistUiPrefs } from "../lib/prefs/uiPrefs";
 import {
   cancelHarnessRun as cancelHarnessRunIpc,
   harnessList,
@@ -49,6 +52,7 @@ import {
   applyReviewChange,
   reviewCleanup,
   reviewDiff,
+  snapshotDiff,
   type ReviewFileChange,
 } from "../lib/ipc/reviewClient";
 import { markWorkspaceOpened } from "../lib/ipc/workspaceClient";
@@ -58,6 +62,7 @@ import {
   appendAssistantNotice,
   appendAssistantThinking,
   appendAssistantSuggestions,
+  appendAppliedChanges,
   appendReviewChangeSuggestions,
   markWorkspaceSuggestion,
   setAssistantSession,
@@ -75,6 +80,7 @@ import {
   chatThreadContextFileLabels,
   closeWorkspaceFileTab,
   addWorkspaceComment,
+  setWorkspaceCommentStatus,
   createLlmContextSnapshots,
   createPromptWithContext,
   createWorkspaceFromPath,
@@ -97,7 +103,7 @@ import {
   prepareWorkspaceSuggestionDrafts,
   rejectWorkspaceSuggestion,
   setAssistantActivity,
-  setCommentChatContext,
+  setCommentsChatContext,
   setCurrentTabContext,
   startBobRun,
   type BobAuthStatus,
@@ -107,6 +113,7 @@ import {
   type OnboardingState,
   type SourceRange,
   type WorkspacePane,
+  type ChatExcerptRef,
   type WorkspaceChatThread,
   type WorkspaceCommentThread,
   type WorkspaceDocumentSuggestion,
@@ -129,6 +136,8 @@ interface WorkspaceState {
     range: SourceRange;
     selectedText: string;
   }) => void;
+  /** Flip a comment open ↔ resolved (the panel's "done" state). */
+  setCommentResolved: (commentId: string, resolved: boolean) => void;
   appendUserChatMessage: (userContent: string, preparedCommand: string | null) => void;
   acceptSuggestedEdit: (suggestionId: string) => void;
   /**
@@ -236,6 +245,7 @@ interface WorkspaceState {
   rejectSuggestedEdit: (suggestionId: string) => void;
   sendChatPrompt: () => Promise<void>;
   sendCommentToChat: (commentId: string) => Promise<void>;
+  sendCommentsToChat: (commentIds: string[]) => Promise<void>;
   setBobAuthStatus: (status: BobAuthStatus) => void;
   setBobInstallStatus: (status: BobInstallStatus | null) => void;
   setChatPrompt: (prompt: string) => void;
@@ -278,6 +288,9 @@ interface WorkspaceState {
   setAllowEdits: (allow: boolean) => void;
   /** Merge a partial options patch into one harness's stored options. */
   setHarnessOptions: (harnessId: string, options: Partial<HarnessRunOptions>) => void;
+  /** Play a subtle chime when a run finishes. Persisted (UI prefs). */
+  soundOnComplete: boolean;
+  setSoundOnComplete: (enabled: boolean) => void;
   /**
    * Declarative capabilities for every registered harness, loaded once
    * at bootstrap. The source of truth for credential gating and the
@@ -411,6 +424,7 @@ function persistHarnessPrefs(prefs: HarnessPrefs) {
 }
 
 const INITIAL_HARNESS_PREFS = loadHarnessPrefs();
+const INITIAL_UI_PREFS = loadUiPrefs();
 
 /**
  * Capabilities for a harness, read from the loaded catalog. When the
@@ -526,10 +540,15 @@ function maybeCleanupReview(
 }
 
 /**
- * After a reviewed (clone-gate) run finishes, diff the sandbox against the
- * live workspace and attach the file-level changes as pending suggestions. A
- * cancelled run, an empty diff, or a diff failure tears the sandbox down
- * instead.
+ * After an edit-guarded run finishes, surface what it changed in the chat:
+ *  - `clone`: diff the sandbox against the live workspace and attach the
+ *    changes as **pending** accept/reject suggestions (nothing has touched the
+ *    real files yet);
+ *  - `snapshot`: the agent already edited the real files, so diff the pre-run
+ *    baseline against them and attach the changes as **informational** applied
+ *    diffs (undo via version history).
+ * A cancelled run, an empty diff, or a diff failure tears the run's review
+ * state down instead. `none` (bob / read-only) does nothing.
  */
 async function finishReviewRun(
   set: StoreApi<WorkspaceState>["setState"],
@@ -538,9 +557,20 @@ async function finishReviewRun(
   editGuard: EditGuard,
   cancelled: boolean,
 ): Promise<void> {
-  if (editGuard !== "clone") {
-    return;
+  if (editGuard === "clone") {
+    await finishCloneReview(set, workspaceId, runId, cancelled);
+  } else if (editGuard === "snapshot") {
+    await finishSnapshotReview(set, workspaceId, runId, cancelled);
   }
+}
+
+/** Clone gate: real files untouched mid-run; the diff becomes pending edits. */
+async function finishCloneReview(
+  set: StoreApi<WorkspaceState>["setState"],
+  workspaceId: string,
+  runId: string,
+  cancelled: boolean,
+): Promise<void> {
   if (cancelled) {
     await reviewCleanup(runId).catch(() => {});
     return;
@@ -562,6 +592,43 @@ async function finishReviewRun(
     workspaces: updateWorkspace(state.workspaces, workspaceId, (workspace) => ({
       ...workspace,
       chatThread: appendReviewChangeSuggestions(workspace.chatThread, runId, drafts, Date.now()),
+    })),
+  }));
+}
+
+/**
+ * Snapshot mode: the agent already edited the real files. Diff the pre-run
+ * baseline against them and show the result as informational applied changes.
+ * The baseline is freed once read. A diff failure is silent — the edits have
+ * landed regardless, so there is no safety action to prompt; we just can't draw
+ * the diff. (No-op in the browser, where `snapshotDiff` returns `[]`.)
+ */
+async function finishSnapshotReview(
+  set: StoreApi<WorkspaceState>["setState"],
+  workspaceId: string,
+  runId: string,
+  cancelled: boolean,
+): Promise<void> {
+  if (cancelled) {
+    await reviewCleanup(runId).catch(() => {});
+    return;
+  }
+  let changes: ReviewFileChange[];
+  try {
+    changes = await snapshotDiff(runId);
+  } catch {
+    await reviewCleanup(runId).catch(() => {});
+    return;
+  }
+  await reviewCleanup(runId).catch(() => {});
+  if (changes.length === 0) {
+    return;
+  }
+  const drafts = changes.map(reviewChangeToDraft);
+  set((state) => ({
+    workspaces: updateWorkspace(state.workspaces, workspaceId, (workspace) => ({
+      ...workspace,
+      chatThread: appendAppliedChanges(workspace.chatThread, runId, drafts),
     })),
   }));
 }
@@ -637,7 +704,15 @@ function persistConversation(get: StoreApi<WorkspaceState>["getState"], workspac
 }
 
 function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  // Tauri `invoke` rejects with a plain String, not an Error — surface it
+  // instead of masking the real backend reason behind the generic fallback.
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+  return fallback;
 }
 
 /**
@@ -965,6 +1040,29 @@ function nextUntitledPath(workspace: BobWorkspace): string {
   return `notes/untitled-${index}.md`;
 }
 
+/**
+ * Prefix every harness prompt with the workspace context so the model knows
+ * where it is — its working directory is the workspace root, and which file is
+ * in focus — instead of hunting for files (the cause of the "let me search for
+ * this file" flailing). Added to the *sent* prompt only; the user-visible chat
+ * message stays clean.
+ */
+function prefixWorkspaceContext(
+  prompt: string,
+  workspaceRoot: string | undefined,
+  activeFilePath: string | null | undefined,
+): string {
+  const root = workspaceRoot?.trim() || "the current folder";
+  const viewing = activeFilePath
+    ? ` The user is currently viewing \`${activeFilePath}\` (relative to that directory).`
+    : "";
+  return (
+    `You are working in a local Markdown workspace. Your working directory is ` +
+    `\`${root}\` — read and edit files directly by their path relative to it; ` +
+    `do not search for them.${viewing}\n\n${prompt}`
+  );
+}
+
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeFileBuffer: () => {
     const workspace = get().activeWorkspace();
@@ -1030,6 +1128,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           selectedText,
           timestamp: Date.now(),
         }),
+      ),
+    }));
+    persistComments(get().workspaces, workspace.id, (message) => set({ saveError: message }));
+  },
+  setCommentResolved: (commentId, resolved) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
+        setWorkspaceCommentStatus(item, commentId, resolved ? "resolved" : "open", Date.now()),
       ),
     }));
     persistComments(get().workspaces, workspace.id, (message) => set({ saveError: message }));
@@ -1813,7 +1923,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           role: persisted.role,
           workspaceId,
         }).catch((error) => {
-          set({ saveError: errorMessage(error, "Could not persist Bob response") });
+          set({ saveError: errorMessage(error, "Could not save the assistant's response") });
         });
       }
       updateThread((current) => finalizeBobRun(current, runId, options));
@@ -1860,6 +1970,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
       releaseSubscription = await subscribeHarnessRun(runId, (event) => {
         handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize, ({ cancelled }) => {
+          if (!cancelled && get().soundOnComplete) {
+            void playCompletionChime();
+          }
           void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
         });
       });
@@ -1881,7 +1994,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         chatMode,
         contextFilePaths,
         maxCoins: 200,
-        prompt: promptWithContext,
+        prompt: prefixWorkspaceContext(promptWithContext, workspace.path, workspace.activeFilePath),
         runId,
         workspaceId,
         harnessId,
@@ -1951,7 +2064,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
                 ...item,
                 chatThread: {
                   ...item.chatThread,
-                  runError: readiness.message ?? "Bob isn't connected yet.",
+                  runError: readiness.message ?? "The assistant isn't connected yet.",
                   runState: "error",
                 },
               },
@@ -1976,6 +2089,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       .join("\n");
     const userMessage =
       `About this excerpt from \`${filePath}\`:\n\n${quotedSelection}\n\n${trimmedQuestion}`;
+
+    // The chat renders this message as a chip (file + line:col + excerpt + note)
+    // via the `excerpt` metadata; `userMessage` above stays the model's prompt.
+    const fileContent = workspace.activeFilePath
+      ? (workspace.fileContents[workspace.activeFilePath]?.content ?? "")
+      : "";
+    const lineColumn = byteOffsetToLineColumn(fileContent, selection.range.start);
+    const excerpt: ChatExcerptRef | null = workspace.activeFilePath
+      ? {
+          filePath: workspace.activeFilePath,
+          line: lineColumn.line,
+          column: lineColumn.column,
+          text: selection.text,
+          note: trimmedQuestion,
+        }
+      : null;
 
     // Batched setter (one set() per animation frame) so per-token
     // deltas don't saturate React. finalize() flushes + disposes at the
@@ -2005,7 +2134,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
         ...item,
         chatThread: startBobRun(
-          appendUserChatMessage(item.chatThread, userMessage, null, null),
+          appendUserChatMessage(item.chatThread, userMessage, null, null, excerpt),
           runId,
           null,
         ),
@@ -2029,30 +2158,37 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     persistConversation(get, workspaceId);
 
     try {
+      // The note decides intent — the assistant may answer OR edit based on
+      // what you wrote — so the run respects the allow-edits toggle + the edit
+      // guard, exactly like a normal chat send (not the old read-only "ask").
+      const capabilities = harnessCapabilitiesOf(get().harnessCatalog, harnessId);
+      const tuning = get().harnessOptions[harnessId] ?? {};
+      const editGuard = editGuardFor(capabilities, get().allowEdits, tuning);
+      const chatMode = capabilities.previewsEdits ? "plan" : get().allowEdits ? "code" : "plan";
+
       releaseSubscription = await subscribeHarnessRun(runId, (event) => {
-        handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize);
+        handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize, ({ cancelled }) => {
+          if (!cancelled && get().soundOnComplete) {
+            void playCompletionChime();
+          }
+          void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
+        });
       });
       activeRunSubscriptions.set(runId, releaseSubscription);
 
-      // Route through the user's selected harness (resolved above,
-      // before the preflight) — `run_harness_stream` keeps bob on its
-      // richer Tauri path and dispatches every other id through
-      // `run_via_harness`. "ask" is read-only for every harness: bob's
-      // `--chat-mode ask`, and `RunMode::Ask` for the CLI harnesses.
-      // A question about a selection never edits the file, so the
-      // allow-edits toggle is deliberately not consulted here.
-      const tuning = get().harnessOptions[harnessId] ?? {};
       await runHarnessStream({
         approvalMode: "default",
-        chatMode: "ask",
+        chatMode,
         maxCoins: 30,
-        prompt: userMessage,
+        prompt: prefixWorkspaceContext(userMessage, workspace.path, workspace.activeFilePath),
         runId,
         workspaceId,
         harnessId,
         model: tuning.model,
         effort: tuning.effort,
         maxTurns: tuning.maxTurns,
+        editGuard,
+        extraArgs: harnessExtraArgs(harnessId, tuning),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "The assistant could not start";
@@ -2074,32 +2210,50 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
     }
   },
-  sendCommentToChat: async (commentId: string) => {
+  sendCommentsToChat: async (commentIds: string[]) => {
     const workspace = get().activeWorkspace();
-    const comment = workspace?.comments.find((item) => item.id === commentId);
-    if (!workspace || !comment) {
+    if (!workspace) {
       return;
     }
+    const comments = commentIds.flatMap((id) => {
+      const found = workspace.comments.find((item) => item.id === id);
+      return found ? [found] : [];
+    });
+    if (comments.length === 0) {
+      return;
+    }
+
+    // 1 comment → its note is the prompt; N → a clear instruction, with every
+    // passage+note carried as context (`createPromptWithContext` renders each
+    // comment block). `.trim()` not just `||`: a whitespace note is truthy here
+    // but trims to empty in `sendChatPrompt`, which would silently drop it.
+    const prompt =
+      comments.length === 1
+        ? comments[0].body?.trim()
+          ? comments[0].body
+          : "Help me with this selection."
+        : `Please address these ${comments.length} comments on this document.`;
+    const filePath = comments[0].filePath;
 
     set((state) => ({
       chatOpen: true,
       workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
         ...item,
-        activeFilePath: comment.filePath,
+        activeFilePath: filePath,
         chatThread: {
-          ...setCommentChatContext(item.chatThread, item.id, comment),
-          // Use `.trim()`, not just `||`: a whitespace-only note is truthy here
-          // but trims to empty in `sendChatPrompt`, which then silently drops
-          // the send (the "comment does nothing while normal chat works" bug).
-          prompt: comment.body?.trim() ? comment.body : "Help me with this selection.",
+          ...setCommentsChatContext(item.chatThread, item.id, comments),
+          prompt,
         },
-        openFilePaths: item.openFilePaths.includes(comment.filePath)
+        openFilePaths: item.openFilePaths.includes(filePath)
           ? item.openFilePaths
-          : [...item.openFilePaths, comment.filePath],
+          : [...item.openFilePaths, filePath],
       })),
     }));
 
     await get().sendChatPrompt();
+  },
+  sendCommentToChat: async (commentId: string) => {
+    await get().sendCommentsToChat([commentId]);
   },
   selectFile: async (path: string) => {
     const workspace = get().activeWorkspace();
@@ -2247,6 +2401,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       allowEdits: get().allowEdits,
       harnessOptions: get().harnessOptions,
     });
+  },
+  soundOnComplete: INITIAL_UI_PREFS.soundOnComplete,
+  setSoundOnComplete: (enabled: boolean) => {
+    set({ soundOnComplete: enabled });
+    persistUiPrefs({ soundOnComplete: enabled });
   },
   harnessCatalog: [],
   loadHarnessCatalog: async () => {

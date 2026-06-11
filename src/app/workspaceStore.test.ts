@@ -200,8 +200,10 @@ describe("workspace store", () => {
 
     expect(getBobAuthStatus).not.toHaveBeenCalled();
     expect(checkBobInstall).not.toHaveBeenCalled();
+    // Ask-about-selection is edit-capable (the assistant can answer *or*
+    // edit from the comment), so a write-capable CLI harness runs in "code".
     expect(runHarnessStream).toHaveBeenCalledWith(
-      expect.objectContaining({ harnessId: "codex", chatMode: "ask" }),
+      expect.objectContaining({ harnessId: "codex", chatMode: "code" }),
     );
     // The bob "not connected" gate did not fire: no error, no Settings pane.
     const workspace = useWorkspaceStore.getState().activeWorkspace();
@@ -213,8 +215,8 @@ describe("workspace store", () => {
   it("forwards the selected harness's persisted model + tuning on an ask-about-selection run", () => {
     // Symmetric to the sendChatPrompt tuning test: the "ask about this
     // selection" flow must also carry the *selected* harness's persisted
-    // model/effort through to runHarnessStream (as a read-only "ask"), so
-    // the adapter maps them onto the same CLI flags a chat run would.
+    // model/effort through to runHarnessStream (edit-capable, so "code"),
+    // so the adapter maps them onto the same CLI flags a chat run would.
     vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
 
     useWorkspaceStore.setState({
@@ -230,7 +232,7 @@ describe("workspace store", () => {
         expect(runHarnessStream).toHaveBeenCalledWith(
           expect.objectContaining({
             harnessId: "codex",
-            chatMode: "ask",
+            chatMode: "code",
             model: "gpt-5-codex",
             effort: "high",
           }),

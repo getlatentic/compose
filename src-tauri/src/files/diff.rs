@@ -18,7 +18,7 @@ use walkdir::WalkDir;
 /// any file whose bytes are not valid UTF-8 — are reported as a change with
 /// `preview_omitted` set and no inline text; the apply step still copies the
 /// real bytes from the clone, so nothing is lost, only the on-screen preview.
-const MAX_PREVIEW_BYTES: u64 = 1_000_000;
+pub(crate) const MAX_PREVIEW_BYTES: u64 = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -182,12 +182,33 @@ fn read_preview(path: &Path, size: u64) -> Result<(Option<String>, bool), FileEr
         return Ok((None, true));
     }
     match std::fs::read(path) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(text) => Ok((Some(text), false)),
-            Err(_) => Ok((None, true)),
-        },
+        Ok(bytes) => Ok(preview_from_bytes(&bytes)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok((None, false)),
         Err(error) => Err(error.into()),
+    }
+}
+
+/// Inline-preview decision for already-read bytes: text when small enough and
+/// valid UTF-8, otherwise `(None, true)` (omitted). The single owner of the
+/// "too big or binary ⇒ size-only card" policy — the snapshot-mode diff reads
+/// the *after* side from disk and routes it through here too.
+pub(crate) fn preview_from_bytes(bytes: &[u8]) -> (Option<String>, bool) {
+    if bytes.len() as u64 > MAX_PREVIEW_BYTES {
+        return (None, true);
+    }
+    match std::str::from_utf8(bytes) {
+        Ok(text) => (Some(text.to_owned()), false),
+        Err(_) => (None, true),
+    }
+}
+
+/// As [`preview_from_bytes`] for content already decoded to a `String` (the
+/// snapshot-mode diff's *before* side comes from text history, not a file).
+pub(crate) fn preview_from_text(text: String) -> (Option<String>, bool) {
+    if text.len() as u64 > MAX_PREVIEW_BYTES {
+        (None, true)
+    } else {
+        (Some(text), false)
     }
 }
 

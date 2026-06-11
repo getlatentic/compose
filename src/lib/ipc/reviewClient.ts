@@ -35,6 +35,19 @@ export async function reviewDiff(runId: string): Promise<ReviewFileChange[]> {
   return invoke<ReviewFileChange[]>("workspace_review_diff", { runId });
 }
 
+/**
+ * The file-level changes a finished `snapshot`-mode run made directly on the
+ * real files, versus its pre-run baseline. Unlike {@link reviewDiff} these are
+ * *already applied* — shown as an informational diff in the chat (undo via
+ * version history), not a pending accept. Same `ReviewFileChange` shape.
+ */
+export async function snapshotDiff(runId: string): Promise<ReviewFileChange[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+  return invoke<ReviewFileChange[]>("workspace_snapshot_diff", { runId });
+}
+
 /** Apply one approved change to the real workspace (write / create / trash). */
 export async function applyReviewChange(runId: string, relativePath: string): Promise<void> {
   if (!isTauriRuntime()) {

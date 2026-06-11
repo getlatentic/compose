@@ -28,7 +28,6 @@ import {
   type SourceRange,
   type WorkspaceCommentThread,
 } from "../comments/commentModel";
-import { runBobAndCollect } from "../../lib/ipc/bobShellClient";
 import { CommentBubble } from "./CommentBubble";
 import {
   parseFrontmatter,
@@ -82,6 +81,8 @@ export interface TiptapMarkdownEditorProps {
    * leak out because the chat panel lives in the AppShell.
    */
   onAskAboutSelection?: (question: string, selection: { range: SourceRange; text: string }) => void;
+  /** Stage the note as a comment in the panel queue (batch-send later). */
+  onQueueComment?: (note: string, selection: { range: SourceRange; text: string }) => void;
   onSelectionChange?: (selection: { range: SourceRange; text: string } | null) => void;
   value: string;
   workspaceId?: string;
@@ -126,6 +127,7 @@ function TiptapMarkdownEditorInner({
   mode = "wysiwyg",
   onChange,
   onAskAboutSelection,
+  onQueueComment,
   onSelectionChange,
   value,
   workspaceId,
@@ -474,79 +476,6 @@ function TiptapMarkdownEditorInner({
     );
   }
 
-  /**
-   * Run Bob's Edit flow on the current selection. We capture
-   * the editor selection NOW (rather than waiting for Bob to
-   * respond), because the user's selection will change as soon
-   * as they click somewhere or as the bubble dismisses. Bob's
-   * round trip can take seconds.
-   */
-  async function handleEditSelection(
-    instruction: string,
-    selection: { range: SourceRange; text: string },
-  ) {
-    if (!editor) return;
-    const { from, to } = editor.state.selection;
-    // The bubble may have already collapsed the selection by the
-    // time we get here. Fall back to a "locate the text and
-    // replace its first occurrence" if the editor's selection is
-    // empty — same trick as `locateInMarkdown` uses for byte
-    // ranges.
-    let replaceFrom = from;
-    let replaceTo = to;
-    if (replaceFrom === replaceTo) {
-      const docText = editor.state.doc.textContent;
-      const idx = docText.indexOf(selection.text);
-      if (idx < 0) return; // Selection text is gone — bail rather than corrupt the doc.
-      replaceFrom = idx + 1; // ProseMirror positions are 1-based at the doc top.
-      replaceTo = replaceFrom + selection.text.length;
-    }
-    // Build the prompt. The "return ONLY the edited markdown"
-    // discipline is critical — without it Bob loves to wrap the
-    // answer in prose like "Here's the edited version: ...".
-    const prompt =
-      `You are editing one excerpt of a longer markdown document.\n\n` +
-      `EXCERPT:\n${selection.text}\n\n` +
-      `INSTRUCTION: ${instruction}\n\n` +
-      `RETURN ONLY THE EDITED EXCERPT AS MARKDOWN. No preamble, no explanation, no code fences.`;
-
-    try {
-      const edited = await runBobAndCollect({
-        prompt,
-        mode: "ask",
-        maxCoins: 30,
-        cwd: undefined,
-      });
-      if (!edited) return;
-      // Suppress the resulting 'update' event so we don't echo
-      // the edit back as a self-triggered save; the editor will
-      // still emit one through the normal debounce after this
-      // commit and the hash check will then permit it.
-      // Heuristic: if Bob's response is a single line of text
-      // and the original was inline (no newlines), use plain
-      // text insertion so we don't introduce paragraph breaks
-      // mid-sentence. For multi-paragraph edits, fall through to
-      // markdown parsing so headings/lists/etc. land correctly.
-      const isInlineReplacement =
-        !selection.text.includes("\n") && !edited.includes("\n");
-      editor
-        .chain()
-        .focus()
-        .deleteRange({ from: replaceFrom, to: replaceTo })
-        .insertContentAt(
-          replaceFrom,
-          edited,
-          isInlineReplacement ? { contentType: "html" } : { contentType: "markdown" },
-        )
-        .run();
-    } catch (error) {
-      // Soft-fail. Errors land in the console; future polish: a
-      // toast/inline error in the bubble so the user knows what
-      // happened.
-      console.error("Bob edit failed:", error);
-    }
-  }
-
   function pickImageFile() {
     // Build a hidden <input type="file"> on the fly and trigger
     // the browser's native file picker. We don't keep the input
@@ -580,8 +509,8 @@ function TiptapMarkdownEditorInner({
       <CommentBubble
         editor={editor}
         selection={bubbleSelection}
-        onEditSelection={handleEditSelection}
-        onAskAboutSelection={onAskAboutSelection}
+        onSendToChat={onAskAboutSelection}
+        onQueueComment={onQueueComment}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import {
   appendAssistantText,
   appendAssistantNotice,
   appendAssistantSuggestions,
+  appendAppliedChanges,
   appendReviewChangeSuggestions,
   markWorkspaceSuggestion,
   assistantMessageContentForRun,
@@ -753,6 +754,49 @@ describe("workspace model", () => {
     expect(suggestions.every((s) => s.status === "pending" && s.runId === runId)).toBe(true);
     const rewrite = suggestions.find((s) => s.kind === "rewrite");
     expect(rewrite?.kind === "rewrite" && rewrite.stale).toBe(true);
+  });
+
+  it("appendAppliedChanges attaches already-applied changes as informational diffs", () => {
+    const base = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    const started = appendAssistantText(
+      startBobRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
+      runId,
+      "Done.",
+    );
+    const withChanges = appendAppliedChanges(started, runId, [
+      {
+        kind: "create",
+        filePath: "new.md",
+        originalText: null,
+        newText: "hi",
+        originalSize: 0,
+        newSize: 2,
+        previewOmitted: false,
+        stale: false,
+      },
+      {
+        kind: "rewrite",
+        filePath: "edit.md",
+        originalText: "old",
+        newText: "new",
+        originalSize: 3,
+        newSize: 3,
+        previewOmitted: false,
+        stale: true,
+      },
+    ]);
+
+    const applied = withChanges.messages[1].appliedChanges ?? [];
+    expect(applied.map((c) => [c.kind, c.filePath])).toEqual([
+      ["create", "new.md"],
+      ["rewrite", "edit.md"],
+    ]);
+    // Informational, not pending: no suggestions, and the draft's `stale` flag
+    // (meaningless for an already-applied change) is dropped.
+    expect(withChanges.messages[1].suggestions ?? []).toHaveLength(0);
+    expect(applied[1]).not.toHaveProperty("stale");
+    expect(withChanges.messages[1].activity).toBe("2 files changed");
   });
 
   it("acceptWorkspaceSuggestion leaves file-level changes to the store; markWorkspaceSuggestion records the result", () => {

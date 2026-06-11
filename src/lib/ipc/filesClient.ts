@@ -121,6 +121,20 @@ export async function createFile(
   });
 }
 
+/**
+ * Create (or reuse) the default starter notes folder `~/Documents/Compose`,
+ * seeded with a Welcome note on first run, and return its absolute path for
+ * the caller to open as a workspace. Desktop only — the browser has no real
+ * filesystem, so this returns null and the caller falls back to the sample
+ * workspace.
+ */
+export async function createStarterFolder(): Promise<string | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+  return invoke<string>("workspace_create_starter");
+}
+
 export async function writeBinaryFile(
   workspaceId: string,
   relativePath: string,

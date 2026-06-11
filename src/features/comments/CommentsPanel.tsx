@@ -1,35 +1,69 @@
-import { useState } from "react";
-import { AddComment, ChatBot, Send, WarningAlt } from "@carbon/react/icons";
-import type { SourceRange, WorkspaceCommentThread } from "./commentModel";
+import { useEffect, useMemo, useState } from "react";
+import { ChatBot, Checkmark, Send, Undo, WarningAlt } from "@carbon/react/icons";
+import type { AnchorResolutionState, WorkspaceCommentThread } from "./commentModel";
 
-export interface EditorSelectionSnapshot {
-  range: SourceRange;
-  text: string;
-}
+/** Plain-English label for an anchor that no longer sits exactly on its text. */
+const RESOLUTION_LABEL: Record<Exclude<AnchorResolutionState, "resolved">, string> = {
+  collapsed: "collapsed",
+  contracted: "shortened",
+  expanded: "expanded",
+  moved: "moved",
+  orphaned: "text deleted",
+  replaced: "text changed",
+  truncatedEnd: "end trimmed",
+  truncatedStart: "start trimmed",
+};
 
+/**
+ * The comment queue. Comments are created from the editor highlight (the
+ * comment bubble's "Queue"); this panel stages them — select some and batch
+ * them to the chat, or resolve the ones that are done.
+ */
 export function CommentsPanel({
   comments,
   filePath,
-  onCreateComment,
-  onSendComment,
-  selection,
+  onSendComments,
+  onResolveComment,
+  onReopenComment,
 }: {
   comments: WorkspaceCommentThread[];
   filePath: string;
-  onCreateComment: (body: string, selection: EditorSelectionSnapshot) => void;
-  onSendComment: (commentId: string) => void;
-  selection: EditorSelectionSnapshot | null;
+  onSendComments: (commentIds: string[]) => void;
+  onResolveComment: (commentId: string) => void;
+  onReopenComment: (commentId: string) => void;
 }) {
-  const [draft, setDraft] = useState("");
-  const canCreate = Boolean(selection && draft.trim());
+  const openComments = useMemo(
+    () => comments.filter((comment) => comment.status === "open"),
+    [comments],
+  );
+  const resolvedComments = useMemo(
+    () => comments.filter((comment) => comment.status === "resolved"),
+    [comments],
+  );
 
-  function handleCreate() {
-    if (!selection || !draft.trim()) {
-      return;
-    }
-    onCreateComment(draft, selection);
-    setDraft("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Drop selections for comments that are gone or no longer open.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const live = new Set(openComments.map((comment) => comment.id));
+      const next = new Set([...prev].filter((id) => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [openComments]);
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   }
+
+  const selectedCount = selectedIds.size;
 
   return (
     <aside className="bob-comments-panel" aria-label="Comments">
@@ -38,71 +72,104 @@ export function CommentsPanel({
           <div className="bob-comments-eyebrow">Comments</div>
           <div className="bob-comments-file">{filePath || "No file selected"}</div>
         </div>
-        <span className="bob-comments-count">{comments.length}</span>
+        <span className="bob-comments-count">{openComments.length}</span>
       </div>
 
-      <div className="bob-comment-compose">
-        <div className="bob-comment-compose__title">
-          <AddComment size={16} />
-          <span>Comment on selection</span>
+      {openComments.length > 0 ? (
+        <div className="bob-comment-list-header">
+          <span>Queue</span>
+          {selectedCount > 0 ? (
+            <button
+              type="button"
+              className="bob-comment-send bob-comment-send--bar"
+              onClick={() => {
+                onSendComments([...selectedIds]);
+                setSelectedIds(new Set());
+              }}
+            >
+              <ChatBot size={16} />
+              Send {selectedCount} to chat
+              <Send size={16} />
+            </button>
+          ) : null}
         </div>
-        {selection ? (
-          <blockquote className="bob-comment-selection">{selection.text}</blockquote>
-        ) : (
-          <p className="bob-comment-empty-copy">Select text in the editor to anchor a comment.</p>
-        )}
-        <textarea
-          aria-label="Comment body"
-          disabled={!selection}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder="Ask the assistant or leave a note..."
-          rows={3}
-        />
-        <button
-          type="button"
-          className="bob-comment-primary"
-          disabled={!canCreate}
-          onClick={handleCreate}
-        >
-          Add comment
-        </button>
-      </div>
+      ) : null}
 
       <div className="bob-comment-list">
-        {comments.length === 0 ? (
+        {openComments.length === 0 ? (
           <div className="bob-comments-empty">
-            Local comments stay out of the Markdown file and can be sent to the assistant when needed.
+            Highlight text in the editor and choose <strong>Queue</strong> to stage a comment here,
+            then batch-send them to the assistant.
           </div>
         ) : (
-          comments.map((comment) => (
-            <article className="bob-comment-card" key={comment.id}>
-              <div className="bob-comment-card__meta">
-                {comment.anchor.resolution === "resolved" ? null : (
-                  <span className="bob-comment-card__state">
-                    <WarningAlt size={14} />
-                    {comment.anchor.resolution}
-                  </span>
-                )}
-                <span>
-                  bytes {comment.anchor.range.start}-{comment.anchor.range.end}
-                </span>
-              </div>
-              <blockquote>{comment.anchor.selectedText}</blockquote>
-              <p>{comment.body}</p>
-              <button
-                type="button"
-                className="bob-comment-send"
-                onClick={() => onSendComment(comment.id)}
-              >
-                <ChatBot size={16} />
-                Send to chat
-                <Send size={16} />
-              </button>
-            </article>
-          ))
+          openComments.map((comment) => {
+            const { resolution } = comment.anchor;
+            return (
+              <article className="bob-comment-card" key={comment.id}>
+                <div className="bob-comment-card__meta">
+                  <label className="bob-comment-card__select">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(comment.id)}
+                      disabled={resolution === "orphaned"}
+                      onChange={() => toggleSelected(comment.id)}
+                    />
+                    <span>Select</span>
+                  </label>
+                  <div className="bob-comment-card__actions">
+                    {resolution === "resolved" ? null : (
+                      <span className="bob-comment-card__state">
+                        <WarningAlt size={14} />
+                        {RESOLUTION_LABEL[resolution]}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="bob-comment-resolve"
+                      onClick={() => onResolveComment(comment.id)}
+                    >
+                      <Checkmark size={14} />
+                      Resolve
+                    </button>
+                  </div>
+                </div>
+                <blockquote>{comment.anchor.selectedText}</blockquote>
+                <p>{comment.body}</p>
+              </article>
+            );
+          })
         )}
       </div>
+
+      {resolvedComments.length > 0 ? (
+        <>
+          <div className="bob-comment-list-header bob-comment-list-header--resolved">
+            <span>Resolved ({resolvedComments.length})</span>
+          </div>
+          <div className="bob-comment-list">
+            {resolvedComments.map((comment) => (
+              <article className="bob-comment-card bob-comment-card--resolved" key={comment.id}>
+                <div className="bob-comment-card__meta">
+                  <span className="bob-comment-card__resolved-label">
+                    <Checkmark size={14} />
+                    Resolved
+                  </span>
+                  <button
+                    type="button"
+                    className="bob-comment-resolve"
+                    onClick={() => onReopenComment(comment.id)}
+                  >
+                    <Undo size={14} />
+                    Reopen
+                  </button>
+                </div>
+                <blockquote>{comment.anchor.selectedText}</blockquote>
+                <p>{comment.body}</p>
+              </article>
+            ))}
+          </div>
+        </>
+      ) : null}
     </aside>
   );
 }

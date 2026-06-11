@@ -1,35 +1,29 @@
-//! Tauri-side bob CLI runner.
+//! Tauri-side harness runner.
 //!
-//! The IPC contract with the front-end (event names, payload
-//! shapes, command signatures) is unchanged from before the
-//! `bob-rs` extraction. What changed is the *implementation*:
-//! the actual spawn + stdout/stderr/exit handling now lives in
-//! `bob_rs::spawn_bob_raw`, the same function the
-//! browser-preview HTTP server calls.
+//! Every harness — bob included — runs through the generic
+//! `agent-harness` registry via `run_via_harness`: resolve the
+//! harness, derive its working dir through the edit-review gate
+//! (`prepare_edit_guard`), build a neutral `RunRequest`, and stream
+//! its normalized `RunEvent`s onto the `HARNESS_RUN_EVENT` channel.
+//! bob is no longer special-cased here — its old bespoke spawn path
+//! and `BobChatMapper` raw-stream interpretation are gone.
 //!
-//! What remains here:
-//!   * Workspace lookup + Bob-command prep (`prepare_bob_spawn`)
-//!     — Tauri-specific because it knows about
-//!     `WorkspaceRegistry` and `build_bob_command`'s richer
-//!     `BobRunMode` enum.
+//! What lives here:
+//!   * `HarnessRunRequest` (the IPC request shape) and the
+//!     `run_harness_stream` / `cancel_harness_run` commands.
 //!   * Run-id keyed `BobRunnerState` so `cancel_harness_run` can find
-//!     the right handle.
-//!   * Bridging `bob_rs::ProcessEvent` to Tauri's `app.emit`
-//!     pump on the existing `HARNESS_RUN_EVENT` channel name.
-//!
-//! Net effect: the desktop build and the browser preview now
-//! execute byte-identical spawn + stream code, with each
-//! transport supplying just its own glue (Tauri event emit /
-//! axum SSE).
+//!     the right handle — works for any harness, since bob's
+//!     `ProcessHandle` and the generic `RunHandle` both implement
+//!     `RunControl`.
+//!   * Bridging the neutral `RunEvent` stream to Tauri's `app.emit`
+//!     via `run_event_to_chat` (→ Compose's `ChatEvent`).
 
-use crate::bob::locator::{resolve_bob_executable, BobExecutable};
-use crate::bob::{build_bob_command, BobApprovalMode, BobChatMode, BobCommandRequest, BobRunMode};
+use crate::bob::{BobApprovalMode, BobChatMode};
 use crate::db::MetadataStore;
 use crate::review::{prepare_edit_guard, EditGuard, ReviewSessionStore};
-use crate::settings::load_bob_api_key;
 use crate::workspace::WorkspaceRegistry;
-use crate::bob::chat_event::{run_event_to_chat, BobChatMapper, ChatEvent};
-use bob_rs::{spawn_bob_raw, InstallEvent, ProcessEvent as CoreEvent};
+use crate::bob::chat_event::{run_event_to_chat, ChatEvent};
+use bob_rs::InstallEvent;
 use harness::harness_by_id;
 use harness::{
     HarnessReadiness, InstallCallback, ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode,
@@ -38,7 +32,6 @@ use harness::{
 use serde::Deserialize;
 use tauri::ipc::Channel;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
@@ -56,16 +49,17 @@ pub struct HarnessRunRequest {
     pub prompt: String,
     pub run_id: String,
     pub workspace_id: String,
-    /// Which harness to run. Defaults to `"bob"` so existing callers
-    /// (and the chat panel until the H5 picker lands) keep hitting
-    /// bob's richer Tauri path. Other ids route through the
-    /// `agent-harness` registry.
+    /// Which harness to run. Defaults to `"bob"`; every id — bob
+    /// included — routes through the `agent-harness` registry
+    /// (`run_via_harness`).
     #[serde(default = "default_harness_id")]
     pub harness_id: String,
-    /// Per-harness run tuning the Settings picker exposes. Only the
-    /// CLI harnesses (claude/codex) honor these via `run_via_harness`;
-    /// the bob branch keeps its own chat-mode / coin controls and
-    /// ignores them. All optional — omitted → the CLI's own defaults.
+    /// Per-harness run tuning the Settings picker exposes, threaded to
+    /// the adapter via `run_via_harness`. Each adapter maps the subset
+    /// its CLI supports (claude: model + max-turns; codex: model +
+    /// effort) and ignores the rest — bob declares none of these
+    /// capabilities, so it ignores all three. All optional — omitted →
+    /// the CLI's own defaults.
     #[serde(default)]
     pub model: Option<String>,
     #[serde(default)]
@@ -74,9 +68,11 @@ pub struct HarnessRunRequest {
     pub max_turns: Option<u32>,
     /// How this run's edits should be guarded — chosen by the frontend per
     /// harness from its capabilities + the user's "review edits" toggle.
-    /// `none` (bob, which reviews its own edits) skips the gate; `snapshot`
-    /// records an undo baseline before direct edits; `clone` runs the harness
-    /// against a sandbox the user approves. Only the non-bob path acts on it.
+    /// `none` skips the gate (a read-only plan/ask run); `snapshot` records an
+    /// undo baseline before direct edits (the write-capable default — bob
+    /// included, now that it writes directly in `auto_edit`); `clone` runs the
+    /// harness against a sandbox the user approves. `run_via_harness` acts on
+    /// it for every harness.
     #[serde(default)]
     pub edit_guard: EditGuard,
     /// Extra CLI args the frontend builds from config (the per-harness
@@ -95,14 +91,12 @@ fn default_harness_id() -> String {
 // three-surface chat vocabulary the front-end renders (started / text /
 // notice / thinking / toolStart{input} / toolEnd{output} / session /
 // usage / suggestedEdits / activity / error / exited). It is *not* a
-// harness type: `agent-harness` returns the model's output faithfully (a
-// neutral `RunEvent`, and bob's untyped raw passthrough `parse_bob_raw` →
-// `serde_json::Value`), and Compose decides what it means here. The two
-// bridges below produce `ChatEvent`s — bob from its raw tier via
-// `BobChatMapper`, claude/codex from the neutral tier via
-// `run_event_to_chat`. (The old src-tauri-local `BobRunEvent`
-// type carried `workspace_id` on Started; the front-end correlates by the
-// per-run subscription closure, not that field, so it's gone.)
+// harness type: `agent-harness` returns the model's output faithfully as a
+// neutral `RunEvent`, and Compose decides what it means by mapping it
+// through `run_event_to_chat` — one bridge for every harness. (The old
+// src-tauri-local `BobRunEvent` type carried `workspace_id` on Started; the
+// front-end correlates by the per-run subscription closure, not that field,
+// so it's gone.)
 
 #[derive(Default)]
 pub struct BobRunnerState {
@@ -259,197 +253,21 @@ pub fn run_harness_stream(
         return Ok(());
     }
 
-    // Route by harness. bob keeps its richer Tauri path below
-    // (locator + workspace-aware argv + attached context files); any
-    // other harness goes through the generic `agent-harness` registry.
+    // Every harness — bob included — runs through the generic agent-harness
+    // registry. bob is no longer special-cased: it runs edit-capable in
+    // `auto_edit` (writing files directly) and is reviewed by the same edit
+    // gate as Claude/Codex (see `editGuardFor` → `prepare_edit_guard`).
     let harness_id = if request.harness_id.trim().is_empty() {
         harness::DEFAULT_HARNESS_ID.to_owned()
     } else {
         request.harness_id.clone()
     };
-    if harness_id != harness::DEFAULT_HARNESS_ID {
-        return run_via_harness(&harness_id, request, &registry, &runner, &metadata, &review, app);
-    }
-
-    // Blocking work. May trigger the macOS Keychain prompt on
-    // first key access for this binary. This command is declared
-    // `#[tauri::command(async)]`, so the whole body runs on a
-    // Tauri worker thread, NOT the main UI thread — the native
-    // window stays responsive while we block here. `cancel_harness_run`
-    // is likewise `(async)`, so it runs on its own worker and can
-    // flip the cancel flag we check below even while we're parked
-    // in the keychain prompt.
-    let prepared = match prepare_bob_spawn(&request, &registry) {
-        Ok(p) => p,
-        Err(error) => {
-            let _ = app.emit(
-                HARNESS_RUN_EVENT,
-                &ChatEvent::Error {
-                    run_id: run_id.clone(),
-                    message: error.clone(),
-                },
-            );
-            let _ = app.emit(
-                HARNESS_RUN_EVENT,
-                &ChatEvent::Exited {
-                    run_id: run_id.clone(),
-                    exit_code: None,
-                    cancelled: cancel_token.load(Ordering::SeqCst),
-                },
-            );
-            runner.unregister(&run_id);
-            return Err(error);
-        }
-    };
-
-    // Did the user click Stop while we were waiting on the
-    // keychain prompt? Honor it before spawning anything.
-    if cancel_token.load(Ordering::SeqCst) {
-        let _ = app.emit(
-            HARNESS_RUN_EVENT,
-            &ChatEvent::Exited {
-                run_id: run_id.clone(),
-                exit_code: None,
-                cancelled: true,
-            },
-        );
-        runner.unregister(&run_id);
-        return Ok(());
-    }
-
-    spawn_via_core(prepared, &runner, app)
+    run_via_harness(&harness_id, request, &registry, &runner, &metadata, &review, app)
 }
 
 #[tauri::command(async)]
 pub fn cancel_harness_run(run_id: String, runner: State<'_, BobRunnerState>) -> Result<(), String> {
     runner.cancel(&run_id)
-}
-
-#[derive(Debug)]
-pub struct PreparedSpawn {
-    pub api_key: String,
-    pub args: Vec<String>,
-    pub cwd: PathBuf,
-    pub program: String,
-    pub run_id: String,
-    pub workspace_id: String,
-}
-
-pub fn prepare_bob_spawn(
-    request: &HarnessRunRequest,
-    registry: &WorkspaceRegistry,
-) -> Result<PreparedSpawn, String> {
-    prepare_bob_spawn_with_dependencies(request, registry, load_bob_api_key, resolve_bob_executable)
-}
-
-fn prepare_bob_spawn_with_dependencies<A, B>(
-    request: &HarnessRunRequest,
-    registry: &WorkspaceRegistry,
-    api_key_loader: A,
-    bob_resolver: B,
-) -> Result<PreparedSpawn, String>
-where
-    A: FnOnce() -> Result<String, String>,
-    B: FnOnce() -> Result<BobExecutable, crate::bob::locator::BobExecutableError>,
-{
-    if request.run_id.trim().is_empty() {
-        return Err("run id cannot be blank".to_owned());
-    }
-    if request.prompt.trim().is_empty() {
-        return Err("prompt is required".to_owned());
-    }
-
-    let cwd = registry.workspace_root(&request.workspace_id)?;
-    let api_key = api_key_loader()?;
-    let bob_executable = bob_resolver().map_err(|error| error.to_string())?;
-
-    let preview = build_bob_command(&BobCommandRequest {
-        approval_mode: request.approval_mode,
-        chat_mode: request.chat_mode,
-        context_file_paths: request.context_file_paths.clone(),
-        max_coins: request.max_coins,
-        mode: BobRunMode::StreamJson,
-        prompt: Some(request.prompt.clone()),
-        workspace_id: Some(request.workspace_id.clone()),
-    })
-    .map_err(|error| error.to_string())?;
-
-    Ok(PreparedSpawn {
-        api_key,
-        args: preview.args,
-        cwd,
-        program: bob_executable.path.display().to_string(),
-        run_id: request.run_id.clone(),
-        workspace_id: request.workspace_id.clone(),
-    })
-}
-
-/// Spawn via `bob-rs` and wire the resulting event stream to
-/// Tauri's `app.emit`. The Started event is re-emitted with the
-/// extra `workspace_id` field that bob-rs doesn't carry; the
-/// rest map 1:1.
-fn spawn_via_core(
-    prepared: PreparedSpawn,
-    runner: &BobRunnerState,
-    app: AppHandle,
-) -> Result<(), String> {
-    let PreparedSpawn { api_key, args, cwd, program, run_id, workspace_id } = prepared;
-
-    let app_for_cb = app.clone();
-    let runner_inner_clone = Arc::clone(&runner.inner);
-    let run_id_for_cleanup = run_id.clone();
-
-    // Bridge bob-rs's raw event stream to Tauri's IPC events as Compose's
-    // `ChatEvent`. Each core event is run through `BobChatMapper`, which
-    // decodes bob's stream-json via its untyped raw tier (`parse_bob_raw`)
-    // and applies Compose's interpretation — narration vs answer, the
-    // `<thinking>` split, the `[using tool …]` echo drop, session + usage
-    // (see chat_event.rs). The mapper is stateful across lines (thinking
-    // tags, chunked echo), so one instance is held for the whole run; the
-    // stdout reader thread drives it sequentially and the `Mutex` just
-    // satisfies the `Fn + Send + Sync` callback bound. We suppress the core
-    // `Started` (run_harness_stream already emitted `ChatEvent::Started` up
-    // front), and on `Exited` deregister from the runner state so a later
-    // cancel doesn't try to SIGTERM a dead PID.
-    let mapper = Arc::new(Mutex::new(BobChatMapper::new()));
-    let callback = move |event: CoreEvent| {
-        if matches!(event, CoreEvent::Started { .. }) {
-            return; // emitted explicitly up front
-        }
-        if matches!(event, CoreEvent::Exited { .. }) {
-            if let Ok(mut inner) = runner_inner_clone.lock() {
-                inner.runs.remove(&run_id_for_cleanup);
-            }
-        }
-        let mut mapper = mapper.lock().expect("bob chat mapper mutex");
-        for chat_event in mapper.on_process_event(event) {
-            let _ = app_for_cb.emit(HARNESS_RUN_EVENT, &chat_event);
-        }
-    };
-
-    // workspace_id is no longer part of the wire event; the
-    // front-end correlates events to a workspace via the per-run
-    // subscription closure, not a field on the event.
-    let _ = workspace_id;
-
-    let handle = spawn_bob_raw(
-        PathBuf::from(&program),
-        args,
-        api_key,
-        cwd,
-        run_id.clone(),
-        callback,
-    )
-    .map_err(|e| e.to_string())?;
-
-    // The run is already registered as "pending" from the
-    // run_harness_stream entry point. Attach the live handle so
-    // cancel_harness_run can SIGTERM the actual child. If the user
-    // cancelled while we were preparing, `attach_handle`
-    // detects that and SIGTERMs the just-spawned child rather
-    // than leaving a zombie.
-    runner.attach_handle(&run_id, Box::new(handle))?;
-    Ok(())
 }
 
 /// Run a non-bob harness through the `agent-harness` registry. bob
@@ -512,6 +330,19 @@ fn run_via_harness(
     // max-turns; codex: model + effort) and ignores the rest. An empty
     // model string is treated as "unset" so a cleared field falls back
     // to the CLI default rather than passing `--model ""`.
+    // bob is the only harness with a coin budget. Thread the request's
+    // max_coins as `--max-coins` so it overrides the adapter's hardcoded
+    // default (bob is yargs last-wins); the other harnesses have no such flag.
+    // (A neutral RunTuning coin field would retire this bob-conditional — none
+    // exists yet, and a literal id check on a real bob-only *knob* is fine; the
+    // anti-pattern the guide warns against is id checks standing in for a
+    // capability flag, which coins don't have.)
+    let mut extra_args = request.extra_args;
+    if harness_id == harness::DEFAULT_HARNESS_ID {
+        extra_args.push("--max-coins".to_owned());
+        extra_args.push(request.max_coins.to_string());
+    }
+
     let tuning = RunTuning {
         model: request
             .model
@@ -524,7 +355,7 @@ fn run_via_harness(
         // Pass-through: the frontend already resolved per-harness policy
         // (permission mode etc.) into these flags. See harnessExtraArgs in the
         // store. The adapter appends them, overriding its own defaults.
-        extra_args: request.extra_args,
+        extra_args,
     };
 
     let run_request = RunRequest {
@@ -533,6 +364,9 @@ fn run_via_harness(
         cwd: Some(cwd),
         mode,
         tuning,
+        // Conversation continuity is still history-in-prompt today; native
+        // `--resume` wiring is a follow-up. Fresh session each run for now.
+        resume: None,
     };
 
     let app_cb = app.clone();
@@ -647,98 +481,12 @@ pub fn harness_login(harness_id: String, on_event: Channel<InstallEvent>) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workspace::WorkspaceRegistry;
-    use tempfile::tempdir;
-
-    #[test]
-    fn prepare_rejects_blank_run_id() {
-        let dir = tempdir().expect("tempdir");
-        let registry = WorkspaceRegistry::default();
-        let list = registry
-            .add(dir.path().to_string_lossy().to_string())
-            .expect("add");
-        let workspace_id = list.workspaces[0].id.clone();
-
-        let request = HarnessRunRequest {
-            approval_mode: BobApprovalMode::Default,
-            chat_mode: BobChatMode::Plan,
-            context_file_paths: Vec::new(),
-            max_coins: 200,
-            prompt: "hi".to_owned(),
-            run_id: "  ".to_owned(),
-            workspace_id,
-            harness_id: "bob".to_owned(),
-            model: None,
-            effort: None,
-            max_turns: None,
-            edit_guard: EditGuard::None,
-            extra_args: Vec::new(),
-        };
-
-        assert!(prepare_bob_spawn(&request, &registry)
-            .unwrap_err()
-            .contains("run id"));
-    }
-
-    #[test]
-    fn prepare_rejects_blank_prompt() {
-        let dir = tempdir().expect("tempdir");
-        let registry = WorkspaceRegistry::default();
-        let list = registry
-            .add(dir.path().to_string_lossy().to_string())
-            .expect("add");
-        let workspace_id = list.workspaces[0].id.clone();
-
-        let request = HarnessRunRequest {
-            approval_mode: BobApprovalMode::Default,
-            chat_mode: BobChatMode::Plan,
-            context_file_paths: Vec::new(),
-            max_coins: 200,
-            prompt: "   ".to_owned(),
-            run_id: "run-1".to_owned(),
-            workspace_id,
-            harness_id: "bob".to_owned(),
-            model: None,
-            effort: None,
-            max_turns: None,
-            edit_guard: EditGuard::None,
-            extra_args: Vec::new(),
-        };
-
-        assert!(prepare_bob_spawn(&request, &registry)
-            .unwrap_err()
-            .contains("prompt"));
-    }
-
-    #[test]
-    fn prepare_rejects_unknown_workspace() {
-        let registry = WorkspaceRegistry::default();
-        let request = HarnessRunRequest {
-            approval_mode: BobApprovalMode::Default,
-            chat_mode: BobChatMode::Plan,
-            context_file_paths: Vec::new(),
-            max_coins: 200,
-            prompt: "hi".to_owned(),
-            run_id: "run-1".to_owned(),
-            workspace_id: "workspace-missing".to_owned(),
-            harness_id: "bob".to_owned(),
-            model: None,
-            effort: None,
-            max_turns: None,
-            edit_guard: EditGuard::None,
-            extra_args: Vec::new(),
-        };
-
-        assert!(prepare_bob_spawn(&request, &registry)
-            .unwrap_err()
-            .contains("workspace"));
-    }
 
     // NOTE: the IPC event wire contract (kind tag + camelCase fields) is
     // Compose's `ChatEvent`, owned + tested in `chat_event.rs`
-    // (`chat_event_serializes_kind_tagged_camelcase`, plus the bob-raw and
-    // neutral mapper tests). The runner just bridges those onto Tauri's
-    // emit pump, so there's nothing event-shape-specific left to assert here.
+    // (`chat_event_serializes_kind_tagged_camelcase`, plus the neutral
+    // mapper tests). The runner just bridges those onto Tauri's emit pump,
+    // so there's nothing event-shape-specific left to assert here.
 
     #[test]
     fn cancel_unknown_run_returns_error() {
@@ -747,49 +495,5 @@ mod tests {
             .cancel("run-missing")
             .unwrap_err()
             .contains("not active"));
-    }
-
-    #[test]
-    fn prepare_uses_resolved_bob_executable_path() {
-        let dir = tempdir().expect("tempdir");
-        let registry = WorkspaceRegistry::default();
-        let list = registry
-            .add(dir.path().to_string_lossy().to_string())
-            .expect("add");
-        let workspace_id = list.workspaces[0].id.clone();
-        let request = HarnessRunRequest {
-            approval_mode: BobApprovalMode::Default,
-            chat_mode: BobChatMode::Plan,
-            context_file_paths: Vec::new(),
-            max_coins: 200,
-            prompt: "hi".to_owned(),
-            run_id: "run-1".to_owned(),
-            workspace_id,
-            harness_id: "bob".to_owned(),
-            model: None,
-            effort: None,
-            max_turns: None,
-            edit_guard: EditGuard::None,
-            extra_args: Vec::new(),
-        };
-
-        let prepared = prepare_bob_spawn_with_dependencies(
-            &request,
-            &registry,
-            || Ok("api-key".to_owned()),
-            || {
-                Ok(BobExecutable {
-                    path: "/Users/dev/.nvm/versions/node/v24.13.0/bin/bob".into(),
-                })
-            },
-        )
-        .expect("prepared");
-
-        assert_eq!(
-            prepared.program,
-            "/Users/dev/.nvm/versions/node/v24.13.0/bin/bob"
-        );
-        assert_eq!(prepared.api_key, "api-key");
-        assert!(prepared.args.contains(&"--output-format".to_owned()));
     }
 }

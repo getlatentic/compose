@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { ChevronDown } from "@carbon/react/icons";
+import { ChevronDown, Document } from "@carbon/react/icons";
 
 import type {
+  ChatExcerptRef,
   TraceEntry,
   WorkspaceChatMessage,
   WorkspaceRunStats,
 } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { AgentTrace } from "./AgentTrace";
+import { AppliedChanges } from "./AppliedChanges";
 import { FileOpCard } from "./FileOpCard";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { MessageAuthor } from "./MessageAuthor";
@@ -81,6 +83,10 @@ export function MessageRow({
           <div className="bob-message-bubble">
             <MarkdownMessage content={message.content} />
           </div>
+        ) : message.excerpt ? (
+          <div className="bob-message-bubble bob-message-bubble--plain">
+            <ExcerptChip excerpt={message.excerpt} />
+          </div>
         ) : (
           <div className="bob-message-bubble bob-message-bubble--plain">{message.content}</div>
         )
@@ -97,6 +103,13 @@ export function MessageRow({
           onAccept={callbacks.onAccept}
           onOpenDocument={callbacks.onOpenDocument}
           onReject={callbacks.onReject}
+        />
+      ) : null}
+
+      {message.appliedChanges?.length ? (
+        <AppliedChanges
+          changes={message.appliedChanges}
+          onOpenDocument={callbacks.onOpenDocument}
         />
       ) : null}
 
@@ -121,6 +134,23 @@ export function MessageRow({
 
       {showMeta && hasTrace && traceOpen ? <AgentTrace trace={trace ?? []} /> : null}
     </article>
+  );
+}
+
+/** A commented passage sent to chat — file + line:col + the excerpt + the note. */
+function ExcerptChip({ excerpt }: { excerpt: ChatExcerptRef }) {
+  return (
+    <div className="bob-excerpt-chip">
+      <div className="bob-excerpt-chip__head">
+        <Document size={14} aria-hidden />
+        <span className="bob-excerpt-chip__file">{excerpt.filePath}</span>
+        <span className="bob-excerpt-chip__loc">
+          L{excerpt.line}:C{excerpt.column}
+        </span>
+      </div>
+      <blockquote className="bob-excerpt-chip__text">{excerpt.text}</blockquote>
+      {excerpt.note ? <p className="bob-excerpt-chip__note">{excerpt.note}</p> : null}
+    </div>
   );
 }
 
