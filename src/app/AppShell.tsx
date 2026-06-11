@@ -58,6 +58,8 @@ export function AppShell() {
   const saveActiveFile = useWorkspaceStore((state) => state.saveActiveFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const sendCommentToChat = useWorkspaceStore((state) => state.sendCommentToChat);
+  const saveError = useWorkspaceStore((state) => state.saveError);
+  const clearSaveError = useWorkspaceStore((state) => state.clearSaveError);
   const askBobAboutSelectionStream = useWorkspaceStore(
     (state) => state.askBobAboutSelectionStream,
   );
@@ -394,6 +396,26 @@ export function AppShell() {
           }}
         />
       ) : null}
+      {saveError ? (
+        <ToastNotification
+          kind="error"
+          lowContrast
+          title="Something went wrong"
+          subtitle={saveError}
+          timeout={8000}
+          onClose={() => {
+            clearSaveError();
+            return true;
+          }}
+          style={{
+            position: "fixed",
+            right: "1rem",
+            bottom: "1rem",
+            zIndex: 9000,
+            maxWidth: "28rem",
+          }}
+        />
+      ) : null}
       {/* Dashboard rendered alongside, hidden via CSS so its
         * state survives the toggle. `display: none` drops it
         * out of layout without unmounting. */}
@@ -449,7 +471,7 @@ export function AppShell() {
             <Chat size={20} />
           </HeaderGlobalAction>
           <HeaderGlobalAction
-            aria-label={chatOpen ? "Hide Bob" : "Open Bob"}
+            aria-label={chatOpen ? "Hide chat" : "Open chat"}
             className={chatOpen ? "bob-header-action--open" : undefined}
             onClick={toggleChat}
             tooltipAlignment="end"
