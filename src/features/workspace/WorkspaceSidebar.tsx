@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { InlineNotification } from "@carbon/react";
-import { AddAlt, Close, FolderAdd, Search } from "@carbon/react/icons";
+import { AddAlt, Search, Settings } from "@carbon/react/icons";
 import type { BobWorkspace } from "../../app/workspaceModel";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import {
@@ -8,39 +8,29 @@ import {
   type WorkspaceBacklinkRecord,
   type WorkspaceSearchHit,
 } from "../../lib/ipc/indexClient";
-import {
-  addWorkspace,
-  canUseNativeFolderPicker,
-  removeWorkspace,
-  selectWorkspaceFolder,
-  switchWorkspace,
-} from "../../lib/ipc/workspaceClient";
-import {
-  applyImportedFolder,
-  importFolderFromPicker,
-  type ImportedFile,
-} from "../../lib/workspace/folderImport";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { FileTree } from "../file-tree/FileTree";
+import { SidebarChatList } from "../chat/SidebarChatList";
 import { PropertiesPanel } from "./PropertiesPanel";
+import { WorkspaceMenu } from "./WorkspaceMenu";
 
 export function WorkspaceSidebar() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const createNote = useWorkspaceStore((state) => state.createNote);
+  const newChat = useWorkspaceStore((state) => state.newChat);
   const deleteActiveFile = useWorkspaceStore((state) => state.deleteActiveFile);
-  const hydrateWorkspaces = useWorkspaceStore((state) => state.hydrateWorkspaces);
   const renameActiveFile = useWorkspaceStore((state) => state.renameActiveFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
-  const switchLocalWorkspace = useWorkspaceStore((state) => state.switchWorkspace);
   const updateActiveContent = useWorkspaceStore((state) => state.updateActiveContent);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
+  const sidebarTab = useWorkspaceStore((state) => state.sidebarTab);
+  const setSidebarTab = useWorkspaceStore((state) => state.setSidebarTab);
+  const openSettings = useWorkspaceStore((state) => state.openSettings);
   const promptText = useTextPrompt();
   const activeWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
     [activeWorkspaceId, workspaces],
   );
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<WorkspaceSearchHit[]>([]);
@@ -144,198 +134,184 @@ export function WorkspaceSidebar() {
     [handleRename],
   );
 
-  async function handleSwitch(workspaceId: string) {
-    setErrorMessage(null);
-    switchLocalWorkspace(workspaceId);
-
-    try {
-      const workspaceList = await switchWorkspace(workspaceId);
-      hydrateWorkspaces(workspaceList);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Workspace could not be switched");
-    }
-  }
-
-  async function handleRemove(workspaceId: string) {
-    setErrorMessage(null);
-
-    try {
-      const workspaceList = await removeWorkspace(workspaceId);
-      hydrateWorkspaces(workspaceList);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Workspace could not be removed");
-    }
-  }
-
-  async function handleChooseFolder() {
-    setErrorMessage(null);
-    setNoticeMessage(null);
-
-    if (canUseNativeFolderPicker()) {
-      const selectedPath = await selectWorkspaceFolder();
-      if (!selectedPath) {
-        return;
-      }
-      await openWorkspacePath(selectedPath);
-      return;
-    }
-
-    // Browser: copy a real folder into the persisted virtual workspace.
-    const imported = await importFolderFromPicker();
-    if (!imported) {
-      return;
-    }
-    if (imported.files.length === 0) {
-      setNoticeMessage("No Markdown files were found in that folder.");
-      return;
-    }
-    await openWorkspacePath(`/${imported.folderName}`, imported.files);
-  }
-
-  async function openWorkspacePath(workspacePath: string, importedFiles?: ImportedFile[]) {
-    setErrorMessage(null);
-    setNoticeMessage(null);
-
-    try {
-      const workspaceList = await addWorkspace(workspacePath);
-      if (importedFiles && workspaceList.activeWorkspaceId) {
-        // Populate the virtual workspace before hydrate activates it, so the
-        // scan AppShell triggers reads the imported files.
-        await applyImportedFolder(workspaceList.activeWorkspaceId, importedFiles);
-      }
-      hydrateWorkspaces(workspaceList);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Workspace could not be added");
-    }
-  }
+  // One context-aware "New" button: a note on the Files tab, a chat on the
+  // Chat tab. Replaces the old top-bar "New note" + the in-panel "new chat".
+  const newLabel = sidebarTab === "files" ? "New note" : "New chat";
+  const onNew = sidebarTab === "files" ? createNote : newChat;
 
   return (
     <aside className="bob-sidebar">
-      <div className="bob-sidebar-section">
-        <div className="bob-section-label">
-          <span>Workspaces</span>
-          <button
-            type="button"
-            className="bob-icon-button"
-            onClick={() => void handleChooseFolder()}
-            aria-label="Open folder"
-            title="Open folder"
-          >
-            <FolderAdd size={16} />
-          </button>
-        </div>
-        <div className="bob-workspace-list">
-          {workspaces.map((workspace) => {
-            const active = workspace.id === activeWorkspaceId;
-            return (
-              <div key={workspace.id} className="bob-workspace-item">
-                <button
-                  type="button"
-                  onClick={() => void handleSwitch(workspace.id)}
-                  className={["bob-workspace-button", active ? "bob-workspace-button--active" : ""]
-                    .filter(Boolean)
-                    .join(" ")}
-                  title={workspace.path}
-                >
-                  <span className="truncate">{workspace.name}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleRemove(workspace.id)}
-                  aria-label={`Remove ${workspace.name}`}
-                  title={`Remove ${workspace.name}`}
-                  className="bob-icon-button bob-icon-button--quiet"
-                >
-                  <Close size={14} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        {noticeMessage ? (
-          <InlineNotification
-            hideCloseButton
-            kind="info"
-            lowContrast
-            subtitle={noticeMessage}
-            title="Browser preview"
-          />
-        ) : null}
-        {errorMessage ? (
-          <InlineNotification
-            hideCloseButton
-            kind="error"
-            lowContrast
-            subtitle={errorMessage}
-            title="Workspace failed"
-          />
-        ) : null}
+      <WorkspaceMenu />
+
+      <div className="bob-sidebar-tabs" role="tablist" aria-label="Sidebar">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={sidebarTab === "files"}
+          className={[
+            "bob-sidebar-tab",
+            sidebarTab === "files" ? "bob-sidebar-tab--active" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          onClick={() => setSidebarTab("files")}
+        >
+          Files
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={sidebarTab === "chat"}
+          className={[
+            "bob-sidebar-tab",
+            sidebarTab === "chat" ? "bob-sidebar-tab--active" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          onClick={() => setSidebarTab("chat")}
+        >
+          Chat
+        </button>
+        <button
+          type="button"
+          className="bob-sidebar-new"
+          onClick={() => void onNew()}
+          disabled={!activeWorkspace}
+          aria-label={newLabel}
+          title={newLabel}
+        >
+          <AddAlt size={16} />
+          <span>{newLabel}</span>
+        </button>
       </div>
 
-      <div className="bob-sidebar-files">
-        <div className="bob-section-label">
-          <span>Files</span>
-          <button
-            type="button"
-            className="bob-icon-button"
-            onClick={() => void createNote()}
-            aria-label="New note"
-            title="New note"
-            disabled={!activeWorkspace}
-          >
-            <AddAlt size={16} />
-          </button>
+      {sidebarTab === "files" ? (
+        <FilesTab
+          activeWorkspace={activeWorkspace}
+          onSelectFile={handleSelectFile}
+          onRenameFile={handleRenameAdapter}
+          onDeleteFile={handleDeleteAdapter}
+          activeFileContent={activeFileContent}
+          onUpdateContent={handleUpdateContent}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          searchResults={searchResults}
+          searchError={searchError}
+          searchState={searchState}
+          backlinks={activeBacklinks}
+        />
+      ) : (
+        <div className="bob-sidebar-pane bob-sidebar-pane--chat">
+          {activeWorkspace ? (
+            <SidebarChatList />
+          ) : (
+            <div className="bob-sidebar-chat__empty">
+              <p>Open a folder to see its conversations.</p>
+            </div>
+          )}
         </div>
-        {activeWorkspace ? (
-          <FileTree
-            activePath={activeWorkspace.activeFilePath}
-            fileContents={activeWorkspace.fileContents}
-            files={activeWorkspace.files}
-            onDelete={handleDeleteAdapter}
-            onRename={handleRenameAdapter}
-            onSelectFile={handleSelectFile}
-          />
-        ) : null}
+      )}
+
+      <button
+        type="button"
+        className="bob-sidebar-settings"
+        onClick={() => openSettings()}
+      >
+        <Settings size={16} />
+        <span>Settings</span>
+      </button>
+    </aside>
+  );
+}
+
+/**
+ * The Files tab body: the file tree, the active file's Properties (frontmatter)
+ * editor, and the Index search + backlinks. Pulled out of the sidebar shell so
+ * the tab switch is a single clean swap and each tab owns its own concern.
+ */
+function FilesTab({
+  activeWorkspace,
+  onSelectFile,
+  onRenameFile,
+  onDeleteFile,
+  activeFileContent,
+  onUpdateContent,
+  searchQuery,
+  onSearchQueryChange,
+  searchResults,
+  searchError,
+  searchState,
+  backlinks,
+}: {
+  activeWorkspace: BobWorkspace | null;
+  onSelectFile: (path: string) => void;
+  onRenameFile: (path: string) => void;
+  onDeleteFile: (path: string) => void;
+  activeFileContent: string | null;
+  onUpdateContent: (next: string) => void;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
+  searchResults: WorkspaceSearchHit[];
+  searchError: string | null;
+  searchState: "idle" | "searching";
+  backlinks: WorkspaceBacklinkRecord[];
+}) {
+  if (!activeWorkspace) {
+    return (
+      <div className="bob-sidebar-pane bob-sidebar-pane--files">
+        <InlineNotification
+          hideCloseButton
+          kind="info"
+          lowContrast
+          subtitle="Open a folder to browse its files."
+          title="No folder open"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bob-sidebar-pane bob-sidebar-pane--files">
+      <div className="bob-sidebar-files">
+        <FileTree
+          activePath={activeWorkspace.activeFilePath}
+          fileContents={activeWorkspace.fileContents}
+          files={activeWorkspace.files}
+          onDelete={onDeleteFile}
+          onRename={onRenameFile}
+          onSelectFile={onSelectFile}
+        />
       </div>
 
       {activeFileContent !== null ? (
-        <PropertiesPanel
-          markdown={activeFileContent}
-          onChange={handleUpdateContent}
-        />
+        <PropertiesPanel markdown={activeFileContent} onChange={onUpdateContent} />
       ) : null}
 
-      {activeWorkspace ? (
-        <div className="bob-sidebar-index">
-          <div className="bob-section-label">
-            <span>Index</span>
-            <span className="bob-section-meta">{indexStatusText(activeWorkspace)}</span>
-          </div>
-          <label className="bob-search-field">
-            <Search size={16} />
-            <input
-              aria-label="Search workspace"
-              disabled={activeWorkspace.indexState !== "ready"}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search files"
-              value={searchQuery}
-            />
-          </label>
-          <SearchResults
-            onSelectFile={(path) => void selectFile(path)}
-            query={searchQuery}
-            results={searchResults}
-            searchError={searchError}
-            searchState={searchState}
-          />
-          <BacklinksList
-            backlinks={activeBacklinks}
-            onSelectFile={(path) => void selectFile(path)}
-          />
+      <div className="bob-sidebar-index">
+        <div className="bob-section-label">
+          <span>Index</span>
+          <span className="bob-section-meta">{indexStatusText(activeWorkspace)}</span>
         </div>
-      ) : null}
-
-    </aside>
+        <label className="bob-search-field">
+          <Search size={16} />
+          <input
+            aria-label="Search workspace"
+            disabled={activeWorkspace.indexState !== "ready"}
+            onChange={(event) => onSearchQueryChange(event.target.value)}
+            placeholder="Search files"
+            value={searchQuery}
+          />
+        </label>
+        <SearchResults
+          onSelectFile={onSelectFile}
+          query={searchQuery}
+          results={searchResults}
+          searchError={searchError}
+          searchState={searchState}
+        />
+        <BacklinksList backlinks={backlinks} onSelectFile={onSelectFile} />
+      </div>
+    </div>
   );
 }
 

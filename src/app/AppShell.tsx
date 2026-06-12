@@ -8,8 +8,7 @@ import {
 } from "@carbon/react";
 import {
   ChatBot,
-  DocumentAdd,
-  Settings,
+  Document as DocumentIcon,
 } from "@carbon/react/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "../features/chat/ChatPanel";
@@ -19,7 +18,6 @@ import { TiptapMarkdownEditor } from "../features/editor/TiptapMarkdownEditor";
 import { PaneTabs, type EditorTab } from "../features/editor/PaneTabs";
 import { VersionHistory } from "../features/history/VersionHistory";
 import { WorkspaceWelcome } from "../features/workspace/WorkspaceWelcome";
-import { WorkspaceMenu } from "../features/workspace/WorkspaceMenu";
 import { NoWorkspaceWelcome } from "../features/workspace/NoWorkspaceWelcome";
 import { useMarkdownPreview } from "../features/editor/useMarkdownPreview";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
@@ -39,6 +37,9 @@ export function AppShell() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const addCommentToActiveFile = useWorkspaceStore((state) => state.addCommentToActiveFile);
   const chatOpen = useWorkspaceStore((state) => state.chatOpen);
+  const editorOpen = useWorkspaceStore((state) => state.editorOpen);
+  const toggleEditor = useWorkspaceStore((state) => state.toggleEditor);
+  const chatPulseSignal = useWorkspaceStore((state) => state.chatPulseSignal);
   const commentsOpen = useWorkspaceStore((state) => state.commentsOpen);
   const editorMode = useWorkspaceStore((state) => state.editorMode);
   const toggleEditorMode = useWorkspaceStore((state) => state.toggleEditorMode);
@@ -92,12 +93,24 @@ export function AppShell() {
       : null;
   const preview = useMarkdownPreview(activeFileBuffer?.content ?? "");
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  // Transient border-pulse on the chat panel: set true whenever a conversation
+  // is opened from the sidebar Chat tab (the store bumps `chatPulseSignal`),
+  // cleared after the ~600ms keyframe so a subsequent open restarts it. The
+  // initial signal (0) is skipped — only an explicit open pulses.
+  const [chatPulsing, setChatPulsing] = useState(false);
+  useEffect(() => {
+    if (chatPulseSignal === 0) {
+      return;
+    }
+    setChatPulsing(true);
+    const timer = window.setTimeout(() => setChatPulsing(false), 650);
+    return () => window.clearTimeout(timer);
+  }, [chatPulseSignal]);
   const [exportNotice, setExportNotice] = useState<{
     kind: "success" | "error";
     text: string;
   } | null>(null);
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen);
-  const openSettings = useWorkspaceStore((state) => state.openSettings);
   const closeSettings = useWorkspaceStore((state) => state.closeSettings);
   // Stabilize the editor's Ask callback so `React.memo` on
   // <TiptapMarkdownEditor /> can short-circuit re-renders. Without
@@ -394,35 +407,32 @@ export function AppShell() {
         <HeaderName href="#main-content" prefix="">
           Compose
         </HeaderName>
-        {/* Left action group: the workspace menu (Home), New note, Settings,
-          * separated from the product name by a styled rule. */}
-        <span className="bob-header-rule" aria-hidden="true" />
-        <div className="bob-header-actions" role="group" aria-label="Workspace">
-          <WorkspaceMenu />
-          <HeaderGlobalAction
-            aria-label="New note"
-            className={activeWorkspace ? undefined : "bob-header-action--disabled"}
-            onClick={() => {
-              if (activeWorkspace) void createNote();
-            }}
-            tooltipAlignment="start"
-          >
-            <DocumentAdd size={20} />
-          </HeaderGlobalAction>
-          <HeaderGlobalAction
-            aria-label="Settings"
-            onClick={() => openSettings()}
-            tooltipAlignment="start"
-          >
-            <Settings size={20} />
-          </HeaderGlobalAction>
-        </div>
+        {/* Minimal top bar: just the product name and, pinned right, the two
+          * independent pane toggles (editor + chat). Everything else (workspace
+          * switcher, New, Settings) now lives in the sidebar. At least one pane
+          * must stay visible, so the toggle for the only-open pane is disabled
+          * (the store guards it too). */}
         <HeaderGlobalBar>
+          <HeaderGlobalAction
+            aria-label={editorOpen ? "Hide editor" : "Show editor"}
+            className={[
+              editorOpen ? "bob-header-action--open" : "",
+              activeWorkspace && !(editorOpen && !chatOpen) ? "" : "bob-header-action--disabled",
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined}
+            onClick={() => {
+              if (activeWorkspace) toggleEditor();
+            }}
+            tooltipAlignment="end"
+          >
+            <DocumentIcon size={20} />
+          </HeaderGlobalAction>
           <HeaderGlobalAction
             aria-label={chatOpen ? "Hide chat" : "Open chat"}
             className={[
               chatOpen ? "bob-header-action--open" : "",
-              activeWorkspace ? "" : "bob-header-action--disabled",
+              activeWorkspace && !(chatOpen && !editorOpen) ? "" : "bob-header-action--disabled",
             ]
               .filter(Boolean)
               .join(" ") || undefined}
@@ -439,9 +449,18 @@ export function AppShell() {
       {!activeWorkspace ? (
         <NoWorkspaceWelcome />
       ) : (
-      <div className={["bob-workspace", chatOpen ? "bob-workspace--chat-open" : ""].join(" ")}>
+      <div
+        className={[
+          "bob-workspace",
+          editorOpen ? "bob-workspace--editor-open" : "",
+          chatOpen ? "bob-workspace--chat-open" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <WorkspaceSidebar />
 
+        {editorOpen ? (
         <main id="main-content" className="bob-editor-region">
           <PaneTabs
             files={openTabs}
@@ -597,9 +616,23 @@ export function AppShell() {
             </span>
           </div>
         </main>
+        ) : null}
 
         {chatOpen ? (
-          <aside className="bob-chat-region">
+          <aside
+            className={[
+              "bob-chat-region",
+              // A transient class drives the ~600ms border-pulse keyframe each
+              // time a conversation is opened from the sidebar Chat tab (the
+              // signal bumps), drawing the eye to the panel even when it was
+              // already open. Toggled off after the animation so the next pulse
+              // can re-add it and restart the keyframe. ChatPanel is NOT
+              // remounted (no key churn), so its local state survives.
+              chatPulsing ? "bob-chat-region--pulse" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
             <MarkdownLinkContext.Provider value={chatLinkContext}>
               <ChatPanel />
             </MarkdownLinkContext.Provider>
