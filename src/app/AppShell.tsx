@@ -8,9 +8,7 @@ import {
 } from "@carbon/react";
 import {
   ChatBot,
-  Chat,
   DocumentAdd,
-  Home,
   Settings,
 } from "@carbon/react/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -21,9 +19,9 @@ import { TiptapMarkdownEditor } from "../features/editor/TiptapMarkdownEditor";
 import { PaneTabs, type EditorTab } from "../features/editor/PaneTabs";
 import { VersionHistory } from "../features/history/VersionHistory";
 import { WorkspaceWelcome } from "../features/workspace/WorkspaceWelcome";
-import { SettingsPanel } from "../features/settings/SettingsPanel";
+import { WorkspaceMenu } from "../features/workspace/WorkspaceMenu";
+import { NoWorkspaceWelcome } from "../features/workspace/NoWorkspaceWelcome";
 import { useMarkdownPreview } from "../features/editor/useMarkdownPreview";
-import { DashboardScreen } from "../features/dashboard/DashboardScreen";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { SetupScreen } from "../features/setup/SetupScreen";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
@@ -74,9 +72,6 @@ export function AppShell() {
   // makes the dependency explicit and lets useSyncExternalStore
   // bail cleanly when the boolean doesn't change.
   const onboardingComplete = useWorkspaceStore((state) => Boolean(state.onboarding.completedAt));
-  const switchWorkspace = useWorkspaceStore((state) => state.switchWorkspace);
-  const viewMode = useWorkspaceStore((state) => state.viewMode);
-  const showDashboard = useWorkspaceStore((state) => state.showDashboard);
   const toggleChat = useWorkspaceStore((state) => state.toggleChat);
   const requestComposerFocus = useWorkspaceStore((state) => state.requestComposerFocus);
   const updateActiveContent = useWorkspaceStore((state) => state.updateActiveContent);
@@ -104,12 +99,6 @@ export function AppShell() {
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen);
   const openSettings = useWorkspaceStore((state) => state.openSettings);
   const closeSettings = useWorkspaceStore((state) => state.closeSettings);
-  const selectPane = useWorkspaceStore((state) => state.selectPane);
-  const closePane = useWorkspaceStore((state) => state.closePane);
-  // The active non-file pane (Settings, …) when one is the active tab.
-  const activePaneId = activeWorkspace?.activePaneId ?? null;
-  const activePane =
-    activeWorkspace?.openPanes.find((pane) => pane.id === activePaneId) ?? null;
   // Stabilize the editor's Ask callback so `React.memo` on
   // <TiptapMarkdownEditor /> can short-circuit re-renders. Without
   // useCallback, every render of AppShell creates a fresh arrow
@@ -345,33 +334,11 @@ export function AppShell() {
     return <SetupScreen />;
   }
 
-  // No workspace yet — just the Dashboard. There's nothing
-  // workspace-related to keep mounted, so the simple early-return
-  // is fine.
-  if (!activeWorkspace) {
-    return (
-      <>
-        <DashboardScreen
-          onOpenSettings={() => openSettings()}
-          onOpenWorkspace={(workspaceId) => switchWorkspace(workspaceId)}
-        />
-        {settingsOpen ? <SettingsDialog onClose={() => closeSettings()} /> : null}
-      </>
-    );
-  }
-
-  // Workspace exists. Render BOTH the dashboard and the workspace
-  // shell, gating visibility with CSS. This is the
-  // perf-critical optimisation flagged by the audit: previously
-  // clicking the Home icon flipped `viewMode` to "dashboard" and
-  // unmounted the entire workspace tree (TipTap editor, chat
-  // panel, file watcher). The TipTap remount alone is a
-  // multi-hundred-millisecond stall on a non-trivial document.
-  // Keeping the tree mounted under `display: none` preserves all
-  // in-memory state and snaps back instantly when the user
-  // returns to the workspace.
-  const dashboardVisible = viewMode === "dashboard";
-
+  // The shell is always present — the top bar (workspace menu / new note /
+  // settings / chat) renders whether or not a workspace is open. When there
+  // is no active workspace, the main area shows the no-workspace welcome
+  // (open-a-folder + recents) in place of the sidebar + editor. This replaces
+  // the old standalone dashboard view.
   const statusDirty = Boolean(activeFileBuffer?.dirty);
   const statusMeta = activeFileEntry
     ? statusDirty
@@ -421,64 +388,47 @@ export function AppShell() {
           }}
         />
       ) : null}
-      {/* Dashboard rendered alongside, hidden via CSS so its
-        * state survives the toggle. `display: none` drops it
-        * out of layout without unmounting. */}
-      <div style={{ display: dashboardVisible ? "contents" : "none" }}>
-        <DashboardScreen
-          onOpenSettings={() => openSettings()}
-          onOpenWorkspace={(workspaceId) => switchWorkspace(workspaceId)}
-        />
-      </div>
-      <div
-        className="bob-app-shell"
-        style={{ display: dashboardVisible ? "none" : "flex" }}
-      >
+      <div className="bob-app-shell">
       <Header aria-label="Compose">
         <SkipToContent />
         <HeaderName href="#main-content" prefix="">
           Compose
         </HeaderName>
-        <HeaderGlobalBar>
-          <HeaderGlobalAction
-            aria-label="Home"
-            onClick={showDashboard}
-            tooltipAlignment="end"
-          >
-            <Home size={20} />
-          </HeaderGlobalAction>
+        {/* Left action group: the workspace menu (Home), New note, Settings,
+          * separated from the product name by a styled rule. */}
+        <span className="bob-header-rule" aria-hidden="true" />
+        <div className="bob-header-actions" role="group" aria-label="Workspace">
+          <WorkspaceMenu />
           <HeaderGlobalAction
             aria-label="New note"
-            onClick={() => void createNote()}
-            tooltipAlignment="end"
+            className={activeWorkspace ? undefined : "bob-header-action--disabled"}
+            onClick={() => {
+              if (activeWorkspace) void createNote();
+            }}
+            tooltipAlignment="start"
           >
             <DocumentAdd size={20} />
           </HeaderGlobalAction>
           <HeaderGlobalAction
             aria-label="Settings"
             onClick={() => openSettings()}
-            tooltipAlignment="end"
+            tooltipAlignment="start"
           >
             <Settings size={20} />
           </HeaderGlobalAction>
-          <HeaderGlobalAction
-            aria-label={
-              commentsOpen
-                ? "Hide comments"
-                : activeFileComments.length > 0
-                  ? `Show comments (${activeFileComments.length})`
-                  : "Show comments"
-            }
-            className={commentsOpen ? "bob-header-action--open" : undefined}
-            onClick={toggleComments}
-            tooltipAlignment="end"
-          >
-            <Chat size={20} />
-          </HeaderGlobalAction>
+        </div>
+        <HeaderGlobalBar>
           <HeaderGlobalAction
             aria-label={chatOpen ? "Hide chat" : "Open chat"}
-            className={chatOpen ? "bob-header-action--open" : undefined}
-            onClick={toggleChat}
+            className={[
+              chatOpen ? "bob-header-action--open" : "",
+              activeWorkspace ? "" : "bob-header-action--disabled",
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined}
+            onClick={() => {
+              if (activeWorkspace) toggleChat();
+            }}
             tooltipAlignment="end"
           >
             <ChatBot size={20} />
@@ -486,6 +436,9 @@ export function AppShell() {
         </HeaderGlobalBar>
       </Header>
 
+      {!activeWorkspace ? (
+        <NoWorkspaceWelcome />
+      ) : (
       <div className={["bob-workspace", chatOpen ? "bob-workspace--chat-open" : ""].join(" ")}>
         <WorkspaceSidebar />
 
@@ -493,12 +446,8 @@ export function AppShell() {
           <PaneTabs
             files={openTabs}
             activeFilePath={activeWorkspace?.activeFilePath ?? ""}
-            activePaneId={activePaneId}
-            panes={activeWorkspace?.openPanes ?? []}
             onSelectFile={(path) => void selectFile(path)}
             onCloseFile={handleCloseTab}
-            onSelectPane={(id) => selectPane(id)}
-            onClosePane={(id) => closePane(id)}
           />
           {activeFileBuffer?.conflict ? (
             <div className="bob-conflict-banner" role="alert">
@@ -526,23 +475,7 @@ export function AppShell() {
             </div>
           ) : null}
           <div className="bob-editor-body">
-            {activePaneId ? (
-              // A non-file pane (Settings, …) is the active tab. Only the
-              // active pane is mounted — the editor unmounts and remounts
-              // from its cached buffer when you switch back to a file tab.
-              <div className="bob-pane-host">
-                {activePane?.kind === "settings" ? (
-                  <SettingsPanel />
-                ) : (
-                  <div className="bob-empty-state">
-                    <div>
-                      <p className="bob-empty-state__title">{activePane?.title ?? "Pane"}</p>
-                      <p>This pane type isn't available yet.</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : activeFileEntry && activeFileBuffer ? (
+            {activeFileEntry && activeFileBuffer ? (
               <div
                 className={[
                   "bob-document-workspace",
@@ -572,6 +505,9 @@ export function AppShell() {
                   onSave={saveActiveFile}
                   onShowVersionHistory={handleShowVersionHistory}
                   onExport={handleExport}
+                  onToggleComments={toggleComments}
+                  commentsOpen={commentsOpen}
+                  commentCount={activeFileComments.length}
                 />
                 {commentsOpen ? (
                   <CommentsPanel
@@ -606,7 +542,6 @@ export function AppShell() {
               </div>
             )}
           </div>
-          {activePaneId ? null : (
           <div className="bob-status-bar">
             <span className="bob-status-bar__path">
               {activeFileEntry?.relativePath ?? activeWorkspace?.path ?? ""}
@@ -661,7 +596,6 @@ export function AppShell() {
               ) : null}
             </span>
           </div>
-          )}
         </main>
 
         {chatOpen ? (
@@ -672,6 +606,7 @@ export function AppShell() {
           </aside>
         ) : null}
       </div>
+      )}
 
       </div>
       {settingsOpen ? <SettingsDialog onClose={() => closeSettings()} /> : null}

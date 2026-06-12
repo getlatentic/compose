@@ -173,7 +173,7 @@ function WelcomeScreen({ onStart, onSkip }: { onStart: () => void; onSkip: () =>
           Get started
         </Button>
         <Button kind="ghost" onClick={onSkip} size="lg">
-          Skip to dashboard
+          Skip for now
         </Button>
       </div>
       <p className="bob-onboard__small">Takes about a minute. You can re-run setup from Settings.</p>

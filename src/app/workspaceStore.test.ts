@@ -72,7 +72,7 @@ describe("workspace store", () => {
       onboarding: {},
       saveError: null,
       selectedHarnessId: "bob",
-      viewMode: "dashboard",
+      settingsOpen: false,
       workspaces: [],
     });
   });
@@ -205,11 +205,11 @@ describe("workspace store", () => {
     expect(runHarnessStream).toHaveBeenCalledWith(
       expect.objectContaining({ harnessId: "codex", chatMode: "code" }),
     );
-    // The bob "not connected" gate did not fire: no error, no Settings pane.
+    // The bob "not connected" gate did not fire: no error, no Settings modal.
     const workspace = useWorkspaceStore.getState().activeWorkspace();
     expect(workspace?.chatThread.runState).not.toBe("error");
     expect(workspace?.chatThread.runError).toBeNull();
-    expect(workspace?.openPanes.some((pane) => pane.kind === "settings") ?? false).toBe(false);
+    expect(useWorkspaceStore.getState().settingsOpen).toBe(false);
   });
 
   it("forwards the selected harness's persisted model + tuning on an ask-about-selection run", () => {
