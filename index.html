@@ -35,7 +35,9 @@
         padding: 0;
         height: 100%;
         background: #ffffff;
-        font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont,
+        /* Matches the app's single UI stack ($ui-font in global.scss):
+           IBM Plex isn't bundled, so the chrome uses system-ui everywhere. */
+        font-family: system-ui, -apple-system, BlinkMacSystemFont,
           "Segoe UI", Roboto, sans-serif;
         color: #161616;
       }
