@@ -12,6 +12,7 @@ import {
 import type { Editor } from "@tiptap/react";
 import type { ReactNode } from "react";
 import type { TiptapEditorMode } from "./TiptapMarkdownEditor";
+import { useTextPrompt } from "../dialogs/TextPromptProvider";
 
 /**
  * The editor's toolbar bar: a formatting group on the left (WYSIWYG only) and a
@@ -67,6 +68,7 @@ function FormattingButtons({
   editor: Editor;
   onInsertImage?: () => void;
 }) {
+  const promptText = useTextPrompt();
   return (
     <>
       <HeadingGroup editor={editor} />
@@ -140,13 +142,20 @@ function FormattingButtons({
         active={editor.isActive("link")}
         onClick={(e) => {
           const previousUrl = e.getAttributes("link").href as string | undefined;
-          const url = window.prompt("Link URL", previousUrl ?? "https://");
-          if (url === null) return;
-          if (url === "") {
-            e.chain().focus().extendMarkRange("link").unsetLink().run();
-            return;
-          }
-          e.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+          void (async () => {
+            const url = await promptText({
+              title: "Link URL",
+              label: "URL (leave empty to remove the link)",
+              defaultValue: previousUrl ?? "https://",
+              allowEmpty: true,
+            });
+            if (url === null) return;
+            if (url === "") {
+              e.chain().focus().extendMarkRange("link").unsetLink().run();
+              return;
+            }
+            e.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+          })();
         }}
         icon={<TextLink size={16} />}
       />
@@ -160,9 +169,15 @@ function FormattingButtons({
             onInsertImage();
             return;
           }
-          const url = window.prompt("Image URL");
-          if (!url) return;
-          editor.chain().focus().setImage({ src: url }).run();
+          void (async () => {
+            const url = await promptText({
+              title: "Insert image",
+              label: "Image URL",
+              defaultValue: "https://",
+            });
+            if (!url) return;
+            editor.chain().focus().setImage({ src: url }).run();
+          })();
         }}
         icon={<ImageIcon size={16} />}
       />

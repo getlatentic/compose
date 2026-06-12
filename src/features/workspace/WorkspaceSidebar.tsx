@@ -20,6 +20,7 @@ import {
   importFolderFromPicker,
   type ImportedFile,
 } from "../../lib/workspace/folderImport";
+import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { FileTree } from "../file-tree/FileTree";
 import { PropertiesPanel } from "./PropertiesPanel";
 
@@ -33,6 +34,7 @@ export function WorkspaceSidebar() {
   const switchLocalWorkspace = useWorkspaceStore((state) => state.switchWorkspace);
   const updateActiveContent = useWorkspaceStore((state) => state.updateActiveContent);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
+  const promptText = useTextPrompt();
   const activeWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
     [activeWorkspaceId, workspaces],
@@ -97,13 +99,18 @@ export function WorkspaceSidebar() {
   const handleRename = useCallback(
     async (relativePath: string) => {
       await selectFile(relativePath);
-      const next = window.prompt("Rename file to:", relativePath);
+      const next = await promptText({
+        title: "Rename file",
+        label: "New name",
+        defaultValue: relativePath,
+        submitLabel: "Rename",
+      });
       if (!next || next.trim() === relativePath) {
         return;
       }
       await renameActiveFile(next.trim());
     },
-    [selectFile, renameActiveFile],
+    [selectFile, renameActiveFile, promptText],
   );
 
   const handleDelete = useCallback(
