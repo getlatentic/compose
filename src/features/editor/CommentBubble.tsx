@@ -98,18 +98,31 @@ export function CommentBubble({
     setDraft("");
   }
 
+  /** After a comment lands, dismiss the whole bubble — not just the
+   * composer. `close()` alone drops back to the pill, because the editor
+   * selection (which drives the upstream `bubbleSelection`) is still
+   * non-empty; collapsing it routes through `onSelectionUpdate`, which
+   * clears the selection snapshot and unmounts the bubble. (Escape / the
+   * X keep the pill on purpose — the user may still want to comment.) */
+  function dismissAfterAction() {
+    close();
+    if (editor) {
+      editor.commands.setTextSelection(editor.state.selection.to);
+    }
+  }
+
   function sendToChat() {
     const note = draft.trim();
     if (!note || !selection) return;
     onSendToChat?.(note, selection);
-    close();
+    dismissAfterAction();
   }
 
   function queue() {
     const note = draft.trim();
     if (!note || !selection) return;
     onQueueComment?.(note, selection);
-    close();
+    dismissAfterAction();
   }
 
   // ---------- Pill: a single "Comment" trigger ----------
