@@ -16,6 +16,7 @@ import { ConversationActionsMenu, type ConversationActions } from "./Conversatio
 import { ConversationTitleEditor } from "./ConversationTitleEditor";
 import { AllConversationsView } from "./AllConversationsView";
 import { ConversationDeleteToast } from "./ConversationDeleteToast";
+import { useTextPrompt } from "../dialogs/TextPromptProvider";
 
 /**
  * The assistant chat surface. A thin orchestrator: it reads the active
@@ -47,6 +48,7 @@ export function ChatPanel() {
   const renameConversation = useWorkspaceStore((state) => state.renameConversation);
   const archiveConversation = useWorkspaceStore((state) => state.archiveConversation);
   const deleteConversation = useWorkspaceStore((state) => state.deleteConversation);
+  const promptText = useTextPrompt();
   const undoDeleteConversation = useWorkspaceStore((state) => state.undoDeleteConversation);
   const duplicateConversation = useWorkspaceStore((state) => state.duplicateConversation);
   const deleteNotice = useWorkspaceStore((state) => state.conversationDeleteNotice);
@@ -140,10 +142,16 @@ export function ChatPanel() {
   // open conversation's header menu builds the same shape inline below.
   const makeActions = (conversation: ConversationSummary): ConversationActions => ({
     onRename: () => {
-      const next = window.prompt("Rename conversation", conversation.title);
-      if (next !== null) {
-        void renameConversation(conversation.conversationId, next.trim() ? next.trim() : null);
-      }
+      void (async () => {
+        const next = await promptText({
+          title: "Rename conversation",
+          defaultValue: conversation.title ?? "",
+          submitLabel: "Rename",
+        });
+        if (next) {
+          void renameConversation(conversation.conversationId, next);
+        }
+      })();
     },
     onDuplicate: () => void duplicateConversation(conversation.conversationId),
     onExport: () => void exportConversation(conversation.conversationId, conversation.title),

@@ -1,5 +1,10 @@
 import { AppShell } from "./AppShell";
+import { TextPromptProvider } from "../features/dialogs/TextPromptProvider";
 
 export function App() {
-  return <AppShell />;
+  return (
+    <TextPromptProvider>
+      <AppShell />
+    </TextPromptProvider>
+  );
 }
