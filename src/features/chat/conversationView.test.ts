@@ -5,7 +5,6 @@ import {
   conversationDateGroup,
   filterConversations,
   groupConversationsByDate,
-  recentConversations,
   relativeTime,
 } from "./conversationView";
 
@@ -95,17 +94,5 @@ describe("groupConversationsByDate", () => {
     );
     expect(sections.map((s) => s.group)).toEqual(["Today", "Older"]);
     expect(sections[0].conversations.map((c) => c.conversationId)).toEqual(["t1", "t2"]);
-  });
-});
-
-describe("recentConversations", () => {
-  it("drops archived and caps the count", () => {
-    const list = [
-      summary({ conversationId: "a" }),
-      summary({ conversationId: "b", archived: true }),
-      summary({ conversationId: "c" }),
-    ];
-    expect(recentConversations(list, 1).map((c) => c.conversationId)).toEqual(["a"]);
-    expect(recentConversations(list, 5).map((c) => c.conversationId)).toEqual(["a", "c"]);
   });
 });

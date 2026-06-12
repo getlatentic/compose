@@ -95,6 +95,10 @@ select {
 .bob-header-action--disabled {
   color: var(--cds-icon-disabled, #8d8d8d);
   cursor: not-allowed;
+  // Inert: the only-open pane's toggle (and every action with no workspace)
+  // can't be activated. The store guards the no-op too, but this stops the
+  // hover/active feedback so the control reads as unavailable.
+  pointer-events: none;
 }
 
 .bob-header-action--disabled:hover {
@@ -121,12 +125,117 @@ select {
   background: var(--cds-layer-01, #f4f4f4);
 }
 
-.bob-sidebar-section {
+// === Sidebar: workspace switcher (pinned top) ===
+.bob-workspace-switcher {
   display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
+  align-items: center;
   gap: 0.25rem;
-  padding: 0.75rem 0.5rem 0.5rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-workspace-switcher__name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bob-workspace-switcher__menu.cds--overflow-menu {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  background: transparent;
+  border-radius: 2px;
+}
+
+.bob-workspace-switcher__menu.cds--overflow-menu:hover,
+.bob-workspace-switcher__menu.cds--overflow-menu[aria-expanded="true"] {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-workspace-switcher__menu.cds--overflow-menu svg {
+  fill: var(--cds-icon-secondary, #525252);
+}
+
+.bob-workspace-switcher__forget .cds--overflow-menu-options__option-content {
+  font-size: 0.75rem;
+}
+
+// === Sidebar: Files | Chat tabs + the context-aware New button ===
+.bob-sidebar-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-sidebar-tab {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  block-size: 1.75rem;
+  padding-inline: 0.625rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 2px;
+}
+
+.bob-sidebar-tab:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-sidebar-tab--active {
+  color: var(--cds-text-primary, #161616);
+  background: var(--cds-layer-selected-01, #e0e0e0);
+  font-weight: 600;
+}
+
+.bob-sidebar-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-inline-start: auto;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  block-size: 1.75rem;
+  padding-inline: 0.5rem;
+  color: var(--cds-link-primary, #0f62fe);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 2px;
+}
+
+.bob-sidebar-new:hover:not(:disabled) {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.bob-sidebar-new:disabled {
+  color: var(--cds-text-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
+// The active tab body fills the remaining height and scrolls; each tab owns
+// its own layout below.
+.bob-sidebar-pane {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.bob-sidebar-pane--chat {
+  padding: 0.25rem 0.25rem 0.5rem;
 }
 
 .bob-sidebar-files {
@@ -136,6 +245,32 @@ select {
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.75rem 0.5rem 0.5rem;
+}
+
+// === Sidebar: Settings footer (pinned bottom) ===
+.bob-sidebar-settings {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
+  border: 0;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: transparent;
+  cursor: pointer;
+  block-size: 2.5rem;
+  padding-inline: 0.75rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.bob-sidebar-settings:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+}
+
+.bob-sidebar-settings svg {
+  fill: var(--cds-icon-secondary, #525252);
 }
 
 .bob-chat-context {
@@ -285,28 +420,6 @@ select {
   }
 }
 
-.bob-workspace-list {
-  display: grid;
-  gap: 1px;
-}
-
-.bob-workspace-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-}
-
-.bob-workspace-item .bob-icon-button--quiet {
-  opacity: 0;
-  transition: opacity 80ms ease;
-}
-
-.bob-workspace-item:hover .bob-icon-button--quiet,
-.bob-workspace-item:focus-within .bob-icon-button--quiet {
-  opacity: 1;
-}
-
-.bob-workspace-button,
 .bob-icon-button,
 .bob-file-row {
   border: 0;
@@ -315,38 +428,9 @@ select {
   cursor: pointer;
 }
 
-.bob-workspace-button {
-  position: relative;
-  block-size: 1.75rem;
-  min-inline-size: 0;
-  padding-inline: 0.5rem;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.8125rem;
-  line-height: 1.75rem;
-  text-align: start;
-  border-radius: 2px;
-}
-
-.bob-workspace-button:hover,
 .bob-icon-button:hover,
 .bob-file-row:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
-}
-
-.bob-workspace-button--active {
-  color: var(--cds-text-primary, #161616);
-  background: var(--cds-layer-selected-01, #e0e0e0);
-  font-weight: 600;
-}
-
-.bob-workspace-button--active::before {
-  content: "";
-  position: absolute;
-  inset-block: 0.25rem;
-  inset-inline-start: -0.375rem;
-  inline-size: 3px;
-  background: var(--cds-focus, #0f62fe);
-  border-radius: 0 2px 2px 0;
 }
 
 .bob-icon-button {
@@ -362,10 +446,6 @@ select {
   color: var(--cds-icon-disabled, #c6c6c6);
   cursor: not-allowed;
   background: transparent;
-}
-
-.bob-icon-button--quiet {
-  color: var(--cds-icon-secondary, #525252);
 }
 
 .bob-setup-step__form .cds--btn,
@@ -552,6 +632,38 @@ select {
 
 .bob-chat-region {
   background: var(--cds-layer-02, #ffffff);
+  position: relative;
+}
+
+// Border-pulse: a ~600ms inset ring drawn over the panel when a conversation
+// is opened from the sidebar Chat tab (AppShell toggles `--pulse` for the
+// keyframe's duration, then removes it so the next open can replay it). A
+// pseudo-element keeps the animation off the panel's own box (no layout shift).
+.bob-chat-region--pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: 2px;
+  animation: bob-chat-pulse 600ms ease-out 1;
+}
+
+@keyframes bob-chat-pulse {
+  0% {
+    box-shadow: inset 0 0 0 2px var(--cds-focus, #0f62fe);
+    opacity: 1;
+  }
+  100% {
+    box-shadow: inset 0 0 0 2px var(--cds-focus, #0f62fe);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bob-chat-region--pulse::after {
+    animation: none;
+  }
 }
 
 .bob-pane-header {
@@ -1560,18 +1672,30 @@ select {
   gap: 0.5rem;
 }
 
-.bob-chat-header__new {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  color: var(--cds-icon-secondary, #525252);
+// The open conversation's title — a click-to-rename button (or plain text
+// before the first send). Switching/new conversations live in the sidebar now.
+.bob-chat-header__title-button,
+.bob-chat-header__title-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  color: inherit;
 }
 
-.bob-chat-header__new:disabled {
-  color: var(--cds-icon-disabled, #c6c6c6);
-  cursor: not-allowed;
+.bob-chat-header__title-button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.125rem 0.25rem;
+  margin-inline: -0.25rem;
+  border-radius: 2px;
+  text-align: start;
+}
+
+.bob-chat-header__title-button:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
 .bob-mark {
@@ -2895,161 +3019,9 @@ select {
   font-weight: 600;
 }
 
-// --- Conversation switcher (chat header) -----------------------------------
+// --- Conversation title (chat header) --------------------------------------
 
-// The history dropdown trigger: the open conversation's title + a chevron.
-.bob-conv-history {
-  position: relative;
-  display: flex;
-  min-inline-size: 0;
-}
-
-.bob-conv-history__trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-inline-size: 0;
-  max-inline-size: 14rem;
-  padding: 0.125rem 0.375rem;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--cds-text-primary, #161616);
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.bob-conv-history__trigger:hover {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-}
-
-.bob-conv-history__trigger svg {
-  flex-shrink: 0;
-  color: var(--cds-icon-secondary, #525252);
-}
-
-.bob-conv-history__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-// Opens DOWNWARD — the header sits at the panel's top edge.
-.bob-conv-history__panel {
-  position: absolute;
-  inset-block-start: calc(100% + 4px);
-  inset-inline-start: 0;
-  z-index: 30;
-  inline-size: 19rem;
-  max-inline-size: 80vw;
-  padding: 0.25rem;
-  background: var(--cds-layer-02, #ffffff);
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-}
-
-.bob-conv-history__empty {
-  margin: 0;
-  padding: 0.75rem 0.5rem;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.8125rem;
-}
-
-.bob-conv-history__list {
-  margin: 0;
-  padding: 0;
-  max-block-size: 18rem;
-  overflow-y: auto;
-  list-style: none;
-}
-
-.bob-conv-history__item {
-  display: grid;
-  gap: 0.125rem;
-  inline-size: 100%;
-  padding: 0.4375rem 0.5rem;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--cds-text-primary, #161616);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.bob-conv-history__item:hover {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-}
-
-.bob-conv-history__item.is-active {
-  background: var(--cds-layer-selected-01, #e0e0e0);
-}
-
-.bob-conv-history__item-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.bob-conv-history__item-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.bob-conv-history__item-time {
-  flex-shrink: 0;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.6875rem;
-}
-
-.bob-conv-history__item-preview {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.75rem;
-}
-
-.bob-conv-history__footer {
-  display: flex;
-  gap: 0.25rem;
-  margin-block-start: 0.25rem;
-  padding-block-start: 0.25rem;
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-.bob-conv-history__action {
-  display: inline-flex;
-  flex: 1 1 0;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.5rem;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--cds-text-primary, #161616);
-  font: inherit;
-  font-size: 0.75rem;
-  cursor: pointer;
-}
-
-.bob-conv-history__action:hover {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-}
-
-.bob-conv-history__action svg {
-  color: var(--cds-icon-secondary, #525252);
-}
-
-// Inline title editor (⋮ Rename / replaces the trigger while editing).
+// Inline title editor (⋮ Rename / replaces the title while editing).
 .bob-conv-title-input {
   min-inline-size: 0;
   max-inline-size: 14rem;
@@ -3139,132 +3111,51 @@ select {
   background: var(--cds-button-danger-secondary-hover, #ffd7d9);
 }
 
-// --- All-conversations overlay ---------------------------------------------
-
-.bob-all-conv {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
+// === Sidebar Chat tab: conversation list (reuses .bob-conv-row) ===
+.bob-sidebar-chat {
   display: flex;
   flex-direction: column;
-  background: var(--cds-layer-01, #f4f4f4);
+  gap: 0.75rem;
+  padding: 0.25rem;
 }
 
-.bob-all-conv__header {
+.bob-sidebar-chat__section {
   display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 0.75rem;
-  background: var(--cds-layer-02, #ffffff);
-  border-block-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.bob-all-conv__title {
+.bob-sidebar-chat__section-title {
   margin: 0;
-  color: var(--cds-text-primary, #161616);
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.bob-all-conv__search {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.75rem;
-  padding: 0.375rem 0.5rem;
-  background: var(--cds-field-01, #ffffff);
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 6px;
-}
-
-.bob-all-conv__search svg {
-  flex-shrink: 0;
-  color: var(--cds-icon-secondary, #525252);
-}
-
-.bob-all-conv__search-input {
-  inline-size: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--cds-text-primary, #161616);
-  font: inherit;
-  font-size: 0.8125rem;
-}
-
-.bob-all-conv__search-input:focus {
-  outline: none;
-}
-
-.bob-all-conv__pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  padding-inline: 0.75rem;
-  padding-block-end: 0.5rem;
-}
-
-.bob-all-conv__pill {
-  max-inline-size: 14rem;
-  overflow: hidden;
-  padding: 0.25rem 0.625rem;
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 999px;
-  background: var(--cds-layer-02, #ffffff);
-  color: var(--cds-text-secondary, #525252);
-  font: inherit;
-  font-size: 0.75rem;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
-
-.bob-all-conv__pill:hover {
-  background: var(--cds-layer-hover-02, #e0e0e0);
-}
-
-.bob-all-conv__pill.is-active {
-  background: var(--cds-button-primary, #0f62fe);
-  border-color: var(--cds-button-primary, #0f62fe);
-  color: var(--cds-text-on-color, #ffffff);
-}
-
-.bob-all-conv__body {
-  flex: 1 1 auto;
-  min-block-size: 0;
-  overflow-y: auto;
-  padding: 0 0.75rem 0.75rem;
-}
-
-.bob-all-conv__empty {
-  margin: 1.5rem 0;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.8125rem;
-  text-align: center;
-}
-
-.bob-all-conv__section {
-  margin-block-start: 0.75rem;
-}
-
-.bob-all-conv__section-title {
-  margin: 0 0 0.375rem;
+  padding-inline: 0.375rem;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
   font-weight: 600;
+  letter-spacing: 0.03125rem;
+  line-height: 1rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
-.bob-all-conv__list {
-  display: grid;
-  gap: 0.375rem;
+.bob-sidebar-chat__list {
+  list-style: none;
   margin: 0;
   padding: 0;
-  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-// A conversation row (all-conversations view).
+.bob-sidebar-chat__empty {
+  padding: 1rem 0.75rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.8125rem;
+  line-height: 1.3;
+}
+
+.bob-sidebar-chat__empty p {
+  margin: 0;
+}
+
 .bob-conv-row {
   display: flex;
   align-items: stretch;
@@ -4125,12 +4016,23 @@ select {
 }
 
 @media (min-width: 48rem) {
+  // The workspace is sidebar + (editor and/or chat). The editor `<main>` and
+  // the chat `<aside>` are each rendered only when their pane is open
+  // (`editorOpen` / `chatOpen`), and at least one is always present. The grid
+  // columns are keyed to the open-pane combination via the two modifier
+  // classes so the present children always have matching tracks.
   .bob-workspace {
-    grid-template-columns: 15rem minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }
 
+  // editor-only (the resting layout) OR chat-only: sidebar + one pane.
+  .bob-workspace--editor-open,
   .bob-workspace--chat-open {
+    grid-template-columns: 15rem minmax(0, 1fr);
+  }
+
+  // both panes open: sidebar + editor + chat.
+  .bob-workspace--editor-open.bob-workspace--chat-open {
     grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
   }
 
@@ -4258,62 +4160,12 @@ select {
   color: var(--cds-link-primary-hover, #0043ce);
 }
 
-/* === Top bar: left action group === */
-/* Compose | [Home(menu) · New · Settings] on the left, Chat pinned right.
-   The rule is a thin separator between the product name and the actions; the
-   action group is a left-aligned flex row sitting right after the name. The
-   HeaderGlobalBar (Chat) is pushed to the far right via its auto margin. */
-.bob-app-shell .bob-header-rule {
-  flex: 0 0 auto;
-  align-self: center;
-  inline-size: 1px;
-  block-size: 1.25rem;
-  margin-inline: 0.25rem 0.5rem;
-  background: var(--cds-border-subtle-01, #6f6f6f);
-}
-
-.bob-app-shell .bob-header-actions {
-  display: flex;
-  align-items: stretch;
-  block-size: 100%;
-}
-
-/* Carbon already pushes the global bar right in most builds; pin it explicitly
-   so the lone Chat action never drifts left of the rule. */
+/* === Top bar: the two pane toggles ===
+   The top bar is minimal now — just the Compose name and, pinned right, the
+   editor + chat toggles (HeaderGlobalBar). The workspace switcher, New, and
+   Settings moved into the sidebar. */
 .bob-app-shell .cds--header__global {
   margin-inline-start: auto;
-}
-
-/* The workspace menu's OverflowMenu trigger styled to match the header actions:
-   same size as a HeaderGlobalAction, transparent on the dark bar, light icon. */
-.bob-app-shell .bob-header-menu.cds--overflow-menu {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 3rem;
-  block-size: 3rem;
-  background: transparent;
-  transition: background 110ms;
-}
-
-.bob-app-shell .bob-header-menu.cds--overflow-menu:hover,
-.bob-app-shell .bob-header-menu.cds--overflow-menu[aria-expanded="true"] {
-  background: var(--cds-background-inverse-hover, #4c4c4c);
-}
-
-.bob-app-shell .bob-header-menu.cds--overflow-menu svg {
-  fill: #c6c6c6;
-}
-
-.bob-app-shell .bob-header-menu.cds--overflow-menu:focus {
-  outline: 2px solid var(--cds-focus-inset, #ffffff);
-  outline-offset: -2px;
-}
-
-/* The "Remove from list" sub-row sits under each workspace's open row; dim it
-   so the workspace name reads as the primary action. */
-.bob-header-menu__options .bob-header-menu__remove .cds--overflow-menu-options__option-content {
-  font-size: 0.75rem;
 }
 
 /* === Editor toolbar: Comments button badge === */

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChatBot, Edit } from "@carbon/react/icons";
+import { ChatBot } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceStore";
 import { bobRuntimeReadiness, sumChatThreadStats } from "../../app/workspaceModel";
@@ -7,26 +7,24 @@ import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
 import { conversationToMarkdown } from "../../lib/export/conversationMarkdown";
 import { loadConversation } from "../../lib/ipc/conversationsClient";
-import type { ConversationSummary } from "../../lib/ipc/conversationsClient";
 import { ChatMessageList } from "./ChatMessageList";
 import type { MessageRowCallbacks } from "./MessageRow";
 import { MessageComposer } from "./MessageComposer";
-import { ConversationHistoryMenu } from "./ConversationHistoryMenu";
-import { ConversationActionsMenu, type ConversationActions } from "./ConversationActionsMenu";
+import { ConversationActionsMenu } from "./ConversationActionsMenu";
 import { ConversationTitleEditor } from "./ConversationTitleEditor";
-import { AllConversationsView } from "./AllConversationsView";
 import { ConversationDeleteToast } from "./ConversationDeleteToast";
-import { useTextPrompt } from "../dialogs/TextPromptProvider";
 
 /**
  * The assistant chat surface. A thin orchestrator: it reads the active
  * workspace's chat thread, conversation history, and harness capabilities
  * from the store, derives availability, and wires the transcript
  * ([ChatMessageList](ChatMessageList.tsx)) and the composer
- * ([MessageComposer](MessageComposer.tsx)). The header hosts the conversation
- * switcher (history dropdown + inline-editable title + ⋮ actions); the
- * all-conversations overlay and the post-delete undo toast layer over the
- * panel. All conversation-management state lives in the store.
+ * ([MessageComposer](MessageComposer.tsx)). The header hosts only the
+ * inline-editable title + the ⋮ actions menu for the open conversation —
+ * switching conversations and starting new ones live in the sidebar Chat tab
+ * now, so this panel no longer owns a history dropdown or an
+ * all-conversations overlay. The post-delete undo toast layers over the panel.
+ * All conversation-management state lives in the store.
  */
 export function ChatPanel() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
@@ -38,23 +36,19 @@ export function ChatPanel() {
   const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
   const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
   const rejectSuggestedEdit = useWorkspaceStore((state) => state.rejectSuggestedEdit);
-  const newChat = useWorkspaceStore((state) => state.newChat);
   const sendChatPrompt = useWorkspaceStore((state) => state.sendChatPrompt);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const setChatPrompt = useWorkspaceStore((state) => state.setChatPrompt);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const conversationsByWorkspace = useWorkspaceStore((state) => state.conversations);
-  const openConversation = useWorkspaceStore((state) => state.openConversation);
   const renameConversation = useWorkspaceStore((state) => state.renameConversation);
   const archiveConversation = useWorkspaceStore((state) => state.archiveConversation);
   const deleteConversation = useWorkspaceStore((state) => state.deleteConversation);
-  const promptText = useTextPrompt();
   const undoDeleteConversation = useWorkspaceStore((state) => state.undoDeleteConversation);
   const duplicateConversation = useWorkspaceStore((state) => state.duplicateConversation);
   const deleteNotice = useWorkspaceStore((state) => state.conversationDeleteNotice);
 
   const [editingTitle, setEditingTitle] = useState(false);
-  const [showAllConversations, setShowAllConversations] = useState(false);
 
   const activeWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
@@ -100,7 +94,6 @@ export function ChatPanel() {
   const openSummary =
     conversations.find((item) => item.conversationId === openConversationId) ?? null;
   const openTitle = openSummary?.title ?? "New conversation";
-  const now = Date.now();
 
   // Header total: the thread's cumulative token + coin usage (compact,
   // human-readable), not a message count. "New chat" until anything's run.
@@ -115,9 +108,8 @@ export function ChatPanel() {
           .join(" · ")
       : "New chat";
 
-  // Export uses the live thread for the open conversation, else loads the
-  // persisted snapshot — so exporting a background conversation doesn't
-  // switch which one is open.
+  // Export the open conversation: prefer the live thread (it has the latest
+  // in-flight turns), else fall back to the persisted snapshot.
   const exportConversation = async (conversationId: string, title: string) => {
     if (!window.confirm(`Export “${title}” as a Markdown file?`)) {
       return;
@@ -138,28 +130,6 @@ export function ChatPanel() {
     });
   };
 
-  // Actions for an arbitrary conversation (the all-conversations rows). The
-  // open conversation's header menu builds the same shape inline below.
-  const makeActions = (conversation: ConversationSummary): ConversationActions => ({
-    onRename: () => {
-      void (async () => {
-        const next = await promptText({
-          title: "Rename conversation",
-          defaultValue: conversation.title ?? "",
-          submitLabel: "Rename",
-        });
-        if (next) {
-          void renameConversation(conversation.conversationId, next);
-        }
-      })();
-    },
-    onDuplicate: () => void duplicateConversation(conversation.conversationId),
-    onExport: () => void exportConversation(conversation.conversationId, conversation.title),
-    onArchive: () =>
-      void archiveConversation(conversation.conversationId, !conversation.archived),
-    onDelete: () => deleteConversation(conversation.conversationId),
-  });
-
   return (
     <section className="bob-chat-panel" aria-label="Assistant chat">
       <header className="bob-chat-header">
@@ -176,16 +146,19 @@ export function ChatPanel() {
               }}
               onCancel={() => setEditingTitle(false)}
             />
+          ) : openConversationId ? (
+            // The open conversation's title — click to rename in place. Switching
+            // and starting conversations now live in the sidebar Chat tab.
+            <button
+              type="button"
+              className="bob-chat-header__title-button"
+              title="Rename conversation"
+              onClick={() => setEditingTitle(true)}
+            >
+              {openTitle}
+            </button>
           ) : (
-            <ConversationHistoryMenu
-              title={openTitle}
-              conversations={conversations}
-              activeId={openConversationId}
-              now={now}
-              onOpen={(id) => void openConversation(id)}
-              onNewChat={() => void newChat()}
-              onShowAll={() => setShowAllConversations(true)}
-            />
+            <span className="bob-chat-header__title-text">{openTitle}</span>
           )}
         </div>
         <div className="bob-chat-header__actions">
@@ -205,16 +178,6 @@ export function ChatPanel() {
               }}
             />
           ) : null}
-          <button
-            type="button"
-            className="bob-icon-button bob-chat-header__new"
-            aria-label="New chat"
-            title="New chat"
-            disabled={running || chatThread.messages.length === 0}
-            onClick={() => void newChat()}
-          >
-            <Edit size={16} />
-          </button>
         </div>
       </header>
 
@@ -245,20 +208,6 @@ export function ChatPanel() {
         runError={chatThread.runError}
         running={running}
       />
-
-      {showAllConversations ? (
-        <AllConversationsView
-          conversations={conversations}
-          activeFileLabel={contextFileLabel}
-          now={now}
-          onClose={() => setShowAllConversations(false)}
-          onOpen={(id) => {
-            setShowAllConversations(false);
-            void openConversation(id);
-          }}
-          makeActions={makeActions}
-        />
-      ) : null}
     </section>
   );
 }

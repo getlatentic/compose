@@ -1,5 +1,5 @@
 import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
-import { Download, History, MessageSquareText, Save } from "lucide-react";
+import { History, MessageSquareText, Save, Share } from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
  * the button.
  *
  * Icons are lucide (scoped to this file): Save, History (previous versions),
- * Download (export), MessageSquareText (comments). The rest of the app's chrome
+ * Share (export), MessageSquareText (comments). The rest of the app's chrome
  * stays on Carbon icons.
  *
  * Fed stable callbacks (the editor is memoized — see TiptapMarkdownEditor), so
@@ -68,7 +68,7 @@ export function EditorFileActions({
         flipped
         align="bottom"
         className="bob-tiptap-toolbar__export"
-        renderIcon={() => <Download size={ICON_SIZE} />}
+        renderIcon={() => <Share size={ICON_SIZE} />}
       >
         <OverflowMenuItem itemText="Markdown (.md)" onClick={() => onExport("markdown")} />
         <OverflowMenuItem itemText="HTML (.html)" onClick={() => onExport("html")} />

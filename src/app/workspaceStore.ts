@@ -167,6 +167,30 @@ interface WorkspaceState {
   cancelActiveBobRun: () => Promise<void>;
   chatOpen: boolean;
   /**
+   * Whether the editor pane is visible. Symmetric to {@link chatOpen}: the
+   * editor and chat toggle independently, but at least one must stay visible —
+   * {@link toggleEditor}/{@link toggleChat} no-op when they'd hide the last
+   * open pane. Default true (editor-only is the resting layout).
+   */
+  editorOpen: boolean;
+  /** Hide/show the editor pane (no-op if it's the only visible pane). */
+  toggleEditor: () => void;
+  /**
+   * Which sidebar tab is active — the file tree + search (`files`) or this
+   * folder's conversation list (`chat`). Switching to `chat` does NOT open the
+   * chat pane or touch {@link editorOpen}; it only changes what the sidebar
+   * shows. Default `files`.
+   */
+  sidebarTab: "files" | "chat";
+  setSidebarTab: (tab: "files" | "chat") => void;
+  /**
+   * Monotonic nonce bumped when a conversation is opened from the sidebar Chat
+   * tab. The chat pane subscribes and replays a brief border-pulse animation
+   * each time it changes, drawing the eye to the (possibly just-revealed)
+   * panel. Starts at 0; the panel skips that initial value.
+   */
+  chatPulseSignal: number;
+  /**
    * Whether the comments side-panel is visible. Closed by default
    * so a fresh editor doesn't show an empty sidebar — opens on
    * demand via the header toggle. Persisted across reloads via the
@@ -227,6 +251,12 @@ interface WorkspaceState {
   /** Open a conversation in the panel: hydrate its thread + bump its
    * last-opened. No-op while the current thread is mid-run. */
   openConversation: (conversationId: string) => Promise<void>;
+  /**
+   * Open a conversation from the sidebar Chat tab: reveals the chat pane if
+   * hidden (without touching {@link editorOpen}) and pulses the panel border
+   * to draw the eye. Delegates the hydrate/bookkeeping to
+   * {@link openConversation}. */
+  openConversationFromSidebar: (conversationId: string) => Promise<void>;
   /** Set (null clears to derived) a conversation's title — optimistic. */
   renameConversation: (conversationId: string, title: string | null) => Promise<void>;
   /** Archive / un-archive — optimistic; archiving the open one opens the next. */
@@ -1207,6 +1237,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
   chatOpen: true,
+  editorOpen: true,
+  toggleEditor: () => {
+    set((state) => {
+      // At least one of editor/chat must stay visible — hiding the editor
+      // while chat is also closed would leave an empty workspace, so that
+      // toggle is a no-op (the button is disabled in this state too).
+      if (state.editorOpen && !state.chatOpen) {
+        return {};
+      }
+      return { editorOpen: !state.editorOpen };
+    });
+  },
+  sidebarTab: "files",
+  setSidebarTab: (tab) => {
+    set({ sidebarTab: tab });
+  },
+  chatPulseSignal: 0,
   // Comments panel starts hidden — see the field's docstring above.
   commentsOpen: false,
   toggleComments: () => {
@@ -1521,6 +1568,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       })),
     }));
     void get().loadConversations(workspaceId);
+  },
+  openConversationFromSidebar: async (conversationId: string) => {
+    // Reveal chat (openConversation also sets chatOpen, but a no-op
+    // same-conversation open below would otherwise skip it) and pulse the
+    // panel border. The editor is left exactly as-is — switching to the Chat
+    // tab never closes the editor.
+    set((state) => ({ chatOpen: true, chatPulseSignal: state.chatPulseSignal + 1 }));
+    await get().openConversation(conversationId);
   },
   renameConversation: async (conversationId: string, title: string | null) => {
     const workspaceId = get().activeWorkspaceId;
@@ -2439,6 +2494,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
   toggleChat: () => {
     if (get().chatOpen) {
+      // Symmetric to toggleEditor: never hide the last visible pane. With the
+      // editor also closed, closing chat would empty the workspace — no-op
+      // (the button is disabled in this state too).
+      if (!get().editorOpen) {
+        return;
+      }
       set({ chatOpen: false });
       return;
     }

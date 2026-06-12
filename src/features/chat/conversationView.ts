@@ -94,14 +94,6 @@ export function filterConversations(
   });
 }
 
-/** The most recent N active (non-archived) conversations, for the dropdown. */
-export function recentConversations(
-  conversations: ConversationSummary[],
-  limit: number,
-): ConversationSummary[] {
-  return conversations.filter((conversation) => !conversation.archived).slice(0, limit);
-}
-
 export interface ConversationSection {
   group: ConversationDateGroup;
   conversations: ConversationSummary[];
@@ -127,9 +119,4 @@ export function groupConversationsByDate(
     group,
     conversations: buckets.get(group) ?? [],
   }));
-}
-
-/** The leaf name of a workspace-relative file path (for the "Mentions" pill). */
-export function fileLeafName(filePath: string): string {
-  return filePath.split(/[\\/]/).filter(Boolean).pop()?.trim() ?? filePath;
 }
