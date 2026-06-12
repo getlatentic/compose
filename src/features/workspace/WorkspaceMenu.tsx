@@ -22,10 +22,12 @@ export function WorkspaceMenu() {
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
   const activeName = activeWorkspace?.name ?? "No folder open";
 
-  // Carbon's OverflowMenuItem has no submenu, so "open" and "forget" for one
+  // Carbon's OverflowMenuItem has no submenu, so "open" and "remove" for one
   // workspace can't both live on the same row. We surface Open as the row's
-  // primary action and a paired "Forget this folder" item right beneath it,
-  // grouped visually by a divider before the next workspace.
+  // primary action and a paired "Remove from list" item right beneath it,
+  // grouped visually by a divider before the next workspace. ("Remove from
+  // list" only drops the folder from Compose's recent list — it never deletes
+  // files; the tooltip says so.)
   const topRecent = recent.slice(0, 8);
 
   return (
@@ -52,7 +54,9 @@ export function WorkspaceMenu() {
               <OverflowMenuItem
                 key={`remove:${record.id}`}
                 className="bob-workspace-switcher__forget"
-                itemText="Forget this folder"
+                itemText="Remove from list"
+                requireTitle
+                title="Removes this folder from Compose's recent list. Your files are not deleted."
                 isDelete
                 onClick={() => void removeRecent(record.id)}
               />,
