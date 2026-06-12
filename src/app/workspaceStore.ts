@@ -102,9 +102,7 @@ import {
   markWorkspaceIndexFailed,
   markWorkspaceIndexing,
   moveWorkspaceComments,
-  closeWorkspacePane,
   openWorkspaceFile,
-  openWorkspacePane,
   prepareWorkspaceSuggestionDrafts,
   rejectWorkspaceSuggestion,
   setAssistantActivity,
@@ -117,7 +115,6 @@ import {
   type FinalizeBobRunOptions,
   type OnboardingState,
   type SourceRange,
-  type WorkspacePane,
   type ChatExcerptRef,
   type WorkspaceChatThread,
   type WorkspaceCommentThread,
@@ -205,8 +202,6 @@ interface WorkspaceState {
   onboarding: OnboardingState;
   onboardingComplete: () => boolean;
   setOnboarding: (onboarding: OnboardingState) => void;
-  showDashboard: () => void;
-  viewMode: "dashboard" | "workspace";
   loadActiveWorkspaceFiles: () => Promise<void>;
   openChat: () => void;
   /**
@@ -275,14 +270,6 @@ interface WorkspaceState {
   settingsOpen: boolean;
   openSettings: () => void;
   closeSettings: () => void;
-  /**
-   * Non-file panes (Settings today; terminal / browser later) hosted in
-   * the active workspace's editor tab strip. `openPane` opens-or-focuses,
-   * `selectPane` activates an already-open pane, `closePane` removes it.
-   */
-  openPane: (pane: WorkspacePane) => void;
-  closePane: (paneId: string) => void;
-  selectPane: (paneId: string) => void;
   /**
    * The harness the user picked (bob / claude / codex / …). Sent as
    * `harnessId` on every run so the Rust side routes to it. Persisted
@@ -1402,10 +1389,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setOnboarding: (onboarding: OnboardingState) => {
     set({ onboarding });
   },
-  showDashboard: () => {
-    set({ viewMode: "dashboard" });
-  },
-  viewMode: "dashboard",
   loadActiveWorkspaceFiles: async () => {
     const workspaceId = get().activeWorkspaceId;
     if (!workspaceId) {
@@ -2102,23 +2085,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (harnessCapabilitiesOf(get().harnessCatalog, harnessId).credentialRequired) {
       const readiness = bobRuntimeReadiness(get().bobAuthStatus, get().bobInstallStatus);
       if (!readiness.ready) {
-        // Surface the error in chat and open Settings as a pane so the user
-        // can self-serve the fix (we're in a workspace here, so it's a tab).
+        // Surface the error in chat and open the Settings modal so the user
+        // can self-serve the fix in place.
         set((state) => ({
           chatOpen: true,
-          workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
-            openWorkspacePane(
-              {
-                ...item,
-                chatThread: {
-                  ...item.chatThread,
-                  runError: readiness.message ?? "The assistant isn't connected yet.",
-                  runState: "error",
-                },
-              },
-              { id: "settings", kind: "settings", title: "Settings" },
-            ),
-          ),
+          settingsOpen: true,
+          workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
+            ...item,
+            chatThread: {
+              ...item.chatThread,
+              runError: readiness.message ?? "The assistant isn't connected yet.",
+              runState: "error",
+            },
+          })),
         }));
         return;
       }
@@ -2393,50 +2372,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
   setupComplete: () => isSetupComplete(get().bobAuthStatus, get().workspaces),
   settingsOpen: false,
-  openSettings: () => {
-    const workspace = get().activeWorkspace();
-    if (workspace) {
-      // In a workspace, Settings opens as a tab in the pane strip.
-      set((state) => ({
-        workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
-          openWorkspacePane(item, { id: "settings", kind: "settings", title: "Settings" }),
-        ),
-      }));
-      return;
-    }
-    // No workspace (dashboard) — there's no tab strip, so use the modal.
-    set({ settingsOpen: true });
-  },
+  // Settings always opens as a modal (the SettingsDialog), reachable from any
+  // state — there is no longer a Settings-as-a-tab path.
+  openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
-  openPane: (pane: WorkspacePane) => {
-    const workspace = get().activeWorkspace();
-    if (!workspace) return;
-    set((state) => ({
-      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
-        openWorkspacePane(item, pane),
-      ),
-    }));
-  },
-  closePane: (paneId: string) => {
-    const workspace = get().activeWorkspace();
-    if (!workspace) return;
-    set((state) => ({
-      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
-        closeWorkspacePane(item, paneId),
-      ),
-    }));
-  },
-  selectPane: (paneId: string) => {
-    const workspace = get().activeWorkspace();
-    if (!workspace) return;
-    set((state) => ({
-      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
-        item.openPanes.some((pane) => pane.id === paneId)
-          ? { ...item, activePaneId: paneId }
-          : item,
-      ),
-    }));
-  },
   selectedHarnessId: INITIAL_HARNESS_PREFS.selectedHarnessId,
   allowEdits: INITIAL_HARNESS_PREFS.allowEdits,
   harnessOptions: INITIAL_HARNESS_PREFS.harnessOptions,
@@ -2491,7 +2430,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const nowMs = Date.now();
     set((state) => ({
       activeWorkspaceId: workspace.id,
-      viewMode: "workspace",
       workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
         ...item,
         lastOpenedAt: nowMs,

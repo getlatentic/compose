@@ -314,20 +314,8 @@ export interface WorkspaceFileBuffer {
 export type WorkspaceScanState = "idle" | "loading" | "ready" | "failed";
 export type WorkspaceIndexState = "idle" | "indexing" | "ready" | "failed";
 
-/** A non-file tab in the editor pane strip (Settings today; terminal /
- *  browser are the obvious future kinds the host already switches on). */
-export type WorkspacePaneKind = "settings" | "terminal" | "browser";
-
-export interface WorkspacePane {
-  id: string;
-  kind: WorkspacePaneKind;
-  title: string;
-}
-
 export interface BobWorkspace {
   activeFilePath: string;
-  /** When set, a non-file pane (by id) is the active tab instead of a file. */
-  activePaneId: string | null;
   chatThread: WorkspaceChatThread;
   comments: WorkspaceCommentThread[];
   fileContents: Record<string, WorkspaceFileBuffer>;
@@ -340,8 +328,6 @@ export interface BobWorkspace {
   lastSavedAt: Date | null;
   name: string;
   openFilePaths: string[];
-  /** Open non-file panes (Settings, etc.) shown in the tab strip. */
-  openPanes: WorkspacePane[];
   path: string;
   scanError: string | null;
   scanState: WorkspaceScanState;
@@ -412,7 +398,6 @@ export function createWorkspaceFromPath(path: string): BobWorkspace {
 
   return {
     activeFilePath: "",
-    activePaneId: null,
     chatThread: {
       activeLlmThreadId: null,
       activeRunId: null,
@@ -434,7 +419,6 @@ export function createWorkspaceFromPath(path: string): BobWorkspace {
     lastSavedAt: null,
     name: workspaceNameFromPath(normalizedPath),
     openFilePaths: [],
-    openPanes: [],
     path: normalizedPath,
     scanError: null,
     scanState: "idle",
@@ -506,28 +490,10 @@ export function openWorkspaceFile(workspace: BobWorkspace, filePath: string): Bo
 
   return {
     ...workspace,
-    // Activating a file clears any active non-file pane (Settings, etc.):
-    // the editor takes over the pane region.
     activeFilePath: filePath,
-    activePaneId: null,
     chatThread: setCurrentTabContext(workspace.chatThread, workspace.id, filePath),
     openFilePaths,
   };
-}
-
-/** Open (or focus) a non-file pane and make it the active tab. */
-export function openWorkspacePane(workspace: BobWorkspace, pane: WorkspacePane): BobWorkspace {
-  const openPanes = workspace.openPanes.some((existing) => existing.id === pane.id)
-    ? workspace.openPanes
-    : [...workspace.openPanes, pane];
-  return { ...workspace, activePaneId: pane.id, openPanes };
-}
-
-/** Close a non-file pane; if it was active, fall back to the active file. */
-export function closeWorkspacePane(workspace: BobWorkspace, paneId: string): BobWorkspace {
-  const openPanes = workspace.openPanes.filter((pane) => pane.id !== paneId);
-  const activePaneId = workspace.activePaneId === paneId ? null : workspace.activePaneId;
-  return { ...workspace, activePaneId, openPanes };
 }
 
 export function closeWorkspaceFileTab(workspace: BobWorkspace, filePath: string): BobWorkspace {

@@ -105,6 +105,12 @@ export interface TiptapMarkdownEditorProps {
   onSave?: () => void;
   onShowVersionHistory?: () => void;
   onExport?: (format: DocumentExportFormat) => void;
+  /** Toggle the per-file comments panel from the toolbar's Comments button. */
+  onToggleComments?: () => void;
+  /** Whether the comments panel is open (drives the toolbar button's state). */
+  commentsOpen?: boolean;
+  /** Open-comment count for this file, shown as a badge on the Comments button. */
+  commentCount?: number;
 }
 
 const NO_LINK_TARGETS: ReadonlySet<string> = new Set();
@@ -138,6 +144,9 @@ function TiptapMarkdownEditorInner({
   onSave,
   onShowVersionHistory,
   onExport,
+  onToggleComments,
+  commentsOpen = false,
+  commentCount = 0,
 }: TiptapMarkdownEditorProps) {
   // YAML frontmatter separation. The editor renders **only the
   // body** — the user shouldn't see raw `key: value` lines
@@ -436,11 +445,14 @@ function TiptapMarkdownEditorInner({
   // The toolbar bar — shared by both modes (formatting shows in WYSIWYG only;
   // the file actions show in both so Save / History / Export stay reachable).
   const fileActions =
-    onSave && onShowVersionHistory && onExport ? (
+    onSave && onShowVersionHistory && onExport && onToggleComments ? (
       <EditorFileActions
         onSave={onSave}
         onShowVersionHistory={onShowVersionHistory}
         onExport={onExport}
+        onToggleComments={onToggleComments}
+        commentsOpen={commentsOpen}
+        commentCount={commentCount}
       />
     ) : undefined;
   const toolbar = (
