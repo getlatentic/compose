@@ -86,6 +86,16 @@ export function AppShell() {
         ) ?? null
       : null;
   const preview = useMarkdownPreview(activeFileBuffer?.content ?? "");
+  // Boot-time hydration gate. `loadSetupState` below fans out 4 IPC calls
+  // (bob auth, install probe, workspace list, onboarding flag) that take
+  // ~1s to resolve. Without this gate, AppShell renders ONCE with the
+  // store's zero-state defaults — `onboarding.completedAt: null` → the
+  // SetupScreen flashes briefly before the rehydration redirects to the
+  // workspace; the sidebar shows "No Markdown files" before the file
+  // index scan completes. Holding the entire render until the initial
+  // Promise.all settles eliminates both flashes — the user sees the
+  // correct view first, not a corrected view after a beat.
+  const [bootHydrated, setBootHydrated] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   // Transient border-pulse on the chat panel: set true whenever a conversation
   // is opened from the sidebar Chat tab (the store bumps `chatPulseSignal`),
@@ -173,12 +183,24 @@ export function AppShell() {
         setBobInstallStatus(installStatus);
         hydrateWorkspaces(workspaceList);
         setOnboarding(onboarding);
+        // Flip the boot gate LAST, after every store hydration above has
+        // committed — otherwise AppShell would render once with the new
+        // values + the still-default `bootHydrated: false` and we'd see
+        // the same flash this gate exists to prevent. React batches the
+        // four setters above into a single commit, then this final setter
+        // is the trigger that releases the render gate.
+        setBootHydrated(true);
       } catch (error) {
         if (!cancelled) {
           setBobAuthStatus({
             configured: false,
             errorMessage: error instanceof Error ? error.message : "Setup state could not be loaded",
           });
+          // Release the gate even on error — otherwise an offline first
+          // launch (IPC fails) would hang on the blank gated view forever.
+          // The error banner inside SetupScreen / SettingsPanel surfaces
+          // the failure; the user can retry from there.
+          setBootHydrated(true);
         }
       }
     }
@@ -336,6 +358,17 @@ export function AppShell() {
         : { kind: "error", text: result.message },
     );
   }, []);
+
+  // Hold the entire UI until boot hydration settles. Without this,
+  // AppShell renders ONCE against the store's zero state — defaulting
+  // `onboarding.completedAt: null` → the SetupScreen flashes for ~1s
+  // before the IPC fan-out in `loadSetupState` resolves and re-routes
+  // to the workspace. Returning `null` here is intentional — a spinner
+  // would draw the eye to a transient state; an empty surface for one
+  // beat is invisible.
+  if (!bootHydrated) {
+    return null;
+  }
 
   if (!onboardingComplete) {
     return <SetupScreen />;
