@@ -34,7 +34,7 @@ use tauri::ipc::Channel;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, EventTarget, State, Window};
+use tauri::{AppHandle, Emitter, State};
 
 pub const HARNESS_RUN_EVENT: &str = "harness_run";
 
@@ -106,12 +106,6 @@ pub struct BobRunnerState {
 #[derive(Default)]
 struct BobRunnerInner {
     runs: HashMap<String, ActiveRun>,
-    /// `run_id → window_label`. Per-window event routing: a run is owned by
-    /// the Tauri window that started it, so its `HARNESS_RUN_EVENT` payloads
-    /// emit *only* to that window. Without this map, `app.emit(..)` would
-    /// broadcast to every open window and stray runs would haunt the wrong
-    /// chat panels. See `emit_run_event`.
-    run_windows: HashMap<String, String>,
 }
 
 /// Per-run state stored in the registry.
@@ -167,21 +161,14 @@ impl BobRunnerState {
 
     /// Register a placeholder run before doing any blocking
     /// preparation. Returns the cancellation token so the
-    /// preparation phase can check whether to abort. The window label
-    /// is captured so terminal/streaming events route only to the
-    /// originating window (see `emit_run_event`).
-    fn register_pending(
-        &self,
-        run_id: String,
-        window_label: String,
-    ) -> Result<Arc<AtomicBool>, String> {
+    /// preparation phase can check whether to abort.
+    fn register_pending(&self, run_id: String) -> Result<Arc<AtomicBool>, String> {
         let mut inner = self
             .inner
             .lock()
             .map_err(|_| "bob runner lock was poisoned".to_owned())?;
         let run = ActiveRun::new();
         let token = Arc::clone(&run.cancelled);
-        inner.run_windows.insert(run_id.clone(), window_label);
         inner.runs.insert(run_id, run);
         Ok(token)
     }
@@ -218,17 +205,8 @@ impl BobRunnerState {
     fn unregister(&self, run_id: &str) {
         if let Ok(mut inner) = self.inner.lock() {
             inner.runs.remove(run_id);
-            inner.run_windows.remove(run_id);
         }
     }
-}
-
-/// Emit a `HARNESS_RUN_EVENT` payload to the single window that started this
-/// run. Per-window routing is what keeps window A's tokens out of window B's
-/// chat panel — each Tauri window has its own JS context and its own Zustand
-/// store, and a run belongs to whichever window started it.
-fn emit_run_event_to(app: &AppHandle, window_label: &str, payload: &ChatEvent) {
-    let _ = app.emit_to(EventTarget::webview_window(window_label), HARNESS_RUN_EVENT, payload);
 }
 
 #[tauri::command(async)]
@@ -239,18 +217,12 @@ pub fn run_harness_stream(
     metadata: State<'_, MetadataStore>,
     review: State<'_, ReviewSessionStore>,
     app: AppHandle,
-    window: Window,
 ) -> Result<(), String> {
-    // Capture the window label — every event emitted for this run is routed
-    // back here (multi-window: window A's tokens must not land in window B's
-    // chat panel). See `emit_run_event` / `BobRunnerInner.run_windows`.
-    let window_label = window.label().to_owned();
-
     // Register the run as "pending" up front. From this moment
     // forward, `cancel_harness_run(run_id)` finds an entry and can
     // flip the cancellation token — even if we're still blocked
     // inside the OS keychain prompt during `prepare_bob_spawn`.
-    let cancel_token = runner.register_pending(request.run_id.clone(), window_label.clone())?;
+    let cancel_token = runner.register_pending(request.run_id.clone())?;
     let run_id = request.run_id.clone();
 
     // Emit Started immediately so the front-end can flip the
@@ -258,9 +230,8 @@ pub fn run_harness_stream(
     // slow) preparation phase. Doing this even when the user
     // ends up cancelling is fine — they'll get the matching
     // Exited{cancelled:true} a moment later.
-    emit_run_event_to(
-        &app,
-        &window_label,
+    let _ = app.emit(
+        HARNESS_RUN_EVENT,
         &ChatEvent::Started {
             run_id: run_id.clone(),
         },
@@ -271,9 +242,8 @@ pub fn run_harness_stream(
     // when prepare_bob_spawn is itself fast and the second-IPC
     // window is real.)
     if cancel_token.load(Ordering::SeqCst) {
-        emit_run_event_to(
-            &app,
-            &window_label,
+        let _ = app.emit(
+            HARNESS_RUN_EVENT,
             &ChatEvent::Exited {
                 run_id: run_id.clone(),
                 exit_code: None,
@@ -293,7 +263,7 @@ pub fn run_harness_stream(
     } else {
         request.harness_id.clone()
     };
-    run_via_harness(&harness_id, request, &registry, &runner, &metadata, &review, app, window_label)
+    run_via_harness(&harness_id, request, &registry, &runner, &metadata, &review, app)
 }
 
 #[tauri::command(async)]
@@ -316,13 +286,12 @@ fn run_via_harness(
     metadata: &MetadataStore,
     review: &ReviewSessionStore,
     app: AppHandle,
-    window_label: String,
 ) -> Result<(), String> {
     let run_id = request.run_id.clone();
 
     let Some(harness) = harness_by_id(harness_id) else {
         let message = format!("Unknown harness: {harness_id}");
-        emit_error_and_exit(&app, &window_label, &run_id, &message);
+        emit_error_and_exit(&app, &run_id, &message);
         runner.unregister(&run_id);
         return Err(message);
     };
@@ -343,7 +312,7 @@ fn run_via_harness(
     ) {
         Ok(path) => path,
         Err(error) => {
-            emit_error_and_exit(&app, &window_label, &run_id, &error);
+            emit_error_and_exit(&app, &run_id, &error);
             runner.unregister(&run_id);
             return Err(error);
         }
@@ -404,7 +373,6 @@ fn run_via_harness(
     let app_cb = app.clone();
     let runner_inner = Arc::clone(&runner.inner);
     let run_id_cleanup = run_id.clone();
-    let window_label_cb = window_label.clone();
     let callback: RunCallback = Arc::new(move |event: RunEvent| {
         // `run_harness_stream` already emitted Started up front; skip the
         // harness's own to avoid a duplicate.
@@ -416,7 +384,6 @@ fn run_via_harness(
         if matches!(event, RunEvent::Exited { .. }) {
             if let Ok(mut inner) = runner_inner.lock() {
                 inner.runs.remove(&run_id_cleanup);
-                inner.run_windows.remove(&run_id_cleanup);
             }
         }
         // Map the neutral event into Compose's `ChatEvent`. claude/codex
@@ -425,7 +392,7 @@ fn run_via_harness(
         // come through empty (see `run_event_to_chat`). `None` = a future
         // `#[non_exhaustive]` RunEvent variant Compose doesn't model → skip.
         if let Some(chat) = run_event_to_chat(event) {
-            emit_run_event_to(&app_cb, &window_label_cb, &chat);
+            let _ = app_cb.emit(HARNESS_RUN_EVENT, &chat);
         }
     });
 
@@ -438,27 +405,24 @@ fn run_via_harness(
             // `Harness::run` returns the typed `HarnessError`; stringify once
             // for the run-event channel + the command's `Result<_, String>`.
             let message = error.to_string();
-            emit_error_and_exit(&app, &window_label, &run_id, &message);
+            emit_error_and_exit(&app, &run_id, &message);
             runner.unregister(&run_id);
             Err(message)
         }
     }
 }
 
-/// Emit a terminal Error + Exited pair on the run-event channel, routed to the
-/// window that started the run.
-fn emit_error_and_exit(app: &AppHandle, window_label: &str, run_id: &str, message: &str) {
-    emit_run_event_to(
-        app,
-        window_label,
+/// Emit a terminal Error + Exited pair on the run-event channel.
+fn emit_error_and_exit(app: &AppHandle, run_id: &str, message: &str) {
+    let _ = app.emit(
+        HARNESS_RUN_EVENT,
         &ChatEvent::Error {
             run_id: run_id.to_owned(),
             message: message.to_owned(),
         },
     );
-    emit_run_event_to(
-        app,
-        window_label,
+    let _ = app.emit(
+        HARNESS_RUN_EVENT,
         &ChatEvent::Exited {
             run_id: run_id.to_owned(),
             exit_code: None,

@@ -2014,6 +2014,27 @@ select {
   text-align: start;
 }
 
+// + (new chat) and × (close chat) — square icon buttons matching the
+// row's rhythm. Quiet at rest, faint hover; the ⋮ ConversationActionsMenu
+// (Carbon OverflowMenu) sits between them with its own native styling.
+.bob-chat-header__btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #4d5358);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.bob-chat-header__btn:hover {
+  background: var(--cds-background-hover, rgba(141, 141, 141, 0.12));
+  color: var(--cds-icon-primary, #121619);
+}
+
 .bob-chat-header__title-button:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
@@ -2035,7 +2056,10 @@ select {
   flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
-  background: var(--cds-layer-01, #f4f4f4);
+  // White, like the editor — the chat is a document-like surface, not a
+  // platform panel. The user-turn bordered card (which IS cool-gray-10) is
+  // what separates messages; the panel itself should fade into the chrome.
+  background: var(--cds-layer-02, #ffffff);
 }
 
 .bob-chat-messages {

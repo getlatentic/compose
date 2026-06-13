@@ -1,6 +1,7 @@
 import { CheckmarkFilled, ErrorFilled, InProgress } from "@carbon/react/icons";
 
 import type { TraceEntry, WorkspaceToolCall } from "../../app/workspaceModel";
+import { MarkdownMessage } from "./MarkdownMessage";
 import { toolName } from "./toolLabels";
 
 /** One icon per tool-call status. */
@@ -37,7 +38,12 @@ function TraceStep({ entry }: { entry: TraceEntry }) {
     return (
       <details className="bob-trace-thinking">
         <summary className="bob-trace-thinking__summary">Thought it through</summary>
-        <div className="bob-trace-thinking__body">{entry.text}</div>
+        {/* bob streams its reasoning as markdown — bullets, **bold**,
+            `code spans` — so render it through the same pipeline as the
+            final answer instead of dumping the raw source. */}
+        <div className="bob-trace-thinking__body">
+          <MarkdownMessage content={entry.text} />
+        </div>
       </details>
     );
   }
