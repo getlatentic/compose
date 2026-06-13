@@ -1,0 +1,28 @@
+{
+  "capturedAt": "2026-06-13T16:57:26.657Z",
+  "machine": {
+    "platform": "darwin",
+    "cpuCount": 10
+  },
+  "target": {
+    "operation": "renderMarkdownPreview",
+    "fixture": "xxlarge (1 MB markdown, realistic structure)",
+    "targetMs": 1000,
+    "why": "Sublime/Bear/Obsidian open a similarly sized markdown in < 1s. Anything slower reads as a hang to a non-technical user."
+  },
+  "measurement": {
+    "fixtureBytes": 1048899,
+    "fixtureLines": 28702,
+    "warmup": 1,
+    "samples": 3,
+    "medianMs": 3093.47,
+    "p95Ms": 3831.26,
+    "meanMs": 3254.08,
+    "timingsMs": [
+      3913.232583,
+      2755.549916,
+      3093.4725
+    ]
+  },
+  "verdict": "regression-vs-target"
+}

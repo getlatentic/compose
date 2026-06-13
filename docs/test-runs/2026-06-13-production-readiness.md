@@ -101,6 +101,21 @@ they're thin. The architecture is doing the right thing; it's just slow.
 4. **The PaneTabs / openFilePaths state may not be re-rendering** — worth
    poking the store to see if `openFilePaths` actually grew.
 
+### Cost breakdown (added after-the-fact via the new pipeline bench)
+
+`pnpm bench:baseline` now runs `markdownPipelineLatency.baseline.spec.ts`
+on a 1 MB fixture and reports:
+
+| Step | Where | Today (1 MB) |
+|---|---|---|
+| `renderMarkdownPreview` (markdown → hast + heading/word-count walk) | `src/workers/markdownPipeline.ts` (worker) | **median 3.1 s, p95 3.8 s** |
+| Total observed editor open | Tiptap `setContent` end-to-end | **~22 s** |
+
+So Tiptap's `setContent` is **~19 s of the 22 s** — the larger problem.
+The pipeline at 3 s is also slow against the < 1 s v1.1 target, but it's
+not the dominant cost. Future perf work should sequence: (1) cut Tiptap's
+parse first; (2) then tighten the worker.
+
 ### Recommended next steps (separate work, not this round)
 
 - Add a perf-mode badge in the corner during a `> 500ms` editor swap so
