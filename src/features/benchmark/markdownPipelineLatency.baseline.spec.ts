@@ -70,24 +70,21 @@ describe("markdown-pipeline latency baseline", () => {
     );
     const summary = summarize(timings);
 
-    // Structural sanity: the parse must actually return content. If
-    // `renderMarkdownPreview` ever starts returning an empty tree (silent
-    // regression) we want to know.
+    // Structural sanity: the scanner must actually extract metadata. If
+    // `renderMarkdownPreview` ever starts returning empty meta (silent
+    // regression) we want to know. The 1MB fixture is built from
+    // `documentFixtures` which inserts headings every block, so we expect
+    // both arrays to be non-empty AND the word count to be substantial.
     const result = await renderMarkdownPreview(document.text);
-    expect(result.tree.children.length).toBeGreaterThan(0);
-    expect(result.meta.wordCount).toBeGreaterThan(0);
+    expect(result.meta.wordCount).toBeGreaterThan(1000);
+    expect(result.meta.headings.length).toBeGreaterThan(0);
     expect(timings.every((ms) => Number.isFinite(ms) && ms >= 0)).toBe(true);
 
-    // Soft warn against the v1.1 target. When we hit < 1s, this gate
-    // becomes a hard assert.
-    if (summary.medianMs > V1_1_TARGET_MS) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[markdown-pipeline] median ${summary.medianMs.toFixed(1)}ms > ` +
-          `v1.1 target ${V1_1_TARGET_MS}ms (${((summary.medianMs / V1_1_TARGET_MS)).toFixed(1)}x slow). ` +
-          `Track in docs/benchmarks/markdown-pipeline.json.`,
-      );
-    }
+    // Hard assert against the v1.1 target. The scanner rewrite lands the
+    // 1MB median well below 1000ms; the gate is now load-bearing so
+    // anyone reintroducing the unified pipeline (or any other O(file)
+    // allocator) here will fail this spec — keeping the perf irreversible.
+    expect(summary.medianMs).toBeLessThan(V1_1_TARGET_MS);
 
     const report = {
       capturedAt: new Date().toISOString(),

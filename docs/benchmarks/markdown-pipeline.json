@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-06-13T16:57:26.657Z",
+  "capturedAt": "2026-06-13T17:09:37.516Z",
   "machine": {
     "platform": "darwin",
     "cpuCount": 10
@@ -15,14 +15,14 @@
     "fixtureLines": 28702,
     "warmup": 1,
     "samples": 3,
-    "medianMs": 3093.47,
-    "p95Ms": 3831.26,
-    "meanMs": 3254.08,
+    "medianMs": 20.4,
+    "p95Ms": 20.62,
+    "meanMs": 19.86,
     "timingsMs": [
-      3913.232583,
-      2755.549916,
-      3093.4725
+      20.397582999999997,
+      18.545957999999985,
+      20.646500000000003
     ]
   },
-  "verdict": "regression-vs-target"
+  "verdict": "pass"
 }
