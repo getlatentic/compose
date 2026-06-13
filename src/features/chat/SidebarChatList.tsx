@@ -37,12 +37,19 @@ export function SidebarChatList() {
   // resolution.
   const now = Date.now();
   const { activeSections, archived } = useMemo(() => {
-    const active = filterConversations(conversations, {
+    // Hide zero-message conversations from BOTH zones. An empty conversation
+    // is a "start state" — the chat panel before you've sent anything — not a
+    // history entry. Compose's runtime currently creates a row eagerly on
+    // workspace open / chat-panel mount; those zombies were showing as
+    // "New conversation" rows in the sidebar with no body, polluting the list
+    // and crowding out real chats.
+    const real = conversations.filter((c) => c.messageCount > 0);
+    const active = filterConversations(real, {
       query: "",
       archived: false,
       mentionsFile: null,
     });
-    const archivedList = filterConversations(conversations, {
+    const archivedList = filterConversations(real, {
       query: "",
       archived: true,
       mentionsFile: null,
