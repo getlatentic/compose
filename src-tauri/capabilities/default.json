@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for the main window and any spawned Compose windows (matches the `compose-<uuid>` labels emitted by `open_new_window`).",
+  "windows": ["main", "compose-*"],
   "permissions": [
     "core:default",
     "dialog:allow-open",

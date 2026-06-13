@@ -1,15 +1,4 @@
-import {
-  Header,
-  HeaderGlobalAction,
-  HeaderGlobalBar,
-  HeaderName,
-  SkipToContent,
-  ToastNotification,
-} from "@carbon/react";
-import {
-  ChatBot,
-  Document as DocumentIcon,
-} from "@carbon/react/icons";
+import { ToastNotification } from "@carbon/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "../features/chat/ChatPanel";
 import { CommentsPanel } from "../features/comments/CommentsPanel";
@@ -22,7 +11,11 @@ import { NoWorkspaceWelcome } from "../features/workspace/NoWorkspaceWelcome";
 import { useMarkdownPreview } from "../features/editor/useMarkdownPreview";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { SetupScreen } from "../features/setup/SetupScreen";
-import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
+import {
+  MAC_TRAFFIC_LIGHTS_INSET,
+  WorkspaceSidebar,
+} from "../features/workspace/WorkspaceSidebar";
+import { WorkspaceSearchPopover } from "../features/workspace/WorkspaceSearchPopover";
 import { exportMarkdownFile } from "../lib/export/markdownExport";
 import { exportDocumentToPdf } from "../lib/export/pdfExport";
 import { exportDocumentToHtml } from "../lib/export/htmlExport";
@@ -38,7 +31,8 @@ export function AppShell() {
   const addCommentToActiveFile = useWorkspaceStore((state) => state.addCommentToActiveFile);
   const chatOpen = useWorkspaceStore((state) => state.chatOpen);
   const editorOpen = useWorkspaceStore((state) => state.editorOpen);
-  const toggleEditor = useWorkspaceStore((state) => state.toggleEditor);
+  const sidebarCollapsed = useWorkspaceStore((state) => state.sidebarCollapsed);
+  const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar);
   const chatPulseSignal = useWorkspaceStore((state) => state.chatPulseSignal);
   const commentsOpen = useWorkspaceStore((state) => state.commentsOpen);
   const editorMode = useWorkspaceStore((state) => state.editorMode);
@@ -402,50 +396,12 @@ export function AppShell() {
         />
       ) : null}
       <div className="bob-app-shell">
-      <Header aria-label="Compose">
-        <SkipToContent />
-        <HeaderName href="#main-content" prefix="">
-          Compose
-        </HeaderName>
-        {/* Minimal top bar: just the product name and, pinned right, the two
-          * independent pane toggles (editor + chat). Everything else (workspace
-          * switcher, New, Settings) now lives in the sidebar. At least one pane
-          * must stay visible, so the toggle for the only-open pane is disabled
-          * (the store guards it too). */}
-        <HeaderGlobalBar>
-          <HeaderGlobalAction
-            aria-label={editorOpen ? "Hide editor" : "Show editor"}
-            className={[
-              editorOpen ? "bob-header-action--open" : "",
-              activeWorkspace && !(editorOpen && !chatOpen) ? "" : "bob-header-action--disabled",
-            ]
-              .filter(Boolean)
-              .join(" ") || undefined}
-            onClick={() => {
-              if (activeWorkspace) toggleEditor();
-            }}
-            tooltipAlignment="end"
-          >
-            <DocumentIcon size={20} />
-          </HeaderGlobalAction>
-          <HeaderGlobalAction
-            aria-label={chatOpen ? "Hide chat" : "Open chat"}
-            className={[
-              chatOpen ? "bob-header-action--open" : "",
-              activeWorkspace && !(chatOpen && !editorOpen) ? "" : "bob-header-action--disabled",
-            ]
-              .filter(Boolean)
-              .join(" ") || undefined}
-            onClick={() => {
-              if (activeWorkspace) toggleChat();
-            }}
-            tooltipAlignment="end"
-          >
-            <ChatBot size={20} />
-          </HeaderGlobalAction>
-        </HeaderGlobalBar>
-      </Header>
-
+      {/* The global Carbon Header is gone in this redesign: app-name ownership
+        * moves to the macOS menu bar, the workspace switcher + New + Settings
+        * live in the sidebar, and the chat-toggle lives in the editor toolbar.
+        * `titleBarStyle: Overlay` (tauri.conf.json) overlays the traffic
+        * lights onto the sidebar titlebar row, so there's nothing left for a
+        * top header to host. */}
       {!activeWorkspace ? (
         <NoWorkspaceWelcome />
       ) : (
@@ -454,6 +410,7 @@ export function AppShell() {
           "bob-workspace",
           editorOpen ? "bob-workspace--editor-open" : "",
           chatOpen ? "bob-workspace--chat-open" : "",
+          sidebarCollapsed ? "bob-workspace--sidebar-collapsed" : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -467,6 +424,8 @@ export function AppShell() {
             activeFilePath={activeWorkspace?.activeFilePath ?? ""}
             onSelectFile={(path) => void selectFile(path)}
             onCloseFile={handleCloseTab}
+            leadingInsetPx={sidebarCollapsed ? MAC_TRAFFIC_LIGHTS_INSET : 0}
+            onShowSidebar={sidebarCollapsed ? toggleSidebar : undefined}
           />
           {activeFileBuffer?.conflict ? (
             <div className="bob-conflict-banner" role="alert">
@@ -527,6 +486,8 @@ export function AppShell() {
                   onToggleComments={toggleComments}
                   commentsOpen={commentsOpen}
                   commentCount={activeFileComments.length}
+                  onToggleChat={toggleChat}
+                  chatOpen={chatOpen}
                 />
                 {commentsOpen ? (
                   <CommentsPanel
@@ -642,6 +603,7 @@ export function AppShell() {
       )}
 
       </div>
+      <WorkspaceSearchPopover />
       {settingsOpen ? <SettingsDialog onClose={() => closeSettings()} /> : null}
       {activeWorkspace && activeFileEntry ? (
         <VersionHistory

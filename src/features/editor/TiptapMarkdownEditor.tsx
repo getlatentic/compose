@@ -111,6 +111,12 @@ export interface TiptapMarkdownEditorProps {
   commentsOpen?: boolean;
   /** Open-comment count for this file, shown as a badge on the Comments button. */
   commentCount?: number;
+  /** Toggle the chat panel — moved from the (now-deleted) top header. */
+  onToggleChat?: () => void;
+  /** Whether the chat panel is open. */
+  chatOpen?: boolean;
+  /** Disable the chat toggle when the editor is the only visible pane. */
+  chatToggleDisabled?: boolean;
 }
 
 const NO_LINK_TARGETS: ReadonlySet<string> = new Set();
@@ -147,6 +153,9 @@ function TiptapMarkdownEditorInner({
   onToggleComments,
   commentsOpen = false,
   commentCount = 0,
+  onToggleChat,
+  chatOpen = false,
+  chatToggleDisabled = false,
 }: TiptapMarkdownEditorProps) {
   // YAML frontmatter separation. The editor renders **only the
   // body** — the user shouldn't see raw `key: value` lines
@@ -453,6 +462,9 @@ function TiptapMarkdownEditorInner({
         onToggleComments={onToggleComments}
         commentsOpen={commentsOpen}
         commentCount={commentCount}
+        onToggleChat={onToggleChat}
+        chatOpen={chatOpen}
+        chatToggleDisabled={chatToggleDisabled}
       />
     ) : undefined;
   const toolbar = (

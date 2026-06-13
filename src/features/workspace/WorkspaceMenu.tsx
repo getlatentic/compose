@@ -19,6 +19,7 @@ export function WorkspaceMenu() {
     useWorkspaceActions();
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
+  const openNewWindow = useWorkspaceStore((state) => state.openNewWindow);
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
   const activeName = activeWorkspace?.name ?? "No folder open";
 
@@ -75,6 +76,14 @@ export function WorkspaceMenu() {
             onClick={() => void openSample()}
           />
         ) : null}
+        <OverflowMenuItem
+          key="new-window"
+          itemText="Open in new window"
+          requireTitle
+          title="Open Compose in a fresh window — its own workspace, chat history, and runs."
+          hasDivider
+          onClick={() => void openNewWindow()}
+        />
       </OverflowMenu>
     </div>
   );

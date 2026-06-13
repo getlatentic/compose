@@ -179,6 +179,13 @@ fn flush_pending(
             relative_path: relative,
             workspace_id: workspace_id.to_owned(),
         };
+        // Broadcast: filesystem changes are inherently global to whichever
+        // windows are looking at this workspace. The payload carries
+        // `workspace_id`, and each window's store discards events for any
+        // workspace it isn't viewing — so two windows on the same folder
+        // both refresh, and a window on a different folder ignores it.
+        // (Per-window routing here would re-introduce the desync the
+        // workspace-id filter already prevents.)
         let _ = app.emit(WORKSPACE_FS_EVENT, payload);
     }
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronDown, Document } from "@carbon/react/icons";
+import { Copy, RefreshCw } from "lucide-react";
 
 import type {
   ChatExcerptRef,
@@ -21,6 +22,10 @@ export interface MessageRowCallbacks {
   onAccept: (suggestionId: string) => void;
   onOpenDocument: (path: string) => void;
   onReject: (suggestionId: string) => void;
+  /** Re-send the most recent user turn as a new run. Resolved in the store
+   * (`regenerateLastTurn`). Per-message granularity isn't supported yet —
+   * regenerate always re-runs the *last* user turn. */
+  onRegenerate?: () => void;
 }
 
 /**
@@ -28,16 +33,19 @@ export interface MessageRowCallbacks {
  * chat (Claude, ChatGPT) doesn't paint a bot-avatar bubble next to a
  * speech-bubble: every turn just flows in document order. We do the same.
  *
- *  - **User turns** show a small "You" eyebrow + the text in a quieter
- *    surface, left-aligned.
+ *  - **User turns** render as a bordered block (Carbon `--cds-layer-02`,
+ *    1px subtle border, rounded). No "You" eyebrow — the contained surface
+ *    is what marks the turn as yours.
  *  - **Assistant turns** render the answer as open prose (markdown from
  *    `attempt_completion`) with no avatar / "Assistant" label / read-pills.
  *    The pills moved to the trace ("Show work"), which is where the
  *    context belongs.
  *  - While a turn runs with no answer yet, a transient **status indicator**
  *    takes the slot ("Thinking…", "Reading file…").
- *  - The agent's process + usage stats sit behind the **"Show work"**
- *    toggle, just below the answer.
+ *  - Hover an assistant turn → a small action row appears below it: Copy,
+ *    Regenerate, Show work, with usage stats on the trailing edge. The row
+ *    is `opacity: 0` at rest and `1` on hover/focus, so the panel stays
+ *    quiet but the actions are one move away.
  */
 export function MessageRow({
   callbacks,
@@ -65,6 +73,15 @@ export function MessageRow({
   const showMeta = isFinal && (hasTrace || Boolean(statsLabel));
   const [traceOpen, setTraceOpen] = useState(false);
 
+  const handleCopy = () => {
+    if (!message.content) {
+      return;
+    }
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(message.content);
+    }
+  };
+
   return (
     <article
       className={[
@@ -72,8 +89,6 @@ export function MessageRow({
         isAssistant ? "bob-message-row--assistant" : "bob-message-row--user",
       ].join(" ")}
     >
-      {!isAssistant ? <span className="bob-message-eyebrow">You</span> : null}
-
       {isAssistant && message.activity ? (
         <div className="bob-message-activity">{message.activity}</div>
       ) : null}
@@ -121,21 +136,43 @@ export function MessageRow({
         />
       ) : null}
 
-      {showMeta ? (
-        <div className="bob-message-meta">
-          {hasTrace ? (
-            <button
-              type="button"
-              className="bob-message-trace__toggle"
-              aria-expanded={traceOpen}
-              onClick={() => setTraceOpen((open) => !open)}
-            >
-              <ChevronDown size={14} className="bob-message-trace__chevron" aria-hidden />
-              <span>{traceOpen ? "Hide work" : "Show work"}</span>
-            </button>
-          ) : (
-            <span />
-          )}
+      {showMeta && isAssistant ? (
+        <div className="bob-message-actions" data-hover-reveal>
+          <div className="bob-message-actions__left">
+            {message.content ? (
+              <button
+                type="button"
+                className="bob-message-actions__btn"
+                onClick={handleCopy}
+                aria-label="Copy message"
+                title="Copy"
+              >
+                <Copy size={14} aria-hidden />
+              </button>
+            ) : null}
+            {callbacks.onRegenerate ? (
+              <button
+                type="button"
+                className="bob-message-actions__btn"
+                onClick={() => callbacks.onRegenerate?.()}
+                aria-label="Regenerate response"
+                title="Regenerate"
+              >
+                <RefreshCw size={14} aria-hidden />
+              </button>
+            ) : null}
+            {hasTrace ? (
+              <button
+                type="button"
+                className="bob-message-trace__toggle"
+                aria-expanded={traceOpen}
+                onClick={() => setTraceOpen((open) => !open)}
+              >
+                <ChevronDown size={14} className="bob-message-trace__chevron" aria-hidden />
+                <span>{traceOpen ? "Hide work" : "Show work"}</span>
+              </button>
+            ) : null}
+          </div>
           {statsLabel ? <span className="bob-message-stats">{statsLabel}</span> : null}
         </div>
       ) : null}
