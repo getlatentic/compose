@@ -56,7 +56,6 @@ import {
   type ReviewFileChange,
 } from "../lib/ipc/reviewClient";
 import { markWorkspaceOpened } from "../lib/ipc/workspaceClient";
-import { openNewComposeWindow } from "../lib/ipc/windowsClient";
 import {
   beginAgentEditWindow,
   endAgentEditWindow,
@@ -217,12 +216,6 @@ interface WorkspaceState {
   /** Step back/forward through the unified history. No-op at the edges. */
   navigateBack: () => void;
   navigateForward: () => void;
-  /**
-   * Open a brand-new Compose window. The new window starts with an empty
-   * store; the user picks a folder there. Per-window event routing (see
-   * `runner.rs`) keeps this window's runs out of the new one's chat.
-   */
-  openNewWindow: () => Promise<void>;
   /**
    * Re-send the most recent user turn in this conversation as a new run. The
    * previous assistant reply is left as history; the regen lands as a fresh
@@ -1393,13 +1386,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
     set({ navIndex: navIndex + 1 });
     applyNavEntry(get, target);
-  },
-  openNewWindow: async () => {
-    try {
-      await openNewComposeWindow();
-    } catch (error) {
-      set({ saveError: errorMessage(error, "Could not open a new window") });
-    }
   },
   regenerateLastTurn: async () => {
     const workspace = get().activeWorkspace();

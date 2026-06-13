@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChatBot } from "@carbon/react/icons";
+import { ChatBot, Add, Close } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceStore";
 import { bobRuntimeReadiness, sumChatThreadStats } from "../../app/workspaceModel";
@@ -47,6 +47,8 @@ export function ChatPanel() {
   const deleteConversation = useWorkspaceStore((state) => state.deleteConversation);
   const undoDeleteConversation = useWorkspaceStore((state) => state.undoDeleteConversation);
   const duplicateConversation = useWorkspaceStore((state) => state.duplicateConversation);
+  const newChat = useWorkspaceStore((state) => state.newChat);
+  const toggleChat = useWorkspaceStore((state) => state.toggleChat);
   const deleteNotice = useWorkspaceStore((state) => state.conversationDeleteNotice);
 
   const [editingTitle, setEditingTitle] = useState(false);
@@ -167,6 +169,21 @@ export function ChatPanel() {
           <span className="bob-chat-header__meta" title="Total token and coin usage this chat">
             {headerMeta}
           </span>
+          {/* + = start a fresh conversation in this panel (the running one
+              stays in the sidebar Chat tab). ⋮ = per-conversation actions
+              (rename / duplicate / export / archive / delete). × = close the
+              panel (same effect as the editor toolbar's PanelRight toggle —
+              hide the chat and give the editor full width). The Chat tab in
+              the sidebar is always one click away to pick another. */}
+          <button
+            type="button"
+            className="bob-chat-header__btn"
+            aria-label="New chat"
+            title="New chat"
+            onClick={() => void newChat()}
+          >
+            <Add size={16} aria-hidden />
+          </button>
           {openConversationId && openSummary ? (
             <ConversationActionsMenu
               archived={openSummary.archived}
@@ -180,6 +197,15 @@ export function ChatPanel() {
               }}
             />
           ) : null}
+          <button
+            type="button"
+            className="bob-chat-header__btn"
+            aria-label="Close chat"
+            title="Close chat"
+            onClick={toggleChat}
+          >
+            <Close size={16} aria-hidden />
+          </button>
         </div>
       </header>
 

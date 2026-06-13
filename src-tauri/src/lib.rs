@@ -7,7 +7,6 @@ pub mod index;
 pub mod logging;
 pub mod review;
 mod settings;
-mod windows;
 mod workspace;
 
 use tauri::Manager;
@@ -119,7 +118,6 @@ pub fn run() {
             export::workspace_export_html,
             logging::report_client_error,
             logging::open_error_log,
-            windows::open_new_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

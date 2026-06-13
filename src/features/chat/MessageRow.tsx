@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronDown, Document } from "@carbon/react/icons";
-import { Copy, RefreshCw } from "lucide-react";
+import { Check, Copy, RefreshCw } from "lucide-react";
 
 import type {
   ChatExcerptRef,
@@ -72,13 +72,20 @@ export function MessageRow({
   const statsLabel = message.stats ? formatStats(message.stats) : "";
   const showMeta = isFinal && (hasTrace || Boolean(statsLabel));
   const [traceOpen, setTraceOpen] = useState(false);
+  // Brief "copied" flash on the Copy button so the user sees that the click
+  // landed (clipboard writes are otherwise invisible). 1.4s mirrors the same
+  // pattern in Claude / ChatGPT.
+  const [justCopied, setJustCopied] = useState(false);
 
   const handleCopy = () => {
     if (!message.content) {
       return;
     }
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      void navigator.clipboard.writeText(message.content);
+      void navigator.clipboard.writeText(message.content).then(() => {
+        setJustCopied(true);
+        setTimeout(() => setJustCopied(false), 1400);
+      });
     }
   };
 
@@ -144,10 +151,14 @@ export function MessageRow({
                 type="button"
                 className="bob-message-actions__btn"
                 onClick={handleCopy}
-                aria-label="Copy message"
-                title="Copy"
+                aria-label={justCopied ? "Copied" : "Copy message"}
+                title={justCopied ? "Copied" : "Copy"}
               >
-                <Copy size={14} aria-hidden />
+                {justCopied ? (
+                  <Check size={14} aria-hidden />
+                ) : (
+                  <Copy size={14} aria-hidden />
+                )}
               </button>
             ) : null}
             {callbacks.onRegenerate ? (
