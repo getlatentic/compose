@@ -270,25 +270,18 @@ select {
 // `data-tauri-drag-region="false"` makes the row draggable except where the
 // user clicks an actual button. The first 78px (`--bob-traffic-lights-inset`)
 // is a no-op spacer for the OS traffic lights to sit over.
-// macOS pins the traffic lights at a fixed window-relative coordinate (their
-// VISUAL CENTER is ~y=10 on macOS Sequoia, regardless of how tall our header
-// row is). Fighting that with flex math gave a small misalignment that varied
-// with the row height — so we pin the button by position too.
-//
-// 28px row block-size matches the native Mac titlebar height. The PanelLeft
-// button is `position: absolute; top: 2px` (button is 28px tall → its center
-// lands at y=16... but we want it at y=10 to match traffic lights, so the
-// button TOP needs to be at y=10-14=-4 — which we do with `top: -4px`
-// effectively by raising the icon explicitly). Cleaner: keep the button in
-// flow but reduce its block-size to 20px and use `align-items: flex-start;
-// padding-block-start: 0`, so the button center lands at y=10.
+// The OS pins the traffic lights at a window-relative coordinate. Rather
+// than guess what that coordinate is on this macOS version, we OVERRIDE it
+// via Tauri's `trafficLightsPosition: { x: 18, y: 8 }` so the lights' top
+// edge is at y=8 (center at y=14 — diameter 12px). Then this row's
+// `align-items: center` puts the PanelLeft button center at y=14 too, so
+// the glyph and the lights sit on the same baseline by construction, not
+// by lucky math. Same pattern as Linear / Notion / Arc.
 .bob-sidebar-titlebar {
-  position: relative;
   display: flex;
   flex: 0 0 auto;
-  align-items: flex-start;
+  align-items: center;
   block-size: 1.75rem;
-  padding-block-start: 0;
   padding-inline: var(--bob-traffic-lights-inset, 78px) 0.5rem;
   background: var(--cds-layer-01, #f4f4f4);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
