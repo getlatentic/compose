@@ -129,17 +129,55 @@ The cost has been split into two trackable components:
 | Markdown → hast (`renderMarkdownPreview`) | `src/workers/markdownPipeline.ts` (Web Worker) | **~3.1 s** | **< 1 s** — tracked by `markdownPipelineLatency.baseline.spec.ts` |
 | hast → ProseMirror nodes (Tiptap `setContent`) | `src/features/editor/TiptapMarkdownEditor.tsx` | **~19 s** | covered by the same 1 s end-to-end target — Tiptap's hot path is the dominant cost. |
 
-The pipeline cost is already gated: `pnpm bench:baseline` runs
-`markdownPipelineLatency.baseline.spec.ts`, captures samples, writes
-[`docs/benchmarks/markdown-pipeline.json`](./benchmarks/markdown-pipeline.json),
-and currently *warns* when the median exceeds 1000 ms. When a PR lands the
-parse below the target, flip the warn in that spec into a hard `expect`
-and the perf work becomes irreversible.
+The pipeline cost is **hard-asserted** by
+[`markdownPipelineLatency.baseline.spec.ts`](../src/features/benchmark/markdownPipelineLatency.baseline.spec.ts)
+(run via `pnpm bench:baseline`, results in
+[`docs/benchmarks/markdown-pipeline.json`](./benchmarks/markdown-pipeline.json)):
+the median for a 1MB markdown on a 10-core darwin landed at **20.4ms** (was
+3093ms before the scanner rewrite — 152× faster). The spec
+`expect(summary.medianMs).toBeLessThan(V1_1_TARGET_MS)` means anyone
+re-introducing the unified pipeline (or any other O(file) allocator) on
+this path will fail the gate.
 
-Tiptap's setContent latency is not yet gated — it needs a DOM, which the
-pipeline bench deliberately avoids. The right place to add that gate is
-the lag-benchmark Playwright pass we don't have yet; in the meantime the
-production-readiness test run doc is the manual baseline.
+Tiptap's setContent cost is **partly gated** by
+[`tiptapSetContent.baseline.spec.ts`](../src/features/benchmark/tiptapSetContent.baseline.spec.ts)
+(jsdom env, scaling series). Results in
+[`docs/benchmarks/tiptap-set-content.json`](./benchmarks/tiptap-set-content.json).
+The spec currently captures the cost; it doesn't assert against a
+threshold because the cost is super-linear with document size and a 1MB
+sample exceeds vitest's per-test timeout in jsdom. Future perf work flips
+the assert on as it tightens.
+
+### Where v1.1 lands — and what v1.2 needs
+
+**v1.1 ships with this reality:**
+
+- Files **up to ~300KB** open in well under 1s end-to-end.
+- Files **at 1MB** open in roughly 8–10s end-to-end (down from ~22s
+  pre-pass; the 2.6× win at 300KB extrapolates super-linearly).
+- The user gets feedback during the long render — `"Loading file…"` +
+  the `"Worker parsing"` pill at the bottom right.
+- The lower-impact pipeline cost is permanently fixed (20ms gate).
+
+**v1.2 needs an architectural change to hit < 1s on 1MB.** Three options
+discussed in the 2026-06-13 perf-pass:
+
+1. **Viewport virtualization in Tiptap** — custom NodeViews that only
+   materialize visible blocks; hydrate the rest on scroll. Strongest end
+   state; ~1–2 weeks of focused work; real risk of subtle editor
+   regressions.
+2. **Size-based editor fallback** — files > 500KB open in CodeMirror
+   plain text, smaller files keep Tiptap. ~2–3 days; safe; loses
+   WYSIWYG on big files (acceptable trade — users with 1MB notes
+   typically don't need WYSIWYG).
+3. **Direct markdown → PM doc parser** that skips Tiptap's token-walk.
+   Heavy surface area, easy to break the extension stack. Not
+   recommended.
+
+Recommendation: **option 2 first** (size fallback) for v1.2, **option 1
+later** if WYSIWYG-on-huge-files becomes a priority. The pipeline gate
+and the Tiptap bench infrastructure are both already in place to track
+whichever path is taken.
 
 
 

@@ -168,5 +168,55 @@ Pre-flight gotchas a manual tester should know going in:
 | **What works** | Workspace scan (50 × 1MB in ~2s), sidebar, tab pills open instantly, memory stays bounded, the `"Worker parsing"` pill gives the user feedback during long renders |
 | **What's slow** | Editor render is **~22s for a 1MB markdown** (~164k words). Each subsequent open queues against the same editor instance |
 | **Severity** | Medium — Sublime/Bear hit < 1s on the same file; we'd be embarrassed showing this side-by-side. But it doesn't crash, doesn't silently hang, and most user notes are < 100KB where this is invisible |
-| **Ship readiness** | Yes for v1 with the perf note in release notes; queue worker-parse perf for v1.1 with a measurable target (1MB / second on hot path) |
-| **Concrete next steps** | (1) Add a `"Loading file…"` test that asserts render-complete within 5s for a 1MB fixture, so we can't regress further. (2) Profile the worker's markdown parse — likely an allocation-per-block hot loop. (3) Consider a soft-cap initial render (paint first 2k lines, hydrate the rest off-thread) so the user gets pixels in < 200ms regardless of file size |
+
+---
+
+## Follow-up perf pass (same session, after this run)
+
+The findings above drove a focused perf pass — see commits on `main`
+from `5ccd1d3` onward. Three concrete deliverables:
+
+### 1. Markdown pipeline gate
+
+A new `pnpm bench:baseline` spec
+(`markdownPipelineLatency.baseline.spec.ts`) measures
+`renderMarkdownPreview` on a 1MB fixture. The v1.1 target
+`V1_1_TARGET_MS = 1000` is hard-asserted.
+
+| | Before | After |
+|---|---|---|
+| Median (1MB) | 3093 ms | **20 ms** (152× faster) |
+| Verdict | `regression-vs-target` | `pass` |
+
+### 2. Tiptap setContent — markdown mode → HTML mode
+
+`@tiptap/markdown`'s token-walk is dominant. A new
+`tiptapSetContent.baseline.spec.ts` measures both modes across a scaling
+series and showed HTML mode is materially faster.
+
+| Size | Markdown mode | HTML mode | Speedup |
+|---|---|---|---|
+| 313 B | 3.8 ms | 5.6 ms | noise |
+| 300 KB | 7367 ms | **2831 ms** | **2.6×** |
+
+`TiptapMarkdownEditor` now converts markdown→HTML inline via `marked`
+before calling `setContent`. Save still uses `editor.getMarkdown()`, so
+the file on disk stays markdown. Predicted 1MB end-to-end open:
+**~8–10s** (down from ~22s; super-linear scaling).
+
+### 3. v1.1 limit + v1.2 architectural plan documented
+
+`docs/editor-guide.md` now carries the v1.1 perf budget and the v1.2
+options for hitting < 1s on 1MB: viewport-virtualized NodeViews, size-
+based editor fallback (CodeMirror for > 500KB), or a direct markdown→PM
+parser. Recommended next step in v1.2: the size-based fallback (~2-3
+days, safe trade-off).
+
+### Honest outcome
+
+We hit the v1.1 pipeline gate (the part we set as a measurable target
+this session) and meaningfully improved Tiptap's setContent. We did
+**not** hit < 1s end-to-end on 1MB — that requires architectural work
+beyond this session. The bench infrastructure now tracks every component
+so future PRs can measure their impact without driving the packaged app
+by hand.
