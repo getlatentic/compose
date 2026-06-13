@@ -4115,6 +4115,31 @@ select {
   color: var(--cds-text-on-color, #ffffff);
 }
 
+// Cold-boot screen: held in place until setup hydration AND the active
+// workspace's first file scan both resolve, so the user never sees the
+// SetupScreen → empty-workspace → workspace flicker on launch.
+// Background matches the workspace surface (`bob-document-workspace`)
+// so the transition under the brand mark is content-only, not a flash
+// of color. The mark itself reuses the onboarding hero-mark visual so
+// returning users land on a face they've seen before.
+.bob-boot-loading {
+  display: grid;
+  place-items: center;
+  block-size: 100%;
+  inline-size: 100%;
+  background: var(--cds-background, #ffffff);
+}
+
+.bob-boot-loading__mark {
+  display: grid;
+  place-items: center;
+  inline-size: 3.5rem;
+  block-size: 3.5rem;
+  border-radius: 1rem;
+  background: var(--cds-background-inverse, #161616);
+  color: var(--cds-text-on-color, #ffffff);
+}
+
 .bob-onboard__eyebrow {
   font-size: 0.75rem;
   font-weight: 600;
