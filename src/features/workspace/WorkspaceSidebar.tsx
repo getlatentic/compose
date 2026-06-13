@@ -1,13 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { InlineNotification } from "@carbon/react";
 import { AddAlt } from "@carbon/react/icons";
-import {
-  ChevronLeft,
-  ChevronRight,
-  PanelLeft,
-  Search,
-  Settings,
-} from "lucide-react";
+import { PanelLeft, Search, Settings } from "lucide-react";
 import type { BobWorkspace } from "../../app/workspaceModel";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { WorkspaceBacklinkRecord } from "../../lib/ipc/indexClient";
@@ -59,10 +53,6 @@ export function WorkspaceSidebar() {
   const setSidebarTab = useWorkspaceStore((state) => state.setSidebarTab);
   const sidebarCollapsed = useWorkspaceStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar);
-  const navHistory = useWorkspaceStore((state) => state.navHistory);
-  const navIndex = useWorkspaceStore((state) => state.navIndex);
-  const navigateBack = useWorkspaceStore((state) => state.navigateBack);
-  const navigateForward = useWorkspaceStore((state) => state.navigateForward);
   const openSettings = useWorkspaceStore((state) => state.openSettings);
   const openSearch = useWorkspaceStore((state) => state.openSearch);
   const promptText = useTextPrompt();
@@ -140,9 +130,6 @@ export function WorkspaceSidebar() {
   const newLabel = sidebarTab === "files" ? "New note" : "New chat";
   const onNew = sidebarTab === "files" ? createNote : newChat;
 
-  const canGoBack = navIndex > 0;
-  const canGoForward = navIndex < navHistory.length - 1;
-
   if (sidebarCollapsed) {
     return null;
   }
@@ -153,11 +140,10 @@ export function WorkspaceSidebar() {
         className="bob-sidebar-titlebar"
         data-tauri-drag-region
         // The whole row is a drag region (Tauri honors `data-tauri-drag-region`
-        // exactly like the older `-webkit-app-region: drag`). The interactive
-        // buttons below opt OUT via `no-drag` on themselves.
+        // exactly like the older `-webkit-app-region: drag`). The PanelLeft
+        // button below opts OUT via `no-drag` on itself.
         style={{ ["--bob-traffic-lights-inset" as never]: `${MAC_TRAFFIC_LIGHTS_INSET}px` }}
       >
-        <div className="bob-sidebar-titlebar__traffic-spacer" aria-hidden />
         <button
           type="button"
           className="bob-sidebar-titlebar__btn"
@@ -168,28 +154,6 @@ export function WorkspaceSidebar() {
         >
           <PanelLeft size={16} aria-hidden />
         </button>
-        <div className="bob-sidebar-titlebar__nav" data-tauri-drag-region="false">
-          <button
-            type="button"
-            className="bob-sidebar-titlebar__btn"
-            onClick={() => navigateBack()}
-            disabled={!canGoBack}
-            aria-label="Go back"
-            title="Go back"
-          >
-            <ChevronLeft size={16} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="bob-sidebar-titlebar__btn"
-            onClick={() => navigateForward()}
-            disabled={!canGoForward}
-            aria-label="Go forward"
-            title="Go forward"
-          >
-            <ChevronRight size={16} aria-hidden />
-          </button>
-        </div>
       </div>
 
       <WorkspaceMenu />

@@ -270,31 +270,36 @@ select {
 // `data-tauri-drag-region="false"` makes the row draggable except where the
 // user clicks an actual button. The first 78px (`--bob-traffic-lights-inset`)
 // is a no-op spacer for the OS traffic lights to sit over.
+// macOS pins the traffic lights at a fixed window-relative coordinate (their
+// VISUAL CENTER is ~y=10 on macOS Sequoia, regardless of how tall our header
+// row is). Fighting that with flex math gave a small misalignment that varied
+// with the row height — so we pin the button by position too.
+//
+// 28px row block-size matches the native Mac titlebar height. The PanelLeft
+// button is `position: absolute; top: 2px` (button is 28px tall → its center
+// lands at y=16... but we want it at y=10 to match traffic lights, so the
+// button TOP needs to be at y=10-14=-4 — which we do with `top: -4px`
+// effectively by raising the icon explicitly). Cleaner: keep the button in
+// flow but reduce its block-size to 20px and use `align-items: flex-start;
+// padding-block-start: 0`, so the button center lands at y=10.
 .bob-sidebar-titlebar {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  // 28px matches the native macOS titlebar height — the OS pins the
-  // traffic lights at the very top (y≈13 center), so in a 40px row with
-  // align-items:center our buttons centered at y=20 and looked ~7px low.
-  // Shrinking the row to 28px puts the centered buttons at y=14, flush
-  // with the traffic-lights' visual baseline.
+  align-items: flex-start;
   block-size: 1.75rem;
-  padding-inline-end: 0.5rem;
+  padding-block-start: 0;
+  padding-inline: var(--bob-traffic-lights-inset, 78px) 0.5rem;
   background: var(--cds-layer-01, #f4f4f4);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-.bob-sidebar-titlebar__traffic-spacer {
-  inline-size: var(--bob-traffic-lights-inset, 78px);
-  block-size: 100%;
 }
 
 .bob-sidebar-titlebar__btn {
   display: inline-grid;
   place-items: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
+  inline-size: 1.5rem;
+  block-size: 1.25rem;       // 20px — center at y=10 matches macOS traffic-lights baseline
+  margin-block-start: 0;
   border: 0;
   background: transparent;
   color: var(--cds-icon-secondary, #525252);
@@ -314,12 +319,6 @@ select {
   cursor: not-allowed;
 }
 
-.bob-sidebar-titlebar__nav {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.125rem;
-  margin-inline-start: auto;
-}
 
 // === Sidebar: Files | Chat tabs + the context-aware New button ===
 .bob-sidebar-tabs {
