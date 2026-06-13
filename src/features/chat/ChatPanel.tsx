@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChatBot, Add, Close } from "@carbon/react/icons";
+import { Add, Close } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceStore";
 import { bobRuntimeReadiness, sumChatThreadStats } from "../../app/workspaceModel";
@@ -97,10 +97,15 @@ export function ChatPanel() {
   const openConversationId = chatThread.conversationId;
   const openSummary =
     conversations.find((item) => item.conversationId === openConversationId) ?? null;
-  const openTitle = openSummary?.title ?? "New conversation";
+  // Title is the open conversation's name; when nothing's open we deliberately
+  // render NO title — the `+ × ⋮` actions already say "this is the chat panel."
+  // A "New chat" / "New conversation" placeholder competed with the `+` button
+  // and made it look like two buttons for the same action.
+  const openTitle = openSummary?.title ?? null;
 
   // Header total: the thread's cumulative token + coin usage (compact,
-  // human-readable), not a message count. "New chat" until anything's run.
+  // human-readable), not a message count. Empty until anything's run — no
+  // placeholder, for the same reason the title is empty.
   const totals = sumChatThreadStats(chatThread);
   const headerMeta =
     totals.totalTokens || totals.coins
@@ -110,7 +115,7 @@ export function ChatPanel() {
         ]
           .filter(Boolean)
           .join(" · ")
-      : "New chat";
+      : null;
 
   // Export the open conversation: prefer the live thread (it has the latest
   // in-flight turns), else fall back to the persisted snapshot.
@@ -138,9 +143,10 @@ export function ChatPanel() {
     <section className="bob-chat-panel" aria-label="Assistant chat">
       <header className="bob-chat-header">
         <div className="bob-chat-header__title">
-          <span className="bob-mark">
-            <ChatBot size={16} />
-          </span>
+          {/* No bob-mark / "Assistant" prefix and no "New chat" placeholder
+              when there's no open conversation — the panel itself + the action
+              buttons already say "this is the assistant." We only show a title
+              when there IS one (the user's named conversation). */}
           {editingTitle && openConversationId ? (
             <ConversationTitleEditor
               initialTitle={openSummary?.title ?? ""}
@@ -150,9 +156,8 @@ export function ChatPanel() {
               }}
               onCancel={() => setEditingTitle(false)}
             />
-          ) : openConversationId ? (
-            // The open conversation's title — click to rename in place. Switching
-            // and starting conversations now live in the sidebar Chat tab.
+          ) : openConversationId && openTitle ? (
+            // The open conversation's title — click to rename in place.
             <button
               type="button"
               className="bob-chat-header__title-button"
@@ -161,20 +166,18 @@ export function ChatPanel() {
             >
               {openTitle}
             </button>
-          ) : (
-            <span className="bob-chat-header__title-text">{openTitle}</span>
-          )}
+          ) : null}
         </div>
         <div className="bob-chat-header__actions">
-          <span className="bob-chat-header__meta" title="Total token and coin usage this chat">
-            {headerMeta}
-          </span>
-          {/* + = start a fresh conversation in this panel (the running one
-              stays in the sidebar Chat tab). ⋮ = per-conversation actions
-              (rename / duplicate / export / archive / delete). × = close the
-              panel (same effect as the editor toolbar's PanelRight toggle —
-              hide the chat and give the editor full width). The Chat tab in
-              the sidebar is always one click away to pick another. */}
+          {headerMeta ? (
+            <span className="bob-chat-header__meta" title="Total token and coin usage this chat">
+              {headerMeta}
+            </span>
+          ) : null}
+          {/* + = start a fresh conversation in this panel. × = close the panel
+              (same effect as the editor toolbar's PanelRight toggle). ⋮ =
+              per-conversation actions (rename / duplicate / export / archive /
+              delete) — only when a conversation is actually open. */}
           <button
             type="button"
             className="bob-chat-header__btn"
@@ -184,19 +187,6 @@ export function ChatPanel() {
           >
             <Add size={16} aria-hidden />
           </button>
-          {openConversationId && openSummary ? (
-            <ConversationActionsMenu
-              archived={openSummary.archived}
-              actions={{
-                onRename: () => setEditingTitle(true),
-                onDuplicate: () => void duplicateConversation(openConversationId),
-                onExport: () => void exportConversation(openConversationId, openTitle),
-                onArchive: () =>
-                  void archiveConversation(openConversationId, !openSummary.archived),
-                onDelete: () => deleteConversation(openConversationId),
-              }}
-            />
-          ) : null}
           <button
             type="button"
             className="bob-chat-header__btn"
@@ -206,6 +196,20 @@ export function ChatPanel() {
           >
             <Close size={16} aria-hidden />
           </button>
+          {openConversationId && openSummary ? (
+            <ConversationActionsMenu
+              archived={openSummary.archived}
+              actions={{
+                onRename: () => setEditingTitle(true),
+                onDuplicate: () => void duplicateConversation(openConversationId),
+                onExport: () =>
+                  void exportConversation(openConversationId, openTitle ?? "conversation"),
+                onArchive: () =>
+                  void archiveConversation(openConversationId, !openSummary.archived),
+                onDelete: () => deleteConversation(openConversationId),
+              }}
+            />
+          ) : null}
         </div>
       </header>
 
