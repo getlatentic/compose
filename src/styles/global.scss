@@ -274,7 +274,12 @@ select {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  block-size: 2.5rem;
+  // 28px matches the native macOS titlebar height — the OS pins the
+  // traffic lights at the very top (y≈13 center), so in a 40px row with
+  // align-items:center our buttons centered at y=20 and looked ~7px low.
+  // Shrinking the row to 28px puts the centered buttons at y=14, flush
+  // with the traffic-lights' visual baseline.
+  block-size: 1.75rem;
   padding-inline-end: 0.5rem;
   background: var(--cds-layer-01, #f4f4f4);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
