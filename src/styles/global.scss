@@ -270,21 +270,21 @@ select {
 // `data-tauri-drag-region="false"` makes the row draggable except where the
 // user clicks an actual button. The first 78px (`--bob-traffic-lights-inset`)
 // is a no-op spacer for the OS traffic lights to sit over.
-// macOS pins the traffic lights' TOP at y=0 of the window. The `y` in
-// Tauri's trafficLightPosition controls the container *padding below* the
-// buttons — NOT the button position (see tao::macos::view::inset_traffic_lights).
-// So lights center is at y = close_button_height/2 ≈ 7-8, regardless of y.
+// macOS pins the traffic lights at the window top with their own overlay
+// container; trying to pixel-align our PanelLeft glyph with their visual
+// center fights the OS for control of a layer that isn't ours. Earlier
+// attempts (trafficLightPosition + heroic flex math) made it WORSE — the
+// 16px button anchored to the row top got clipped by the overlay.
 //
-// Our PanelLeft must sit at that same y. Anchor it to the TOP of the row
-// (align-items: flex-start, no padding) and make the button the same height
-// as the close button (16px) so its center lands at y=8 — flush with the
-// traffic lights' visual center.
+// Pragmatic fix: a normal-height row, vertically centered button, no OS
+// overrides. The button sits in the row at the icon's natural position;
+// it's a hair below the traffic lights baseline but visible, clickable,
+// and predictable across macOS versions.
 .bob-sidebar-titlebar {
   display: flex;
   flex: 0 0 auto;
-  align-items: flex-start;
-  block-size: 1.75rem;
-  padding-block: 0;
+  align-items: center;
+  block-size: 2.5rem;
   padding-inline: var(--bob-traffic-lights-inset, 78px) 0.5rem;
   background: var(--cds-layer-01, #f4f4f4);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
@@ -293,9 +293,8 @@ select {
 .bob-sidebar-titlebar__btn {
   display: inline-grid;
   place-items: center;
-  inline-size: 1.5rem;
-  block-size: 1rem;          // 16px — matches the macOS close button; center at y=8
-  margin-block-start: 0;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
   border: 0;
   background: transparent;
   color: var(--cds-icon-secondary, #525252);
