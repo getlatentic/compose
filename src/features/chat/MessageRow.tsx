@@ -12,7 +12,6 @@ import { AgentTrace } from "./AgentTrace";
 import { AppliedChanges } from "./AppliedChanges";
 import { FileOpCard } from "./FileOpCard";
 import { MarkdownMessage } from "./MarkdownMessage";
-import { MessageAuthor } from "./MessageAuthor";
 import { SuggestionList } from "./SuggestionList";
 import { toolActionLabel } from "./toolLabels";
 import { appliedChangeBasenames, fileOpsFromTrace } from "./traceFiles";
@@ -25,16 +24,20 @@ export interface MessageRowCallbacks {
 }
 
 /**
- * One chat message across three surfaces:
- *  - the **bubble** is only the answer (assistant: markdown from
- *    `attempt_completion`; user: the plain text they typed);
- *  - while a turn runs with no answer yet, a transient **status
- *    indicator** (styled unlike the bubble) takes the slot, derived from
- *    the trace's latest step ("Thinking…", the live narration, "Reading
- *    file…"); and
- *  - the agent's process (session + the ordered reasoning / narration /
- *    tool timeline) lives behind the **"Agent trace"** toggle, with usage
- *    stats floated beside it.
+ * One chat message — single-column, no avatars, no left/right split. Modern
+ * chat (Claude, ChatGPT) doesn't paint a bot-avatar bubble next to a
+ * speech-bubble: every turn just flows in document order. We do the same.
+ *
+ *  - **User turns** show a small "You" eyebrow + the text in a quieter
+ *    surface, left-aligned.
+ *  - **Assistant turns** render the answer as open prose (markdown from
+ *    `attempt_completion`) with no avatar / "Assistant" label / read-pills.
+ *    The pills moved to the trace ("Show work"), which is where the
+ *    context belongs.
+ *  - While a turn runs with no answer yet, a transient **status indicator**
+ *    takes the slot ("Thinking…", "Reading file…").
+ *  - The agent's process + usage stats sit behind the **"Show work"**
+ *    toggle, just below the answer.
  */
 export function MessageRow({
   callbacks,
@@ -69,7 +72,7 @@ export function MessageRow({
         isAssistant ? "bob-message-row--assistant" : "bob-message-row--user",
       ].join(" ")}
     >
-      {isAssistant ? <MessageAuthor trace={trace} /> : null}
+      {!isAssistant ? <span className="bob-message-eyebrow">You</span> : null}
 
       {isAssistant && message.activity ? (
         <div className="bob-message-activity">{message.activity}</div>
@@ -85,15 +88,15 @@ export function MessageRow({
 
       {message.content ? (
         isAssistant ? (
-          <div className="bob-message-bubble">
+          <div className="bob-message-body">
             <MarkdownMessage content={message.content} />
           </div>
         ) : message.excerpt ? (
-          <div className="bob-message-bubble bob-message-bubble--plain">
+          <div className="bob-message-body bob-message-body--user">
             <ExcerptChip excerpt={message.excerpt} />
           </div>
         ) : (
-          <div className="bob-message-bubble bob-message-bubble--plain">{message.content}</div>
+          <div className="bob-message-body bob-message-body--user">{message.content}</div>
         )
       ) : message.streaming && !opRunning ? (
         // No answer yet — the transient status (derived from the trace) takes

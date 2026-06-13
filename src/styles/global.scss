@@ -1847,48 +1847,55 @@ select {
   gap: 0.75rem;
 }
 
+// Single-column chat — every turn is left-aligned, full panel width.
+// No left/right split, no avatar bubbles, no "assistant" label. The eyebrow
+// + colour difference is what tells the two turns apart, in document order.
 .bob-message-row {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 0.25rem;
 }
 
-.bob-message-row--user {
-  align-items: flex-end;
-}
-
-.bob-message-row--assistant {
-  align-items: flex-start;
+// The "You" eyebrow above a user turn. Mirrors the trace's "Show work" toggle
+// (small, muted) — it's a marker, not a header. Assistant turns have no such
+// label: it would land just like a 2010 chat avatar bar.
+.bob-message-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cds-text-secondary, #525252);
+  letter-spacing: 0.01em;
 }
 
 .bob-message-activity {
-  max-inline-size: min(32rem, 85%);
   padding-inline: 0.25rem;
   font-size: 0.75rem;
   line-height: 1rem;
   color: var(--cds-text-helper, #525252);
 }
 
-.bob-message-bubble {
-  // `min-inline-size: 0` lets the bubble shrink inside the flex column so
-  // a wide child (a code block, a long URL) scrolls/wraps within it
-  // instead of forcing the bubble — and the panel — wider.
+// The turn's prose. No border, no fill, no max-inline-size cap — it spans the
+// panel column and reads like a document, not a chat-app bubble.
+// `min-inline-size: 0` lets a wide child (a code block, a long URL) wrap
+// inside the column instead of forcing the panel wider.
+.bob-message-body {
   min-inline-size: 0;
-  max-inline-size: min(32rem, 85%);
-  padding: 0.75rem 1rem;
+  padding-block: 0.125rem;
   font-size: 0.875rem;
   // Unitless so every element (headings included) keeps the same rhythm
   // relative to its own size.
   line-height: 1.5;
+  color: var(--cds-text-primary, #161616);
   overflow-wrap: anywhere;
-  border-radius: 8px;
 }
 
-// User turns (and the streaming placeholder) are plain text — preserve
-// the newlines the user typed. Assistant turns render markdown and must
-// not be pre-wrapped, or block elements inherit collapsed whitespace.
-.bob-message-bubble--plain {
+// User turns are plain text — preserve the newlines the user typed. The text
+// rides in a slightly quieter ink than the assistant's reply, so they
+// alternate in colour rather than alignment. Assistant turns render markdown
+// and must not be pre-wrapped, or block elements inherit collapsed whitespace.
+.bob-message-body--user {
   white-space: pre-wrap;
+  color: var(--cds-text-secondary, #525252);
 }
 
 // A commented passage sent to chat, rendered as a chip inside the user bubble.
@@ -1940,26 +1947,6 @@ select {
   line-height: 1.25rem;
 }
 
-// Your own turn: a quiet outlined card, not a filled primary button. Primary
-// blue is reserved for actions (Send, suggestion CTAs); painting the message
-// text in it makes the user's words read like a button and out-shout the
-// assistant's answer. White surface + subtle border, right-aligned.
-.bob-message-row--user .bob-message-bubble {
-  color: var(--cds-text-primary, #161616);
-  background: var(--cds-layer-02, #ffffff);
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-// The assistant's answer is the main content — let it breathe as open prose
-// rather than boxing it. No border/fill; it spans the panel width and aligns
-// to the conversation's left edge. The contrast with the right-aligned,
-// outlined user card is what tells the two turns apart — not a competing box.
-.bob-message-row--assistant .bob-message-bubble {
-  max-inline-size: 100%;
-  padding-inline: 0;
-  padding-block: 0.25rem;
-  color: var(--cds-text-primary, #161616);
-}
 
 // Rendered markdown inside an assistant bubble. The bubble owns the
 // padding; the markdown's outer blocks collapse their edge margins so
@@ -2222,57 +2209,6 @@ select {
 // --- Per-turn assistant author row: mark + "Assistant" + read pills ---
 // Makes each assistant turn legible at a glance — who's talking and what
 // files the answer drew on — without opening the agent trace.
-.bob-message-author {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.75rem;
-}
-
-.bob-message-author__mark {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 1rem;
-  block-size: 1rem;
-  border-radius: 3px;
-  background: var(--cds-button-primary, #0f62fe);
-  color: var(--cds-text-on-color, #ffffff);
-}
-
-.bob-message-author__name {
-  font-weight: 600;
-  color: var(--cds-text-primary, #161616);
-}
-
-// A quiet "saw this file" pill — eye glyph + basename, on the subtle layer
-// (not the action blue): it's context, not a button.
-.bob-message-author__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  max-inline-size: 12rem;
-  padding: 0.0625rem 0.375rem;
-  border-radius: 999px;
-  background: var(--cds-layer-accent-01, #e0e0e0);
-  color: var(--cds-text-secondary, #525252);
-}
-
-.bob-message-author__pill svg {
-  flex-shrink: 0;
-}
-
-.bob-message-author__pill-file {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bob-message-author__more {
-  color: var(--cds-text-helper, #6f6f6f);
-}
-
 // --- File-operation cards: a create / edit the assistant made to a file ---
 // Prominent (a bordered card in the flow, not buried in the trace) because
 // changing the user's workspace is a significant action.
@@ -3204,28 +3140,38 @@ select {
   margin: 0;
 }
 
+// Conversation row: the title runs the full width; on the trailing edge we
+// show EITHER the relative time (rest state) or the ⋮ actions menu (hover /
+// focus / menu-open). Mirrors how Claude reveals row actions — the row stays
+// quiet until you're interacting with it.
+//
+// The ⋮ button is stacked over the time slot (absolute, anchored end), so the
+// title's overflow:ellipsis works against the row's full width without having
+// to reserve space for either chip. Visibility is row-scoped (`.bob-conv-row`
+// hover) so hovering anywhere in the row triggers the swap, not just the
+// title button.
 .bob-conv-row {
+  position: relative;
   display: flex;
   align-items: stretch;
-  gap: 0.25rem;
 }
 
 .bob-conv-row__main {
   display: grid;
-  gap: 0.25rem;
   flex: 1 1 auto;
   min-inline-size: 0;
   padding: 0.5rem 0.625rem;
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--cds-layer-02, #ffffff);
+  background: transparent;
   color: var(--cds-text-primary, #161616);
   font: inherit;
   text-align: start;
   cursor: pointer;
 }
 
-.bob-conv-row__main:hover {
+.bob-conv-row:hover .bob-conv-row__main,
+.bob-conv-row:focus-within .bob-conv-row__main {
   background: var(--cds-layer-hover-02, #e0e0e0);
 }
 
@@ -3244,10 +3190,37 @@ select {
   font-weight: 600;
 }
 
+// Time: visible at rest, hidden when the row is hovered or focused (the ⋮
+// takes its slot then).
 .bob-conv-row__time {
   flex-shrink: 0;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
+}
+
+.bob-conv-row:hover .bob-conv-row__time,
+.bob-conv-row:focus-within .bob-conv-row__time {
+  visibility: hidden;
+}
+
+// The ⋮ actions menu — wraps the Carbon OverflowMenu — sits absolutely on
+// the trailing edge so it overlaps the (now-hidden) time without reflow.
+// Hidden at rest, shown on hover / focus / when the menu itself is open.
+.bob-conv-row__actions {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0.375rem;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.bob-conv-row:hover .bob-conv-row__actions,
+.bob-conv-row:focus-within .bob-conv-row__actions,
+.bob-conv-row__actions:has([aria-expanded="true"]) {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 // --- Post-delete undo toast ------------------------------------------------

@@ -4,14 +4,15 @@ import { relativeTime } from "./conversationView";
 
 /**
  * One row in the sidebar Chat tab's conversation list: just the conversation
- * title (the truncated first user message, one line with ellipsis) and a
- * relative timestamp, with the per-conversation ⋮ actions menu on the trailing
- * edge. Clicking the body opens the conversation.
+ * title (the truncated first user message, one line with ellipsis), with the
+ * relative time on the trailing edge AT REST and the per-conversation ⋮
+ * actions menu in its place on HOVER / focus / when the menu is open. Mirrors
+ * Claude's row pattern — the row stays quiet until you interact with it, so a
+ * sidebar of 50 chats doesn't look like a wall of controls. Clicking the body
+ * opens the conversation.
  *
- * Deliberately lean — the preview snippet, attached-file chips, and message
- * count were dropped to keep the row to a single uncluttered line (the
- * all-conversations overlay that wanted the fuller meta block is gone, so the
- * sidebar is the only caller).
+ * The visibility swap is CSS-only (see `.bob-conv-row` in global.scss); the
+ * markup is just title + time + actions, all always-rendered.
  */
 export function ConversationListRow({
   conversation,
@@ -36,7 +37,9 @@ export function ConversationListRow({
           <span className="bob-conv-row__time">{relativeTime(conversation.updatedAt, now)}</span>
         </span>
       </button>
-      <ConversationActionsMenu archived={conversation.archived} actions={actions} align="end" />
+      <span className="bob-conv-row__actions">
+        <ConversationActionsMenu archived={conversation.archived} actions={actions} align="end" />
+      </span>
     </li>
   );
 }
