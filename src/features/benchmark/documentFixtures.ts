@@ -16,7 +16,7 @@
 
 import { byteLength } from "../text/positionMapper";
 
-export type DocumentSizeLabel = "small" | "large" | "xlarge";
+export type DocumentSizeLabel = "small" | "large" | "xlarge" | "xxlarge";
 
 /** Ordered smallest→largest so the report scenarios read naturally. */
 export const DOCUMENT_SIZE_LABELS: readonly DocumentSizeLabel[] = ["small", "large", "xlarge"];
@@ -26,6 +26,14 @@ const BYTE_TARGETS: Record<DocumentSizeLabel, number> = {
   small: 256,
   large: 300 * 1024,
   xlarge: 500 * 1024,
+  // 1 MB — the markdown-pipeline latency baseline target. NOT in
+  // DOCUMENT_SIZE_LABELS so the lag-benchmark scenarios stay unchanged;
+  // the markdown-pipeline bench imports it directly via buildDocument.
+  // Sized to match the production-readiness test fixture (~164k words of
+  // realistic content), which currently takes ~22s to parse end-to-end —
+  // far above the v1.1 target of < 1s. See
+  // `markdownPipelineLatency.baseline.spec.ts`.
+  xxlarge: 1024 * 1024,
 };
 
 export interface BenchmarkDocument {
