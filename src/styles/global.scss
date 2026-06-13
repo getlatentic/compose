@@ -270,18 +270,21 @@ select {
 // `data-tauri-drag-region="false"` makes the row draggable except where the
 // user clicks an actual button. The first 78px (`--bob-traffic-lights-inset`)
 // is a no-op spacer for the OS traffic lights to sit over.
-// The OS pins the traffic lights at a window-relative coordinate. Rather
-// than guess what that coordinate is on this macOS version, we OVERRIDE it
-// via Tauri's `trafficLightsPosition: { x: 18, y: 8 }` so the lights' top
-// edge is at y=8 (center at y=14 — diameter 12px). Then this row's
-// `align-items: center` puts the PanelLeft button center at y=14 too, so
-// the glyph and the lights sit on the same baseline by construction, not
-// by lucky math. Same pattern as Linear / Notion / Arc.
+// macOS pins the traffic lights' TOP at y=0 of the window. The `y` in
+// Tauri's trafficLightPosition controls the container *padding below* the
+// buttons — NOT the button position (see tao::macos::view::inset_traffic_lights).
+// So lights center is at y = close_button_height/2 ≈ 7-8, regardless of y.
+//
+// Our PanelLeft must sit at that same y. Anchor it to the TOP of the row
+// (align-items: flex-start, no padding) and make the button the same height
+// as the close button (16px) so its center lands at y=8 — flush with the
+// traffic lights' visual center.
 .bob-sidebar-titlebar {
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
+  align-items: flex-start;
   block-size: 1.75rem;
+  padding-block: 0;
   padding-inline: var(--bob-traffic-lights-inset, 78px) 0.5rem;
   background: var(--cds-layer-01, #f4f4f4);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
@@ -291,7 +294,7 @@ select {
   display: inline-grid;
   place-items: center;
   inline-size: 1.5rem;
-  block-size: 1.25rem;       // 20px — center at y=10 matches macOS traffic-lights baseline
+  block-size: 1rem;          // 16px — matches the macOS close button; center at y=8
   margin-block-start: 0;
   border: 0;
   background: transparent;
