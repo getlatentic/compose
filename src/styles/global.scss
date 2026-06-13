@@ -13,8 +13,79 @@
 // are overridden just below. Code/mono stacks are intentionally left alone.
 $ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
+// === Palette: Carbon Cool Gray (matches the design reference) ================
+// The reference mocks use Carbon's COOL GRAY scale (a cooler blue-tinted
+// neutral) instead of Compose's default warm neutral gray. Overriding the
+// underlying `--cds-*` tokens here propagates through every Carbon component
+// AND every rule in this stylesheet that already reads
+// `var(--cds-text-primary, …)` / `var(--cds-layer-01, …)` / etc. — the
+// per-rule hex fallbacks stay as last-resort safety (only fire if the
+// variable is unset, which it never is here).
+//
+// Visual effect: every grey gets a slight blue undertone, like macOS chrome
+// vs. document beige. Same hierarchy + contrast ratios. Interactive blue
+// (#0f62fe) and the support / link / focus tokens stay Carbon-standard —
+// only the neutral scale tilts cool.
 :root {
-  color: var(--cds-text-primary, #161616);
+  // Backgrounds + layers (Cool Gray 10 / 20)
+  --cds-background: #ffffff;
+  --cds-background-hover: rgba(141, 141, 141, 0.12);
+  --cds-background-active: rgba(141, 141, 141, 0.5);
+  --cds-background-selected: rgba(141, 141, 141, 0.2);
+  --cds-background-selected-hover: rgba(141, 141, 141, 0.32);
+  --cds-background-inverse: #343a3f;            // cool-gray-80
+  --cds-background-inverse-hover: #4d5358;      // cool-gray-70
+  --cds-layer-01: #f2f4f8;                      // cool-gray-10
+  --cds-layer-02: #ffffff;
+  --cds-layer-03: #f2f4f8;
+  --cds-layer-hover-01: #e4e9f1;
+  --cds-layer-hover-02: #e4e9f1;
+  --cds-layer-accent-01: #dde1e6;               // cool-gray-20
+  --cds-layer-accent-02: #dde1e6;
+  --cds-layer-selected-01: #dde1e6;
+  --cds-layer-selected-02: #dde1e6;
+  --cds-layer-selected-hover-01: #c1c7cd;       // cool-gray-30
+  --cds-field-01: #f2f4f8;
+  --cds-field-02: #ffffff;
+  --cds-field-hover-01: #e4e9f1;
+  --cds-field-hover-02: #e4e9f1;
+  // Borders (subtler — Cool Gray 20)
+  --cds-border-subtle-00: #dde1e6;
+  --cds-border-subtle-01: #dde1e6;
+  --cds-border-subtle-02: #dde1e6;
+  --cds-border-strong-01: #878d96;              // cool-gray-50
+  --cds-border-strong-02: #878d96;
+  --cds-border-tile-01: #c1c7cd;                // cool-gray-30
+  --cds-border-inverse: #121619;                // cool-gray-100
+  --cds-border-interactive: #0f62fe;            // interactive stays Carbon blue
+  // Text (Cool Gray 100 / 70 / 60)
+  --cds-text-primary: #121619;
+  --cds-text-secondary: #4d5358;
+  --cds-text-placeholder: rgba(18, 22, 25, 0.4);
+  --cds-text-on-color: #ffffff;
+  --cds-text-helper: #697077;
+  --cds-text-disabled: rgba(18, 22, 25, 0.25);
+  --cds-text-inverse: #ffffff;
+  // Icons follow text
+  --cds-icon-primary: #121619;
+  --cds-icon-secondary: #4d5358;
+  --cds-icon-disabled: rgba(18, 22, 25, 0.25);
+  --cds-icon-on-color: #ffffff;
+  --cds-icon-on-color-disabled: rgba(255, 255, 255, 0.25);
+  --cds-icon-interactive: #0f62fe;
+  --cds-icon-inverse: #ffffff;
+  // Focus + link stay Carbon-standard
+  --cds-focus: #0f62fe;
+  --cds-link-primary: #0f62fe;
+  --cds-link-primary-hover: #0043ce;
+  --cds-link-secondary: #0043ce;
+  --cds-link-visited: #8a3ffc;
+  // Pale-blue highlight used by selected rows + the assistant-suggestion tile
+  --cds-highlight: #edf5ff;                     // Carbon blue-10
+}
+
+:root {
+  color: var(--cds-text-primary, #121619);
   background: var(--cds-background, #ffffff);
   font-family: $ui-font;
   font-synthesis: none;
