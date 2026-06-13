@@ -18,7 +18,14 @@ import {
   type ClipboardEvent as ReactClipboardEvent,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
+  type MutableRefObject,
 } from "react";
+import type { Editor } from "@tiptap/core";
+import {
+  DEFAULT_CHUNK_BYTES,
+  chunkMarkdownAtParagraphs,
+  shouldChunk,
+} from "./markdownChunker";
 import { openExternalUrl } from "../../lib/links/openExternal";
 import { resolveWorkspaceLink } from "../../lib/links/workspaceLink";
 import { resolveWikilinkTarget } from "../../lib/links/wikilink";
@@ -69,6 +76,55 @@ import { TiptapToolbar } from "./TiptapToolbar";
  */
 function markdownToHtmlFast(markdown: string): string {
   return marked.parse(markdown, { async: false }) as string;
+}
+
+/**
+ * Stream remaining markdown chunks into a live Tiptap editor, one per
+ * animation frame, so the main thread paints + processes input between
+ * inserts. Used by both the initial-mount path (when the first chunk has
+ * already been handed to `useEditor` as `content`) and the value-change
+ * path (when `setContent` of the first chunk has just landed).
+ *
+ * `loadingRef` is flipped to `true` for the duration of the stream so the
+ * editor's `onUpdate` handler can skip the per-insert update events — we
+ * don't want each chunk firing an autosave on its own.
+ *
+ * Returns a cancel function. Calling it stops the rAF chain immediately
+ * and clears `loadingRef`. Safe to call after natural completion.
+ */
+function streamRemainingChunks(
+  editor: Editor,
+  chunks: readonly string[],
+  loadingRef: MutableRefObject<boolean>,
+): () => void {
+  loadingRef.current = true;
+  let i = 0;
+  let cancelled = false;
+  let rafId = 0;
+
+  const tick = () => {
+    if (cancelled) return;
+    if (editor.isDestroyed) {
+      loadingRef.current = false;
+      return;
+    }
+    if (i >= chunks.length) {
+      loadingRef.current = false;
+      return;
+    }
+    const html = marked.parse(chunks[i], { async: false }) as string;
+    editor.commands.insertContentAt(editor.state.doc.content.size, html);
+    i += 1;
+    rafId = requestAnimationFrame(tick);
+  };
+
+  rafId = requestAnimationFrame(tick);
+
+  return () => {
+    cancelled = true;
+    if (rafId) cancelAnimationFrame(rafId);
+    loadingRef.current = false;
+  };
 }
 
 export type TiptapEditorMode = "wysiwyg" | "source";
@@ -220,6 +276,28 @@ function TiptapMarkdownEditorInner({
   // Prevents the file-watcher → setContent → 'update' → save →
   // file-watcher loop.
   const suppressNextUpdateRef = useRef<boolean>(false);
+  // True while `streamRemainingChunks` is mid-flight. Every chunk insert
+  // fires an `onUpdate` event; we suppress all of them and let the natural
+  // autosave kick in after the user's next real edit. Without this, a 20-
+  // chunk 1MB load would queue 20 autosave debounce timers.
+  const loadingChunkedRef = useRef<boolean>(false);
+  // Cancel handle for the in-flight chunked load. Cleared when the load
+  // completes, called when value changes mid-load or the editor unmounts.
+  const chunkedLoadCancelRef = useRef<(() => void) | null>(null);
+  // First-mount decision: pre-split the initial body so `useEditor` can
+  // mount with just the first chunk (fast — ~100ms for a 50KB chunk vs
+  // ~7s for a 1MB single setContent) and a later effect streams the rest.
+  // useMemo with [] runs ONCE — value-prop changes after mount route
+  // through the value-change useEffect, not back through this initial
+  // path.
+  const initialBodyChunks = useMemo<readonly string[]>(() => {
+    const body = parsedRef.current.body;
+    if (shouldChunk(body)) {
+      return chunkMarkdownAtParagraphs(body, DEFAULT_CHUNK_BYTES);
+    }
+    return [body];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Debounce timer for autosave.
   const autosaveTimerRef = useRef<number | null>(null);
 
@@ -291,9 +369,15 @@ function TiptapMarkdownEditorInner({
       // minute, the html path is multi-second. Save still goes through
       // `editor.getMarkdown()` from the `@tiptap/markdown` extension, so
       // round-trip remains markdown-in / markdown-out.
-      content: markdownToHtmlFast(bodyRef.current),
+      // Mount with just the first chunk (or the whole body if it fits in
+      // one chunk). The remaining chunks stream in via the mount-time
+      // effect below.
+      content: markdownToHtmlFast(initialBodyChunks[0] ?? ""),
       contentType: "html",
       onUpdate({ editor }) {
+        // Skip every update event fired by `streamRemainingChunks` —
+        // each `insertContentAt` is our own write, not a user edit.
+        if (loadingChunkedRef.current) return;
         // Loop guard: if we just called setContent from an
         // external value change, the resulting update event is
         // our own — skip emitting a save.
@@ -372,6 +456,29 @@ function TiptapMarkdownEditorInner({
     [],
   );
 
+  // Initial-mount streamer: useEditor already mounted with the FIRST
+  // chunk; if there are more, stream them in across animation frames so
+  // the main thread paints + processes input between inserts. For a 1MB
+  // doc this turns a ~7s frozen setContent into a ~500ms first paint +
+  // ~6s of background load during which clicks and scroll still work.
+  useEffect(() => {
+    if (!editor) return;
+    if (initialBodyChunks.length <= 1) return;
+    const cancel = streamRemainingChunks(
+      editor,
+      initialBodyChunks.slice(1),
+      loadingChunkedRef,
+    );
+    chunkedLoadCancelRef.current = cancel;
+    return () => {
+      cancel();
+      chunkedLoadCancelRef.current = null;
+    };
+    // initialBodyChunks is stable (useMemo with []); we only want this to
+    // run once when the editor becomes available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
+
   // External value change: when the LLM or file watcher updates
   // the markdown file, push the new content into the editor.
   // Hash guard prevents an infinite loop with our own autosave.
@@ -392,20 +499,47 @@ function TiptapMarkdownEditorInner({
     suppressNextUpdateRef.current = true;
     lastEmittedHashRef.current = hash;
     currentMarkdownRef.current = value;
+    // Cancel any in-flight chunked load from a previous value (tab
+    // switch mid-stream); the new value's chunks will replace it.
+    chunkedLoadCancelRef.current?.();
+    chunkedLoadCancelRef.current = null;
     // Push only the body into the editor — the YAML frontmatter
     // stays in our ref, hidden from the user's writing surface. See the
     // initial-mount comment above for why we go via HTML instead of
     // markdown mode.
-    editor.commands.setContent(markdownToHtmlFast(parsed.body), { contentType: "html" });
+    if (shouldChunk(parsed.body)) {
+      const chunks = chunkMarkdownAtParagraphs(parsed.body, DEFAULT_CHUNK_BYTES);
+      editor.commands.setContent(
+        markdownToHtmlFast(chunks[0] ?? ""),
+        { contentType: "html" },
+      );
+      const rest = chunks.slice(1);
+      if (rest.length > 0) {
+        chunkedLoadCancelRef.current = streamRemainingChunks(
+          editor,
+          rest,
+          loadingChunkedRef,
+        );
+      }
+    } else {
+      editor.commands.setContent(
+        markdownToHtmlFast(parsed.body),
+        { contentType: "html" },
+      );
+    }
   }, [editor, value]);
 
   // Clean up the autosave timer on unmount so we don't fire a
-  // save after the parent unmounted (file switch race).
+  // save after the parent unmounted (file switch race). Also cancel any
+  // in-flight chunked load so its rAF callbacks don't fire on a destroyed
+  // editor.
   useEffect(() => {
     return () => {
       if (autosaveTimerRef.current !== null) {
         window.clearTimeout(autosaveTimerRef.current);
       }
+      chunkedLoadCancelRef.current?.();
+      chunkedLoadCancelRef.current = null;
     };
   }, []);
 

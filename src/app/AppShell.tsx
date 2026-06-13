@@ -1,4 +1,5 @@
 import { ToastNotification } from "@carbon/react";
+import { ChatBot } from "@carbon/react/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "../features/chat/ChatPanel";
 import { CommentsPanel } from "../features/comments/CommentsPanel";
@@ -86,6 +87,33 @@ export function AppShell() {
         ) ?? null
       : null;
   const preview = useMarkdownPreview(activeFileBuffer?.content ?? "");
+  // Boot-time hydration gate. `loadSetupState` below fans out 4 IPC calls
+  // (bob auth, install probe, workspace list, onboarding flag) that take
+  // ~1s to resolve. Without this gate, AppShell renders ONCE with the
+  // store's zero-state defaults — `onboarding.completedAt: null` → the
+  // SetupScreen flashes briefly before the rehydration redirects to the
+  // workspace; the sidebar shows "No Markdown files" before the file
+  // index scan completes. Holding the entire render until the initial
+  // Promise.all settles eliminates both flashes — the user sees the
+  // correct view first, not a corrected view after a beat.
+  const [bootHydrated, setBootHydrated] = useState(false);
+  // The full "ready to show real UI" predicate. Setup hydration is
+  // necessary but not sufficient: a returning user lands in a workspace
+  // and the active workspace's file scan is its OWN async pass (the
+  // `loadActiveWorkspaceFiles` effect kicks off only after the workspace
+  // list hydrates), so without waiting on that too we'd flash an "empty
+  // workspace" placeholder before files appear. We treat any terminal
+  // scanState (`ready` or `failed`) as resolved — a failed scan should
+  // surface its error in-pane, not stall the whole shell on the loader.
+  // No active workspace? Nothing to scan — the no-workspace welcome can
+  // render as soon as setup hydration completes.
+  const appReady =
+    bootHydrated &&
+    (!onboardingComplete ||
+      !activeWorkspaceId ||
+      !activeWorkspace ||
+      activeWorkspace.scanState === "ready" ||
+      activeWorkspace.scanState === "failed");
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   // Transient border-pulse on the chat panel: set true whenever a conversation
   // is opened from the sidebar Chat tab (the store bumps `chatPulseSignal`),
@@ -173,12 +201,24 @@ export function AppShell() {
         setBobInstallStatus(installStatus);
         hydrateWorkspaces(workspaceList);
         setOnboarding(onboarding);
+        // Flip the boot gate LAST, after every store hydration above has
+        // committed — otherwise AppShell would render once with the new
+        // values + the still-default `bootHydrated: false` and we'd see
+        // the same flash this gate exists to prevent. React batches the
+        // four setters above into a single commit, then this final setter
+        // is the trigger that releases the render gate.
+        setBootHydrated(true);
       } catch (error) {
         if (!cancelled) {
           setBobAuthStatus({
             configured: false,
             errorMessage: error instanceof Error ? error.message : "Setup state could not be loaded",
           });
+          // Release the gate even on error — otherwise an offline first
+          // launch (IPC fails) would hang on the blank gated view forever.
+          // The error banner inside SetupScreen / SettingsPanel surfaces
+          // the failure; the user can retry from there.
+          setBootHydrated(true);
         }
       }
     }
@@ -336,6 +376,17 @@ export function AppShell() {
         : { kind: "error", text: result.message },
     );
   }, []);
+
+  // Hold the entire UI until `appReady` flips: setup hydration *and*
+  // (if a workspace will be shown) its initial file scan must both
+  // settle. Without this, cold launch glitches through 3-4 transient
+  // states — SetupScreen → empty-workspace placeholder → finally the
+  // real workspace — and reads as broken. The loader below is the
+  // single visible state until everything resolves; the right
+  // destination then renders directly without intermediate flashes.
+  if (!appReady) {
+    return <BootLoadingScreen />;
+  }
 
   if (!onboardingComplete) {
     return <SetupScreen />;
@@ -615,5 +666,22 @@ export function AppShell() {
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Single visible state during boot — held until `appReady` flips. The
+ * brand mark sits centered on the same background the workspace uses, so
+ * the transition to the real UI is a swap of content under one frame
+ * (not a flash of color). No spinner: a moving indicator on a sub-second
+ * load reads as "something's wrong" more than "loading."
+ */
+function BootLoadingScreen() {
+  return (
+    <div className="bob-boot-loading" role="status" aria-label="Loading">
+      <span className="bob-boot-loading__mark" aria-hidden="true">
+        <ChatBot size={36} />
+      </span>
+    </div>
   );
 }
