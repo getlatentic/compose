@@ -1,5 +1,6 @@
 import { Markdown } from "@tiptap/markdown";
 import { Link } from "@tiptap/extension-link";
+import { marked } from "marked";
 import { Table } from "@tiptap/extension-table";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
@@ -43,6 +44,32 @@ import {
 import { ImageWithAssets } from "./imageAssetExtension";
 import { computeFileDir, type ImageResolveContext } from "./imageSrcResolver";
 import { TiptapToolbar } from "./TiptapToolbar";
+
+/**
+ * Convert markdown to HTML for the editor's initial setContent. We hand the
+ * resulting HTML to ProseMirror's native DOM parser (`contentType: "html"`)
+ * instead of the slower token-walk inside `@tiptap/markdown`'s markdown
+ * mode. See the `tiptapSetContent.baseline.spec.ts` bench:
+ *
+ *   small (313B) markdown ≈ html ≈ 4–6ms — noise
+ *   large (300KB) markdown ≈ 7400ms vs html ≈ 2800ms — html 2.6× faster
+ *
+ * The gap widens super-linearly with document size; `marked.parse` itself
+ * takes ~115ms on a 1MB markdown so the worker-equivalent here is a small
+ * fixed cost that buys a large variable saving.
+ *
+ * `marked` is async-by-default; we ask for sync so the editor can mount
+ * immediately. The sync path is the parser's hot path — it's what
+ * `@tiptap/markdown` calls under the hood — so we're not paying for it
+ * twice.
+ *
+ * Save still goes through `editor.getMarkdown()` from `@tiptap/markdown`,
+ * so the file on disk stays markdown. The user's input is markdown; the
+ * file is markdown; only the in-memory bridge has changed.
+ */
+function markdownToHtmlFast(markdown: string): string {
+  return marked.parse(markdown, { async: false }) as string;
+}
 
 export type TiptapEditorMode = "wysiwyg" | "source";
 
@@ -254,8 +281,18 @@ function TiptapMarkdownEditorInner({
       // Render only the body. Frontmatter is hidden from the
       // WYSIWYG surface and recombined into the saved markdown
       // below.
-      content: bodyRef.current,
-      contentType: "markdown",
+      //
+      // We convert markdown → HTML via `marked` first, then hand the HTML
+      // to ProseMirror's native DOM parser instead of Tiptap's
+      // markdown-token-walk (`@tiptap/markdown`'s `contentType: "markdown"`
+      // path). The bench `tiptapSetContent.baseline.spec.ts` shows the
+      // markdown path is 2.6× slower than the html path at 300KB and the
+      // gap widens super-linearly — at 1MB the markdown path is multi-
+      // minute, the html path is multi-second. Save still goes through
+      // `editor.getMarkdown()` from the `@tiptap/markdown` extension, so
+      // round-trip remains markdown-in / markdown-out.
+      content: markdownToHtmlFast(bodyRef.current),
+      contentType: "html",
       onUpdate({ editor }) {
         // Loop guard: if we just called setContent from an
         // external value change, the resulting update event is
@@ -356,8 +393,10 @@ function TiptapMarkdownEditorInner({
     lastEmittedHashRef.current = hash;
     currentMarkdownRef.current = value;
     // Push only the body into the editor — the YAML frontmatter
-    // stays in our ref, hidden from the user's writing surface.
-    editor.commands.setContent(parsed.body, { contentType: "markdown" });
+    // stays in our ref, hidden from the user's writing surface. See the
+    // initial-mount comment above for why we go via HTML instead of
+    // markdown mode.
+    editor.commands.setContent(markdownToHtmlFast(parsed.body), { contentType: "html" });
   }, [editor, value]);
 
   // Clean up the autosave timer on unmount so we don't fire a
