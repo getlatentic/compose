@@ -1,5 +1,11 @@
 import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
-import { ChevronDown, History, MessageSquareText, Save } from "lucide-react";
+import {
+  ChevronDown,
+  History,
+  MessageSquareText,
+  PanelRight,
+  Save,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
@@ -35,6 +41,13 @@ export interface EditorFileActionsProps {
   commentsOpen: boolean;
   /** Open-comment count for the active file, shown as a badge. */
   commentCount: number;
+  /** Toggle the chat panel — moved here from the (now-deleted) top header. */
+  onToggleChat?: () => void;
+  /** Whether the chat panel is currently open (drives the pressed state). */
+  chatOpen?: boolean;
+  /** Disable the chat toggle when hiding it would leave no pane visible (the
+   * store enforces the same guard; the toolbar mirrors it for clarity). */
+  chatToggleDisabled?: boolean;
 }
 
 export function EditorFileActions({
@@ -44,6 +57,9 @@ export function EditorFileActions({
   onToggleComments,
   commentsOpen,
   commentCount,
+  onToggleChat,
+  chatOpen = false,
+  chatToggleDisabled = false,
 }: EditorFileActionsProps) {
   const commentsLabel = commentsOpen
     ? "Hide comments"
@@ -97,6 +113,15 @@ export function EditorFileActions({
           </span>
         }
       />
+      {onToggleChat ? (
+        <FileButton
+          label={chatOpen ? "Hide chat" : "Show chat"}
+          active={chatOpen}
+          disabled={chatToggleDisabled}
+          onClick={onToggleChat}
+          icon={<PanelRight size={ICON_SIZE} />}
+        />
+      ) : null}
     </div>
   );
 }
@@ -105,12 +130,14 @@ function FileButton({
   label,
   shortcut,
   active,
+  disabled,
   onClick,
   icon,
 }: {
   label: string;
   shortcut?: string;
   active?: boolean;
+  disabled?: boolean;
   onClick: () => void;
   icon: ReactNode;
 }) {
@@ -126,6 +153,7 @@ function FileButton({
         .join(" ")}
       aria-label={fullLabel}
       aria-pressed={active}
+      disabled={disabled}
       title={fullLabel}
       // Don't steal focus from the editor when clicked.
       onMouseDown={(event) => event.preventDefault()}

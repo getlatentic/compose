@@ -36,6 +36,7 @@ export function ChatPanel() {
   const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
   const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
   const rejectSuggestedEdit = useWorkspaceStore((state) => state.rejectSuggestedEdit);
+  const regenerateLastTurn = useWorkspaceStore((state) => state.regenerateLastTurn);
   const sendChatPrompt = useWorkspaceStore((state) => state.sendChatPrompt);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const setChatPrompt = useWorkspaceStore((state) => state.setChatPrompt);
@@ -61,8 +62,9 @@ export function ChatPanel() {
       onAccept: acceptSuggestedEdit,
       onOpenDocument: (path) => void selectFile(path),
       onReject: rejectSuggestedEdit,
+      onRegenerate: () => void regenerateLastTurn(),
     }),
-    [acceptSuggestedEdit, rejectSuggestedEdit, selectFile],
+    [acceptSuggestedEdit, rejectSuggestedEdit, regenerateLastTurn, selectFile],
   );
 
   if (!activeWorkspaceId || !chatThread) {

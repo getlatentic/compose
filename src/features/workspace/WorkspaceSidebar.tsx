@@ -1,19 +1,51 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { InlineNotification } from "@carbon/react";
-import { AddAlt, Search, Settings } from "@carbon/react/icons";
+import { AddAlt } from "@carbon/react/icons";
+import {
+  ChevronLeft,
+  ChevronRight,
+  PanelLeft,
+  Search,
+  Settings,
+} from "lucide-react";
 import type { BobWorkspace } from "../../app/workspaceModel";
 import { useWorkspaceStore } from "../../app/workspaceStore";
-import {
-  searchWorkspaceIndex,
-  type WorkspaceBacklinkRecord,
-  type WorkspaceSearchHit,
-} from "../../lib/ipc/indexClient";
+import type { WorkspaceBacklinkRecord } from "../../lib/ipc/indexClient";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { FileTree } from "../file-tree/FileTree";
 import { SidebarChatList } from "../chat/SidebarChatList";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
+/**
+ * Width reserved for the macOS traffic lights when `titleBarStyle: Overlay` is
+ * enabled. 78px clears all three lights + their inner padding at the system
+ * default size; smaller values clip the rightmost (Maximize) button on Sonoma+
+ * Big Sur, which exposes a slightly larger hit target than the marker dots
+ * would suggest. Both the sidebar titlebar (when expanded) and the editor tab
+ * strip (when the sidebar is collapsed) reserve this space.
+ */
+export const MAC_TRAFFIC_LIGHTS_INSET = 78;
+
+/**
+ * The sidebar — first column of the workspace shell.
+ *
+ * Layout, top → bottom:
+ *   1. **Titlebar row** (40px, drag region): traffic-light spacer + sidebar
+ *      collapse toggle (PanelLeft) + back/forward chevrons (browser-style).
+ *   2. **Workspace switcher** (the existing {@link WorkspaceMenu} dropdown,
+ *      now with "Open in new window").
+ *   3. **Notes/Chat tabs** + a context-aware "New" button.
+ *   4. **Tab body** — file tree + properties (Notes) or conversation list
+ *      (Chat). Search moved OUT of the sidebar to a footer popover; the
+ *      INDEX section is gone.
+ *   5. **Footer** (pinned): "X notes" counter + Search + Settings icons.
+ *
+ * When `sidebarCollapsed` is true, the whole sidebar is removed from the
+ * layout (the editor's tab strip then owns the traffic-lights inset and shows
+ * a re-open toggle). The state lives in the store so the editor can read it
+ * symmetrically.
+ */
 export function WorkspaceSidebar() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const createNote = useWorkspaceStore((state) => state.createNote);
@@ -25,16 +57,19 @@ export function WorkspaceSidebar() {
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const sidebarTab = useWorkspaceStore((state) => state.sidebarTab);
   const setSidebarTab = useWorkspaceStore((state) => state.setSidebarTab);
+  const sidebarCollapsed = useWorkspaceStore((state) => state.sidebarCollapsed);
+  const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar);
+  const navHistory = useWorkspaceStore((state) => state.navHistory);
+  const navIndex = useWorkspaceStore((state) => state.navIndex);
+  const navigateBack = useWorkspaceStore((state) => state.navigateBack);
+  const navigateForward = useWorkspaceStore((state) => state.navigateForward);
   const openSettings = useWorkspaceStore((state) => state.openSettings);
+  const openSearch = useWorkspaceStore((state) => state.openSearch);
   const promptText = useTextPrompt();
   const activeWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
     [activeWorkspaceId, workspaces],
   );
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<WorkspaceSearchHit[]>([]);
-  const [searchState, setSearchState] = useState<"idle" | "searching">("idle");
   const activeBacklinks = useMemo(() => activeFileBacklinks(activeWorkspace), [activeWorkspace]);
   // The active file's current content. Drives the Properties
   // panel below — we parse frontmatter out of this on every
@@ -43,45 +78,11 @@ export function WorkspaceSidebar() {
     ? activeWorkspace.fileContents[activeWorkspace.activeFilePath]?.content ?? null
     : null;
 
-  useEffect(() => {
-    const trimmedQuery = searchQuery.trim();
-    if (!activeWorkspace || activeWorkspace.indexState !== "ready" || !trimmedQuery) {
-      setSearchError(null);
-      setSearchResults([]);
-      setSearchState("idle");
-      return;
-    }
-
-    let cancelled = false;
-    const timeout = window.setTimeout(() => {
-      setSearchState("searching");
-      searchWorkspaceIndex(activeWorkspace.id, trimmedQuery, 8)
-        .then((results) => {
-          if (!cancelled) {
-            setSearchError(null);
-            setSearchResults(results);
-            setSearchState("idle");
-          }
-        })
-        .catch((error) => {
-          if (!cancelled) {
-            setSearchError(error instanceof Error ? error.message : "Search failed");
-            setSearchResults([]);
-            setSearchState("idle");
-          }
-        });
-    }, 150);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
-    };
-  }, [
-    activeWorkspace?.id,
-    activeWorkspace?.indexSnapshot?.indexedAtMs,
-    activeWorkspace?.indexState,
-    searchQuery,
-  ]);
+  // "X notes" counter for the footer — markdown files in the active workspace.
+  // Cheap (the file list is already in memory), no memoization needed.
+  const noteCount = activeWorkspace?.files.filter((entry) =>
+    entry.relativePath.toLowerCase().endsWith(".md"),
+  ).length ?? 0;
 
   // Stable callbacks so FileTree's memo can short-circuit on
   // workspace store ticks that don't actually shift the file list
@@ -134,13 +135,63 @@ export function WorkspaceSidebar() {
     [handleRename],
   );
 
-  // One context-aware "New" button: a note on the Files tab, a chat on the
-  // Chat tab. Replaces the old top-bar "New note" + the in-panel "new chat".
+  // One context-aware "New" button: a note on the Notes tab, a chat on the
+  // Chat tab.
   const newLabel = sidebarTab === "files" ? "New note" : "New chat";
   const onNew = sidebarTab === "files" ? createNote : newChat;
 
+  const canGoBack = navIndex > 0;
+  const canGoForward = navIndex < navHistory.length - 1;
+
+  if (sidebarCollapsed) {
+    return null;
+  }
+
   return (
     <aside className="bob-sidebar">
+      <div
+        className="bob-sidebar-titlebar"
+        data-tauri-drag-region
+        // The whole row is a drag region (Tauri honors `data-tauri-drag-region`
+        // exactly like the older `-webkit-app-region: drag`). The interactive
+        // buttons below opt OUT via `no-drag` on themselves.
+        style={{ ["--bob-traffic-lights-inset" as never]: `${MAC_TRAFFIC_LIGHTS_INSET}px` }}
+      >
+        <div className="bob-sidebar-titlebar__traffic-spacer" aria-hidden />
+        <button
+          type="button"
+          className="bob-sidebar-titlebar__btn"
+          data-tauri-drag-region="false"
+          onClick={() => toggleSidebar()}
+          aria-label="Collapse sidebar"
+          title="Collapse sidebar"
+        >
+          <PanelLeft size={16} aria-hidden />
+        </button>
+        <div className="bob-sidebar-titlebar__nav" data-tauri-drag-region="false">
+          <button
+            type="button"
+            className="bob-sidebar-titlebar__btn"
+            onClick={() => navigateBack()}
+            disabled={!canGoBack}
+            aria-label="Go back"
+            title="Go back"
+          >
+            <ChevronLeft size={16} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="bob-sidebar-titlebar__btn"
+            onClick={() => navigateForward()}
+            disabled={!canGoForward}
+            aria-label="Go forward"
+            title="Go forward"
+          >
+            <ChevronRight size={16} aria-hidden />
+          </button>
+        </div>
+      </div>
+
       <WorkspaceMenu />
 
       <div className="bob-sidebar-tabs" role="tablist" aria-label="Sidebar">
@@ -156,7 +207,7 @@ export function WorkspaceSidebar() {
             .join(" ")}
           onClick={() => setSidebarTab("files")}
         >
-          Files
+          Notes
         </button>
         <button
           type="button"
@@ -193,11 +244,6 @@ export function WorkspaceSidebar() {
           onDeleteFile={handleDeleteAdapter}
           activeFileContent={activeFileContent}
           onUpdateContent={handleUpdateContent}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          searchResults={searchResults}
-          searchError={searchError}
-          searchState={searchState}
           backlinks={activeBacklinks}
         />
       ) : (
@@ -212,22 +258,40 @@ export function WorkspaceSidebar() {
         </div>
       )}
 
-      <button
-        type="button"
-        className="bob-sidebar-settings"
-        onClick={() => openSettings()}
-      >
-        <Settings size={16} />
-        <span>Settings</span>
-      </button>
+      <div className="bob-sidebar-footer">
+        <span className="bob-sidebar-footer__count">
+          {activeWorkspace ? `${noteCount} note${noteCount === 1 ? "" : "s"}` : "No folder"}
+        </span>
+        <div className="bob-sidebar-footer__actions">
+          <button
+            type="button"
+            className="bob-sidebar-footer__btn"
+            onClick={() => openSearch()}
+            disabled={!activeWorkspace}
+            aria-label="Search workspace"
+            title="Search"
+          >
+            <Search size={16} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="bob-sidebar-footer__btn"
+            onClick={() => openSettings()}
+            aria-label="Open settings"
+            title="Settings"
+          >
+            <Settings size={16} aria-hidden />
+          </button>
+        </div>
+      </div>
     </aside>
   );
 }
 
 /**
  * The Files tab body: the file tree, the active file's Properties (frontmatter)
- * editor, and the Index search + backlinks. Pulled out of the sidebar shell so
- * the tab switch is a single clean swap and each tab owns its own concern.
+ * editor, and the backlinks list. Search moved to the footer popover — the
+ * INDEX section is gone from here.
  */
 function FilesTab({
   activeWorkspace,
@@ -236,11 +300,6 @@ function FilesTab({
   onDeleteFile,
   activeFileContent,
   onUpdateContent,
-  searchQuery,
-  onSearchQueryChange,
-  searchResults,
-  searchError,
-  searchState,
   backlinks,
 }: {
   activeWorkspace: BobWorkspace | null;
@@ -249,11 +308,6 @@ function FilesTab({
   onDeleteFile: (path: string) => void;
   activeFileContent: string | null;
   onUpdateContent: (next: string) => void;
-  searchQuery: string;
-  onSearchQueryChange: (query: string) => void;
-  searchResults: WorkspaceSearchHit[];
-  searchError: string | null;
-  searchState: "idle" | "searching";
   backlinks: WorkspaceBacklinkRecord[];
 }) {
   if (!activeWorkspace) {
@@ -287,75 +341,7 @@ function FilesTab({
         <PropertiesPanel markdown={activeFileContent} onChange={onUpdateContent} />
       ) : null}
 
-      <div className="bob-sidebar-index">
-        <div className="bob-section-label">
-          <span>Index</span>
-          <span className="bob-section-meta">{indexStatusText(activeWorkspace)}</span>
-        </div>
-        <label className="bob-search-field">
-          <Search size={16} />
-          <input
-            aria-label="Search workspace"
-            disabled={activeWorkspace.indexState !== "ready"}
-            onChange={(event) => onSearchQueryChange(event.target.value)}
-            placeholder="Search files"
-            value={searchQuery}
-          />
-        </label>
-        <SearchResults
-          onSelectFile={onSelectFile}
-          query={searchQuery}
-          results={searchResults}
-          searchError={searchError}
-          searchState={searchState}
-        />
-        <BacklinksList backlinks={backlinks} onSelectFile={onSelectFile} />
-      </div>
-    </div>
-  );
-}
-
-function SearchResults({
-  onSelectFile,
-  query,
-  results,
-  searchError,
-  searchState,
-}: {
-  onSelectFile: (path: string) => void;
-  query: string;
-  results: WorkspaceSearchHit[];
-  searchError: string | null;
-  searchState: "idle" | "searching";
-}) {
-  const trimmedQuery = query.trim();
-  if (searchError) {
-    return <p className="bob-index-message">{searchError}</p>;
-  }
-  if (!trimmedQuery) {
-    return null;
-  }
-  if (searchState === "searching") {
-    return <p className="bob-index-message">Searching...</p>;
-  }
-  if (results.length === 0) {
-    return <p className="bob-index-message">No matches</p>;
-  }
-
-  return (
-    <div className="bob-search-results" aria-label="Search results">
-      {results.map((result) => (
-        <button
-          type="button"
-          key={`${result.docId}:${result.ranges[0]?.start ?? 0}`}
-          className="bob-search-result"
-          onClick={() => onSelectFile(result.path)}
-        >
-          <span className="bob-search-result__title">{result.title}</span>
-          <span className="bob-search-result__path">{result.path}</span>
-          <span className="bob-search-result__snippet">{result.snippet}</span>
-        </button>
-      ))}
+      {backlinks.length > 0 ? <BacklinksList backlinks={backlinks} onSelectFile={onSelectFile} /> : null}
     </div>
   );
 }
@@ -367,10 +353,6 @@ function BacklinksList({
   backlinks: WorkspaceBacklinkRecord[];
   onSelectFile: (path: string) => void;
 }) {
-  if (backlinks.length === 0) {
-    return null;
-  }
-
   return (
     <div className="bob-backlinks" aria-label="Backlinks">
       <div className="bob-section-label bob-section-label--compact">
@@ -405,17 +387,4 @@ function activeFileBacklinks(workspace: BobWorkspace | null) {
     }
     return backlink.targetPath === workspace.activeFilePath;
   });
-}
-
-function indexStatusText(workspace: BobWorkspace) {
-  if (workspace.indexState === "indexing") {
-    return "Indexing";
-  }
-  if (workspace.indexState === "failed") {
-    return "Failed";
-  }
-  if (workspace.indexState === "ready") {
-    return `${workspace.indexSnapshot?.indexedDocumentCount ?? 0} docs`;
-  }
-  return "Idle";
 }

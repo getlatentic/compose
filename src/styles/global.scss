@@ -190,6 +190,57 @@ select {
   font-size: 0.75rem;
 }
 
+// === Sidebar titlebar row (40px, overlays the macOS traffic lights) ===
+// `data-tauri-drag-region` on the row + nested elements with
+// `data-tauri-drag-region="false"` makes the row draggable except where the
+// user clicks an actual button. The first 78px (`--bob-traffic-lights-inset`)
+// is a no-op spacer for the OS traffic lights to sit over.
+.bob-sidebar-titlebar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  block-size: 2.5rem;
+  padding-inline-end: 0.5rem;
+  background: var(--cds-layer-01, #f4f4f4);
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.bob-sidebar-titlebar__traffic-spacer {
+  inline-size: var(--bob-traffic-lights-inset, 78px);
+  block-size: 100%;
+}
+
+.bob-sidebar-titlebar__btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.bob-sidebar-titlebar__btn:hover:not(:disabled),
+.bob-sidebar-titlebar__btn:focus-visible {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+  outline: none;
+}
+
+.bob-sidebar-titlebar__btn:disabled {
+  color: var(--cds-icon-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
+.bob-sidebar-titlebar__nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  margin-inline-start: auto;
+}
+
 // === Sidebar: Files | Chat tabs + the context-aware New button ===
 .bob-sidebar-tabs {
   display: flex;
@@ -270,30 +321,179 @@ select {
   padding: 0.75rem 0.5rem 0.5rem;
 }
 
-// === Sidebar: Settings footer (pinned bottom) ===
-.bob-sidebar-settings {
-  display: inline-flex;
+// === Sidebar: footer (pinned bottom) ===
+// "X notes" counter on the left + Search/Settings icons on the right. Replaces
+// the older "Settings" labeled row — Compose is deliberately local-first, so
+// the footer carries NO account avatar and NO "Synced" string (saying
+// "Synced" would lie about a folder that lives only on this Mac).
+.bob-sidebar-footer {
+  display: flex;
   flex: 0 0 auto;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
-  border: 0;
+  block-size: 2.25rem;
+  padding-inline: 0.5rem 0.25rem;
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  background: transparent;
-  cursor: pointer;
-  block-size: 2.5rem;
-  padding-inline: 0.75rem;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.8125rem;
-  font-weight: 500;
+  background: var(--cds-layer-01, #f4f4f4);
 }
 
-.bob-sidebar-settings:hover {
+.bob-sidebar-footer__count {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bob-sidebar-footer__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.bob-sidebar-footer__btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.bob-sidebar-footer__btn:hover:not(:disabled),
+.bob-sidebar-footer__btn:focus-visible {
   background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+  outline: none;
+}
+
+.bob-sidebar-footer__btn:disabled {
+  color: var(--cds-icon-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
+// === Search popover (sidebar footer trigger → centered modal) ===
+.bob-search-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9100;
+  background: rgba(22, 22, 22, 0.35);
+  display: grid;
+  place-items: start center;
+  padding-block-start: 6rem;
+}
+
+.bob-search-popover {
+  inline-size: min(36rem, calc(100vw - 2rem));
+  background: var(--cds-background, #ffffff);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bob-search-popover__field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.bob-search-popover__field input {
+  flex: 1 1 auto;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-sidebar-settings svg {
-  fill: var(--cds-icon-secondary, #525252);
+.bob-search-popover__results {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-block-size: 24rem;
+  overflow: auto;
+  padding: 0.25rem 0;
+}
+
+.bob-search-popover__message {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.8125rem;
+}
+
+.bob-search-popover__result {
+  display: grid;
+  text-align: start;
+  gap: 0.125rem;
+  padding: 0.5rem 1rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bob-search-popover__result:hover,
+.bob-search-popover__result:focus-visible {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  outline: none;
+}
+
+.bob-search-popover__result-title {
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.bob-search-popover__result-path {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+}
+
+.bob-search-popover__result-snippet {
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// === Editor tab strip: traffic-lights inset + show-sidebar toggle ===
+// When the sidebar is collapsed, the tab strip hosts both — the spacer
+// reserves room for the macOS traffic lights (their new home), and the
+// toggle gets the sidebar back.
+.bob-tab-strip__traffic-spacer {
+  flex: 0 0 auto;
+  block-size: 100%;
+}
+
+.bob-tab-strip__sidebar-toggle {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  margin-inline: 0.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.bob-tab-strip__sidebar-toggle:hover,
+.bob-tab-strip__sidebar-toggle:focus-visible {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+  outline: none;
 }
 
 .bob-chat-context {
@@ -1857,15 +2057,10 @@ select {
   gap: 0.25rem;
 }
 
-// The "You" eyebrow above a user turn. Mirrors the trace's "Show work" toggle
-// (small, muted) — it's a marker, not a header. Assistant turns have no such
-// label: it would land just like a 2010 chat avatar bar.
-.bob-message-eyebrow {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--cds-text-secondary, #525252);
-  letter-spacing: 0.01em;
-}
+// The "You" eyebrow used to live here. Replaced by the bordered user-block
+// (see `.bob-message-body--user`) — the contained surface is what marks a
+// user turn, not a tiny label.
+.bob-message-eyebrow { display: none; }
 
 .bob-message-activity {
   padding-inline: 0.25rem;
@@ -1889,13 +2084,19 @@ select {
   overflow-wrap: anywhere;
 }
 
-// User turns are plain text — preserve the newlines the user typed. The text
-// rides in a slightly quieter ink than the assistant's reply, so they
-// alternate in colour rather than alignment. Assistant turns render markdown
-// and must not be pre-wrapped, or block elements inherit collapsed whitespace.
+// User turns are a contained, bordered block — Carbon `--cds-layer-02`, a
+// subtle 1px border, modest padding, and rounded corners. The block is what
+// marks the turn as the user's; the assistant reply stays open prose.
+// Whitespace preserves the newlines the user typed.
 .bob-message-body--user {
   white-space: pre-wrap;
-  color: var(--cds-text-secondary, #525252);
+  align-self: flex-start;
+  max-inline-size: min(36rem, 100%);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  background: var(--cds-layer-02, #ffffff);
+  color: var(--cds-text-primary, #161616);
 }
 
 // A commented passage sent to chat, rendered as a chip inside the user bubble.
@@ -2320,6 +2521,55 @@ select {
 
 .bob-message-trace__toggle[aria-expanded="true"] .bob-message-trace__chevron {
   transform: rotate(180deg);
+}
+
+// Hover-revealed action row under an assistant turn — Copy, Regenerate,
+// Show work, with usage stats on the trailing edge. Hidden at rest so the
+// transcript reads as one quiet column; revealed on row hover or whenever a
+// child receives keyboard focus (so the actions are reachable without a
+// mouse). The "Show work" trace toggle keeps the row open if it's been
+// expanded.
+.bob-message-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-self: stretch;
+  max-inline-size: min(32rem, 85%);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.bob-message-actions__left {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.bob-message-row--assistant:hover .bob-message-actions,
+.bob-message-row--assistant:focus-within .bob-message-actions,
+.bob-message-actions:has(.bob-message-trace__toggle[aria-expanded="true"]) {
+  opacity: 1;
+}
+
+.bob-message-actions__btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.bob-message-actions__btn:hover,
+.bob-message-actions__btn:focus-visible {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+  outline: none;
 }
 
 .bob-agent-trace {
@@ -4010,6 +4260,16 @@ select {
   // both panes open: sidebar + editor + chat.
   .bob-workspace--editor-open.bob-workspace--chat-open {
     grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
+  }
+
+  // Sidebar collapsed: drop its column entirely. The editor's tab strip
+  // owns the traffic-lights inset in that mode (and renders a re-open toggle).
+  .bob-workspace--sidebar-collapsed.bob-workspace--editor-open,
+  .bob-workspace--sidebar-collapsed.bob-workspace--chat-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bob-workspace--sidebar-collapsed.bob-workspace--editor-open.bob-workspace--chat-open {
+    grid-template-columns: minmax(17rem, 1fr) minmax(18rem, 22rem);
   }
 
   .bob-sidebar {

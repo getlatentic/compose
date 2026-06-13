@@ -56,6 +56,7 @@ import {
   type ReviewFileChange,
 } from "../lib/ipc/reviewClient";
 import { markWorkspaceOpened } from "../lib/ipc/workspaceClient";
+import { openNewComposeWindow } from "../lib/ipc/windowsClient";
 import {
   beginAgentEditWindow,
   endAgentEditWindow,
@@ -126,6 +127,18 @@ import {
   type WorkspaceReviewSuggestionDraft,
 } from "./workspaceModel";
 
+/**
+ * One entry in the unified file+chat navigation history. Either the user was
+ * looking at a file (`kind: "file"`, `id` = relative path) or at a chat
+ * conversation (`kind: "chat"`, `id` = conversation id). `workspaceId` is
+ * captured so a back-step can switch workspaces too if needed.
+ */
+export interface NavEntry {
+  kind: "file" | "chat";
+  id: string;
+  workspaceId: string;
+}
+
 interface WorkspaceState {
   activeFileBuffer: () => WorkspaceFileBuffer | null;
   activeFileComments: () => WorkspaceCommentThread[];
@@ -183,6 +196,48 @@ interface WorkspaceState {
    */
   sidebarTab: "files" | "chat";
   setSidebarTab: (tab: "files" | "chat") => void;
+  /**
+   * Whether the sidebar is collapsed. When true the sidebar body is hidden and
+   * the macOS traffic lights swap to the editor's tab strip (the editor needs
+   * a 78px no-drag spacer in that mode so they don't collide with its
+   * formatting buttons). Default false.
+   */
+  sidebarCollapsed: boolean;
+  toggleSidebar: () => void;
+  /**
+   * Per-window browser-style back/forward navigation across both files and
+   * conversations. Each entry remembers what was active (file or chat) at that
+   * point in the user's journey through THIS window; switching workspaces
+   * pushes too (the next entry's `workspaceId` may differ). History is
+   * window-local — each Tauri window has its own JS context, hence its own
+   * Zustand store, hence its own stack. Not persisted across launches.
+   */
+  navHistory: NavEntry[];
+  navIndex: number;
+  /** Step back/forward through the unified history. No-op at the edges. */
+  navigateBack: () => void;
+  navigateForward: () => void;
+  /**
+   * Open a brand-new Compose window. The new window starts with an empty
+   * store; the user picks a folder there. Per-window event routing (see
+   * `runner.rs`) keeps this window's runs out of the new one's chat.
+   */
+  openNewWindow: () => Promise<void>;
+  /**
+   * Re-send the most recent user turn in this conversation as a new run. The
+   * previous assistant reply is left as history; the regen lands as a fresh
+   * turn. No-op if there is no preceding user turn or a run is already in
+   * flight.
+   */
+  regenerateLastTurn: () => Promise<void>;
+  /**
+   * Per-window search popover state — replaces the old INDEX section that
+   * used to live in the sidebar's Files tab. The popover renders the existing
+   * workspace search; only the chrome moved (sidebar footer icon → modal).
+   */
+  searchOpen: boolean;
+  openSearch: () => void;
+  closeSearch: () => void;
   /**
    * Monotonic nonce bumped when a conversation is opened from the sidebar Chat
    * tab. The chat pane subscribes and replays a brief border-pulse animation
@@ -812,6 +867,62 @@ function persistComments(
 
 const activeRunSubscriptions = new Map<string, () => void>();
 
+/**
+ * When true, `pushNavEntry` short-circuits — used by `navigateBack` /
+ * `navigateForward` so re-applying a history entry doesn't *append* a new one
+ * to the stack (which would make Forward unreachable). Module-level: there
+ * is exactly one store per window's JS context, and this flag is only flipped
+ * synchronously around an `applyNavEntry` call.
+ */
+let suppressNavPush = false;
+
+/** Push a new nav entry, truncating any "forward" entries past the current
+ * position — same behavior a browser exhibits when you navigate after going
+ * back. Coalesces consecutive duplicates so repeated selects of the same file
+ * don't bloat the stack. */
+function pushNavEntry(
+  state: { navHistory: NavEntry[]; navIndex: number },
+  entry: NavEntry,
+): { navHistory: NavEntry[]; navIndex: number } | null {
+  if (suppressNavPush) {
+    return null;
+  }
+  const current = state.navHistory[state.navIndex];
+  if (
+    current
+    && current.kind === entry.kind
+    && current.id === entry.id
+    && current.workspaceId === entry.workspaceId
+  ) {
+    return null;
+  }
+  const truncated = state.navHistory.slice(0, state.navIndex + 1);
+  truncated.push(entry);
+  return { navHistory: truncated, navIndex: truncated.length - 1 };
+}
+
+/** Re-apply a nav entry without pushing a new one (the flag does the work).
+ * Reads through the live store so the entry can target a different workspace
+ * than the current one. */
+function applyNavEntry(
+  get: StoreApi<WorkspaceState>["getState"],
+  entry: NavEntry,
+) {
+  suppressNavPush = true;
+  try {
+    if (get().activeWorkspaceId !== entry.workspaceId) {
+      get().switchWorkspace(entry.workspaceId);
+    }
+    if (entry.kind === "file") {
+      void get().selectFile(entry.id);
+    } else {
+      void get().openConversation(entry.id);
+    }
+  } finally {
+    suppressNavPush = false;
+  }
+}
+
 function handleHarnessRunEvent(
   event: HarnessRunEvent,
   runId: string,
@@ -1253,6 +1364,86 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setSidebarTab: (tab) => {
     set({ sidebarTab: tab });
   },
+  sidebarCollapsed: false,
+  toggleSidebar: () => {
+    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed }));
+  },
+  navHistory: [],
+  navIndex: -1,
+  navigateBack: () => {
+    const { navHistory, navIndex } = get();
+    if (navIndex <= 0) {
+      return;
+    }
+    const target = navHistory[navIndex - 1];
+    if (!target) {
+      return;
+    }
+    set({ navIndex: navIndex - 1 });
+    applyNavEntry(get, target);
+  },
+  navigateForward: () => {
+    const { navHistory, navIndex } = get();
+    if (navIndex >= navHistory.length - 1) {
+      return;
+    }
+    const target = navHistory[navIndex + 1];
+    if (!target) {
+      return;
+    }
+    set({ navIndex: navIndex + 1 });
+    applyNavEntry(get, target);
+  },
+  openNewWindow: async () => {
+    try {
+      await openNewComposeWindow();
+    } catch (error) {
+      set({ saveError: errorMessage(error, "Could not open a new window") });
+    }
+  },
+  regenerateLastTurn: async () => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    const thread = workspace.chatThread;
+    // Don't regenerate over a running turn — symmetric to sendChatPrompt.
+    if (
+      thread.activeRunId
+      || thread.runState === "starting"
+      || thread.runState === "streaming"
+    ) {
+      return;
+    }
+    // Walk back to find the most recent user message.
+    let userText: string | null = null;
+    for (let i = thread.messages.length - 1; i >= 0; i -= 1) {
+      const message = thread.messages[i];
+      if (message.role === "user" && message.content?.trim()) {
+        userText = message.content;
+        break;
+      }
+    }
+    if (!userText) {
+      return;
+    }
+    // Stage the prompt and delegate to the standard send path. The previous
+    // assistant reply stays in history; the regen lands as a fresh turn.
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
+        ...item,
+        chatThread: {
+          ...item.chatThread,
+          preparedCommand: null,
+          prompt: userText ?? "",
+        },
+      })),
+    }));
+    await get().sendChatPrompt();
+  },
+  searchOpen: false,
+  openSearch: () => set({ searchOpen: true }),
+  closeSearch: () => set({ searchOpen: false }),
   chatPulseSignal: 0,
   // Comments panel starts hidden — see the field's docstring above.
   commentsOpen: false,
@@ -1560,13 +1751,20 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!snapshot) {
       return;
     }
-    set((state) => ({
-      chatOpen: true,
-      workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+    set((state) => {
+      const updated = updateWorkspace(state.workspaces, workspaceId, (item) => ({
         ...item,
         chatThread: hydrateChatThread(item.chatThread, snapshot),
-      })),
-    }));
+      }));
+      const navPatch = pushNavEntry(state, {
+        kind: "chat",
+        id: conversationId,
+        workspaceId,
+      });
+      return navPatch
+        ? { chatOpen: true, workspaces: updated, ...navPatch }
+        : { chatOpen: true, workspaces: updated };
+    });
     void get().loadConversations(workspaceId);
   },
   openConversationFromSidebar: async (conversationId: string) => {
@@ -2362,11 +2560,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return;
     }
 
-    set((state) => ({
-      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
+    set((state) => {
+      const updated = updateWorkspace(state.workspaces, workspace.id, (item) =>
         openWorkspaceFile(item, path),
-      ),
-    }));
+      );
+      const navPatch = pushNavEntry(state, {
+        kind: "file",
+        id: path,
+        workspaceId: workspace.id,
+      });
+      return navPatch ? { workspaces: updated, ...navPatch } : { workspaces: updated };
+    });
     persistTabs(get().workspaces, workspace.id);
 
     const current = get().workspaces.find((item) => item.id === workspace.id);
@@ -2483,13 +2687,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
 
     const nowMs = Date.now();
-    set((state) => ({
-      activeWorkspaceId: workspace.id,
-      workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+    set((state) => {
+      const updated = updateWorkspace(state.workspaces, workspaceId, (item) => ({
         ...item,
         lastOpenedAt: nowMs,
-      })),
-    }));
+      }));
+      // Push a nav entry for the workspace's active file (or its first file)
+      // so back/forward steps return to the right document. No active file →
+      // skip the push; the next selectFile/openConversation will record one.
+      const target = workspace.activeFilePath;
+      const navPatch = target
+        ? pushNavEntry(state, { kind: "file", id: target, workspaceId })
+        : null;
+      return navPatch
+        ? { activeWorkspaceId: workspace.id, workspaces: updated, ...navPatch }
+        : { activeWorkspaceId: workspace.id, workspaces: updated };
+    });
     void markWorkspaceOpened(workspaceId).catch(() => undefined);
   },
   toggleChat: () => {
