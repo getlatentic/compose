@@ -216,7 +216,11 @@ select {
   flex-direction: column;
   overflow: hidden;
   border-inline-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
-  background: var(--cds-layer-01, #f4f4f4);
+  // White, same as the editor + chat panel — every primary pane reads as
+  // one document surface. The cool-gray-20 border at the right is what
+  // separates the sidebar visually; a tinted background was double-marking
+  // the boundary and competing with the panes' own surfaces.
+  background: var(--cds-layer-02, #ffffff);
 }
 
 // === Sidebar: workspace switcher (pinned top) ===
