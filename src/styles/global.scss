@@ -1,6 +1,38 @@
-@use "@carbon/react" with (
+// Carbon CSS — selective component imports
+//
+// The catch-all `@use "@carbon/react"` pulls every Carbon component's CSS
+// into the bundle (50+ components: accordion, breadcrumb, calendar, data-
+// table, page-header, popover, progress-indicator, tile, …). Compose uses
+// 14 React components from @carbon/react; the rest of the bundle is dead
+// weight. The cool-gray palette override below and every `.bob-*` rule in
+// this stylesheet already supply our own visual system, so the slim set
+// below is all the Carbon CSS we actually need.
+//
+// Config goes through `@carbon/styles/scss/config` so the `$css--font-face`
+// flag still cascades to the components below (kept false because we don't
+// bundle the IBM Plex webfont — see the note on the $ui-font stack).
+//
+// Adding a new Carbon component? Add its `scss/components/<name>` import
+// here; otherwise it'll render unstyled.
+// Routed through @carbon/react's proxy modules (which `@forward` to
+// @carbon/styles) because only @carbon/react is hoisted by pnpm — sass's
+// bare-import resolver looks in *our* node_modules, not the deps of a
+// transitive package.
+@use "@carbon/react/scss/config" with (
   $css--font-face: false
 );
+@use "@carbon/react/scss/reset";
+@use "@carbon/react/scss/components/button";
+@use "@carbon/react/scss/components/inline-loading";
+@use "@carbon/react/scss/components/modal";
+@use "@carbon/react/scss/components/notification";
+@use "@carbon/react/scss/components/overflow-menu";
+@use "@carbon/react/scss/components/select";
+@use "@carbon/react/scss/components/skeleton-styles";
+@use "@carbon/react/scss/components/tabs";
+@use "@carbon/react/scss/components/tag";
+@use "@carbon/react/scss/components/text-input";
+@use "@carbon/react/scss/components/toggle";
 
 // One UI typeface for the whole app. Carbon is loaded with
 // `$css--font-face: false`, IBM Plex is not bundled (no `@ibm/plex` dep, no
