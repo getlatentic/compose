@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { cancelHarnessRun, runHarnessStream, subscribeHarnessRun } from "./bobClient";
+import { cancelHarnessRun, runHarnessStream, subscribeHarnessRun } from "./harnessClient";
 
-describe("bobClient runtime boundary", () => {
+describe("harnessClient runtime boundary", () => {
   it("does not simulate Bob outside the Tauri desktop runtime", async () => {
     await expect(
       runHarnessStream({

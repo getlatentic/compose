@@ -15,14 +15,14 @@ export function NoWorkspaceWelcome() {
     useWorkspaceActions();
 
   return (
-    <div className="bob-no-workspace">
-      <div className="bob-no-workspace__card">
-        <h1 className="bob-no-workspace__title">Welcome to Compose</h1>
-        <p className="bob-no-workspace__lead">
+    <div className="no-workspace">
+      <div className="no-workspace__card">
+        <h1 className="no-workspace__title">Welcome to Compose</h1>
+        <p className="no-workspace__lead">
           Open a local folder of Markdown files and start writing with your AI assistant. Your
           files stay on your device.
         </p>
-        <div className="bob-no-workspace__cta">
+        <div className="no-workspace__cta">
           <Button
             kind="primary"
             size="lg"
@@ -49,27 +49,27 @@ export function NoWorkspaceWelcome() {
         ) : null}
 
         {recent.length > 0 ? (
-          <section className="bob-no-workspace__recent">
-            <h2 className="bob-no-workspace__recent-heading">Recent workspaces</h2>
-            <ul className="bob-no-workspace__recent-list">
+          <section className="no-workspace__recent">
+            <h2 className="no-workspace__recent-heading">Recent workspaces</h2>
+            <ul className="no-workspace__recent-list">
               {recent.slice(0, 5).map((record) => (
-                <li key={record.id} className="bob-no-workspace__recent-row">
+                <li key={record.id} className="no-workspace__recent-row">
                   <button
                     type="button"
-                    className="bob-no-workspace__recent-open"
+                    className="no-workspace__recent-open"
                     onClick={() => openWorkspace(record.id)}
                   >
-                    <span className="bob-no-workspace__recent-icon" aria-hidden="true">
+                    <span className="no-workspace__recent-icon" aria-hidden="true">
                       <Folder size={16} />
                     </span>
-                    <span className="bob-no-workspace__recent-meta">
+                    <span className="no-workspace__recent-meta">
                       <strong>{record.name}</strong>
                       <span>{record.path}</span>
                     </span>
                   </button>
                   <button
                     type="button"
-                    className="bob-no-workspace__recent-remove"
+                    className="no-workspace__recent-remove"
                     aria-label={`Remove ${record.name} from list`}
                     title="Remove from list"
                     onClick={() => void removeRecent(record.id)}

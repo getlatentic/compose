@@ -9,7 +9,6 @@ pub mod runner;
 pub enum BobRunMode {
     JsonTask,
     StreamJson,
-    InteractivePty,
     ResumeLatest,
 }
 
@@ -105,12 +104,6 @@ pub fn build_bob_command(
                 request.approval_mode,
                 request.max_coins,
             ));
-        }
-        BobRunMode::InteractivePty => {
-            if let Some(prompt) = prompt {
-                args.push("-i".to_owned());
-                args.push(prompt.to_owned());
-            }
         }
         BobRunMode::ResumeLatest => {
             args.push("--resume".to_owned());
@@ -236,31 +229,6 @@ mod tests {
         assert_eq!(
             build_bob_command(&request).expect_err("blank prompt must fail"),
             BobCommandError::PromptRequired
-        );
-    }
-
-    #[test]
-    fn builds_interactive_prompt_as_pty_command() {
-        let request = BobCommandRequest {
-            approval_mode: BobApprovalMode::Default,
-            chat_mode: BobChatMode::Plan,
-            context_file_paths: Vec::new(),
-            max_coins: 200,
-            mode: BobRunMode::InteractivePty,
-            prompt: Some("Start by reviewing this workspace".to_owned()),
-            workspace_id: Some("workspace-1".to_owned()),
-        };
-
-        let preview = build_bob_command(&request).expect("valid command");
-
-        assert_eq!(
-            preview.args,
-            vec![
-                "--auth-method",
-                "api-key",
-                "-i",
-                "Start by reviewing this workspace"
-            ]
         );
     }
 

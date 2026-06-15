@@ -14,11 +14,12 @@ import {
   Toggle,
 } from "@carbon/react";
 import {
-  useWorkspaceStore,
   harnessCapabilitiesOf,
   supportsPermissionMode,
   type HarnessRunOptions,
 } from "../../app/workspaceStore";
+import { useUiStore } from "../../app/store/uiStore";
+import { useHarnessStore } from "../../app/store/harnessStore";
 import {
   checkBobInstall,
   getBobAuthStatus,
@@ -39,14 +40,14 @@ import { HarnessPicker } from "./HarnessPicker";
  * (no backdrop / title bar) so it composes into either host.
  */
 export function SettingsPanel() {
-  const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useWorkspaceStore((state) => state.bobInstallStatus);
-  const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
-  const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
-  const setBobAuthStatus = useWorkspaceStore((state) => state.setBobAuthStatus);
-  const setBobInstallStatus = useWorkspaceStore((state) => state.setBobInstallStatus);
-  const soundOnComplete = useWorkspaceStore((state) => state.soundOnComplete);
-  const setSoundOnComplete = useWorkspaceStore((state) => state.setSoundOnComplete);
+  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
+  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
+  const setBobAuthStatus = useHarnessStore((state) => state.setBobAuthStatus);
+  const setBobInstallStatus = useHarnessStore((state) => state.setBobInstallStatus);
+  const soundOnComplete = useUiStore((state) => state.soundOnComplete);
+  const setSoundOnComplete = useUiStore((state) => state.setSoundOnComplete);
   const [apiKey, setApiKey] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [runtimeCheck, setRuntimeCheck] = useState<BobRuntimeVerification | null>(null);
@@ -148,7 +149,7 @@ export function SettingsPanel() {
           {/* Provider detail. Always rendered in a stable region so
               switching providers swaps the content in place instead of
               collapsing the layout (the old conditional caused a jump). */}
-          <div className="bob-settings-provider-detail">
+          <div className="settings-provider-detail">
             {harnessCapabilitiesOf(harnessCatalog, selectedHarnessId).credentialRequired ? (
               <BobSetup
                 apiKey={apiKey}
@@ -173,7 +174,7 @@ export function SettingsPanel() {
             )}
           </div>
 
-          <div className="bob-settings-section">
+          <div className="settings-section">
             <h3>Preferences</h3>
             <Toggle
               id="sound-on-complete"
@@ -184,7 +185,7 @@ export function SettingsPanel() {
               toggled={soundOnComplete}
               onToggle={(checked) => setSoundOnComplete(checked)}
             />
-            <p className="bob-settings-helper">
+            <p className="settings-helper">
               Play a subtle chime when the assistant finishes a run.
             </p>
           </div>
@@ -192,21 +193,21 @@ export function SettingsPanel() {
 
         {/* ----- About tab ------------------------------- */}
         <TabPanel>
-          <div className="bob-settings-section">
+          <div className="settings-section">
             <h3>About Compose</h3>
-            <p className="bob-settings-helper">Compose · version 0.1.0</p>
-            <p className="bob-settings-helper">
+            <p className="settings-helper">Compose · version 0.1.0</p>
+            <p className="settings-helper">
               A local-first AI writing workspace — your notes stay on your computer. AI for
               everyone.
             </p>
             {bobInstallStatus?.nodeVersion ? (
-              <p className="bob-settings-helper">Runtime: Node.js {bobInstallStatus.nodeVersion}</p>
+              <p className="settings-helper">Runtime: Node.js {bobInstallStatus.nodeVersion}</p>
             ) : null}
           </div>
           {isTauriRuntime() ? (
-            <div className="bob-settings-section">
+            <div className="settings-section">
               <h3>Report a problem</h3>
-              <p className="bob-settings-helper">
+              <p className="settings-helper">
                 Compose keeps a local error log on your computer — it's never sent anywhere. If
                 something goes wrong, open it and attach it to your report.
               </p>
@@ -250,19 +251,19 @@ const MAX_TURNS_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
  *  A new harness needs zero edits here. Each control left on "Default"
  *  omits the flag so the CLI uses its own default. */
 function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
-  const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
+  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const options =
-    useWorkspaceStore((state) => state.harnessOptions[harnessId]) ?? ({} as HarnessRunOptions);
-  const setHarnessOptions = useWorkspaceStore((state) => state.setHarnessOptions);
+    useHarnessStore((state) => state.harnessOptions[harnessId]) ?? ({} as HarnessRunOptions);
+  const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
 
   const info = harnessCatalog.find((entry) => entry.id === harnessId);
   const caps = harnessCapabilitiesOf(harnessCatalog, harnessId);
   const name = info?.displayName ?? harnessId;
 
   return (
-    <div className="bob-settings-section">
+    <div className="settings-section">
       <h3>{name} setup</h3>
-      <p className="bob-settings-helper">
+      <p className="settings-helper">
         {name} uses your existing {name} login — there's nothing to connect here. If it isn't
         installed yet, use the Install button on its card above. Choose a model and run options
         below; leave a field on "Default" to use {name}'s own default.
@@ -283,7 +284,7 @@ function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
           toggled={options.reviewEdits ?? false}
           onToggle={(checked) => setHarnessOptions(harnessId, { reviewEdits: checked })}
         />
-        <p className="bob-settings-helper" style={{ marginBlockStart: "-0.5rem" }}>
+        <p className="settings-helper" style={{ marginBlockStart: "-0.5rem" }}>
           Off (default): changes apply to your files as {name} works, and you can undo any of them
           from a file's “Previous versions”. On: {name} works on a copy and you approve each change
           before it lands — safer to preview, but {name} can't see your real folder or its tools.
@@ -414,14 +415,14 @@ function BobSetup(props: BobSetupProps) {
   return (
     <>
       {/* ----- Install / re-install ------------------------- */}
-      <div className="bob-settings-section">
+      <div className="settings-section">
         <h3>Bob CLI</h3>
-        <p className="bob-settings-helper">
+        <p className="settings-helper">
           {needsInstall
             ? "Bob runs as a local CLI. Click below to install it via nvm + npm — no sudo needed."
             : "Bob is installed. Reinstall to update to the latest version."}
         </p>
-        <div className="bob-settings-actions">
+        <div className="settings-actions">
           <Button
             disabled={installing}
             size="sm"
@@ -434,14 +435,14 @@ function BobSetup(props: BobSetupProps) {
         {installLog.length > 0 ? (
           <pre
             ref={logRef}
-            className="bob-settings-install-log"
+            className="settings-install-log"
             aria-label="Bob install progress"
             aria-live="polite"
           >
             {installLog.map((entry, i) => (
               <div
                 key={i}
-                className={`bob-settings-install-log__line bob-settings-install-log__line--${entry.kind}`}
+                className={`settings-install-log__line settings-install-log__line--${entry.kind}`}
               >
                 {entry.kind === "step" ? "› " : entry.kind === "stderr" ? "! " : "  "}
                 {entry.text}
@@ -465,10 +466,10 @@ function BobSetup(props: BobSetupProps) {
       </div>
 
       {/* ----- API key ------------------------------------- */}
-      <form onSubmit={onSubmit} className="bob-settings-section bob-settings-form">
+      <form onSubmit={onSubmit} className="settings-section settings-form">
         <h3>Bob API key</h3>
         <PasswordInput
-          id="settings-bob-key"
+          id="settings-key"
           labelText="Bob API key"
           helperText={
             bobAuthStatus.configured
@@ -496,7 +497,7 @@ function BobSetup(props: BobSetupProps) {
             title="API key saved"
           />
         ) : null}
-        <div className="bob-settings-actions">
+        <div className="settings-actions">
           <Button disabled={saving} size="sm" type="submit">
             {saving ? "Saving" : "Save key"}
           </Button>
@@ -536,7 +537,7 @@ function RuntimeCheckResult({ result }: { result: BobRuntimeVerification }) {
     .join("\n");
 
   return (
-    <div className="bob-settings-runtime">
+    <div className="settings-runtime">
       <InlineNotification hideCloseButton kind={kind} lowContrast subtitle={details} title={title} />
     </div>
   );

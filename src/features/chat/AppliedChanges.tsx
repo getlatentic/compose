@@ -15,16 +15,16 @@ export function AppliedChanges({
   onOpenDocument: (path: string) => void;
 }) {
   return (
-    <div className="bob-applied-list" aria-label="Changes the assistant made">
+    <div className="applied-list" aria-label="Changes the assistant made">
       {changes.map((change, index) => (
-        <article className="bob-applied" key={`${change.filePath}-${index}`}>
-          <header className="bob-applied__header">
-            <span className={`bob-applied__badge bob-applied__badge--${change.kind}`}>
+        <article className="applied" key={`${change.filePath}-${index}`}>
+          <header className="applied__header">
+            <span className={`applied__badge applied__badge--${change.kind}`}>
               {appliedLabel(change.kind)}
             </span>
             <button
               type="button"
-              className="bob-applied__path"
+              className="applied__path"
               onClick={() => onOpenDocument(change.filePath)}
             >
               {change.filePath}

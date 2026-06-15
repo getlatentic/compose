@@ -28,12 +28,12 @@ export function ChatEmptyState({
   const suggestions = contextFileLabel ? FILE_SUGGESTIONS : WORKSPACE_SUGGESTIONS;
 
   return (
-    <div className="bob-chat-empty">
-      <span className="bob-chat-empty__mark" aria-hidden>
+    <div className="chat-empty">
+      <span className="chat-empty__mark" aria-hidden>
         <ChatBot size={20} />
       </span>
-      <h3 className="bob-chat-empty__title">New conversation</h3>
-      <p className="bob-chat-empty__hint">
+      <h3 className="chat-empty__title">New conversation</h3>
+      <p className="chat-empty__hint">
         {contextFileLabel ? (
           <>
             I can already see <strong>{contextFileLabel}</strong> — the file you&rsquo;re viewing.
@@ -43,12 +43,12 @@ export function ChatEmptyState({
           <>Ask anything about your workspace, or start with one of these.</>
         )}
       </p>
-      <div className="bob-chat-empty__suggestions">
+      <div className="chat-empty__suggestions">
         {suggestions.map((text) => (
           <button
             type="button"
             key={text}
-            className="bob-chat-empty__suggestion"
+            className="chat-empty__suggestion"
             onClick={() => onUseSuggestion(text)}
           >
             <ArrowRight size={14} aria-hidden />

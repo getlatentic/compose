@@ -1,9 +1,9 @@
 import { AddComment, Close, ListBulleted, Send } from "@carbon/react/icons";
-import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { bobRuntimeReadiness } from "../../app/workspaceModel";
-import { useWorkspaceStore } from "../../app/workspaceStore";
+import { useUiStore } from "../../app/store/uiStore";
+import { useHarnessStore } from "../../app/store/harnessStore";
 import type { SourceRange } from "../comments/commentModel";
 
 /**
@@ -20,8 +20,21 @@ import type { SourceRange } from "../comments/commentModel";
  * the selection; click it and an inline composer pops up below.
  */
 export interface CommentBubbleProps {
-  editor: Editor | null;
+  /**
+   * The bubble unmounts when this becomes `null`. The "editor presence"
+   * gate from the Tiptap version was the same thing; keeping it as a
+   * dedicated flag lets the CM6 editor pass the same prop without
+   * importing Tiptap types.
+   */
+  hasEditor: boolean;
   selection: { text: string; range: SourceRange } | null;
+  /**
+   * Collapse the editor's selection to a single caret after a
+   * bubble action lands. Engine-specific — Tiptap calls
+   * `editor.commands.setTextSelection`; CM6 dispatches a cursor
+   * selection. Pass whichever closes over the live editor.
+   */
+  dismissSelection: () => void;
   /** Send the note + selection to the chat now (assistant answers or edits). */
   onSendToChat?: (note: string, selection: { text: string; range: SourceRange }) => void;
   /** Stage the note as a comment in the panel queue (batch-send later). */
@@ -29,8 +42,9 @@ export interface CommentBubbleProps {
 }
 
 export function CommentBubble({
-  editor,
+  hasEditor,
   selection,
+  dismissSelection,
   onSendToChat,
   onQueueComment,
 }: CommentBubbleProps) {
@@ -40,14 +54,14 @@ export function CommentBubble({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Readiness drives the "set up the assistant" notice; the send still works
   // through the run's own preflight, so the buttons don't hard-gate on it.
-  const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useWorkspaceStore((state) => state.bobInstallStatus);
-  const openSettings = useWorkspaceStore((state) => state.openSettings);
+  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
+  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
+  const openSettings = useUiStore((state) => state.openSettings);
   const bobReady = bobRuntimeReadiness(bobAuthStatus, bobInstallStatus);
 
   // Recompute the anchor rect when the editor selection changes.
   useEffect(() => {
-    if (!editor || !selection) {
+    if (!hasEditor || !selection) {
       setAnchorRect(null);
       if (composing) setComposing(false);
       return;
@@ -66,7 +80,7 @@ export function CommentBubble({
     setAnchorRect(rect);
     // Adding `composing` would loop: closing the composer re-fires this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, selection]);
+  }, [hasEditor, selection]);
 
   // Focus the textarea when the composer opens.
   useEffect(() => {
@@ -101,14 +115,13 @@ export function CommentBubble({
   /** After a comment lands, dismiss the whole bubble — not just the
    * composer. `close()` alone drops back to the pill, because the editor
    * selection (which drives the upstream `bubbleSelection`) is still
-   * non-empty; collapsing it routes through `onSelectionUpdate`, which
-   * clears the selection snapshot and unmounts the bubble. (Escape / the
-   * X keep the pill on purpose — the user may still want to comment.) */
+   * non-empty; collapsing it routes through the editor's selection
+   * listener, which clears the selection snapshot and unmounts the
+   * bubble. (Escape / the X keep the pill on purpose — the user may
+   * still want to comment.) */
   function dismissAfterAction() {
     close();
-    if (editor) {
-      editor.commands.setTextSelection(editor.state.selection.to);
-    }
+    dismissSelection();
   }
 
   function sendToChat() {
@@ -131,14 +144,14 @@ export function CommentBubble({
     const left = anchorRect.right + BUBBLE_OFFSET;
     return createPortal(
       <div
-        className="bob-selection-actions"
+        className="selection-actions"
         role="toolbar"
         aria-label="Actions for selection"
         style={{ top, left }}
       >
         <button
           type="button"
-          className="bob-selection-actions__button bob-selection-actions__button--ask"
+          className="selection-actions__button selection-actions__button--ask"
           aria-label="Comment on this selection"
           title="Comment"
           onMouseDown={(event) => event.preventDefault()}
@@ -170,32 +183,32 @@ export function CommentBubble({
 
   return createPortal(
     <div
-      className="bob-selection-composer"
+      className="selection-composer"
       role="dialog"
       aria-label="Comment on selection"
       style={{ top: composerTop, left: composerLeft, width: COMPOSER_WIDTH }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <div className="bob-selection-composer__header">
-        <span className="bob-selection-composer__title">
+      <div className="selection-composer__header">
+        <span className="selection-composer__title">
           <AddComment size={14} />
           Comment
         </span>
         <button
           type="button"
-          className="bob-selection-composer__close"
+          className="selection-composer__close"
           aria-label="Cancel"
           onClick={close}
         >
           <Close size={14} />
         </button>
       </div>
-      <blockquote className="bob-selection-composer__selection">
+      <blockquote className="selection-composer__selection">
         {selection.text.length > 280 ? selection.text.slice(0, 280) + "…" : selection.text}
       </blockquote>
       <textarea
         ref={textareaRef}
-        className="bob-selection-composer__textarea"
+        className="selection-composer__textarea"
         placeholder="Leave a note — the assistant answers or edits based on what you write…"
         rows={3}
         value={draft}
@@ -208,21 +221,21 @@ export function CommentBubble({
         }}
       />
       {!bobReady.ready ? (
-        <div className="bob-selection-composer__notice" role="status">
+        <div className="selection-composer__notice" role="status">
           <span>{bobReady.message ?? "The assistant isn't connected yet."}</span>
           <button
             type="button"
-            className="bob-selection-composer__setup"
+            className="selection-composer__setup"
             onClick={() => openSettings()}
           >
             Set up the assistant →
           </button>
         </div>
       ) : null}
-      <div className="bob-selection-composer__actions">
+      <div className="selection-composer__actions">
         <button
           type="button"
-          className="bob-selection-composer__secondary"
+          className="selection-composer__secondary"
           disabled={!hasDraft}
           onClick={queue}
           title="Add to the comment queue in the panel"
@@ -232,7 +245,7 @@ export function CommentBubble({
         </button>
         <button
           type="button"
-          className="bob-selection-composer__primary"
+          className="selection-composer__primary"
           disabled={!hasDraft}
           onClick={sendToChat}
         >

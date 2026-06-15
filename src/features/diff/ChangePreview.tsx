@@ -21,7 +21,7 @@ export function ChangePreview({
 }) {
   if (previewOmitted) {
     return (
-      <div className="bob-diff bob-diff--omitted">
+      <div className="diff diff--omitted">
         {omittedLabel} · {formatBytes(omittedSize)} · preview not shown
       </div>
     );

@@ -37,7 +37,7 @@ export function ConversationTitleEditor({
   return (
     <input
       ref={inputRef}
-      className="bob-conv-title-input"
+      className="conv-title-input"
       value={value}
       aria-label="Conversation title"
       onChange={(event) => setValue(event.target.value)}

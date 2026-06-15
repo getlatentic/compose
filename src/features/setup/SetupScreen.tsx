@@ -24,6 +24,7 @@ import {
   type ImportedFile,
 } from "../../lib/workspace/folderImport";
 import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceStore";
+import { useHarnessStore } from "../../app/store/harnessStore";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { HarnessPicker } from "../settings/HarnessPicker";
 
@@ -116,17 +117,17 @@ export function SetupScreen() {
   };
 
   return (
-    <div className="bob-onboard">
-      <header className="bob-onboard__topbar">
-        <div className="bob-onboard__brand">
-          <span className="bob-onboard__mark" aria-hidden="true">
+    <div className="onboard">
+      <header className="onboard__topbar">
+        <div className="onboard__brand">
+          <span className="onboard__mark" aria-hidden="true">
             <ChatBot size={16} />
           </span>
           <span>Compose</span>
         </div>
       </header>
 
-      <main className="bob-onboard__stage">
+      <main className="onboard__stage">
         {screen === "welcome" ? (
           <WelcomeScreen onStart={goNext} onSkip={() => void finishOnboarding()} />
         ) : null}
@@ -150,7 +151,7 @@ export function SetupScreen() {
         ) : null}
       </main>
 
-      <footer className="bob-onboard__footer">
+      <footer className="onboard__footer">
         <ProgressDots count={SCREENS.length} index={screenIndex} />
       </footer>
     </div>
@@ -160,15 +161,15 @@ export function SetupScreen() {
 function WelcomeScreen({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) {
   return (
     <ScreenShell>
-      <div className="bob-onboard__hero-mark" aria-hidden="true">
+      <div className="onboard__hero-mark" aria-hidden="true">
         <ChatBot size={36} />
       </div>
-      <h1 className="bob-onboard__title">Welcome to Compose</h1>
-      <p className="bob-onboard__lead">
+      <h1 className="onboard__title">Welcome to Compose</h1>
+      <p className="onboard__lead">
         A local-first Markdown workspace with an AI collaborator alongside. Your files stay on
         disk, and answers stream in next to what you're writing.
       </p>
-      <div className="bob-onboard__cta-row">
+      <div className="onboard__cta-row">
         <Button kind="primary" renderIcon={ArrowRight} onClick={onStart} size="lg">
           Get started
         </Button>
@@ -176,7 +177,7 @@ function WelcomeScreen({ onStart, onSkip }: { onStart: () => void; onSkip: () =>
           Skip for now
         </Button>
       </div>
-      <p className="bob-onboard__small">Takes about a minute. You can re-run setup from Settings.</p>
+      <p className="onboard__small">Takes about a minute. You can re-run setup from Settings.</p>
     </ScreenShell>
   );
 }
@@ -184,9 +185,9 @@ function WelcomeScreen({ onStart, onSkip }: { onStart: () => void; onSkip: () =>
 function ValueScreen({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   return (
     <ScreenShell>
-      <span className="bob-onboard__eyebrow">What you get</span>
-      <h1 className="bob-onboard__title">Three things, working together</h1>
-      <div className="bob-onboard__value-grid">
+      <span className="onboard__eyebrow">What you get</span>
+      <h1 className="onboard__title">Three things, working together</h1>
+      <div className="onboard__value-grid">
         <ValueProp
           icon={<Document size={20} />}
           title="Your files, on disk"
@@ -220,10 +221,10 @@ function ValueScreen({ onBack, onNext }: { onBack: () => void; onNext: () => voi
  */
 function ChooseAiScreen({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const desktop = isTauriRuntime();
-  const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
-  const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
-  const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
-  const setBobAuthStatus = useWorkspaceStore((state) => state.setBobAuthStatus);
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
+  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
+  const setBobAuthStatus = useHarnessStore((state) => state.setBobAuthStatus);
 
   // Capability-driven, never an id check: a harness whose credential Compose
   // stores (bob) needs a key here. `harnessCapabilitiesOf` falls back to the
@@ -235,9 +236,9 @@ function ChooseAiScreen({ onBack, onNext }: { onBack: () => void; onNext: () => 
 
   return (
     <ScreenShell>
-      <span className="bob-onboard__eyebrow">Step 3 of 4</span>
-      <h1 className="bob-onboard__title">Choose your AI</h1>
-      <p className="bob-onboard__lead">
+      <span className="onboard__eyebrow">Step 3 of 4</span>
+      <h1 className="onboard__title">Choose your AI</h1>
+      <p className="onboard__lead">
         Compose works with the AI agents already on your computer. We checked for the ones we
         support — pick one below. You can change this anytime in Settings.
       </p>
@@ -287,9 +288,9 @@ function BobKeyForm({ onSaved }: { onSaved: (status: BobAuthStatus) => void }) {
   }
 
   return (
-    <form className="bob-onboard__form" onSubmit={submit}>
+    <form className="onboard__form" onSubmit={submit}>
       <PasswordInput
-        id="bob-api-key"
+        id="api-key"
         labelText="bob API key"
         helperText="Stored in your OS keychain — we never see it. Generate one in your bob console."
         value={apiKey}
@@ -335,15 +336,15 @@ function FolderScreen({
 }) {
   return (
     <ScreenShell>
-      <span className="bob-onboard__eyebrow">Step 4 of 4</span>
-      <h1 className="bob-onboard__title">Where your notes live</h1>
-      <p className="bob-onboard__lead">
+      <span className="onboard__eyebrow">Step 4 of 4</span>
+      <h1 className="onboard__title">Where your notes live</h1>
+      <p className="onboard__lead">
         Compose can set up a notes folder for you, or you can use one you already have. Either way
         your files stay on your computer, and you can add more folders later.
       </p>
 
-      <div className="bob-onboard__form">
-        <div className="bob-onboard__folder-actions">
+      <div className="onboard__form">
+        <div className="onboard__folder-actions">
           <Button
             kind="primary"
             onClick={onStarter}
@@ -379,13 +380,13 @@ function FolderScreen({
 }
 
 function ScreenShell({ children }: { children: ReactNode }) {
-  return <section className="bob-onboard__screen">{children}</section>;
+  return <section className="onboard__screen">{children}</section>;
 }
 
 function ValueProp({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
   return (
-    <div className="bob-onboard__value">
-      <span className="bob-onboard__value-icon" aria-hidden="true">
+    <div className="onboard__value">
+      <span className="onboard__value-icon" aria-hidden="true">
         {icon}
       </span>
       <h3>{title}</h3>
@@ -410,7 +411,7 @@ function NavRow({
   hideNext?: boolean;
 }) {
   return (
-    <div className="bob-onboard__nav">
+    <div className="onboard__nav">
       {onBack ? (
         <Button kind="ghost" onClick={onBack} renderIcon={ArrowLeft} size="md">
           Back
@@ -436,14 +437,14 @@ function NavRow({
 
 function ProgressDots({ count, index }: { count: number; index: number }) {
   return (
-    <div className="bob-onboard__dots" role="progressbar" aria-valuemin={1} aria-valuemax={count} aria-valuenow={index + 1}>
+    <div className="onboard__dots" role="progressbar" aria-valuemin={1} aria-valuemax={count} aria-valuenow={index + 1}>
       {Array.from({ length: count }).map((_, i) => (
         <span
           key={i}
           className={[
-            "bob-onboard__dot",
-            i === index ? "bob-onboard__dot--current" : "",
-            i < index ? "bob-onboard__dot--past" : "",
+            "onboard__dot",
+            i === index ? "onboard__dot--current" : "",
+            i < index ? "onboard__dot--past" : "",
           ]
             .filter(Boolean)
             .join(" ")}

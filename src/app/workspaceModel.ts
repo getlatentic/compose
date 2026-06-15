@@ -8,12 +8,11 @@ import {
   type SourceRange,
   type WorkspaceCommentThread,
 } from "../features/comments/commentModel";
-import type { ToolKind } from "../lib/ipc/bobClient";
+import type { ToolKind } from "../lib/ipc/harnessClient";
 import type {
   ConversationMessageRecord,
   ConversationSnapshot,
 } from "../lib/ipc/conversationsClient";
-import type { WorkspaceIndexSnapshot } from "../lib/ipc/indexClient";
 import type { BobInstallStatus } from "../lib/ipc/settingsClient";
 
 export type {
@@ -285,7 +284,7 @@ export interface WorkspaceAppliedChange {
   previewOmitted: boolean;
 }
 
-export interface BobSuggestedEditInput {
+export interface SuggestedEditInput {
   filePath: string;
   range: SourceRange;
   replacement: string;
@@ -312,18 +311,28 @@ export interface WorkspaceFileBuffer {
 }
 
 export type WorkspaceScanState = "idle" | "loading" | "ready" | "failed";
-export type WorkspaceIndexState = "idle" | "indexing" | "ready" | "failed";
 
-export interface BobWorkspace {
+export type WorkspaceKind = "real" | "loose";
+
+export const LOOSE_WORKSPACE_ID = "compose:loose";
+export const LOOSE_WORKSPACE_NAME = "Open files";
+
+export interface Workspace {
   activeFilePath: string;
   chatThread: WorkspaceChatThread;
   comments: WorkspaceCommentThread[];
   fileContents: Record<string, WorkspaceFileBuffer>;
   files: WorkspaceFileEntry[];
   id: string;
-  indexError: string | null;
-  indexSnapshot: WorkspaceIndexSnapshot | null;
-  indexState: WorkspaceIndexState;
+  /**
+   * `"real"` workspaces have a folder root at `path`; file entries hold
+   * paths relative to that root. `"loose"` is a singleton pseudo-workspace
+   * for files opened individually (Finder Open-With, `compose <file>`,
+   * etc.) — `path` is `""` and file entries' `relativePath` field stores
+   * the **absolute** path. The chat / comments / conversation surfaces
+   * work identically on both.
+   */
+  kind: WorkspaceKind;
   lastOpenedAt?: number;
   lastSavedAt: Date | null;
   name: string;
@@ -367,7 +376,7 @@ export type FsEventEffect =
   | { type: "rescan" }
   | { type: "noop" };
 
-export function isSetupComplete(authStatus: BobAuthStatus, workspaces: BobWorkspace[]) {
+export function isSetupComplete(authStatus: BobAuthStatus, workspaces: Workspace[]) {
   return authStatus.configured && workspaces.length > 0;
 }
 
@@ -393,7 +402,7 @@ export function bobRuntimeReadiness(
   return { message: null, ready: true };
 }
 
-export function createWorkspaceFromPath(path: string): BobWorkspace {
+export function createWorkspaceFromPath(path: string): Workspace {
   const normalizedPath = normalizeWorkspacePath(path);
 
   return {
@@ -413,9 +422,7 @@ export function createWorkspaceFromPath(path: string): BobWorkspace {
     fileContents: {},
     files: [],
     id: createWorkspaceId(normalizedPath),
-    indexError: null,
-    indexSnapshot: null,
-    indexState: "idle",
+    kind: "real",
     lastSavedAt: null,
     name: workspaceNameFromPath(normalizedPath),
     openFilePaths: [],
@@ -425,7 +432,41 @@ export function createWorkspaceFromPath(path: string): BobWorkspace {
   };
 }
 
-export function createWorkspaceFromRecord(record: WorkspaceRecord): BobWorkspace {
+/**
+ * Build the singleton "Open files" workspace that houses files opened
+ * individually (Finder Open-With, `compose <file>`). Files added later
+ * to this workspace carry **absolute** paths in their `relativePath`
+ * field — every IO path that consumes a workspace branches on `kind`.
+ */
+export function createLooseWorkspace(): Workspace {
+  return {
+    activeFilePath: "",
+    chatThread: {
+      activeLlmThreadId: null,
+      activeRunId: null,
+      conversationId: null,
+      contextItems: [],
+      messages: [],
+      preparedCommand: null,
+      prompt: "",
+      runError: null,
+      runState: "idle",
+    },
+    comments: [],
+    fileContents: {},
+    files: [],
+    id: LOOSE_WORKSPACE_ID,
+    kind: "loose",
+    lastSavedAt: null,
+    name: LOOSE_WORKSPACE_NAME,
+    openFilePaths: [],
+    path: "",
+    scanError: null,
+    scanState: "idle",
+  };
+}
+
+export function createWorkspaceFromRecord(record: WorkspaceRecord): Workspace {
   const workspace = createWorkspaceFromPath(record.path);
   const restoredOpen = record.tabs?.openFilePaths ?? [];
   const restoredActive = record.tabs?.activeFilePath ?? "";
@@ -442,7 +483,7 @@ export function createWorkspaceFromRecord(record: WorkspaceRecord): BobWorkspace
 }
 
 export function hydrateWorkspaceRecords(
-  existingWorkspaces: BobWorkspace[],
+  existingWorkspaces: Workspace[],
   records: WorkspaceRecord[],
 ) {
   return records.map((record) => {
@@ -483,7 +524,7 @@ export function setCurrentTabContext(
   };
 }
 
-export function openWorkspaceFile(workspace: BobWorkspace, filePath: string): BobWorkspace {
+export function openWorkspaceFile(workspace: Workspace, filePath: string): Workspace {
   const openFilePaths = workspace.openFilePaths.includes(filePath)
     ? workspace.openFilePaths
     : [...workspace.openFilePaths, filePath];
@@ -496,7 +537,7 @@ export function openWorkspaceFile(workspace: BobWorkspace, filePath: string): Bo
   };
 }
 
-export function closeWorkspaceFileTab(workspace: BobWorkspace, filePath: string): BobWorkspace {
+export function closeWorkspaceFileTab(workspace: Workspace, filePath: string): Workspace {
   const closingIndex = workspace.openFilePaths.indexOf(filePath);
   if (closingIndex === -1) {
     return workspace;
@@ -521,9 +562,9 @@ export function closeWorkspaceFileTab(workspace: BobWorkspace, filePath: string)
 }
 
 export function applyScanResult(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   entries: WorkspaceFileEntry[],
-): BobWorkspace {
+): Workspace {
   const knownPaths = new Set(entries.map((entry) => entry.relativePath));
   const openFilePaths = workspace.openFilePaths.filter((path) => knownPaths.has(path));
   const fileContents: Record<string, WorkspaceFileBuffer> = {};
@@ -552,10 +593,10 @@ export function applyScanResult(
 }
 
 export function applyFileBuffer(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
   buffer: { content: string; lastModifiedMs: number },
-): BobWorkspace {
+): Workspace {
   return {
     ...workspace,
     fileContents: {
@@ -571,48 +612,15 @@ export function applyFileBuffer(
   };
 }
 
-export function markWorkspaceIndexing(workspace: BobWorkspace): BobWorkspace {
-  return {
-    ...workspace,
-    indexError: null,
-    indexState: "indexing",
-  };
-}
 
-export function applyWorkspaceIndexSnapshot(
-  workspace: BobWorkspace,
-  snapshot: WorkspaceIndexSnapshot,
-): BobWorkspace {
-  if (snapshot.workspaceId !== workspace.id) {
-    return workspace;
-  }
-  return {
-    ...workspace,
-    indexError: null,
-    indexSnapshot: snapshot,
-    indexState: "ready",
-  };
-}
-
-export function markWorkspaceIndexFailed(
-  workspace: BobWorkspace,
-  errorMessage: string,
-): BobWorkspace {
-  return {
-    ...workspace,
-    indexError: errorMessage,
-    indexState: "failed",
-  };
-}
-
-export function commentsForFile(workspace: BobWorkspace, filePath: string) {
+export function commentsForFile(workspace: Workspace, filePath: string) {
   return workspace.comments.filter(
     (comment) => comment.filePath === filePath && comment.status === "open",
   );
 }
 
 export function addWorkspaceComment(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   input: {
     body: string;
     filePath: string;
@@ -620,7 +628,7 @@ export function addWorkspaceComment(
     selectedText: string;
     timestamp: number;
   },
-): BobWorkspace {
+): Workspace {
   const buffer = workspace.fileContents[input.filePath];
   if (!buffer || !input.body.trim() || input.range.start >= input.range.end) {
     return workspace;
@@ -664,12 +672,12 @@ export function addWorkspaceComment(
 }
 
 export function applyWorkspaceDocumentChanges(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
   content: string,
   changes: DocumentTextChange[],
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   const next = markBufferDirty(workspace, relativePath, content, changes);
   if (next === workspace || changes.length === 0) {
     return next;
@@ -682,13 +690,13 @@ export function applyWorkspaceDocumentChanges(
 }
 
 export function prepareWorkspaceSuggestionDrafts(
-  workspace: BobWorkspace,
-  edits: BobSuggestedEditInput[],
+  workspace: Workspace,
+  edits: SuggestedEditInput[],
 ): WorkspaceSuggestionPreparation {
   const drafts: WorkspaceSuggestionDraft[] = [];
   let rejectedCount = 0;
   // One mapper per file content reused across edits targeting the same
-  // buffer — a batch of suggestions from one Bob turn typically hits the
+  // buffer — a batch of suggestions from one harness turn typically hits the
   // same document many times.
   const mappersByFilePath = new Map<string, PositionMapper>();
 
@@ -735,11 +743,11 @@ export function prepareWorkspaceSuggestionDrafts(
 }
 
 export function moveWorkspaceComments(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   fromFilePath: string,
   toFilePath: string,
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   return {
     ...workspace,
     comments: moveCommentsToFile(workspace.comments, fromFilePath, toFilePath, timestamp),
@@ -748,11 +756,11 @@ export function moveWorkspaceComments(
 
 /** Flip a comment open ↔ resolved (the "done" state shown in the panel). */
 export function setWorkspaceCommentStatus(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   commentId: string,
   status: "open" | "resolved",
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   return {
     ...workspace,
     comments: workspace.comments.map((comment) =>
@@ -845,11 +853,11 @@ export function createLlmContextSnapshots(
 }
 
 export function markBufferDirty(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
   content: string,
   changes: DocumentTextChange[] = [],
-): BobWorkspace {
+): Workspace {
   const existing = workspace.fileContents[relativePath];
   if (!existing) {
     return workspace;
@@ -873,10 +881,10 @@ export function markBufferDirty(
 }
 
 export function markBufferSaved(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
   lastModifiedMs: number,
-): BobWorkspace {
+): Workspace {
   const existing = workspace.fileContents[relativePath];
   if (!existing) {
     return workspace;
@@ -904,9 +912,9 @@ export function markBufferSaved(
 }
 
 export function markBufferConflict(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
-): BobWorkspace {
+): Workspace {
   const existing = workspace.fileContents[relativePath];
   if (!existing) {
     return workspace;
@@ -921,9 +929,9 @@ export function markBufferConflict(
 }
 
 export function dismissBufferConflict(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
-): BobWorkspace {
+): Workspace {
   const existing = workspace.fileContents[relativePath];
   if (!existing) {
     return workspace;
@@ -938,7 +946,7 @@ export function dismissBufferConflict(
 }
 
 export function applyFsEvent(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   event: WorkspaceFsEvent,
   /**
    * Whether this disk change is attributable to a just-run agent (a
@@ -949,12 +957,25 @@ export function applyFsEvent(
    * history. A genuine external edit (no agent run in flight) still conflicts.
    */
   agentEdit = false,
-): { workspace: BobWorkspace; effect: FsEventEffect } {
+): { workspace: Workspace; effect: FsEventEffect } {
   if (event.kind === "created" || event.kind === "removed") {
     return { workspace, effect: { type: "rescan" } };
   }
 
   const buffer = workspace.fileContents[event.relativePath];
+
+  // Echo of our OWN write (autosave / manual save), or an older event:
+  // the open buffer's mtime is already >= the event's. Return the
+  // workspace UNCHANGED. We previously rebuilt `files` here to refresh the
+  // entry's mtime, but that churns the `files` array reference on every
+  // autosave-driven watcher echo and re-renders the entire file tree
+  // (incl. each row's Carbon OverflowMenu) for nothing — confirmed via
+  // react-scan. Conflict detection keys off the *buffer's* mtime, not the
+  // file-entry's, so skipping the entry-mtime refresh here is safe.
+  if (buffer && event.lastModifiedMs != null && event.lastModifiedMs <= buffer.lastModifiedMs) {
+    return { workspace, effect: { type: "noop" } };
+  }
+
   const updatedFiles = event.lastModifiedMs
     ? workspace.files.map((entry) =>
         entry.relativePath === event.relativePath
@@ -964,13 +985,6 @@ export function applyFsEvent(
     : workspace.files;
 
   if (!buffer) {
-    return {
-      workspace: { ...workspace, files: updatedFiles },
-      effect: { type: "noop" },
-    };
-  }
-
-  if (event.lastModifiedMs != null && event.lastModifiedMs <= buffer.lastModifiedMs) {
     return {
       workspace: { ...workspace, files: updatedFiles },
       effect: { type: "noop" },
@@ -1025,7 +1039,7 @@ export function appendUserChatMessage(
   };
 }
 
-export function startBobRun(
+export function startRun(
   chatThread: WorkspaceChatThread,
   runId: string,
   llmThreadId: string | null = null,
@@ -1039,7 +1053,7 @@ export function startBobRun(
   };
 }
 
-export function markBobRunStreaming(
+export function markRunStreaming(
   chatThread: WorkspaceChatThread,
   runId: string,
 ): WorkspaceChatThread {
@@ -1475,10 +1489,10 @@ function reviewChangeTitle(kind: WorkspaceReviewSuggestionDraft["kind"]): string
 }
 
 export function acceptWorkspaceSuggestion(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   suggestionId: string,
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   const suggestion = findSuggestion(workspace.chatThread, suggestionId);
   if (!suggestion || suggestion.status !== "pending") {
     return workspace;
@@ -1505,7 +1519,7 @@ export function acceptWorkspaceSuggestion(
   if (currentText !== suggestion.originalText) {
     return updateWorkspaceSuggestion(workspace, suggestionId, {
       status: "stale",
-      statusMessage: "Source changed since Bob suggested this edit.",
+      statusMessage: "Source changed since this edit was suggested.",
       updatedAt: timestamp,
     });
   }
@@ -1527,10 +1541,10 @@ export function acceptWorkspaceSuggestion(
 }
 
 export function rejectWorkspaceSuggestion(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   suggestionId: string,
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   const suggestion = findSuggestion(workspace.chatThread, suggestionId);
   if (!suggestion || suggestion.status !== "pending") {
     return workspace;
@@ -1567,16 +1581,16 @@ export function assistantMessageContentForRun(chatThread: WorkspaceChatThread, r
   return message?.content.trim() ?? "";
 }
 
-export interface FinalizeBobRunOptions {
+export interface FinalizeRunOptions {
   cancelled?: boolean;
   errorMessage?: string | null;
   exitCode?: number | null;
 }
 
-export function finalizeBobRun(
+export function finalizeRun(
   chatThread: WorkspaceChatThread,
   runId: string,
-  options: FinalizeBobRunOptions = {},
+  options: FinalizeRunOptions = {},
 ): WorkspaceChatThread {
   if (chatThread.activeRunId !== runId) {
     return chatThread;
@@ -1715,7 +1729,7 @@ function safeParseJson<T>(value: string): T | undefined {
 // which emit the normalized `RunEvent` stream every harness shares.
 // The front-end now consumes already-decoded events (see
 // `handleHarnessRunEvent` in `workspaceStore.ts`) and no longer parses a
-// harness wire format. `BobSuggestedEditInput` stays — it's the
+// harness wire format. `SuggestedEditInput` stays — it's the
 // shape `prepareWorkspaceSuggestionDrafts` consumes.
 
 function findSuggestion(
@@ -1737,12 +1751,12 @@ function findSuggestion(
  * model can't do the I/O itself.
  */
 export function markWorkspaceSuggestion(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   suggestionId: string,
   status: WorkspaceSuggestionStatus,
   statusMessage: string | null,
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   return updateWorkspaceSuggestion(workspace, suggestionId, {
     status,
     statusMessage,
@@ -1751,10 +1765,10 @@ export function markWorkspaceSuggestion(
 }
 
 function updateWorkspaceSuggestion(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   suggestionId: string,
   updates: Pick<WorkspaceDocumentSuggestion, "status" | "statusMessage" | "updatedAt">,
-): BobWorkspace {
+): Workspace {
   return {
     ...workspace,
     chatThread: {

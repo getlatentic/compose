@@ -3,8 +3,9 @@ import {
   useWorkspaceStore,
   type HarnessRunOptions,
 } from "../../app/workspaceStore";
+import { useHarnessStore } from "../../app/store/harnessStore";
 import { sumChatThreadStats } from "../../app/workspaceModel";
-import type { HarnessCapabilities, HarnessInfo } from "../../lib/ipc/bobClient";
+import type { HarnessCapabilities, HarnessInfo } from "../../lib/ipc/harnessClient";
 import { formatCompact } from "../../lib/format/numbers";
 import { FooterMenu, type FooterMenuItem } from "./FooterMenu";
 
@@ -17,7 +18,7 @@ import { FooterMenu, type FooterMenuItem } from "./FooterMenu";
  * {@link FooterMenu} popovers (not Carbon form fields, which shifted the
  * layout). The model selector follows the harness's *capabilities* — shown
  * only when there's something to switch among — exactly like the Settings
- * panel. Renders nothing without a catalog (the browser preview is bob-only).
+ * panel. Renders nothing without a catalog (the browser preview is only).
  *
  * Note: the keyboard hint reads "↵ to send" because the composer sends on
  * plain Enter (Shift+Enter = newline). The mockup's "⌘↵" would require
@@ -66,8 +67,8 @@ export function ChatComposerFooterView({
     harnesses.find((harness) => harness.id === selectedHarnessId)?.displayName ?? selectedHarnessId;
 
   return (
-    <div className="bob-chat-footer">
-      <div className="bob-chat-footer__meta">
+    <div className="chat-footer">
+      <div className="chat-footer__meta">
         <FooterMenu
           label={selectedHarnessName}
           ariaLabel="Assistant"
@@ -78,7 +79,7 @@ export function ChatComposerFooterView({
         />
         {modelItems.length > 0 ? (
           <>
-            <span className="bob-chat-footer__sep" aria-hidden>
+            <span className="chat-footer__sep" aria-hidden>
               /
             </span>
             <FooterMenu
@@ -93,22 +94,22 @@ export function ChatComposerFooterView({
         ) : null}
         {tokenLabel ? (
           <>
-            <span className="bob-chat-footer__dot" aria-hidden>
+            <span className="chat-footer__dot" aria-hidden>
               ·
             </span>
-            <span className="bob-chat-footer__tokens">{tokenLabel}</span>
+            <span className="chat-footer__tokens">{tokenLabel}</span>
           </>
         ) : null}
       </div>
-      <div className="bob-chat-footer__end">
+      <div className="chat-footer__end">
         {showReviewToggle ? (
           <button
             type="button"
             role="switch"
             aria-checked={reviewEdits}
             className={[
-              "bob-chat-footer__review",
-              reviewEdits ? "bob-chat-footer__review--on" : "",
+              "chat-footer__review",
+              reviewEdits ? "chat-footer__review--on" : "",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -120,11 +121,11 @@ export function ChatComposerFooterView({
             }
             onClick={() => onToggleReviewEdits?.(!reviewEdits)}
           >
-            <span className="bob-chat-footer__review-dot" aria-hidden />
+            <span className="chat-footer__review-dot" aria-hidden />
             <span>{reviewEdits ? "Review edits" : "Auto-apply"}</span>
           </button>
         ) : null}
-        <span className="bob-chat-footer__hint">↵ to send</span>
+        <span className="chat-footer__hint">↵ to send</span>
       </div>
     </div>
   );
@@ -155,11 +156,11 @@ function modelItemsFor(caps: HarnessCapabilities, currentModel: string): FooterM
  * stay in lockstep.
  */
 export function ChatComposerFooter({ disabled = false }: { disabled?: boolean }) {
-  const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
-  const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
-  const setSelectedHarness = useWorkspaceStore((state) => state.setSelectedHarness);
-  const harnessOptions = useWorkspaceStore((state) => state.harnessOptions);
-  const setHarnessOptions = useWorkspaceStore((state) => state.setHarnessOptions);
+  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
+  const harnessOptions = useHarnessStore((state) => state.harnessOptions);
+  const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
   const chatThread = useWorkspaceStore((state) => state.activeWorkspace()?.chatThread ?? null);
 
   const caps = harnessCapabilitiesOf(harnessCatalog, selectedHarnessId);

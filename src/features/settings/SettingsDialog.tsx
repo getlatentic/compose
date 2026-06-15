@@ -10,16 +10,16 @@ import { SettingsPanel } from "./SettingsPanel";
  */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   return (
-    <div className="bob-modal-backdrop">
-      <section className="bob-settings-dialog" aria-modal="true" role="dialog">
-        <div className="bob-settings-header">
+    <div className="modal-backdrop">
+      <section className="settings-dialog" aria-modal="true" role="dialog">
+        <div className="settings-header">
           <h2>Settings</h2>
           <button
             type="button"
             onClick={onClose}
             title="Close settings"
             aria-label="Close settings"
-            className="bob-icon-button"
+            className="icon-button"
           >
             <Close size={16} />
           </button>

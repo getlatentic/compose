@@ -1,4 +1,4 @@
-import type { ToolKind } from "../../lib/ipc/bobClient";
+import type { ToolKind } from "../../lib/ipc/harnessClient";
 
 /**
  * Plain-language names for the agent's tools, so a non-technical reader

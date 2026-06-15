@@ -34,10 +34,10 @@ React captures edits, the worker parses Markdown, and inactive blocks render inl
 `,
   },
   {
-    path: "runs/bob-streaming.md",
-    markdown: `# Bob streaming
+    path: "runs/streaming.md",
+    markdown: `# Streaming
 
-Bob responses should stream into the chat panel when the runner is connected. Until then, the UI should never pretend a response exists.
+Assistant responses should stream into the chat panel when the runner is connected. Until then, the UI should never pretend a response exists.
 `,
   },
 ];

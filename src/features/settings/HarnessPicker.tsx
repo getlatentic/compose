@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, InlineNotification, SkeletonText, Tag, Toggle } from "@carbon/react";
-import { useWorkspaceStore } from "../../app/workspaceStore";
+import { useHarnessStore } from "../../app/store/harnessStore";
 import {
   harnessInstall,
   harnessList,
@@ -8,7 +8,7 @@ import {
   harnessReadiness,
   type HarnessInfo,
   type HarnessReadiness,
-} from "../../lib/ipc/bobClient";
+} from "../../lib/ipc/harnessClient";
 
 /**
  * The AI-assistant ("harness") picker.
@@ -47,15 +47,15 @@ function suggestedDefaultId(rows: HarnessRow[]): string | null {
 }
 
 export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefault?: boolean } = {}) {
-  const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
-  const setSelectedHarness = useWorkspaceStore((state) => state.setSelectedHarness);
-  const allowEdits = useWorkspaceStore((state) => state.allowEdits);
-  const setAllowEdits = useWorkspaceStore((state) => state.setAllowEdits);
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
+  const allowEdits = useHarnessStore((state) => state.allowEdits);
+  const setAllowEdits = useHarnessStore((state) => state.setAllowEdits);
   // Re-probe drivers: when the user saves a Bob API key or (re)installs
   // a CLI elsewhere in Settings, the stored status changes and the
   // badges must reflect it without reopening the panel.
-  const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useWorkspaceStore((state) => state.bobInstallStatus);
+  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
+  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
 
   const [rows, setRows] = useState<HarnessRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,8 +180,8 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
   const suggestedId = suggestedDefaultId(rows);
 
   return (
-    <div className="bob-settings-section">
-      <p className="bob-settings-helper">
+    <div className="settings-section">
+      <p className="settings-helper">
         {loading
           ? "Checking your computer for AI assistants you already have…"
           : "Choose which AI Compose works with. You can change this anytime."}
@@ -200,7 +200,7 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
           ))}
         </ul>
       ) : (
-        <ul className="bob-harness-list" style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "0.5rem" }}>
+        <ul className="harness-list" style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "0.5rem" }}>
           {rows.map(({ info, readiness }) => {
             const selected = info.id === selectedHarnessId;
             const ready = readiness?.ready ?? false;
@@ -283,12 +283,12 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
       {installLog.length > 0 ? (
         <pre
           ref={logRef}
-          className="bob-settings-install-log"
+          className="settings-install-log"
           aria-label="Setup progress"
           aria-live="polite"
         >
           {installLog.map((line, i) => (
-            <div key={i} className="bob-settings-install-log__line">
+            <div key={i} className="settings-install-log__line">
               {line}
             </div>
           ))}
@@ -321,7 +321,7 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
           toggled={allowEdits}
           onToggle={(checked) => setAllowEdits(checked)}
         />
-        <p className="bob-settings-helper">
+        <p className="settings-helper">
           Only in your workspace folder — never anywhere else on your computer.{" "}
           {selectedPreviewsEdits
             ? "Proposed edits wait for your approval before they apply."

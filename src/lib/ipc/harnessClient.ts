@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
 
-export type BobChatMode = "plan" | "code" | "advanced" | "ask";
-export type BobApprovalMode = "default" | "auto_edit";
+export type ChatMode = "plan" | "code" | "advanced" | "ask";
+export type ApprovalMode = "default" | "auto_edit";
 /** Harness-neutral reasoning-effort levels (Codex's
  * `model_reasoning_effort`). Mirrors `compose_core::ReasoningEffort`. */
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
@@ -18,8 +18,8 @@ export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 export type EditGuard = "none" | "snapshot" | "clone";
 
 export interface HarnessRunRequest {
-  approvalMode: BobApprovalMode;
-  chatMode: BobChatMode;
+  approvalMode: ApprovalMode;
+  chatMode: ChatMode;
   contextFilePaths?: string[];
   maxCoins: number;
   prompt: string;
@@ -119,12 +119,12 @@ export type HarnessInstallEvent =
 
 /**
  * A raw suggested edit on the wire. Structurally matches the app's
- * `BobSuggestedEditInput` except `title` is omitted (vs `null`) when
+ * `SuggestedEditInput` except `title` is omitted (vs `null`) when
  * absent — the store maps `title ?? null` when handing it to
  * `prepareWorkspaceSuggestionDrafts`. Defined here (not imported from
  * the app layer) so the IPC client stays a leaf with no upward dep.
  */
-export interface BobRunSuggestedEdit {
+export interface HarnessRunSuggestedEdit {
   filePath: string;
   range: { start: number; end: number };
   replacement: string;
@@ -166,7 +166,7 @@ export type HarnessRunEvent =
   | { kind: "toolEnd"; runId: string; toolCallId: string; ok: boolean; output: string | null }
   /** Harness session identity (bob's `init`) → trace. */
   | { kind: "session"; runId: string; sessionId: string; model: string | null }
-  | { kind: "suggestedEdits"; runId: string; edits: BobRunSuggestedEdit[] }
+  | { kind: "suggestedEdits"; runId: string; edits: HarnessRunSuggestedEdit[] }
   | { kind: "activity"; runId: string; message: string }
   /** Terminal usage stats (bob's `result.stats`) → stats float. */
   | {

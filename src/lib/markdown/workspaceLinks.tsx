@@ -64,9 +64,9 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
   };
 
   const className = internalPath
-    ? "bob-internal-link"
+    ? "internal-link"
     : isWikilink
-      ? "bob-wikilink bob-wikilink--broken"
+      ? "wikilink wikilink--broken"
       : undefined;
 
   return (

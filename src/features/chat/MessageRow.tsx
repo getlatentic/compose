@@ -92,16 +92,16 @@ export function MessageRow({
   return (
     <article
       className={[
-        "bob-message-row",
-        isAssistant ? "bob-message-row--assistant" : "bob-message-row--user",
+        "message-row",
+        isAssistant ? "message-row--assistant" : "message-row--user",
       ].join(" ")}
     >
       {isAssistant && message.activity ? (
-        <div className="bob-message-activity">{message.activity}</div>
+        <div className="message-activity">{message.activity}</div>
       ) : null}
 
       {fileOps.length ? (
-        <div className="bob-message-fileops">
+        <div className="message-fileops">
           {fileOps.map((tool) => (
             <FileOpCard key={tool.id} tool={tool} />
           ))}
@@ -110,15 +110,15 @@ export function MessageRow({
 
       {message.content ? (
         isAssistant ? (
-          <div className="bob-message-body">
+          <div className="message-body">
             <MarkdownMessage content={message.content} />
           </div>
         ) : message.excerpt ? (
-          <div className="bob-message-body bob-message-body--user">
+          <div className="message-body message-body--user">
             <ExcerptChip excerpt={message.excerpt} />
           </div>
         ) : (
-          <div className="bob-message-body bob-message-body--user">{message.content}</div>
+          <div className="message-body message-body--user">{message.content}</div>
         )
       ) : message.streaming && !opRunning ? (
         // No answer yet — the transient status (derived from the trace) takes
@@ -144,12 +144,12 @@ export function MessageRow({
       ) : null}
 
       {showMeta && isAssistant ? (
-        <div className="bob-message-actions" data-hover-reveal>
-          <div className="bob-message-actions__left">
+        <div className="message-actions" data-hover-reveal>
+          <div className="message-actions__left">
             {message.content ? (
               <button
                 type="button"
-                className="bob-message-actions__btn"
+                className="message-actions__btn"
                 onClick={handleCopy}
                 aria-label={justCopied ? "Copied" : "Copy message"}
                 title={justCopied ? "Copied" : "Copy"}
@@ -164,7 +164,7 @@ export function MessageRow({
             {callbacks.onRegenerate ? (
               <button
                 type="button"
-                className="bob-message-actions__btn"
+                className="message-actions__btn"
                 onClick={() => callbacks.onRegenerate?.()}
                 aria-label="Regenerate response"
                 title="Regenerate"
@@ -175,16 +175,16 @@ export function MessageRow({
             {hasTrace ? (
               <button
                 type="button"
-                className="bob-message-trace__toggle"
+                className="message-trace__toggle"
                 aria-expanded={traceOpen}
                 onClick={() => setTraceOpen((open) => !open)}
               >
-                <ChevronDown size={14} className="bob-message-trace__chevron" aria-hidden />
+                <ChevronDown size={14} className="message-trace__chevron" aria-hidden />
                 <span>{traceOpen ? "Hide work" : "Show work"}</span>
               </button>
             ) : null}
           </div>
-          {statsLabel ? <span className="bob-message-stats">{statsLabel}</span> : null}
+          {statsLabel ? <span className="message-stats">{statsLabel}</span> : null}
         </div>
       ) : null}
 
@@ -196,16 +196,16 @@ export function MessageRow({
 /** A commented passage sent to chat — file + line:col + the excerpt + the note. */
 function ExcerptChip({ excerpt }: { excerpt: ChatExcerptRef }) {
   return (
-    <div className="bob-excerpt-chip">
-      <div className="bob-excerpt-chip__head">
+    <div className="excerpt-chip">
+      <div className="excerpt-chip__head">
         <Document size={14} aria-hidden />
-        <span className="bob-excerpt-chip__file">{excerpt.filePath}</span>
-        <span className="bob-excerpt-chip__loc">
+        <span className="excerpt-chip__file">{excerpt.filePath}</span>
+        <span className="excerpt-chip__loc">
           L{excerpt.line}:C{excerpt.column}
         </span>
       </div>
-      <blockquote className="bob-excerpt-chip__text">{excerpt.text}</blockquote>
-      {excerpt.note ? <p className="bob-excerpt-chip__note">{excerpt.note}</p> : null}
+      <blockquote className="excerpt-chip__text">{excerpt.text}</blockquote>
+      {excerpt.note ? <p className="excerpt-chip__note">{excerpt.note}</p> : null}
     </div>
   );
 }
@@ -221,8 +221,8 @@ const STATUS_DWELL_MS = 450;
 function StatusIndicator({ trace }: { trace: TraceEntry[] | undefined }) {
   const status = useDwellValue(liveStatus(trace), STATUS_DWELL_MS);
   return (
-    <div className="bob-message-status" aria-live="polite">
-      <span className="bob-message-status__dot" aria-hidden />
+    <div className="message-status" aria-live="polite">
+      <span className="message-status__dot" aria-hidden />
       <span>{status}</span>
     </div>
   );

@@ -11,7 +11,7 @@ import { relativeTime } from "./conversationView";
  * sidebar of 50 chats doesn't look like a wall of controls. Clicking the body
  * opens the conversation.
  *
- * The visibility swap is CSS-only (see `.bob-conv-row` in global.scss); the
+ * The visibility swap is CSS-only (see `.conv-row` in global.scss); the
  * markup is just title + time + actions, all always-rendered.
  */
 export function ConversationListRow({
@@ -26,18 +26,18 @@ export function ConversationListRow({
   actions: ConversationActions;
 }) {
   return (
-    <li className="bob-conv-row">
+    <li className="conv-row">
       <button
         type="button"
-        className="bob-conv-row__main"
+        className="conv-row__main"
         onClick={() => onOpen(conversation.conversationId)}
       >
-        <span className="bob-conv-row__head">
-          <span className="bob-conv-row__title">{conversation.title}</span>
-          <span className="bob-conv-row__time">{relativeTime(conversation.updatedAt, now)}</span>
+        <span className="conv-row__head">
+          <span className="conv-row__title">{conversation.title}</span>
+          <span className="conv-row__time">{relativeTime(conversation.updatedAt, now)}</span>
         </span>
       </button>
-      <span className="bob-conv-row__actions">
+      <span className="conv-row__actions">
         <ConversationActionsMenu archived={conversation.archived} actions={actions} align="end" />
       </span>
     </li>

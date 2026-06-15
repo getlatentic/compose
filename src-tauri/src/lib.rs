@@ -5,21 +5,25 @@ pub mod export;
 pub mod files;
 pub mod index;
 pub mod logging;
+mod open_with;
 pub mod review;
 mod settings;
 mod workspace;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager, RunEvent};
+
+use crate::open_with::PendingOpenUrls;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(workspace::WorkspaceRegistry::default())
         .manage(db::MetadataStore::default())
         .manage(files::watcher::WatcherManager::default())
         .manage(bob::runner::BobRunnerState::default())
         .manage(review::ReviewSessionStore::default())
         .manage(index::WorkspaceIndexStore::default())
+        .manage(PendingOpenUrls::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -60,6 +64,19 @@ pub fn run() {
                 let metadata = sweep_handle.state::<db::MetadataStore>();
                 files::trash_sweep::run_startup_trash_sweep(&metadata);
             });
+            // Open Safari Web Inspector on launch when this build was made
+            // with `COMPOSE_DEVTOOLS=1 pnpm tauri build`. `option_env!` evaluates
+            // at *compile time*, so a normal release build never opens the
+            // inspector — there's no runtime flag a curious user could flip.
+            #[cfg(debug_assertions)]
+            let want_devtools = true;
+            #[cfg(not(debug_assertions))]
+            let want_devtools = option_env!("COMPOSE_DEVTOOLS").is_some();
+            if want_devtools {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    window.open_devtools();
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -118,7 +135,29 @@ pub fn run() {
             export::workspace_export_html,
             logging::report_client_error,
             logging::open_error_log,
+            open_with::drain_pending_open_urls,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let RunEvent::Opened { urls } = event {
+            let pending = app_handle.state::<PendingOpenUrls>();
+            for url in urls {
+                let Some(path) = url
+                    .to_file_path()
+                    .ok()
+                    .and_then(|p| p.to_str().map(String::from))
+                else {
+                    continue;
+                };
+                // Buffer first so a frontend that mounts later can drain it.
+                pending.push(path.clone());
+                // Best-effort live emit for the warm-start case (Compose
+                // already running). The cold-start case is covered by the
+                // buffer + drain.
+                let _ = app_handle.emit("compose:open-external-file", path);
+            }
+        }
+    });
 }

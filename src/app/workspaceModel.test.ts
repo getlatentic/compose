@@ -28,10 +28,10 @@ import {
   createWorkspaceFromPath,
   createWorkspaceFromRecord,
   dismissBufferConflict,
-  finalizeBobRun,
+  finalizeRun,
   hydrateWorkspaceRecords,
   isSetupComplete,
-  markBobRunStreaming,
+  markRunStreaming,
   markBufferConflict,
   markBufferDirty,
   markBufferSaved,
@@ -41,8 +41,8 @@ import {
   setAssistantActivity,
   setCommentChatContext,
   setCurrentTabContext,
-  startBobRun,
-  type BobWorkspace,
+  startRun,
+  type Workspace,
   type WorkspaceFileEntry,
 } from "./workspaceModel";
 
@@ -50,7 +50,7 @@ function makeEntry(relativePath: string, lastModifiedMs = 1_000): WorkspaceFileE
   return { relativePath, lastModifiedMs, sizeBytes: 16 };
 }
 
-function workspaceWithFiles(path: string, files: string[]): BobWorkspace {
+function workspaceWithFiles(path: string, files: string[]): Workspace {
   return applyScanResult(
     createWorkspaceFromPath(path),
     files.map((file) => makeEntry(file)),
@@ -227,8 +227,8 @@ describe("workspace model", () => {
     const runId = "run-1";
     const llmThreadId = "llm-thread-1";
     const withUser = appendUserChatMessage(workspace.chatThread, "Audit this context", null, llmThreadId);
-    const started = startBobRun(withUser, runId, llmThreadId);
-    const streaming = markBobRunStreaming(started, runId);
+    const started = startRun(withUser, runId, llmThreadId);
+    const streaming = markRunStreaming(started, runId);
 
     expect(streaming.messages[0]).toMatchObject({
       content: "Audit this context",
@@ -426,16 +426,16 @@ describe("workspace model", () => {
     expect(merged[0]).toBe(populated);
   });
 
-  it("startBobRun → markBobRunStreaming → appendAssistantText builds a streaming reply", () => {
+  it("startRun → markRunStreaming → appendAssistantText builds a streaming reply", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
     const t1 = appendUserChatMessage(workspace.chatThread, "Hi Bob", null);
-    const t2 = startBobRun(t1, runId, "llm-thread-1");
+    const t2 = startRun(t1, runId, "llm-thread-1");
     expect(t2.runState).toBe("starting");
     expect(t2.activeRunId).toBe(runId);
     expect(t2.activeLlmThreadId).toBe("llm-thread-1");
 
-    const t3 = markBobRunStreaming(t2, runId);
+    const t3 = markRunStreaming(t2, runId);
     expect(t3.runState).toBe("streaming");
     expect(t3.messages[t3.messages.length - 1]?.role).toBe("assistant");
     expect(t3.messages[t3.messages.length - 1]?.streaming).toBe(true);
@@ -445,15 +445,15 @@ describe("workspace model", () => {
     expect(assistantMessageContentForRun(t4, runId)).toBe("Hello world");
   });
 
-  it("finalizeBobRun marks success and clears the streaming flag", () => {
+  it("finalizeRun marks success and clears the streaming flag", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
     const streaming = appendAssistantText(
-      markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId),
+      markRunStreaming(startRun(workspace.chatThread, runId), runId),
       runId,
       "done",
     );
-    const finalized = finalizeBobRun(streaming, runId, { exitCode: 0 });
+    const finalized = finalizeRun(streaming, runId, { exitCode: 0 });
     expect(finalized.runState).toBe("idle");
     expect(finalized.activeRunId).toBeNull();
     expect(finalized.activeLlmThreadId).toBeNull();
@@ -461,26 +461,26 @@ describe("workspace model", () => {
     expect(finalized.runError).toBeNull();
   });
 
-  it("finalizeBobRun surfaces a runError on non-zero exit", () => {
+  it("finalizeRun surfaces a runError on non-zero exit", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
 
-    const failed = finalizeBobRun(streaming, runId, { exitCode: 2 });
+    const failed = finalizeRun(streaming, runId, { exitCode: 2 });
     expect(failed.runState).toBe("error");
     expect(failed.runError).toContain("2");
   });
 
-  it("finalizeBobRun surfaces an in-band errorMessage as the runError", () => {
+  it("finalizeRun surfaces an in-band errorMessage as the runError", () => {
     // The path a failing codex/claude run takes: a ChatEvent::Error (now
     // produced by agent-harness 0.3.0 from codex's turn.failed/error) →
     // finalize({ errorMessage }). The message must reach runError + the
     // assistant trace, not vanish — the run is shown as errored, not silent.
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
 
-    const failed = finalizeBobRun(streaming, runId, { errorMessage: "quota exceeded" });
+    const failed = finalizeRun(streaming, runId, { errorMessage: "quota exceeded" });
     expect(failed.runState).toBe("error");
     expect(failed.runError).toBe("quota exceeded");
     expect(failed.activeRunId).toBeNull();
@@ -492,7 +492,7 @@ describe("workspace model", () => {
   it("setAssistantActivity attaches a status line to the latest assistant message", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
 
     const annotated = setAssistantActivity(streaming, runId, "Reading notes/a.md");
     expect(annotated.messages[annotated.messages.length - 1]?.activity).toBe("Reading notes/a.md");
@@ -501,7 +501,7 @@ describe("workspace model", () => {
   it("concatenates narration deltas into one ordered trace entry, never the answer", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
 
     // Two deltas of the same narration message concatenate into one entry.
     const t1 = appendAssistantNotice(streaming, runId, "I'll read ");
@@ -523,7 +523,7 @@ describe("workspace model", () => {
     // trace step (which would blank the live status line).
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    let thread = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    let thread = markRunStreaming(startRun(workspace.chatThread, runId), runId);
     thread = appendAssistantNotice(thread, runId, "Reading the notes.");
     thread = startAssistantToolCall(thread, runId, "t1", "read_file", "read", "{}");
     thread = endAssistantToolCall(thread, runId, "t1", true, "ok");
@@ -539,7 +539,7 @@ describe("workspace model", () => {
   it("builds an ordered trace: thinking → notice → tool, with tool input/output", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    let thread = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    let thread = markRunStreaming(startRun(workspace.chatThread, runId), runId);
     thread = appendAssistantThinking(thread, runId, "Let me ");
     thread = appendAssistantThinking(thread, runId, "look.");
     thread = appendAssistantNotice(thread, runId, "Reading the notes.");
@@ -565,14 +565,14 @@ describe("workspace model", () => {
     ]);
 
     // The trace survives finalize.
-    const finalized = finalizeBobRun(thread, runId, { exitCode: 0 });
+    const finalized = finalizeRun(thread, runId, { exitCode: 0 });
     expect(finalized.messages[finalized.messages.length - 1]?.trace).toHaveLength(3);
   });
 
   it("records session id and usage stats on the assistant message", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
     const withSession = setAssistantSession(streaming, runId, "session-abc");
     const withStats = setAssistantStats(withSession, runId, {
       totalTokens: 1234,
@@ -591,7 +591,7 @@ describe("workspace model", () => {
       { content: "# Old title\n", lastModifiedMs: 1_000 },
     );
     const runId = "run-1";
-    const started = startBobRun(
+    const started = startRun(
       appendUserChatMessage(workspace.chatThread, "Improve the title", null),
       runId,
     );
@@ -631,7 +631,7 @@ describe("workspace model", () => {
       { content: "# Old title\n", lastModifiedMs: 1_000 },
     );
     const runId = "run-1";
-    const started = startBobRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
+    const started = startRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
     const { drafts } = prepareWorkspaceSuggestionDrafts(base, [
       {
         filePath: "a.md",
@@ -665,7 +665,7 @@ describe("workspace model", () => {
       { content: "# Old title\n", lastModifiedMs: 1_000 },
     );
     const runId = "run-1";
-    const started = startBobRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
+    const started = startRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
     const { drafts } = prepareWorkspaceSuggestionDrafts(base, [
       {
         filePath: "a.md",
@@ -685,7 +685,7 @@ describe("workspace model", () => {
     expect(accepted.fileContents["a.md"].content).toBe("# Changed\n");
     expect(accepted.chatThread.messages[1].suggestions?.[0]).toMatchObject({
       status: "stale",
-      statusMessage: "Source changed since Bob suggested this edit.",
+      statusMessage: "Source changed since this edit was suggested.",
     });
   });
 
@@ -696,7 +696,7 @@ describe("workspace model", () => {
       { content: "# Old title\n", lastModifiedMs: 1_000 },
     );
     const runId = "run-1";
-    const started = startBobRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
+    const started = startRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
     const { drafts } = prepareWorkspaceSuggestionDrafts(base, [
       {
         filePath: "a.md",
@@ -723,7 +723,7 @@ describe("workspace model", () => {
     const base = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
     const started = appendAssistantText(
-      startBobRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
+      startRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
       runId,
       "Done.",
     );
@@ -780,7 +780,7 @@ describe("workspace model", () => {
     const base = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
     const started = appendAssistantText(
-      startBobRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
+      startRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
       runId,
       "Done.",
     );
@@ -824,7 +824,7 @@ describe("workspace model", () => {
     const runId = "run-1";
     const chatThread = appendReviewChangeSuggestions(
       appendAssistantText(
-        startBobRun(appendUserChatMessage(base.chatThread, "x", null), runId),
+        startRun(appendUserChatMessage(base.chatThread, "x", null), runId),
         runId,
         "Done.",
       ),
@@ -875,8 +875,8 @@ describe("workspace model", () => {
   it("serialize → hydrate round-trips content, trace, and stats", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    let thread = markBobRunStreaming(
-      startBobRun(appendUserChatMessage(workspace.chatThread, "what is this about?", null), runId),
+    let thread = markRunStreaming(
+      startRun(appendUserChatMessage(workspace.chatThread, "what is this about?", null), runId),
       runId,
     );
     thread = appendAssistantThinking(thread, runId, "Let me look.");
@@ -884,7 +884,7 @@ describe("workspace model", () => {
     thread = endAssistantToolCall(thread, runId, "t1", true, "ok: 10 lines");
     thread = appendAssistantText(thread, runId, "It is a relocation plan.");
     thread = setAssistantStats(thread, runId, { totalTokens: 21956, coins: 0.05 });
-    thread = finalizeBobRun(thread, runId, { exitCode: 0 });
+    thread = finalizeRun(thread, runId, { exitCode: 0 });
     thread = { ...thread, conversationId: "conv-1" };
 
     const records = serializeChatMessages(thread);
@@ -929,10 +929,10 @@ describe("workspace model", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
     const withContext = setCurrentTabContext(workspace.chatThread, workspace.id, "a.md");
     const runId = "run-1";
-    const used = finalizeBobRun(
+    const used = finalizeRun(
       appendAssistantText(
-        markBobRunStreaming(
-          startBobRun(appendUserChatMessage(withContext, "hi", null), runId),
+        markRunStreaming(
+          startRun(appendUserChatMessage(withContext, "hi", null), runId),
           runId,
         ),
         runId,
@@ -952,13 +952,13 @@ describe("workspace model", () => {
   it("createPromptWithContext replays prior request/answer turns, excludes trace", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    let thread = markBobRunStreaming(
-      startBobRun(appendUserChatMessage(workspace.chatThread, "first question", null), runId),
+    let thread = markRunStreaming(
+      startRun(appendUserChatMessage(workspace.chatThread, "first question", null), runId),
       runId,
     );
     thread = appendAssistantThinking(thread, runId, "secret reasoning");
     thread = appendAssistantText(thread, runId, "first answer");
-    thread = finalizeBobRun(thread, runId, { exitCode: 0 });
+    thread = finalizeRun(thread, runId, { exitCode: 0 });
 
     const prompt = createPromptWithContext("second question", [], thread.messages);
     expect(prompt).toContain("Conversation so far:");

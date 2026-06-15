@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runHarnessStream } from "../lib/ipc/bobClient";
+import { runHarnessStream } from "../lib/ipc/harnessClient";
 import { recordLlmThread } from "../lib/ipc/llmContextClient";
 import { checkBobInstall, getBobAuthStatus } from "../lib/ipc/settingsClient";
 import {
@@ -9,7 +9,10 @@ import {
   type ConversationMessageRecord,
 } from "../lib/ipc/conversationsClient";
 import { editGuardFor, reviewChangeToDraft, useWorkspaceStore } from "./workspaceStore";
-import type { HarnessCapabilities } from "../lib/ipc/bobClient";
+import { useHarnessStore } from "./store/harnessStore";
+import { useUiStore } from "./store/uiStore";
+import { useToastStore } from "../features/toast/toastStore";
+import type { HarnessCapabilities } from "../lib/ipc/harnessClient";
 import { FileConflictError, readFile, writeFile } from "../lib/ipc/filesClient";
 
 vi.mock("../lib/ipc/filesClient", () => ({
@@ -48,7 +51,7 @@ vi.mock("../lib/ipc/workspaceClient", () => ({
   saveWorkspaceTabs: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock("../lib/ipc/bobClient", () => ({
+vi.mock("../lib/ipc/harnessClient", () => ({
   cancelHarnessRun: vi.fn(),
   runHarnessStream: vi.fn(),
   subscribeHarnessRun: vi.fn(),
@@ -62,18 +65,19 @@ describe("workspace store", () => {
     _resetFallbackConversationsForTests();
     useWorkspaceStore.setState({
       activeWorkspaceId: null,
-      bobAuthStatus: { configured: false },
-      bobInstallStatus: null,
-      chatOpen: true,
       conversations: {},
       conversationDeleteNotice: null,
+      onboarding: {},
+      workspaces: [],
+    });
+    useUiStore.setState({ chatOpen: true, settingsOpen: false });
+    useToastStore.setState({ toasts: [] });
+    useHarnessStore.setState({
+      bobAuthStatus: { configured: false },
+      bobInstallStatus: null,
       harnessCatalog: [],
       harnessOptions: {},
-      onboarding: {},
-      saveError: null,
       selectedHarnessId: "bob",
-      settingsOpen: false,
-      workspaces: [],
     });
   });
 
@@ -110,7 +114,7 @@ describe("workspace store", () => {
     // run error, not a bob-flavoured one.
     vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
 
-    useWorkspaceStore.setState({ selectedHarnessId: "codex" });
+    useHarnessStore.setState({ selectedHarnessId: "codex" });
     useWorkspaceStore.getState().addWorkspace("/tmp/codex-vault");
     useWorkspaceStore.getState().setChatPrompt("Summarize this note");
 
@@ -133,7 +137,7 @@ describe("workspace store", () => {
       installed: false,
       requiresDesktopRuntime: true,
     });
-    useWorkspaceStore.setState({
+    useHarnessStore.setState({
       selectedHarnessId: "acme",
       harnessCatalog: [
         {
@@ -169,7 +173,7 @@ describe("workspace store", () => {
     // runHarnessStream so the adapter can map them onto CLI flags.
     vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
 
-    useWorkspaceStore.setState({
+    useHarnessStore.setState({
       selectedHarnessId: "codex",
       harnessOptions: { codex: { model: "gpt-5-codex", effort: "high" } },
     });
@@ -190,10 +194,10 @@ describe("workspace store", () => {
     // with "Connect your Bob API key" and never ran the chosen harness.
     // Now it mirrors sendChatPrompt — the bob preflight is bob-only, so
     // the run routes straight to runHarnessStream as a read-only "ask".
-    useWorkspaceStore.setState({ selectedHarnessId: "codex" });
+    useHarnessStore.setState({ selectedHarnessId: "codex" });
     useWorkspaceStore.getState().addWorkspace("/tmp/codex-vault");
 
-    await useWorkspaceStore.getState().askBobAboutSelectionStream("What does this do?", {
+    await useWorkspaceStore.getState().askAboutSelectionStream("What does this do?", {
       range: { start: 0, end: 4 },
       text: "todo",
     });
@@ -209,7 +213,7 @@ describe("workspace store", () => {
     const workspace = useWorkspaceStore.getState().activeWorkspace();
     expect(workspace?.chatThread.runState).not.toBe("error");
     expect(workspace?.chatThread.runError).toBeNull();
-    expect(useWorkspaceStore.getState().settingsOpen).toBe(false);
+    expect(useUiStore.getState().settingsOpen).toBe(false);
   });
 
   it("forwards the selected harness's persisted model + tuning on an ask-about-selection run", () => {
@@ -219,7 +223,7 @@ describe("workspace store", () => {
     // so the adapter maps them onto the same CLI flags a chat run would.
     vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
 
-    useWorkspaceStore.setState({
+    useHarnessStore.setState({
       selectedHarnessId: "codex",
       harnessOptions: { codex: { model: "gpt-5-codex", effort: "high" } },
     });
@@ -227,7 +231,7 @@ describe("workspace store", () => {
 
     return useWorkspaceStore
       .getState()
-      .askBobAboutSelectionStream("question", { range: { start: 0, end: 4 }, text: "todo" })
+      .askAboutSelectionStream("question", { range: { start: 0, end: 4 }, text: "todo" })
       .then(() => {
         expect(runHarnessStream).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -278,7 +282,7 @@ describe("workspace store", () => {
     it("creates a conversation on first send and lists it with a derived title", async () => {
       vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
       const ws = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
-      useWorkspaceStore.setState({ selectedHarnessId: "codex" });
+      useHarnessStore.setState({ selectedHarnessId: "codex" });
       useWorkspaceStore.getState().setChatPrompt("Plan the Q3 relocation");
 
       await useWorkspaceStore.getState().sendChatPrompt();
@@ -415,7 +419,7 @@ describe("workspace store", () => {
 
       await useWorkspaceStore.getState().selectFile("missing.md");
 
-      expect(useWorkspaceStore.getState().saveError).toBe("disk gone");
+      expect(useToastStore.getState().toasts.slice(-1)[0]?.message).toBe("disk gone");
     });
 
     it("saveActiveFile guards on the buffer's mtime and marks it saved on success", async () => {
@@ -438,7 +442,7 @@ describe("workspace store", () => {
       const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
       expect(buffer?.dirty).toBe(false);
       expect(buffer?.lastModifiedMs).toBe(200);
-      expect(useWorkspaceStore.getState().saveError).toBeNull();
+      expect(useToastStore.getState().toasts).toHaveLength(0);
     });
 
     it("saveActiveFile refuses to clobber a file changed on disk, keeping local edits", async () => {
@@ -453,7 +457,7 @@ describe("workspace store", () => {
       const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
       expect(buffer?.conflict).toBe(true);
       expect(buffer?.content).toBe("local edits");
-      expect(useWorkspaceStore.getState().saveError).toContain("changed on disk");
+      expect(useToastStore.getState().toasts.slice(-1)[0]?.message).toContain("changed on disk");
     });
   });
 

@@ -19,11 +19,13 @@
         "minHeight": 760,
         "backgroundColor": "#ffffff",
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 8, "y": 21 },
+        "decorations": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost http://localhost:1421 ws://localhost:1421 ws://localhost:1423",
+      "csp": null,
       "assetProtocol": {
         "enable": true,
         "scope": []
@@ -39,6 +41,16 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "name": "Markdown",
+        "description": "Markdown document",
+        "ext": ["md", "markdown", "mdown", "mkd"],
+        "mimeType": "text/markdown",
+        "role": "Editor",
+        "rank": "Alternate"
+      }
     ]
   }
 }

@@ -56,28 +56,28 @@ export function FooterMenu({
   }, [open]);
 
   return (
-    <div className="bob-footer-menu" ref={rootRef}>
+    <div className="footer-menu" ref={rootRef}>
       <button
         type="button"
-        className="bob-footer-menu__trigger"
+        className="footer-menu__trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="bob-footer-menu__label">{label}</span>
+        <span className="footer-menu__label">{label}</span>
         <ChevronDown size={12} aria-hidden />
       </button>
       {open ? (
-        <ul className="bob-footer-menu__list" role="listbox" aria-label={ariaLabel}>
+        <ul className="footer-menu__list" role="listbox" aria-label={ariaLabel}>
           {items.map((item) => (
             <li key={item.value} role="option" aria-selected={item.value === selected}>
               <button
                 type="button"
                 className={[
-                  "bob-footer-menu__item",
-                  item.value === selected ? "bob-footer-menu__item--selected" : "",
+                  "footer-menu__item",
+                  item.value === selected ? "footer-menu__item--selected" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}

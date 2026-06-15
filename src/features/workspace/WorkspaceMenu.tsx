@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
 import { ChevronDown } from "@carbon/react/icons";
 import { useWorkspaceStore } from "../../app/workspaceStore";
@@ -14,13 +15,20 @@ import { useWorkspaceActions } from "./useWorkspaceActions";
  * Replaces the old dark-header workspace menu: this redesign empties the top
  * bar and hosts the switcher in the sidebar instead.
  */
-export function WorkspaceMenu() {
+function WorkspaceMenuInner() {
   const { recent, openFolder, openSample, openWorkspace, removeRecent, canOpenNativeFolder } =
     useWorkspaceActions();
-  const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
-  const workspaces = useWorkspaceStore((state) => state.workspaces);
-  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
-  const activeName = activeWorkspace?.name ?? "No folder open";
+  // Narrow selectors: only the active workspace's name + path, not the
+  // whole `workspaces` array — so a note edit doesn't re-render the
+  // switcher (and its Carbon OverflowMenu).
+  const activeName = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    return ws?.name ?? "No folder open";
+  });
+  const activePath = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    return ws?.path;
+  });
 
   // Carbon's OverflowMenuItem has no submenu, so "open" and "remove" for one
   // workspace can't both live on the same row. We surface Open as the row's
@@ -31,14 +39,14 @@ export function WorkspaceMenu() {
   const topRecent = recent.slice(0, 8);
 
   return (
-    <div className="bob-workspace-switcher" title={activeWorkspace?.path}>
-      <span className="bob-workspace-switcher__name truncate">{activeName}</span>
+    <div className="workspace-switcher" title={activePath}>
+      <span className="workspace-switcher__name truncate">{activeName}</span>
       <OverflowMenu
         aria-label="Switch workspace"
-        className="bob-workspace-switcher__menu"
+        className="workspace-switcher__menu"
         size="md"
         renderIcon={() => <ChevronDown size={16} />}
-        menuOptionsClass="bob-workspace-switcher__options"
+        menuOptionsClass="workspace-switcher__options"
         flipped
       >
         {topRecent.length > 0
@@ -53,7 +61,7 @@ export function WorkspaceMenu() {
               />,
               <OverflowMenuItem
                 key={`remove:${record.id}`}
-                className="bob-workspace-switcher__forget"
+                className="workspace-switcher__forget"
                 itemText="Remove from list"
                 requireTitle
                 title="Removes this folder from Compose's recent list. Your files are not deleted."
@@ -79,3 +87,10 @@ export function WorkspaceMenu() {
     </div>
   );
 }
+
+/**
+ * Memoised — reads its name/path/recent via narrow selectors, so it
+ * re-renders only when the workspace switcher's own data changes, not
+ * on every note edit that re-renders the surrounding sidebar.
+ */
+export const WorkspaceMenu = memo(WorkspaceMenuInner);

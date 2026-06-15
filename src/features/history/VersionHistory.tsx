@@ -85,7 +85,7 @@ export function VersionHistory({
       modalLabel={filePath}
       onRequestClose={onClose}
     >
-      <p className="bob-version-history__intro">
+      <p className="version-history__intro">
         Pick a version to go back to. Your current file is saved first, so you can undo a
         restore too.
       </p>
@@ -101,15 +101,15 @@ export function VersionHistory({
       {loading ? (
         <InlineLoading description="Loading previous versions…" />
       ) : versions.length === 0 ? (
-        <p className="bob-version-history__empty">
+        <p className="version-history__empty">
           No earlier versions yet. Compose saves one each time this file changes.
         </p>
       ) : (
-        <ul className="bob-version-history__list" style={{ display: "grid", gap: "0.5rem" }}>
+        <ul className="version-history__list" style={{ display: "grid", gap: "0.5rem" }}>
           {versions.map((version) => (
             <li
               key={version.revisionId}
-              className="bob-version-history__item"
+              className="version-history__item"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -117,11 +117,11 @@ export function VersionHistory({
                 gap: "1rem",
               }}
             >
-              <div className="bob-version-history__meta" style={{ display: "flex", gap: "0.75rem" }}>
-                <span className="bob-version-history__when">{relativeTime(version.createdAt, now)}</span>
-                <span className="bob-version-history__size">{formatBytes(version.sizeBytes)}</span>
+              <div className="version-history__meta" style={{ display: "flex", gap: "0.75rem" }}>
+                <span className="version-history__when">{relativeTime(version.createdAt, now)}</span>
+                <span className="version-history__size">{formatBytes(version.sizeBytes)}</span>
                 {version.isCurrent ? (
-                  <span className="bob-version-history__current">Current version</span>
+                  <span className="version-history__current">Current version</span>
                 ) : null}
               </div>
               <Button

@@ -2,7 +2,7 @@ import { useEffect, useRef, type KeyboardEvent } from "react";
 import { Document, Send, StopFilledAlt } from "@carbon/react/icons";
 
 import type { BobRuntimeReadiness, WorkspaceContextItem } from "../../app/workspaceModel";
-import { useWorkspaceStore } from "../../app/workspaceStore";
+import { useUiStore } from "../../app/store/uiStore";
 import { ChatComposerFooter } from "./ChatComposerFooter";
 import { useAutoGrowTextarea } from "./useAutoGrowTextarea";
 
@@ -43,7 +43,7 @@ export function MessageComposer({
   // the input (e.g. the empty-folder "Ask the assistant" button). We focus on
   // every change *after* mount — the ref to skip the initial value keeps a
   // fresh load from stealing focus into the composer.
-  const composerFocusNonce = useWorkspaceStore((state) => state.composerFocusNonce);
+  const composerFocusNonce = useUiStore((state) => state.composerFocusNonce);
   const lastFocusNonce = useRef(composerFocusNonce);
   useEffect(() => {
     if (composerFocusNonce === lastFocusNonce.current) {
@@ -71,13 +71,13 @@ export function MessageComposer({
   }
 
   return (
-    <footer className="bob-chat-composer">
-      <div className="bob-chat-context-row">
+    <footer className="chat-composer">
+      <div className="chat-context-row">
         {contextItems.length === 0 ? (
-          <span className="bob-chat-context-chip bob-chat-context-chip--empty">No context</span>
+          <span className="chat-context-chip chat-context-chip--empty">No context</span>
         ) : (
           contextItems.map((item) => (
-            <span className="bob-chat-context-chip" key={item.id} title={item.label}>
+            <span className="chat-context-chip" key={item.id} title={item.label}>
               <Document size={14} />
               <span>{item.kind === "comment" ? "Comment selection" : item.label}</span>
             </span>
@@ -85,7 +85,7 @@ export function MessageComposer({
         )}
       </div>
 
-      <div className="bob-chat-input-row">
+      <div className="chat-input-row">
         <textarea
           ref={textareaRef}
           aria-label="Message your assistant"
@@ -97,13 +97,13 @@ export function MessageComposer({
           value={prompt}
         />
         {running ? (
-          <button type="button" className="bob-chat-send" aria-label="Stop" onClick={onStop}>
+          <button type="button" className="chat-send" aria-label="Stop" onClick={onStop}>
             <StopFilledAlt size={18} />
           </button>
         ) : (
           <button
             type="button"
-            className="bob-chat-send"
+            className="chat-send"
             aria-label="Send message"
             disabled={!canSend}
             onClick={onSend}
@@ -114,14 +114,14 @@ export function MessageComposer({
       </div>
 
       {!assistantReady.ready ? (
-        <div className="bob-chat-error bob-chat-error--setup">
+        <div className="chat-error chat-error--setup">
           <span>{assistantReady.message}</span>
-          <button type="button" className="bob-chat-setup-link" onClick={onOpenSettings}>
+          <button type="button" className="chat-setup-link" onClick={onOpenSettings}>
             Set up your assistant →
           </button>
         </div>
       ) : null}
-      {runError ? <div className="bob-chat-error">{runError}</div> : null}
+      {runError ? <div className="chat-error">{runError}</div> : null}
 
       {/* The compact footer line: assistant + model selectors, token count,
           and the send hint. Switches the harness from chat (like a model

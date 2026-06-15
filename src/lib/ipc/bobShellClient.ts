@@ -9,7 +9,7 @@
  *     `BOBSHELL_API_KEY` from `.env`. The key never reaches
  *     this code.
  *   * **Tauri desktop (planned)** — will route through the
- *     existing `bobClient.ts` IPC. For now the browser path is
+ *     existing `harnessClient.ts` IPC. For now the browser path is
  *     used in both modes since `pnpm tauri dev` is also exposed
  *     to the same Vite middleware via its devUrl.
  *

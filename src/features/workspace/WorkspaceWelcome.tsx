@@ -14,25 +14,25 @@ export function WorkspaceWelcome({
   onNewNote: () => void;
 }) {
   return (
-    <div className="bob-welcome">
-      <div className="bob-welcome__inner">
-        <span className="bob-welcome__mark" aria-hidden="true">
+    <div className="welcome">
+      <div className="welcome__inner">
+        <span className="welcome__mark" aria-hidden="true">
           <Edit size={24} />
         </span>
-        <h2 className="bob-welcome__title">Your workspace is ready</h2>
-        <p className="bob-welcome__lead">
+        <h2 className="welcome__title">Your workspace is ready</h2>
+        <p className="welcome__lead">
           This folder is empty. Start a note, or tell the assistant what you'd like to write.
         </p>
-        <div className="bob-welcome__actions">
+        <div className="welcome__actions">
           <button
             type="button"
-            className="bob-welcome__action bob-welcome__action--primary"
+            className="welcome__action welcome__action--primary"
             onClick={onNewNote}
           >
             <DocumentAdd size={16} aria-hidden="true" />
             <span>New note</span>
           </button>
-          <button type="button" className="bob-welcome__action" onClick={onAskAssistant}>
+          <button type="button" className="welcome__action" onClick={onAskAssistant}>
             <ChatBot size={16} aria-hidden="true" />
             <span>Ask the assistant</span>
           </button>

@@ -7,6 +7,14 @@ import "./styles/global.scss";
 // Capture uncaught errors / rejections to the local log before anything renders.
 installGlobalErrorReporter();
 
+// react-scan note: its overlay is NOT wired here. It must initialize
+// before React evaluates, which a dynamic import in this module can't do
+// (ESM hoists the React imports above any code). Instead, the
+// `COMPOSE_REACT_SCAN=1` build flag makes a Vite plugin (vite.config.ts)
+// prepend `import "./reactScanInit"` as the first import of this file —
+// so react-scan hooks the reconciler before React runs. Normal builds
+// never reference reactScanInit, so it tree-shakes to zero bytes.
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <App />

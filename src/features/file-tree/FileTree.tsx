@@ -1,7 +1,107 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
 import { CaretDown, CaretRight, Document } from "@carbon/react/icons";
-import type { WorkspaceFileBuffer, WorkspaceFileEntry } from "./fileTreeTypes";
+import type { WorkspaceFileEntry } from "./fileTreeTypes";
+import { useWorkspaceStore } from "../../app/workspaceStore";
+
+/**
+ * The unsaved-edit dot for one file row. Self-subscribes to just that file's
+ * dirty flag (a boolean), so a dirty flip on first-edit / autosave re-renders
+ * ONLY this dot — never the row, its `OverflowMenu` (a Carbon Popover stack),
+ * or the FileTree. Mirrors {@link TabDirtyDot} in PaneTabs. Before this, the
+ * row's `dirty` prop flipped twice per edit burst (dirty on first keystroke,
+ * clean on autosave), re-rendering the row + its Popover menu each time
+ * (react-scan: Popover ×51 on a single file during a typing burst).
+ */
+function FileRowDirtyDot({ path }: { path: string }) {
+  const dirty = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    return Boolean(ws?.fileContents[path]?.dirty);
+  });
+  return dirty ? <span className="dirty-dot" aria-label="Unsaved" /> : null;
+}
+
+/**
+ * One file row, memoised. Each row mounts a Carbon `OverflowMenu` (the ⋯
+ * kebab) which drags in a Popover + Icon floating-ui stack. Before this,
+ * the whole `rows.map` re-ran on any FileTree render — selecting a file
+ * re-rendered all 50 rows' menus (react-scan: Icon ×201, Popover ×56,
+ * 23 FPS, ~170ms/click). With per-row memo + stable callbacks, selecting
+ * a file only re-renders the two rows whose `active` flips. The unsaved dot
+ * is NOT a prop — it self-subscribes via {@link FileRowDirtyDot}, so a dirty
+ * flip never re-renders the row or its Popover menu.
+ */
+const FileRow = memo(function FileRow({
+  path,
+  name,
+  depth,
+  active,
+  onSelect,
+  onRename,
+  onDelete,
+}: {
+  path: string;
+  name: string;
+  depth: number;
+  active: boolean;
+  onSelect: (relativePath: string) => void;
+  onRename: (relativePath: string) => void;
+  onDelete: (relativePath: string) => void;
+}) {
+  return (
+    <div
+      className={["file-row-wrapper", active ? "file-row-wrapper--active" : ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(path)}
+        className={["file-row", active ? "file-row--active" : ""]
+          .filter(Boolean)
+          .join(" ")}
+        style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.875rem)` }}
+        title={path}
+      >
+        <Document size={16} />
+        <span className="truncate">{name}</span>
+        <FileRowDirtyDot path={path} />
+      </button>
+      <OverflowMenu aria-label={`Actions for ${path}`} size="sm" flipped align="bottom">
+        <OverflowMenuItem itemText="Rename..." onClick={() => onRename(path)} />
+        <OverflowMenuItem hasDivider isDelete itemText="Delete" onClick={() => onDelete(path)} />
+      </OverflowMenu>
+    </div>
+  );
+});
+
+/** One folder row, memoised — only re-renders when its own open state flips. */
+const FolderRow = memo(function FolderRow({
+  path,
+  name,
+  depth,
+  open,
+  onToggle,
+}: {
+  path: string;
+  name: string;
+  depth: number;
+  open: boolean;
+  onToggle: (path: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="file-row file-row--folder"
+      style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.875rem)` }}
+      onClick={() => onToggle(path)}
+      aria-expanded={open}
+    >
+      {open ? <CaretDown size={16} /> : <CaretRight size={16} />}
+      <span className="truncate">{name}</span>
+    </button>
+  );
+});
 
 interface FolderNode {
   type: "folder";
@@ -89,14 +189,12 @@ function flatten(nodes: TreeNode[], collapsed: Set<string>, out: TreeNode[] = []
 
 function FileTreeInner({
   activePath,
-  fileContents,
   files,
   onDelete,
   onRename,
   onSelectFile,
 }: {
   activePath: string;
-  fileContents: Record<string, WorkspaceFileBuffer>;
   files: WorkspaceFileEntry[];
   onDelete: (relativePath: string) => void;
   onRename: (relativePath: string) => void;
@@ -106,7 +204,9 @@ function FileTreeInner({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const rows = useMemo(() => flatten(tree, collapsed), [tree, collapsed]);
 
-  function toggleFolder(path: string) {
+  // Stable so the memoised FolderRow doesn't re-render on every keystroke /
+  // file-select that re-renders FileTree.
+  const toggleFolder = useCallback((path: string) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
@@ -116,11 +216,11 @@ function FileTreeInner({
       }
       return next;
     });
-  }
+  }, []);
 
   if (files.length === 0) {
     return (
-      <div className="bob-file-tree bob-file-tree--empty">
+      <div className="file-tree file-tree--empty">
         <p>No Markdown files</p>
         <p>Create a note from the toolbar.</p>
       </div>
@@ -128,64 +228,30 @@ function FileTreeInner({
   }
 
   return (
-    <nav className="bob-file-tree" aria-label="Files">
-      {rows.map((node) => {
-        if (node.type === "folder") {
-          const open = !collapsed.has(node.path);
-          return (
-            <button
-              type="button"
-              key={`folder:${node.path}`}
-              className="bob-file-row bob-file-row--folder"
-              style={{ paddingInlineStart: `calc(0.5rem + ${node.depth} * 0.875rem)` }}
-              onClick={() => toggleFolder(node.path)}
-              aria-expanded={open}
-            >
-              {open ? <CaretDown size={16} /> : <CaretRight size={16} />}
-              <span className="truncate">{node.name}</span>
-            </button>
-          );
-        }
-
-        const active = node.path === activePath;
-        const buffer = fileContents[node.path];
-        return (
-          <div
+    <nav className="file-tree" aria-label="Files">
+      {rows.map((node) =>
+        node.type === "folder" ? (
+          <FolderRow
+            key={`folder:${node.path}`}
+            path={node.path}
+            name={node.name}
+            depth={node.depth}
+            open={!collapsed.has(node.path)}
+            onToggle={toggleFolder}
+          />
+        ) : (
+          <FileRow
             key={`file:${node.path}`}
-            className={["bob-file-row-wrapper", active ? "bob-file-row-wrapper--active" : ""]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            <button
-              type="button"
-              onClick={() => onSelectFile(node.path)}
-              className={["bob-file-row", active ? "bob-file-row--active" : ""]
-                .filter(Boolean)
-                .join(" ")}
-              style={{ paddingInlineStart: `calc(0.5rem + ${node.depth} * 0.875rem)` }}
-              title={node.path}
-            >
-              <Document size={16} />
-              <span className="truncate">{node.name}</span>
-              {buffer?.dirty ? <span className="bob-dirty-dot" aria-label="Unsaved" /> : null}
-            </button>
-            <OverflowMenu
-              aria-label={`Actions for ${node.path}`}
-              size="sm"
-              flipped
-              align="bottom"
-            >
-              <OverflowMenuItem itemText="Rename..." onClick={() => onRename(node.path)} />
-              <OverflowMenuItem
-                hasDivider
-                isDelete
-                itemText="Delete"
-                onClick={() => onDelete(node.path)}
-              />
-            </OverflowMenu>
-          </div>
-        );
-      })}
+            path={node.path}
+            name={node.name}
+            depth={node.depth}
+            active={node.path === activePath}
+            onSelect={onSelectFile}
+            onRename={onRename}
+            onDelete={onDelete}
+          />
+        ),
+      )}
     </nav>
   );
 }

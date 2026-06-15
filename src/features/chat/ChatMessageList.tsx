@@ -36,11 +36,11 @@ export function ChatMessageList({
   }, [messages, runState]);
 
   return (
-    <div ref={scrollRef} className="bob-chat-messages">
+    <div ref={scrollRef} className="chat-messages">
       {messages.length === 0 ? (
         <ChatEmptyState contextFileLabel={contextFileLabel} onUseSuggestion={onUseSuggestion} />
       ) : (
-        <div className="bob-message-stack">
+        <div className="message-stack">
           {messages.map((message) => (
             <MessageRow callbacks={callbacks} key={message.id} message={message} />
           ))}

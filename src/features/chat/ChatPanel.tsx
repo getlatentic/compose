@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Add, Close } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceStore";
+import { useUiStore } from "../../app/store/uiStore";
+import { useHarnessStore } from "../../app/store/harnessStore";
 import { bobRuntimeReadiness, sumChatThreadStats } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
@@ -26,21 +28,32 @@ import { ConversationDeleteToast } from "./ConversationDeleteToast";
  * all-conversations overlay. The post-delete undo toast layers over the panel.
  * All conversation-management state lives in the store.
  */
-export function ChatPanel() {
+function ChatPanelInner() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const acceptSuggestedEdit = useWorkspaceStore((state) => state.acceptSuggestedEdit);
-  const cancelActiveBobRun = useWorkspaceStore((state) => state.cancelActiveBobRun);
-  const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useWorkspaceStore((state) => state.bobInstallStatus);
-  const openSettings = useWorkspaceStore((state) => state.openSettings);
-  const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
-  const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
+  const cancelActiveRun = useWorkspaceStore((state) => state.cancelActiveRun);
+  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
+  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
+  const openSettings = useUiStore((state) => state.openSettings);
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const rejectSuggestedEdit = useWorkspaceStore((state) => state.rejectSuggestedEdit);
   const regenerateLastTurn = useWorkspaceStore((state) => state.regenerateLastTurn);
   const sendChatPrompt = useWorkspaceStore((state) => state.sendChatPrompt);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const setChatPrompt = useWorkspaceStore((state) => state.setChatPrompt);
-  const workspaces = useWorkspaceStore((state) => state.workspaces);
+  // Narrow selector: the chat panel only needs the active workspace's
+  // chat thread, NOT the whole `workspaces` array. The store preserves
+  // `chatThread`'s reference when other workspace fields change (e.g. a
+  // buffer-content edit spreads `{...ws, fileContents}`, leaving
+  // `chatThread` identical), so editing a note no longer re-renders the
+  // chat panel — only a real chat change (token, conversation switch)
+  // produces a new `chatThread` reference. (See the re-render-cascade
+  // investigation: AppShell + ChatPanel both used to read all workspaces.)
+  const chatThread = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    return ws?.chatThread ?? null;
+  });
   const conversationsByWorkspace = useWorkspaceStore((state) => state.conversations);
   const renameConversation = useWorkspaceStore((state) => state.renameConversation);
   const archiveConversation = useWorkspaceStore((state) => state.archiveConversation);
@@ -48,16 +61,10 @@ export function ChatPanel() {
   const undoDeleteConversation = useWorkspaceStore((state) => state.undoDeleteConversation);
   const duplicateConversation = useWorkspaceStore((state) => state.duplicateConversation);
   const newChat = useWorkspaceStore((state) => state.newChat);
-  const toggleChat = useWorkspaceStore((state) => state.toggleChat);
+  const toggleChat = useUiStore((state) => state.toggleChat);
   const deleteNotice = useWorkspaceStore((state) => state.conversationDeleteNotice);
 
   const [editingTitle, setEditingTitle] = useState(false);
-
-  const activeWorkspace = useMemo(
-    () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
-    [activeWorkspaceId, workspaces],
-  );
-  const chatThread = activeWorkspace?.chatThread ?? null;
 
   const callbacks = useMemo<MessageRowCallbacks>(
     () => ({
@@ -140,10 +147,10 @@ export function ChatPanel() {
   };
 
   return (
-    <section className="bob-chat-panel" aria-label="Assistant chat">
-      <header className="bob-chat-header">
-        <div className="bob-chat-header__title">
-          {/* No bob-mark / "Assistant" prefix and no "New chat" placeholder
+    <section className="chat-panel" aria-label="Assistant chat">
+      <header className="chat-header">
+        <div className="chat-header__title">
+          {/* No mark / "Assistant" prefix and no "New chat" placeholder
               when there's no open conversation — the panel itself + the action
               buttons already say "this is the assistant." We only show a title
               when there IS one (the user's named conversation). */}
@@ -160,7 +167,7 @@ export function ChatPanel() {
             // The open conversation's title — click to rename in place.
             <button
               type="button"
-              className="bob-chat-header__title-button"
+              className="chat-header__title-button"
               title="Rename conversation"
               onClick={() => setEditingTitle(true)}
             >
@@ -168,9 +175,9 @@ export function ChatPanel() {
             </button>
           ) : null}
         </div>
-        <div className="bob-chat-header__actions">
+        <div className="chat-header__actions">
           {headerMeta ? (
-            <span className="bob-chat-header__meta" title="Total token and coin usage this chat">
+            <span className="chat-header__meta" title="Total token and coin usage this chat">
               {headerMeta}
             </span>
           ) : null}
@@ -180,7 +187,7 @@ export function ChatPanel() {
               delete) — only when a conversation is actually open. */}
           <button
             type="button"
-            className="bob-chat-header__btn"
+            className="chat-header__btn"
             aria-label="New chat"
             title="New chat"
             onClick={() => void newChat()}
@@ -189,7 +196,7 @@ export function ChatPanel() {
           </button>
           <button
             type="button"
-            className="bob-chat-header__btn"
+            className="chat-header__btn"
             aria-label="Close chat"
             title="Close chat"
             onClick={toggleChat}
@@ -235,7 +242,7 @@ export function ChatPanel() {
         onOpenSettings={openSettings}
         onPromptChange={setChatPrompt}
         onSend={() => void sendChatPrompt()}
-        onStop={() => void cancelActiveBobRun()}
+        onStop={() => void cancelActiveRun()}
         prompt={chatThread.prompt}
         runError={chatThread.runError}
         running={running}
@@ -243,3 +250,10 @@ export function ChatPanel() {
     </section>
   );
 }
+
+/**
+ * Memoised + no props → re-renders only when the chat panel's own store
+ * subscriptions change (chat thread, conversations, harness/auth state),
+ * not when AppShell re-renders for an unrelated reason (e.g. a note edit).
+ */
+export const ChatPanel = memo(ChatPanelInner);

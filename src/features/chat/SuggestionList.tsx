@@ -22,22 +22,22 @@ export function SuggestionList({
   suggestions: WorkspaceDocumentSuggestion[];
 }) {
   return (
-    <div className="bob-suggestion-list" aria-label="Suggested changes">
+    <div className="suggestion-list" aria-label="Suggested changes">
       {suggestions.map((suggestion) => (
-        <article className="bob-suggestion" key={suggestion.id}>
-          <header className="bob-suggestion__header">
+        <article className="suggestion" key={suggestion.id}>
+          <header className="suggestion__header">
             <div>
-              <div className="bob-suggestion__title">{suggestion.title}</div>
+              <div className="suggestion__title">{suggestion.title}</div>
               <button
                 type="button"
-                className="bob-suggestion__path"
+                className="suggestion__path"
                 onClick={() => onOpenDocument(suggestion.filePath)}
               >
                 {suggestion.filePath}
               </button>
             </div>
             <span
-              className={`bob-suggestion__status bob-suggestion__status--${suggestion.status}`}
+              className={`suggestion__status suggestion__status--${suggestion.status}`}
             >
               {suggestion.status}
             </span>
@@ -46,20 +46,20 @@ export function SuggestionList({
           <SuggestionPreview suggestion={suggestion} />
 
           {isStale(suggestion) ? (
-            <div className="bob-suggestion__stale" role="alert">
+            <div className="suggestion__stale" role="alert">
               This file changed on your computer since the assistant started. Accepting
               will replace your version.
             </div>
           ) : null}
 
           {suggestion.statusMessage ? (
-            <div className="bob-suggestion__message">{suggestion.statusMessage}</div>
+            <div className="suggestion__message">{suggestion.statusMessage}</div>
           ) : null}
 
-          <div className="bob-suggestion__actions">
+          <div className="suggestion__actions">
             <button
               type="button"
-              className="bob-suggestion__action bob-suggestion__action--accept"
+              className="suggestion__action suggestion__action--accept"
               disabled={suggestion.status !== "pending"}
               onClick={() => onAccept(suggestion.id)}
             >
@@ -68,7 +68,7 @@ export function SuggestionList({
             </button>
             <button
               type="button"
-              className="bob-suggestion__action"
+              className="suggestion__action"
               disabled={suggestion.status !== "pending"}
               onClick={() => onReject(suggestion.id)}
             >

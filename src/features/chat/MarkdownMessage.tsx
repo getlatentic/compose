@@ -19,7 +19,7 @@ import { workspaceMarkdownComponents } from "../../lib/markdown/workspaceLinks";
  */
 export const MarkdownMessage = memo(function MarkdownMessage({ content }: { content: string }) {
   return (
-    <div className="bob-markdown">
+    <div className="markdown">
       {renderMarkdownToReact(content, workspaceMarkdownComponents)}
     </div>
   );
