@@ -8,28 +8,17 @@ import {
   type SourceRange,
   type WorkspaceCommentThread,
 } from "../features/comments/commentModel";
-import type { ToolKind } from "../lib/ipc/harnessClient";
+import type { HarnessReadiness, ToolKind } from "../lib/ipc/harnessClient";
 import type {
   ConversationMessageRecord,
   ConversationSnapshot,
 } from "../lib/ipc/conversationsClient";
-import type { BobInstallStatus } from "../lib/ipc/settingsClient";
 
 export type {
   DocumentTextChange,
   SourceRange,
   WorkspaceCommentThread,
 } from "../features/comments/commentModel";
-
-export interface BobAuthStatus {
-  configured: boolean;
-  errorMessage?: string;
-}
-
-export interface BobRuntimeReadiness {
-  message: string | null;
-  ready: boolean;
-}
 
 export type WorkspaceContextItem = WorkspaceFileContextItem | WorkspaceCommentContextItem;
 
@@ -376,30 +365,13 @@ export type FsEventEffect =
   | { type: "rescan" }
   | { type: "noop" };
 
-export function isSetupComplete(authStatus: BobAuthStatus, workspaces: Workspace[]) {
-  return authStatus.configured && workspaces.length > 0;
-}
-
-export function bobRuntimeReadiness(
-  authStatus: BobAuthStatus,
-  installStatus: BobInstallStatus | null,
-): BobRuntimeReadiness {
-  if (authStatus.errorMessage) {
-    return { message: authStatus.errorMessage, ready: false };
-  }
-  if (!authStatus.configured) {
-    return { message: "Connect your Bob API key.", ready: false };
-  }
-  if (!installStatus) {
-    return { message: "Checking Bob CLI.", ready: false };
-  }
-  if (installStatus.requiresDesktopRuntime) {
-    return { message: "Open the desktop app to run Bob.", ready: false };
-  }
-  if (!installStatus.installed) {
-    return { message: installStatus.errorMessage ?? "Bob CLI not found.", ready: false };
-  }
-  return { message: null, ready: true };
+export function isSetupComplete(
+  selectedHarnessReadiness: HarnessReadiness | null,
+  workspaces: Workspace[],
+) {
+  // "Set up" = the selected harness is installed and a workspace exists; the
+  // key is checked at send.
+  return Boolean(selectedHarnessReadiness?.installed) && workspaces.length > 0;
 }
 
 export function createWorkspaceFromPath(path: string): Workspace {

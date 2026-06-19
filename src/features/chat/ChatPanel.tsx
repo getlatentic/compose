@@ -4,7 +4,7 @@ import { Add, Close } from "@carbon/react/icons";
 import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import { bobRuntimeReadiness, sumChatThreadStats } from "../../app/workspaceModel";
+import { sumChatThreadStats } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
 import { conversationToMarkdown } from "../../lib/export/conversationMarkdown";
@@ -32,8 +32,7 @@ function ChatPanelInner() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const acceptSuggestedEdit = useWorkspaceStore((state) => state.acceptSuggestedEdit);
   const cancelActiveRun = useWorkspaceStore((state) => state.cancelActiveRun);
-  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
+  const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
   const openSettings = useUiStore((state) => state.openSettings);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
@@ -91,8 +90,8 @@ function ChatPanelInner() {
     selectedHarnessId,
   ).credentialRequired;
   const assistantReady = credentialRequired
-    ? bobRuntimeReadiness(bobAuthStatus, bobInstallStatus)
-    : { ready: true, message: "" };
+    ? { ready: selectedHarnessReadiness?.ready ?? false, message: selectedHarnessReadiness?.error ?? null }
+    : { ready: true, message: null };
   const canSend = Boolean(chatThread.prompt.trim()) && !running && assistantReady.ready;
 
   // The file currently attached as context (the open note) — named in the

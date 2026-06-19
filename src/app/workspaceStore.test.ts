@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runHarnessStream } from "../lib/ipc/harnessClient";
+import {
+  harnessCredentialStatus,
+  harnessReadiness,
+  runHarnessStream,
+} from "../lib/ipc/harnessClient";
 import { recordLlmThread } from "../lib/ipc/llmContextClient";
-import { checkBobInstall, getBobAuthStatus } from "../lib/ipc/settingsClient";
 import {
   newConversation,
   saveConversation,
@@ -39,11 +42,6 @@ vi.mock("../lib/ipc/llmContextClient", () => ({
   recordLlmThread: vi.fn(),
 }));
 
-vi.mock("../lib/ipc/settingsClient", () => ({
-  checkBobInstall: vi.fn(),
-  getBobAuthStatus: vi.fn(),
-}));
-
 vi.mock("../lib/ipc/workspaceClient", () => ({
   // Both return Promise<void> in real life; `persistTabs` chains `.catch` on
   // the result, so the mocks must resolve rather than return undefined.
@@ -56,7 +54,10 @@ vi.mock("../lib/ipc/harnessClient", () => ({
   runHarnessStream: vi.fn(),
   subscribeHarnessRun: vi.fn(),
   harnessList: vi.fn(async () => []),
-  DEFAULT_HARNESS_ID: "bob",
+  harnessListModels: vi.fn(async () => []),
+  harnessReadiness: vi.fn(async () => null),
+  harnessDiscover: vi.fn(async () => []),
+  harnessCredentialStatus: vi.fn(async () => ({ configured: false })),
 }));
 
 describe("workspace store", () => {
@@ -73,10 +74,11 @@ describe("workspace store", () => {
     useUiStore.setState({ chatOpen: true, settingsOpen: false });
     useToastStore.setState({ toasts: [] });
     useHarnessStore.setState({
-      bobAuthStatus: { configured: false },
-      bobInstallStatus: null,
+      selectedHarnessReadiness: null,
       harnessCatalog: [],
+      harnessModels: {},
       harnessOptions: {},
+      allowEdits: true,
       selectedHarnessId: "bob",
     });
   });
@@ -85,12 +87,30 @@ describe("workspace store", () => {
     vi.useRealTimers();
   });
 
-  it("does not persist or spawn a Bob run before desktop runtime readiness passes", async () => {
-    vi.mocked(getBobAuthStatus).mockResolvedValue({ configured: true });
-    vi.mocked(checkBobInstall).mockResolvedValue({
-      errorMessage: "Bob credentials and CLI checks require the Tauri desktop runtime.",
-      installed: false,
-      requiresDesktopRuntime: true,
+  it("does not spawn a Bob run before its key is configured", async () => {
+    // bob's key is the host's concern (the Compose keychain), checked via the
+    // generic credential-status command — like any credentialed harness. A
+    // missing key blocks the run with a Settings nudge: no LLM thread, no spawn.
+    // The loaded catalog is the source of truth for `credentialRequired`.
+    vi.mocked(harnessCredentialStatus).mockResolvedValue({ configured: false });
+    useHarnessStore.setState({
+      harnessCatalog: [
+        {
+          id: "bob",
+          displayName: "Bob",
+          description: "",
+          requiresInstall: true,
+          capabilities: {
+            credentialRequired: true,
+            previewsEdits: true,
+            models: [],
+            allowsCustomModel: false,
+            supportsEffort: false,
+            supportsMaxTurns: false,
+            supportsLogin: false,
+          },
+        },
+      ],
     });
 
     useWorkspaceStore.getState().addWorkspace("/tmp/bob-vault");
@@ -100,10 +120,11 @@ describe("workspace store", () => {
 
     const workspace = useWorkspaceStore.getState().activeWorkspace();
 
+    expect(harnessCredentialStatus).toHaveBeenCalledWith("bob");
     expect(recordLlmThread).not.toHaveBeenCalled();
     expect(runHarnessStream).not.toHaveBeenCalled();
     expect(workspace?.chatThread.runState).toBe("error");
-    expect(workspace?.chatThread.runError).toBe("Open the desktop app to run Bob.");
+    expect(workspace?.chatThread.runError).toContain("API key in Settings");
   });
 
   it("routes a non-bob harness to runHarnessStream without the bob credential preflight", async () => {
@@ -120,23 +141,18 @@ describe("workspace store", () => {
 
     await useWorkspaceStore.getState().sendChatPrompt();
 
-    expect(getBobAuthStatus).not.toHaveBeenCalled();
-    expect(checkBobInstall).not.toHaveBeenCalled();
+    expect(harnessReadiness).not.toHaveBeenCalled();
     expect(runHarnessStream).toHaveBeenCalledWith(
       expect.objectContaining({ harnessId: "codex" }),
     );
   });
 
-  it("gates the credential preflight on capability, not the harness id", async () => {
-    // A non-bob harness whose catalog entry declares credentialRequired
-    // must trigger the SAME preflight as bob — proving the gate reads
-    // capabilities, not `id === "bob"`.
-    vi.mocked(getBobAuthStatus).mockResolvedValue({ configured: true });
-    vi.mocked(checkBobInstall).mockResolvedValue({
-      errorMessage: "requires the Tauri desktop runtime.",
-      installed: false,
-      requiresDesktopRuntime: true,
-    });
+  it("gates a non-bob credentialed harness on its own key, not bob's", async () => {
+    // A non-bob harness that declares credentialRequired (e.g. OpenRouter) is
+    // gated on ITS OWN stored key via the generic keychain check — never bob's
+    // API key / install (the bug that told Codex users to "connect bob"). A
+    // missing key blocks the run; bob's checks must not fire.
+    vi.mocked(harnessCredentialStatus).mockResolvedValue({ configured: false });
     useHarnessStore.setState({
       selectedHarnessId: "acme",
       harnessCatalog: [
@@ -162,9 +178,45 @@ describe("workspace store", () => {
 
     await useWorkspaceStore.getState().sendChatPrompt();
 
-    expect(getBobAuthStatus).toHaveBeenCalled();
+    expect(harnessCredentialStatus).toHaveBeenCalledWith("acme");
+    expect(harnessReadiness).not.toHaveBeenCalled();
     expect(runHarnessStream).not.toHaveBeenCalled();
     expect(useWorkspaceStore.getState().activeWorkspace()?.chatThread.runState).toBe("error");
+  });
+
+  it("runs a non-bob credentialed harness once its key is stored", async () => {
+    // With the key present, the generic gate passes and the run proceeds —
+    // through the same path as a login-managed CLI, never bob's checks.
+    vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
+    vi.mocked(harnessCredentialStatus).mockResolvedValue({ configured: true });
+    useHarnessStore.setState({
+      selectedHarnessId: "acme",
+      harnessCatalog: [
+        {
+          id: "acme",
+          displayName: "Acme",
+          description: "",
+          requiresInstall: false,
+          capabilities: {
+            credentialRequired: true,
+            previewsEdits: false,
+            models: [],
+            allowsCustomModel: false,
+            supportsEffort: false,
+            supportsMaxTurns: false,
+            supportsLogin: false,
+          },
+        },
+      ],
+    });
+    useWorkspaceStore.getState().addWorkspace("/tmp/acme-vault");
+    useWorkspaceStore.getState().setChatPrompt("hello");
+
+    await useWorkspaceStore.getState().sendChatPrompt();
+
+    expect(harnessCredentialStatus).toHaveBeenCalledWith("acme");
+    expect(harnessReadiness).not.toHaveBeenCalled();
+    expect(runHarnessStream).toHaveBeenCalledWith(expect.objectContaining({ harnessId: "acme" }));
   });
 
   it("forwards the selected harness's persisted model + tuning on a run", async () => {
@@ -202,8 +254,8 @@ describe("workspace store", () => {
       text: "todo",
     });
 
-    expect(getBobAuthStatus).not.toHaveBeenCalled();
-    expect(checkBobInstall).not.toHaveBeenCalled();
+    expect(harnessCredentialStatus).not.toHaveBeenCalled();
+    expect(harnessReadiness).not.toHaveBeenCalled();
     // Ask-about-selection is edit-capable (the assistant can answer *or*
     // edit from the comment), so a write-capable CLI harness runs in "code".
     expect(runHarnessStream).toHaveBeenCalledWith(

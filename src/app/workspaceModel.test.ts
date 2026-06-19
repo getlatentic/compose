@@ -23,7 +23,6 @@ import {
   applyFsEvent,
   applyScanResult,
   closeWorkspaceFileTab,
-  bobRuntimeReadiness,
   createLlmContextSnapshots,
   createWorkspaceFromPath,
   createWorkspaceFromRecord,
@@ -45,9 +44,22 @@ import {
   type Workspace,
   type WorkspaceFileEntry,
 } from "./workspaceModel";
+import type { HarnessReadiness } from "../lib/ipc/harnessClient";
 
 function makeEntry(relativePath: string, lastModifiedMs = 1_000): WorkspaceFileEntry {
   return { relativePath, lastModifiedMs, sizeBytes: 16 };
+}
+
+function selectedHarnessReadiness(installed: boolean): HarnessReadiness {
+  return {
+    harnessId: "bob",
+    ready: installed,
+    installed,
+    version: installed ? "1.0.4" : null,
+    authConfigured: false,
+    error: null,
+    details: null,
+  };
 }
 
 function workspaceWithFiles(path: string, files: string[]): Workspace {
@@ -58,45 +70,16 @@ function workspaceWithFiles(path: string, files: string[]): Workspace {
 }
 
 describe("workspace model", () => {
-  it("blocks first-run entry until Bob auth and one workspace are configured", () => {
-    expect(isSetupComplete({ configured: false }, [])).toBe(false);
-    expect(isSetupComplete({ configured: true }, [])).toBe(false);
-    expect(isSetupComplete({ configured: false }, [createWorkspaceFromPath("/tmp/project")])).toBe(
-      false,
-    );
-    expect(isSetupComplete({ configured: true }, [createWorkspaceFromPath("/tmp/project")])).toBe(
-      true,
-    );
-  });
-
-  it("reports Bob runtime readiness without treating browser preview as real Bob", () => {
-    expect(bobRuntimeReadiness({ configured: false }, null)).toEqual({
-      message: "Connect your Bob API key.",
-      ready: false,
-    });
+  it("blocks first-run entry until the selected harness is installed and one workspace exists", () => {
+    expect(isSetupComplete(null, [])).toBe(false);
+    expect(isSetupComplete(selectedHarnessReadiness(false), [])).toBe(false);
+    expect(isSetupComplete(selectedHarnessReadiness(true), [])).toBe(false);
     expect(
-      bobRuntimeReadiness(
-        { configured: true },
-        {
-          errorMessage: "Bob credentials and CLI checks require the Tauri desktop runtime.",
-          installed: false,
-          requiresDesktopRuntime: true,
-        },
-      ),
-    ).toEqual({
-      message: "Open the desktop app to run Bob.",
-      ready: false,
-    });
+      isSetupComplete(selectedHarnessReadiness(false), [createWorkspaceFromPath("/tmp/project")]),
+    ).toBe(false);
     expect(
-      bobRuntimeReadiness(
-        { configured: true },
-        {
-          installed: true,
-          path: "/usr/local/bin/bob",
-          version: "1.0.4",
-        },
-      ),
-    ).toEqual({ message: null, ready: true });
+      isSetupComplete(selectedHarnessReadiness(true), [createWorkspaceFromPath("/tmp/project")]),
+    ).toBe(true);
   });
 
   it("starts a workspace with no files and no active tab", () => {

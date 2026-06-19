@@ -21,43 +21,60 @@ import {
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import {
-  checkBobInstall,
-  getBobAuthStatus,
-  setBobApiKey,
-  verifyBobRuntime,
-  type BobRuntimeVerification,
-} from "../../lib/ipc/settingsClient";
-import { installBob, type BobInstallEvent } from "../../lib/ipc/bobShellClient";
+  harnessCredentialStatus,
+  harnessInstall,
+  harnessReadiness,
+  harnessSetCredential,
+  verifyHarnessRuntime,
+  type HarnessInstallEvent,
+  type HarnessReadiness,
+  type HarnessRuntimeVerification,
+} from "../../lib/ipc/harnessClient";
 import { revealErrorLog } from "../../lib/diagnostics/errorReporter";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { HarnessPicker } from "./HarnessPicker";
 
+/** bob's `readiness().details` payload (a JSON object on the wire). Read for
+ * the Node.js diagnostics the setup UI surfaces ("Runtime: Node …"). */
+interface BobReadinessDetails {
+  node?: {
+    version?: string | null;
+    satisfies_min?: boolean;
+    min_version?: string;
+    installed?: boolean;
+  };
+}
+
+/** Narrow a harness readiness's opaque `details` to bob's node diagnostics. */
+function bobNodeVersion(readiness: HarnessReadiness | null): string | null {
+  const details = readiness?.details as BobReadinessDetails | null | undefined;
+  return details?.node?.version ?? null;
+}
+
 /**
- * Settings content — the canonical surface for first-time Bob setup and
+ * Settings content — the canonical surface for first-time harness setup and
  * ongoing maintenance. Rendered either inside a workspace tab (the pane
  * host) or, on the dashboard where there is no tab strip, inside the
  * modal wrapper [SettingsDialog](./SettingsDialog.tsx). It owns no chrome
  * (no backdrop / title bar) so it composes into either host.
  */
 export function SettingsPanel() {
-  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
+  const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
-  const setBobAuthStatus = useHarnessStore((state) => state.setBobAuthStatus);
-  const setBobInstallStatus = useHarnessStore((state) => state.setBobInstallStatus);
+  const setSelectedHarnessReadiness = useHarnessStore((state) => state.setSelectedHarnessReadiness);
   const soundOnComplete = useUiStore((state) => state.soundOnComplete);
   const setSoundOnComplete = useUiStore((state) => state.setSoundOnComplete);
   const [apiKey, setApiKey] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [runtimeCheck, setRuntimeCheck] = useState<BobRuntimeVerification | null>(null);
+  const [runtimeCheck, setRuntimeCheck] = useState<HarnessRuntimeVerification | null>(null);
   const [checkingRuntime, setCheckingRuntime] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [installLog, setInstallLog] = useState<InstallLogEntry[]>([]);
   const [installResult, setInstallResult] = useState<
-    Extract<BobInstallEvent, { kind: "done" }> | null
+    Extract<HarnessInstallEvent, { kind: "done" }> | null
   >(null);
   const logRef = useRef<HTMLPreElement>(null);
 
@@ -68,14 +85,32 @@ export function SettingsPanel() {
     }
   }, [installLog.length]);
 
+  // The managed harness's "key saved" state from credential-status: probed on
+  // open and whenever the selection changes, refreshed after a save.
+  const [managedKeyConfigured, setManagedKeyConfigured] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void harnessCredentialStatus(selectedHarnessId)
+      .then((status) => {
+        if (active) setManagedKeyConfigured(status.configured);
+      })
+      .catch(() => {
+        if (active) setManagedKeyConfigured(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedHarnessId]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
     setSaveSuccess(false);
     setSaving(true);
     try {
-      const status = await setBobApiKey(apiKey);
-      setBobAuthStatus(status);
+      await harnessSetCredential(selectedHarnessId, apiKey);
+      setSelectedHarnessReadiness(await harnessReadiness(selectedHarnessId));
+      setManagedKeyConfigured((await harnessCredentialStatus(selectedHarnessId)).configured);
       setApiKey("");
       setRuntimeCheck(null);
       setSaveSuccess(true);
@@ -91,15 +126,9 @@ export function SettingsPanel() {
     setCheckingRuntime(true);
     setErrorMessage(null);
     try {
-      const result = await verifyBobRuntime();
+      const result = await verifyHarnessRuntime(selectedHarnessId);
       setRuntimeCheck(result);
-      setBobInstallStatus({
-        errorMessage: result.errorMessage,
-        installed: result.installed,
-        path: result.path,
-        requiresDesktopRuntime: result.requiresDesktopRuntime,
-        version: result.version,
-      });
+      setSelectedHarnessReadiness(await harnessReadiness(selectedHarnessId));
     } catch (error) {
       setRuntimeCheck(null);
       setErrorMessage(error instanceof Error ? error.message : "Bob runtime check failed");
@@ -114,16 +143,14 @@ export function SettingsPanel() {
     setInstallResult(null);
     setErrorMessage(null);
     try {
-      for await (const event of installBob()) {
+      for await (const event of harnessInstall(selectedHarnessId)) {
         setInstallLog((prev) => [
           ...prev,
           { kind: event.kind, text: "text" in event ? event.text : "" },
         ]);
         if (event.kind === "done") {
           setInstallResult(event);
-          const [auth, install] = await Promise.all([getBobAuthStatus(), checkBobInstall()]);
-          setBobAuthStatus(auth);
-          setBobInstallStatus(install);
+          setSelectedHarnessReadiness(await harnessReadiness(selectedHarnessId));
         }
       }
     } catch (error) {
@@ -133,7 +160,17 @@ export function SettingsPanel() {
     }
   }
 
-  const needsInstall = !bobInstallStatus?.installed;
+  const needsInstall = !selectedHarnessReadiness?.installed;
+
+  // "Managed setup" = Compose both installs the harness AND stores its key (bob
+  // today): the full install + key + smoke-test panel. Derived from the
+  // selected harness's catalog capabilities, not its id; every other harness
+  // uses the generic setup (a key form when it needs one).
+  const selectedInfo = harnessCatalog.find((entry) => entry.id === selectedHarnessId);
+  const usesManagedSetup = Boolean(
+    selectedInfo?.requiresInstall &&
+      harnessCapabilitiesOf(harnessCatalog, selectedHarnessId).credentialRequired,
+  );
 
   return (
     <Tabs>
@@ -150,11 +187,11 @@ export function SettingsPanel() {
               switching providers swaps the content in place instead of
               collapsing the layout (the old conditional caused a jump). */}
           <div className="settings-provider-detail">
-            {harnessCapabilitiesOf(harnessCatalog, selectedHarnessId).credentialRequired ? (
-              <BobSetup
+            {usesManagedSetup ? (
+              <ManagedHarnessSetup
                 apiKey={apiKey}
                 setApiKey={setApiKey}
-                bobAuthStatus={bobAuthStatus}
+                authConfigured={managedKeyConfigured}
                 needsInstall={needsInstall}
                 installing={installing}
                 installLog={installLog}
@@ -200,8 +237,8 @@ export function SettingsPanel() {
               A local-first AI writing workspace — your notes stay on your computer. AI for
               everyone.
             </p>
-            {bobInstallStatus?.nodeVersion ? (
-              <p className="settings-helper">Runtime: Node.js {bobInstallStatus.nodeVersion}</p>
+            {bobNodeVersion(selectedHarnessReadiness) ? (
+              <p className="settings-helper">Runtime: Node.js {bobNodeVersion(selectedHarnessReadiness)}</p>
             ) : null}
           </div>
           {isTauriRuntime() ? (
@@ -252,21 +289,50 @@ const MAX_TURNS_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
  *  omits the flag so the CLI uses its own default. */
 function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
-  const options =
-    useHarnessStore((state) => state.harnessOptions[harnessId]) ?? ({} as HarnessRunOptions);
-  const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
-
   const info = harnessCatalog.find((entry) => entry.id === harnessId);
   const caps = harnessCapabilitiesOf(harnessCatalog, harnessId);
   const name = info?.displayName ?? harnessId;
 
   return (
+    <>
+      {/* Key-only cloud providers (OpenRouter) need an API key Compose stores;
+          login-managed CLIs and local servers (Ollama/OpenCode) don't. */}
+      {caps.credentialRequired ? <HarnessCredentialForm harnessId={harnessId} name={name} /> : null}
+      <ExternalHarnessOptions harnessId={harnessId} name={name} />
+    </>
+  );
+}
+
+/** The per-harness model + run-option controls (model, permission mode, max
+ *  turns, effort, edit-review). Driven by the harness's declared capabilities —
+ *  a new harness needs zero edits here. */
+function ExternalHarnessOptions({ harnessId, name }: { harnessId: string; name: string }) {
+  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
+  const options =
+    useHarnessStore((state) => state.harnessOptions[harnessId]) ?? ({} as HarnessRunOptions);
+  const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
+  const harnessModels = useHarnessStore((state) => state.harnessModels);
+  const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
+  const caps = harnessCapabilitiesOf(harnessCatalog, harnessId);
+
+  // Discover models live for harnesses without a curated compile-time list
+  // (Ollama / OpenCode / OpenRouter / Codex). claude ships `caps.models`, so skip
+  // the probe for it. Failures resolve to [] → the free-text field below.
+  useEffect(() => {
+    if (caps.models.length === 0) {
+      void loadHarnessModels(harnessId);
+    }
+  }, [harnessId, caps.models.length, loadHarnessModels]);
+  const dynamicModels = harnessModels[harnessId] ?? [];
+  const currentModel = options.model ?? "";
+
+  return (
     <div className="settings-section">
       <h3>{name} setup</h3>
       <p className="settings-helper">
-        {name} uses your existing {name} login — there's nothing to connect here. If it isn't
-        installed yet, use the Install button on its card above. Choose a model and run options
-        below; leave a field on "Default" to use {name}'s own default.
+        {caps.credentialRequired
+          ? `Add your ${name} API key above. Choose a model and run options below; leave a field on "Default" to use ${name}'s own default.`
+          : `${name} uses your existing ${name} login — there's nothing to connect here. If it isn't installed yet, use the Install button on its card above. Choose a model and run options below; leave a field on "Default" to use ${name}'s own default.`}
       </p>
 
       <div style={{ display: "grid", gap: "1rem", maxWidth: "22rem", marginBlockStart: "0.75rem" }}>
@@ -290,12 +356,35 @@ function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
           before it lands — safer to preview, but {name} can't see your real folder or its tools.
         </p>
 
-        {caps.allowsCustomModel ? (
+        {/* Model picker, in priority: a live-discovered list (Ollama/OpenCode/
+            OpenRouter/Codex) → dropdown; else free-text where custom ids are
+            allowed; else a curated dropdown (claude). A discovered list that came
+            back empty (offline, Ollama down) falls through to free-text so the
+            field is never a dead end. The current value is always selectable even
+            if it predates the discovered list. */}
+        {dynamicModels.length > 0 ? (
+          <Select
+            id={`${harnessId}-model`}
+            labelText="Model"
+            value={currentModel}
+            onChange={(event) =>
+              setHarnessOptions(harnessId, { model: event.target.value || undefined })
+            }
+          >
+            <SelectItem value="" text="Default (the model decides)" />
+            {dynamicModels.map((model) => (
+              <SelectItem key={model.value} value={model.value} text={model.label} />
+            ))}
+            {currentModel && !dynamicModels.some((model) => model.value === currentModel) ? (
+              <SelectItem value={currentModel} text={currentModel} />
+            ) : null}
+          </Select>
+        ) : caps.allowsCustomModel ? (
           <TextInput
             id={`${harnessId}-model`}
             labelText="Model"
             placeholder="Default (the CLI decides)"
-            value={options.model ?? ""}
+            value={currentModel}
             onChange={(event) =>
               setHarnessOptions(harnessId, { model: event.target.value || undefined })
             }
@@ -304,7 +393,7 @@ function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
           <Select
             id={`${harnessId}-model`}
             labelText="Model"
-            value={options.model ?? ""}
+            value={currentModel}
             onChange={(event) =>
               setHarnessOptions(harnessId, { model: event.target.value || undefined })
             }
@@ -374,30 +463,115 @@ function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
   );
 }
 
-interface BobSetupProps {
+/** Generic API-key form for a key-only harness (OpenRouter). Mirrors bob's key
+ *  form but writes through the generic `harness_set_credential` keychain path
+ *  rather than bob-rs. The harness's `readiness()` reflects the key once saved
+ *  (Compose exports it into the env), so there's no separate "test" step. */
+function HarnessCredentialForm({ harnessId, name }: { harnessId: string; name: string }) {
+  const [apiKey, setApiKey] = useState("");
+  const [configured, setConfigured] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void harnessCredentialStatus(harnessId)
+      .then((status) => {
+        if (active) setConfigured(status.configured);
+      })
+      .catch(() => {
+        if (active) setConfigured(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [harnessId]);
+
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await harnessSetCredential(harnessId, apiKey);
+      setApiKey("");
+      const status = await harnessCredentialStatus(harnessId);
+      setConfigured(status.configured);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 4000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Could not save the ${name} API key`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSave} className="settings-section settings-form">
+      <h3>{name} API key</h3>
+      <PasswordInput
+        id={`${harnessId}-credential`}
+        labelText={`${name} API key`}
+        helperText={
+          configured
+            ? "A key is saved. Paste a new one to replace it."
+            : `Paste your ${name} API key. Stored locally in your OS keychain.`
+        }
+        value={apiKey}
+        onChange={(event) => setApiKey(event.currentTarget.value)}
+        placeholder={configured ? "Replace saved key" : `Paste ${name} API key`}
+      />
+      {error ? (
+        <InlineNotification
+          hideCloseButton
+          kind="error"
+          lowContrast
+          subtitle={error}
+          title="Setup error"
+        />
+      ) : saved ? (
+        <InlineNotification
+          hideCloseButton
+          kind="success"
+          lowContrast
+          subtitle={`Stored in your keychain. ${name} is ready to use.`}
+          title="API key saved"
+        />
+      ) : null}
+      <div className="settings-actions">
+        <Button disabled={saving} size="sm" type="submit">
+          {saving ? "Saving" : "Save key"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+interface ManagedHarnessSetupProps {
   apiKey: string;
   setApiKey: (value: string) => void;
-  bobAuthStatus: { configured: boolean };
+  authConfigured: boolean;
   needsInstall: boolean;
   installing: boolean;
   installLog: InstallLogEntry[];
-  installResult: Extract<BobInstallEvent, { kind: "done" }> | null;
+  installResult: Extract<HarnessInstallEvent, { kind: "done" }> | null;
   logRef: React.RefObject<HTMLPreElement>;
   errorMessage: string | null;
   saveSuccess: boolean;
   saving: boolean;
   checkingRuntime: boolean;
-  runtimeCheck: BobRuntimeVerification | null;
+  runtimeCheck: HarnessRuntimeVerification | null;
   onInstall: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onRuntimeCheck: () => void;
 }
 
-function BobSetup(props: BobSetupProps) {
+function ManagedHarnessSetup(props: ManagedHarnessSetupProps) {
   const {
     apiKey,
     setApiKey,
-    bobAuthStatus,
+    authConfigured,
     needsInstall,
     installing,
     installLog,
@@ -469,16 +643,16 @@ function BobSetup(props: BobSetupProps) {
       <form onSubmit={onSubmit} className="settings-section settings-form">
         <h3>Bob API key</h3>
         <PasswordInput
-          id="settings-key"
+          id="settings-bob-key"
           labelText="Bob API key"
           helperText={
-            bobAuthStatus.configured
+            authConfigured
               ? "Paste a new key to replace the saved one."
               : "Paste your Bob API key. Stored locally in your OS keychain."
           }
           value={apiKey}
           onChange={(event) => setApiKey(event.currentTarget.value)}
-          placeholder={bobAuthStatus.configured ? "Replace saved key" : "Paste Bob API key"}
+          placeholder={authConfigured ? "Replace saved key" : "Paste Bob API key"}
         />
         {errorMessage ? (
           <InlineNotification
@@ -518,20 +692,17 @@ function BobSetup(props: BobSetupProps) {
 }
 
 interface InstallLogEntry {
-  kind: BobInstallEvent["kind"];
+  kind: HarnessInstallEvent["kind"];
   text: string;
 }
 
-function RuntimeCheckResult({ result }: { result: BobRuntimeVerification }) {
+function RuntimeCheckResult({ result }: { result: HarnessRuntimeVerification }) {
   const kind = result.authenticated ? "success" : "error";
   const title = result.authenticated ? "Bob verified" : "Bob not ready";
   const details = [
-    result.path ? `CLI: ${result.path}` : null,
     result.version ? `Version: ${result.version}` : null,
-    result.exitCode !== undefined ? `Exit: ${result.exitCode}` : null,
     result.errorMessage,
-    result.stdoutPreview ? `stdout: ${result.stdoutPreview}` : null,
-    result.stderrPreview ? `stderr: ${result.stderrPreview}` : null,
+    result.outputPreview ? `Reply: ${result.outputPreview}` : null,
   ]
     .filter(Boolean)
     .join("\n");

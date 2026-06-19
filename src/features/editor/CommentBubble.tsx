@@ -1,7 +1,7 @@
 import { AddComment, Close, ListBulleted, Send } from "@carbon/react/icons";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { bobRuntimeReadiness } from "../../app/workspaceModel";
+import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import type { SourceRange } from "../comments/commentModel";
@@ -70,10 +70,15 @@ function CommentComposer({
   const [hasContent, setHasContent] = useState(false);
   // Readiness drives the "set up the assistant" notice; the send still works
   // through the run's own preflight, so the buttons don't hard-gate on it.
-  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
+  // Capability-driven: only a harness Compose manages a key for can be
+  // "not connected" here; a login-managed CLI is always treated as ready.
+  const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const openSettings = useUiStore((state) => state.openSettings);
-  const bobReady = bobRuntimeReadiness(bobAuthStatus, bobInstallStatus);
+  const assistantReady = harnessCapabilitiesOf(harnessCatalog, selectedHarnessId).credentialRequired
+    ? { ready: selectedHarnessReadiness?.ready ?? false, message: selectedHarnessReadiness?.error ?? null }
+    : { ready: true, message: null };
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -135,9 +140,9 @@ function CommentComposer({
           }
         }}
       />
-      {!bobReady.ready ? (
+      {!assistantReady.ready ? (
         <div className="selection-composer__notice" role="status">
-          <span>{bobReady.message ?? "The assistant isn't connected yet."}</span>
+          <span>{assistantReady.message ?? "The assistant isn't connected yet."}</span>
           <button
             type="button"
             className="selection-composer__setup"

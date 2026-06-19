@@ -111,18 +111,9 @@ export default defineConfig(async () => ({
       ? {
           protocol: "ws",
           host,
-          // Bumped to 1423 because 1422 is now reserved for the
-          // Rust `bob-api` dev server (started by the dev script).
           port: 1423,
         }
       : undefined,
-    // Forward every bob endpoint to the Rust `bob-api` server on
-    // :1422. Same-origin from the browser's perspective. The
-    // handlers all live in Rust (`crates/bob-core`) — same code
-    // the Tauri prod build runs through `invoke()`.
-    proxy: {
-      "/api/bob": "http://127.0.0.1:1422",
-    },
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],

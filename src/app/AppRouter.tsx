@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { checkBobInstall, getBobAuthStatus } from "../lib/ipc/settingsClient";
+import { harnessReadiness } from "../lib/ipc/harnessClient";
 import { getOnboarding, listWorkspaces } from "../lib/ipc/workspaceClient";
 import { SetupScreen } from "../features/setup/SetupScreen";
 import { SplashScreen } from "./SplashScreen";
@@ -19,10 +19,10 @@ import { useHarnessStore } from "./store/harnessStore";
  * splash/onboarding.
  */
 export function AppRouter() {
-  // Boot-time hydration gate. `loadSetupState` fans out 4 IPC calls (bob auth,
-  // install probe, workspace list, onboarding flag) that take ~1s. Holding the
-  // splash until they settle stops the cold-launch flash (SetupScreen → empty
-  // workspace → real workspace) — the user sees the correct view first.
+  // Boot-time hydration gate. `loadSetupState` fans out IPC calls (the selected
+  // harness's readiness, workspace list, onboarding flag) that take ~1s. Holding
+  // the splash until they settle stops the cold-launch flash (SetupScreen →
+  // empty workspace → real workspace) — the user sees the correct view first.
   const [bootHydrated, setBootHydrated] = useState(false);
   // Read the field, not `onboardingComplete()` — calling the method inside a
   // selector re-runs its body on every store mutation and masks future logic
@@ -31,15 +31,16 @@ export function AppRouter() {
   const onboardingComplete = useWorkspaceStore((state) => Boolean(state.onboarding.completedAt));
   const hydrateWorkspaces = useWorkspaceStore((state) => state.hydrateWorkspaces);
   const setOnboarding = useWorkspaceStore((state) => state.setOnboarding);
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const setSelectedHarnessReadiness = useHarnessStore((state) => state.setSelectedHarnessReadiness);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadSetupState() {
       try {
-        const [authStatus, installStatus, workspaceList, onboarding] = await Promise.all([
-          getBobAuthStatus(),
-          checkBobInstall(),
+        const [readiness, workspaceList, onboarding] = await Promise.all([
+          harnessReadiness(useHarnessStore.getState().selectedHarnessId),
           listWorkspaces(),
           getOnboarding(),
         ]);
@@ -47,20 +48,16 @@ export function AppRouter() {
           return;
         }
 
-        useHarnessStore.getState().setBobAuthStatus(authStatus);
-        useHarnessStore.getState().setBobInstallStatus(installStatus);
+        setSelectedHarnessReadiness(readiness);
         hydrateWorkspaces(workspaceList);
         setOnboarding(onboarding);
         // Flip the boot gate LAST, after every store hydration above has
         // committed — React batches the setters into one commit, then this
         // final setter is the trigger that releases the splash.
         setBootHydrated(true);
-      } catch (error) {
+      } catch {
         if (!cancelled) {
-          useHarnessStore.getState().setBobAuthStatus({
-            configured: false,
-            errorMessage: error instanceof Error ? error.message : "Setup state could not be loaded",
-          });
+          setSelectedHarnessReadiness(null);
           // Release the gate even on error — otherwise an offline first launch
           // (IPC fails) would hang on the blank splash forever. The error banner
           // inside SetupScreen / SettingsPanel surfaces the failure.
@@ -77,7 +74,16 @@ export function AppRouter() {
     return () => {
       cancelled = true;
     };
-  }, [hydrateWorkspaces, setOnboarding]);
+  }, [hydrateWorkspaces, setOnboarding, setSelectedHarnessReadiness]);
+
+  // Re-probe when the selected harness changes, so the send gate + setup state
+  // track the new selection after a switch. The boot effect seeds the first
+  // probe; this fires on every subsequent change.
+  useEffect(() => {
+    harnessReadiness(selectedHarnessId)
+      .then(setSelectedHarnessReadiness)
+      .catch(() => setSelectedHarnessReadiness(null));
+  }, [selectedHarnessId, setSelectedHarnessReadiness]);
 
   if (!bootHydrated) {
     return <SplashScreen />;

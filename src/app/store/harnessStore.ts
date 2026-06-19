@@ -1,27 +1,26 @@
 import { create } from "zustand";
-import { harnessList, type HarnessInfo } from "../../lib/ipc/harnessClient";
-import type { BobInstallStatus } from "../../lib/ipc/settingsClient";
-import type { BobAuthStatus } from "../workspaceModel";
+import {
+  harnessList,
+  harnessListModels,
+  type HarnessInfo,
+  type HarnessModel,
+  type HarnessReadiness,
+} from "../../lib/ipc/harnessClient";
 import { persistHarnessPrefs } from "./harnessConfig";
 import { INITIAL_HARNESS_PREFS } from "./initialPrefs";
 import type { HarnessRunOptions } from "./types";
 
 /**
- * Harness selection, per-harness run options, and Bob credential/install
- * status. A **standalone store**, not a slice of the workspace store: nothing
- * here changes on document edits, so components that read harness config never
- * re-render on typing, and the editor/file tree never re-render when the user
- * picks a model. The only cross-store traffic is the chat-run path *reading*
- * this config via `useHarnessStore.getState()` — a one-directional dependency
- * (workspace store → harness store), which keeps this store a pure leaf.
+ * Harness selection, per-harness run options, discovered capabilities/models,
+ * and the selected harness's readiness. A **standalone store**, not a slice of
+ * the workspace store: nothing here changes on document edits, so components
+ * that read harness config never re-render on typing, and the editor/file tree
+ * never re-render when the user picks a model. The only cross-store traffic is
+ * the chat-run path *reading* this config via `useHarnessStore.getState()` — a
+ * one-directional dependency (workspace store → harness store), which keeps this
+ * store a pure leaf.
  */
 export interface HarnessState {
-  /** Whether Bob's managed API key is configured + any verification error. */
-  bobAuthStatus: BobAuthStatus;
-  /** Result of the last Bob CLI install check, or null before one runs. */
-  bobInstallStatus: BobInstallStatus | null;
-  setBobAuthStatus: (status: BobAuthStatus) => void;
-  setBobInstallStatus: (status: BobInstallStatus | null) => void;
   /** The harness the user picked (bob / claude / codex / …). Persisted. */
   selectedHarnessId: string;
   /** Whether the active harness may edit files. Persisted. */
@@ -35,17 +34,20 @@ export interface HarnessState {
    * bootstrap. Empty in the browser preview (the registry is desktop-only). */
   harnessCatalog: HarnessInfo[];
   loadHarnessCatalog: () => Promise<void>;
+  /** Models discovered live per harness (`harness_list_models`) for harnesses
+   * whose set isn't curated at compile time (Ollama, OpenCode, OpenRouter,
+   * Codex). Keyed by harness id; absent until loaded, `[]` when discovery finds
+   * none (the picker then falls back to a free-text model field). */
+  harnessModels: Record<string, HarnessModel[]>;
+  loadHarnessModels: (harnessId: string) => Promise<void>;
+  /** Readiness of the *selected* harness, refreshed on boot and whenever the
+   * selection changes or its credential/install is updated. Drives the send
+   * gate and the setup-complete check for key-backed harnesses. */
+  selectedHarnessReadiness: HarnessReadiness | null;
+  setSelectedHarnessReadiness: (readiness: HarnessReadiness | null) => void;
 }
 
 export const useHarnessStore = create<HarnessState>((set, get) => ({
-  bobAuthStatus: { configured: false },
-  bobInstallStatus: null,
-  setBobAuthStatus: (status) => {
-    set({ bobAuthStatus: status });
-  },
-  setBobInstallStatus: (status) => {
-    set({ bobInstallStatus: status });
-  },
   selectedHarnessId: INITIAL_HARNESS_PREFS.selectedHarnessId,
   allowEdits: INITIAL_HARNESS_PREFS.allowEdits,
   harnessOptions: INITIAL_HARNESS_PREFS.harnessOptions,
@@ -85,5 +87,15 @@ export const useHarnessStore = create<HarnessState>((set, get) => ({
     // that). Never throws into bootstrap.
     const catalog = await harnessList().catch(() => [] as HarnessInfo[]);
     set({ harnessCatalog: catalog });
+  },
+  harnessModels: {},
+  loadHarnessModels: async (harnessId) => {
+    // Best-effort; failures resolve to [] (the picker falls back to free-text).
+    const models = await harnessListModels(harnessId).catch(() => [] as HarnessModel[]);
+    set((state) => ({ harnessModels: { ...state.harnessModels, [harnessId]: models } }));
+  },
+  selectedHarnessReadiness: null,
+  setSelectedHarnessReadiness: (readiness) => {
+    set({ selectedHarnessReadiness: readiness });
   },
 }));

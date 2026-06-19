@@ -14,7 +14,6 @@ import {
 } from "../../lib/ipc/llmContextClient";
 import {
   appendUserChatMessage,
-  bobRuntimeReadiness,
   createLlmContextSnapshots,
   createPromptWithContext,
   finalizeRun,
@@ -25,10 +24,6 @@ import {
   beginAgentEditWindow,
   endAgentEditWindow,
 } from "../agentEditWindow";
-import {
-  checkBobInstall,
-  getBobAuthStatus,
-} from "../../lib/ipc/settingsClient";
 import {
   editGuardFor,
   harnessCapabilitiesOf,
@@ -52,6 +47,7 @@ import {
   playCompletionChime,
 } from "../../lib/audio/completionChime";
 import {
+  harnessCredentialStatus,
   runHarnessStream,
   subscribeHarnessRun,
 } from "../../lib/ipc/harnessClient";
@@ -103,33 +99,23 @@ export async function runSendChatPrompt(
 
   // Credential preflight runs only for harnesses Compose manages a
   // key for — driven by capability, not `id === "bob"`. Such a
-  // harness can't run without its CLI + key, so we verify up front
-  // and fail fast with a precise message rather than spawn a doomed
-  // process. Login-managed CLIs (Claude, Codex) have nothing for
-  // Compose to check here — a missing login surfaces as *that
-  // harness's* run error, not a misleading "Connect your Bob API
-  // key". Same gate as ChatPanel.
-  const harnessId = useHarnessStore.getState().selectedHarnessId;
-  if (harnessCapabilitiesOf(useHarnessStore.getState().harnessCatalog, harnessId).credentialRequired) {
-    const [authStatus, installStatus] = await Promise.all([
-      getBobAuthStatus().catch((error) => ({
-        configured: false,
-        errorMessage: errorMessage(error, "Could not verify Bob credentials"),
-      })),
-      checkBobInstall().catch((error) => ({
-        errorMessage: errorMessage(error, "Could not verify Bob CLI"),
-        installed: false,
-      })),
-    ]);
-    useHarnessStore.setState({ bobAuthStatus: authStatus, bobInstallStatus: installStatus });
-    const readiness = bobRuntimeReadiness(authStatus, installStatus);
-    if (!readiness.ready) {
+  // harness can't run without its stored key, so we verify it up
+  // front via the generic keychain check and fail fast with a
+  // precise message rather than spawn a doomed process. Login-managed
+  // CLIs (Claude, Codex) have nothing for Compose to check here — a
+  // missing login surfaces as *that harness's* run error, not a
+  // misleading "Connect your Bob API key". Same gate as ChatPanel.
+  const { selectedHarnessId: harnessId, harnessCatalog } = useHarnessStore.getState();
+  if (harnessCapabilitiesOf(harnessCatalog, harnessId).credentialRequired) {
+    const info = harnessCatalog.find((entry) => entry.id === harnessId);
+    const status = await harnessCredentialStatus(harnessId).catch(() => ({ configured: false }));
+    if (!status.configured) {
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
           ...item,
           chatThread: {
             ...item.chatThread,
-            runError: readiness.message,
+            runError: `Add your ${info?.displayName ?? harnessId} API key in Settings to use it.`,
             runState: "error",
           },
         })),

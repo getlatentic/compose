@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   harnessCapabilitiesOf,
   useWorkspaceStore,
@@ -5,7 +6,7 @@ import {
 } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { sumChatThreadStats } from "../../app/workspaceModel";
-import type { HarnessCapabilities, HarnessInfo } from "../../lib/ipc/harnessClient";
+import type { HarnessInfo, HarnessModel } from "../../lib/ipc/harnessClient";
 import { formatCompact } from "../../lib/format/numbers";
 import { FooterMenu, type FooterMenuItem } from "./FooterMenu";
 
@@ -131,16 +132,15 @@ export function ChatComposerFooterView({
   );
 }
 
-/** Build the model selector's options from a harness's capabilities — Default
- * plus any curated models, plus an active custom model not already listed.
- * Empty when there's nothing meaningful to switch among (no curated list and
- * no model set), so the selector hides rather than show a lone "Default". */
-function modelItemsFor(caps: HarnessCapabilities, currentModel: string): FooterMenuItem[] {
-  if (caps.models.length === 0 && !currentModel) {
+/** Build the model selector's options — Default plus the harness's models, plus
+ * an active custom model not already listed. Empty when there's nothing to switch
+ * among (no models and no model set), so the selector hides. */
+function modelItemsFor(models: HarnessModel[], currentModel: string): FooterMenuItem[] {
+  if (models.length === 0 && !currentModel) {
     return [];
   }
   const items: FooterMenuItem[] = [{ value: "", label: "Default" }];
-  for (const model of caps.models) {
+  for (const model of models) {
     items.push({ value: model.value, label: model.label });
   }
   if (currentModel && !items.some((item) => item.value === currentModel)) {
@@ -161,12 +161,21 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
   const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
   const harnessOptions = useHarnessStore((state) => state.harnessOptions);
   const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
+  const harnessModels = useHarnessStore((state) => state.harnessModels);
+  const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
   const chatThread = useWorkspaceStore((state) => state.activeWorkspace()?.chatThread ?? null);
 
   const caps = harnessCapabilitiesOf(harnessCatalog, selectedHarnessId);
+  // Harnesses with no curated list discover models live (Ollama/OpenCode/OpenRouter).
+  useEffect(() => {
+    if (caps.models.length === 0) {
+      void loadHarnessModels(selectedHarnessId);
+    }
+  }, [selectedHarnessId, caps.models.length, loadHarnessModels]);
   const options: HarnessRunOptions = harnessOptions[selectedHarnessId] ?? {};
   const currentModel = options.model ?? "";
-  const modelItems = modelItemsFor(caps, currentModel);
+  const models = caps.models.length > 0 ? caps.models : harnessModels[selectedHarnessId] ?? [];
+  const modelItems = modelItemsFor(models, currentModel);
   const modelLabel =
     modelItems.find((item) => item.value === currentModel)?.label ?? (currentModel || "Default");
 

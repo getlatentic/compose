@@ -9,8 +9,12 @@ import {
   FolderOpen,
 } from "@carbon/react/icons";
 import type { FormEvent, ReactNode } from "react";
-import { useState } from "react";
-import { setBobApiKey, type BobAuthStatus } from "../../lib/ipc/settingsClient";
+import { useEffect, useState } from "react";
+import {
+  harnessCredentialStatus,
+  harnessReadiness,
+  harnessSetCredential,
+} from "../../lib/ipc/harnessClient";
 import { createStarterFolder } from "../../lib/ipc/filesClient";
 import {
   addWorkspace,
@@ -223,16 +227,37 @@ function ChooseAiScreen({ onBack, onNext }: { onBack: () => void; onNext: () => 
   const desktop = isTauriRuntime();
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
-  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
-  const setBobAuthStatus = useHarnessStore((state) => state.setBobAuthStatus);
+  const setSelectedHarnessReadiness = useHarnessStore((state) => state.setSelectedHarnessReadiness);
 
-  // Capability-driven, never an id check: a harness whose credential Compose
-  // stores (bob) needs a key here. `harnessCapabilitiesOf` falls back to the
-  // default harness's capabilities when the catalog is empty (browser preview),
-  // so the bob key field still appears there.
+  // Capability-driven, never an id check: a key field appears when the SELECTED
+  // harness stores its credential with Compose and none is saved yet — probed
+  // against that harness, so switching the selection re-checks the right key.
+  const [keyConfigured, setKeyConfigured] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void harnessCredentialStatus(selectedHarnessId)
+      .then((status) => {
+        if (active) setKeyConfigured(status.configured);
+      })
+      .catch(() => {
+        if (active) setKeyConfigured(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedHarnessId]);
+
   const needsKey =
-    harnessCapabilitiesOf(harnessCatalog, selectedHarnessId).credentialRequired &&
-    !bobAuthStatus.configured;
+    harnessCapabilitiesOf(harnessCatalog, selectedHarnessId).credentialRequired && !keyConfigured;
+
+  async function handleKeySaved() {
+    const [status, readiness] = await Promise.all([
+      harnessCredentialStatus(selectedHarnessId).catch(() => ({ configured: false })),
+      harnessReadiness(selectedHarnessId).catch(() => null),
+    ]);
+    setKeyConfigured(status.configured);
+    setSelectedHarnessReadiness(readiness);
+  }
 
   return (
     <ScreenShell>
@@ -255,7 +280,9 @@ function ChooseAiScreen({ onBack, onNext }: { onBack: () => void; onNext: () => 
         />
       )}
 
-      {needsKey ? <BobKeyForm onSaved={setBobAuthStatus} /> : null}
+      {needsKey ? (
+        <HarnessKeyForm harnessId={selectedHarnessId} onSaved={handleKeySaved} />
+      ) : null}
 
       <NavRow onBack={onBack} onNext={onNext} nextLabel="Continue" />
     </ScreenShell>
@@ -263,11 +290,20 @@ function ChooseAiScreen({ onBack, onNext }: { onBack: () => void; onNext: () => 
 }
 
 /**
- * Inline bob API-key entry, shown on the "Choose your AI" step only when the
+ * Inline API-key entry, shown on the "Choose your AI" step only when the
  * selected harness stores its credential with Compose and none is saved yet.
  * Optional — the user can also add it later in Settings.
  */
-function BobKeyForm({ onSaved }: { onSaved: (status: BobAuthStatus) => void }) {
+function HarnessKeyForm({
+  harnessId,
+  onSaved,
+}: {
+  harnessId: string;
+  onSaved: () => void | Promise<void>;
+}) {
+  const displayName =
+    useHarnessStore((state) => state.harnessCatalog.find((entry) => entry.id === harnessId))
+      ?.displayName ?? harnessId;
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -277,11 +313,11 @@ function BobKeyForm({ onSaved }: { onSaved: (status: BobAuthStatus) => void }) {
     setError(null);
     setSaving(true);
     try {
-      const status = await setBobApiKey(apiKey);
-      onSaved(status);
+      await harnessSetCredential(harnessId, apiKey);
       setApiKey("");
+      await onSaved();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Bob API key could not be saved");
+      setError(caught instanceof Error ? caught.message : "API key could not be saved");
     } finally {
       setSaving(false);
     }
@@ -290,12 +326,12 @@ function BobKeyForm({ onSaved }: { onSaved: (status: BobAuthStatus) => void }) {
   return (
     <form className="onboard__form" onSubmit={submit}>
       <PasswordInput
-        id="api-key"
-        labelText="bob API key"
-        helperText="Stored in your OS keychain — we never see it. Generate one in your bob console."
+        id="harness-api-key"
+        labelText={`${displayName} API key`}
+        helperText="Stored in your OS keychain — we never see it."
         value={apiKey}
         onChange={(event) => setApiKey(event.currentTarget.value)}
-        placeholder="bob_sk_…"
+        placeholder="API key"
         size="md"
       />
       {error ? (

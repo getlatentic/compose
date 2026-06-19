@@ -55,10 +55,6 @@ export interface HarnessRunRequest {
   extraArgs?: string[];
 }
 
-/** The default harness id when nothing is selected / the catalog is
- * unavailable. Mirrors `compose_core::DEFAULT_HARNESS_ID`. */
-export const DEFAULT_HARNESS_ID = "bob";
-
 /** A model the harness can be pointed at (mirrors
  * `compose_core::HarnessModel`). `value` is passed verbatim to the CLI. */
 export interface HarnessModel {
@@ -215,6 +211,84 @@ export async function harnessReadiness(harnessId: string): Promise<HarnessReadin
     return null;
   }
   return invoke<HarnessReadiness>("harness_readiness", { harnessId });
+}
+
+/** Probe every registered harness's readiness in one pass, so the picker
+ * discovers what's on this machine without a per-harness fan-out. Desktop-only;
+ * the browser preview has no registry. */
+export async function harnessDiscover(): Promise<HarnessReadiness[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+  return invoke<HarnessReadiness[]>("harness_discover");
+}
+
+/**
+ * The model ids a harness offers, discovered live (Ollama `/api/tags`, OpenCode
+ * `opencode models`, models.dev for cloud providers) or its static curated list.
+ * Populates the model picker for harnesses whose `capabilities.models` is empty
+ * because discovery is dynamic. Best-effort: `[]` in the browser preview or on
+ * any backend error (the free-text model field still applies).
+ */
+export async function harnessListModels(harnessId: string): Promise<HarnessModel[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+  return invoke<HarnessModel[]>("harness_list_models", { harnessId });
+}
+
+/**
+ * Store a harness's API key in the OS keychain (and export it into the env so it
+ * takes effect immediately). An empty value clears it. Works for any harness id
+ * including bob — the Rust side routes bob's key through bob-rs.
+ */
+export async function harnessSetCredential(harnessId: string, value: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+  await invoke<void>("harness_set_credential", { harnessId, value });
+}
+
+/** Whether a harness's API key is stored (or none is needed). */
+export interface HarnessCredentialStatus {
+  configured: boolean;
+}
+
+/** Read whether a harness's API key is stored (or none is needed). */
+export async function harnessCredentialStatus(
+  harnessId: string,
+): Promise<HarnessCredentialStatus> {
+  if (!isTauriRuntime()) {
+    return { configured: false };
+  }
+  return invoke<HarnessCredentialStatus>("harness_credential_status", { harnessId });
+}
+
+/** Result of a harness runtime smoke-test (`harness_verify_runtime`). */
+export interface HarnessRuntimeVerification {
+  authenticated: boolean;
+  errorMessage?: string;
+  installed: boolean;
+  outputPreview?: string;
+  requiresDesktopRuntime?: boolean;
+  version?: string;
+}
+
+/** Smoke-test a harness end to end — a live run with a trivial prompt that
+ * confirms its install + credential work. Desktop-only; returns the
+ * requires-desktop fallback in a browser preview. */
+export async function verifyHarnessRuntime(
+  harnessId: string,
+): Promise<HarnessRuntimeVerification> {
+  if (!isTauriRuntime()) {
+    return {
+      authenticated: false,
+      errorMessage: DESKTOP_RUNTIME_REQUIRED,
+      installed: false,
+      requiresDesktopRuntime: true,
+    };
+  }
+  return invoke<HarnessRuntimeVerification>("harness_verify_runtime", { harnessId });
 }
 
 /**

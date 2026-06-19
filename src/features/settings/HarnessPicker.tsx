@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Button, InlineNotification, SkeletonText, Tag, Toggle } from "@carbon/react";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import {
+  harnessDiscover,
   harnessInstall,
   harnessList,
   harnessLogin,
-  harnessReadiness,
   type HarnessInfo,
   type HarnessReadiness,
 } from "../../lib/ipc/harnessClient";
@@ -31,11 +31,11 @@ interface HarnessRow {
 }
 
 /**
- * The harness to recommend as the default, chosen from what discovery
- * actually found — the agent that works *right now* (ready, zero setup),
- * else one that's installed (just needs sign-in / a key), else the first
- * registered harness (which has an install path). No hardcoded id, so a
- * machine with Claude ready isn't told to use bob.
+ * The harness to recommend as the default, in catalog (registration) order: the
+ * first that works *right now* (ready), else the first installed (needs sign-in /
+ * a key), else the first registered. The registry's declared order *is* the
+ * preference — reorder `compose_registry` to change it — so there's no separate
+ * priority list to drift.
  */
 function suggestedDefaultId(rows: HarnessRow[]): string | null {
   return (
@@ -51,11 +51,10 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
   const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
   const allowEdits = useHarnessStore((state) => state.allowEdits);
   const setAllowEdits = useHarnessStore((state) => state.setAllowEdits);
-  // Re-probe drivers: when the user saves a Bob API key or (re)installs
-  // a CLI elsewhere in Settings, the stored status changes and the
-  // badges must reflect it without reopening the panel.
-  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
+  // Re-probe driver: when the user saves an API key or (re)installs a CLI
+  // elsewhere in Settings, the selected harness's stored readiness changes and
+  // the badges must reflect it without reopening the panel.
+  const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
 
   const [rows, setRows] = useState<HarnessRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,15 +82,13 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
     }
     setError(null);
     try {
-      const list = await harnessList();
-      // Probe readiness in parallel — each is an async (off-thread)
-      // command, and one failing shouldn't sink the rest.
-      const withReadiness = await Promise.all(
-        list.map(async (info) => ({
-          info,
-          readiness: await harnessReadiness(info.id).catch(() => null),
-        })),
-      );
+      // One discovery pass probes every harness's readiness; the catalog
+      // supplies the display info, zipped by id.
+      const [list, discovered] = await Promise.all([harnessList(), harnessDiscover()]);
+      const withReadiness = list.map((info) => ({
+        info,
+        readiness: discovered.find((r) => r.harnessId === info.id) ?? null,
+      }));
       setRows(withReadiness);
       // Onboarding only: land the first-time user on the agent discovery
       // suggests, so they can accept it with one click. Once.
@@ -109,15 +106,15 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
     }
   }
 
-  // Probe on mount (with the skeleton), then re-probe quietly whenever
-  // Bob's stored auth or install status changes — e.g. the moment the
-  // user saves an API key below, Bob flips "Needs sign-in" → "Ready"
-  // without having to close and reopen Settings.
+  // Probe on mount (with the skeleton), then re-probe quietly whenever the
+  // selected harness's stored readiness changes — e.g. the moment the user
+  // saves an API key below, its badge flips "Needs sign-in" → "Ready" without
+  // having to close and reopen Settings.
   const probedOnce = useRef(false);
   useEffect(() => {
     void refresh({ quiet: probedOnce.current });
     probedOnce.current = true;
-  }, [bobAuthStatus, bobInstallStatus]);
+  }, [selectedHarnessReadiness]);
 
   useEffect(() => {
     if (logRef.current) {

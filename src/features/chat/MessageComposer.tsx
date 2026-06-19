@@ -1,10 +1,17 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import { Document, Send, StopFilledAlt } from "@carbon/react/icons";
 
-import type { BobRuntimeReadiness, WorkspaceContextItem } from "../../app/workspaceModel";
+import type { WorkspaceContextItem } from "../../app/workspaceModel";
 import { useUiStore } from "../../app/store/uiStore";
 import { ChatComposerFooter } from "./ChatComposerFooter";
 import { useAutoGrowTextarea } from "./useAutoGrowTextarea";
+
+/** Whether the chat can be sent right now, with a message to show when it
+ * can't (drives the composer's setup notice + the disabled placeholder). */
+export interface AssistantReadiness {
+  ready: boolean;
+  message: string | null;
+}
 
 /**
  * The chat footer: the context chips, the auto-growing prompt textarea,
@@ -26,7 +33,7 @@ export function MessageComposer({
   runError,
   running,
 }: {
-  assistantReady: BobRuntimeReadiness;
+  assistantReady: AssistantReadiness;
   canSend: boolean;
   contextItems: WorkspaceContextItem[];
   onOpenSettings: () => void;

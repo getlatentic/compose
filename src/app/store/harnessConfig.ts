@@ -1,5 +1,4 @@
 import {
-  DEFAULT_HARNESS_ID,
   type EditGuard,
   type HarnessCapabilities,
   type HarnessInfo,
@@ -41,11 +40,11 @@ export interface HarnessPrefs {
   harnessOptions: Record<string, HarnessRunOptions>;
 }
 
-/** Load the persisted harness selection + edit permission + per-harness
- * run options. Defaults to bob + edits-allowed + no options (matches the
- * onboarding recommended path). */
+/** Load the persisted harness selection + edit permission + per-harness run
+ * options. Fresh-start default is Claude (the top of the availability priority,
+ * before onboarding's detection-driven pick refines it). */
 export function loadHarnessPrefs(): HarnessPrefs {
-  const fallback: HarnessPrefs = { selectedHarnessId: "bob", allowEdits: true, harnessOptions: {} };
+  const fallback: HarnessPrefs = { selectedHarnessId: "claude", allowEdits: true, harnessOptions: {} };
   if (typeof localStorage === "undefined") {
     return fallback;
   }
@@ -83,12 +82,11 @@ export function persistHarnessPrefs(prefs: HarnessPrefs) {
 }
 
 /**
- * Capabilities for a harness, read from the loaded catalog. When the
- * catalog isn't loaded yet (browser preview, or before bootstrap) it
- * falls back to the static defaults: the default harness (bob) manages
- * a credential and previews edits, any other id is a login-managed CLI.
- * Every credential/preview branch reads this instead of comparing the
- * harness id to `"bob"`.
+ * Capabilities for a harness, read from the loaded catalog — the source of
+ * truth for credential gating and the options UI. Every credential/preview
+ * branch reads this instead of comparing the harness id. Before the catalog
+ * loads (browser preview, pre-bootstrap) it returns conservative no-capability
+ * defaults; the loaded catalog then supplies the real ones.
  */
 export function harnessCapabilitiesOf(
   catalog: HarnessInfo[],
@@ -98,10 +96,9 @@ export function harnessCapabilitiesOf(
   if (info) {
     return info.capabilities;
   }
-  const isDefault = harnessId === DEFAULT_HARNESS_ID;
   return {
-    credentialRequired: isDefault,
-    previewsEdits: isDefault,
+    credentialRequired: false,
+    previewsEdits: false,
     models: [],
     allowsCustomModel: false,
     supportsEffort: false,

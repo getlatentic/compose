@@ -5,9 +5,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "concurrently --names bob-api,vite --prefix-colors blue,green --kill-others-on-fail 'pnpm dev:bob-api' 'pnpm dev:vite'",
-    "dev:vite": "vite",
-    "dev:bob-api": "cargo run --quiet --bin bob-api",
+    "dev": "vite",
     "build": "pnpm build:wasm && pnpm typecheck && vite build",
     "build:wasm": "wasm-pack build crates/workspace-index-wasm --target web --out-dir ../../src/wasm/workspace_index_pkg --no-pack && rm -f src/wasm/workspace_index_pkg/.gitignore",
     "build:editor": "pnpm --filter ai-editor build",

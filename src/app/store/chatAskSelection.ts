@@ -8,7 +8,6 @@ import {
 } from "./runEvents";
 import {
   appendUserChatMessage,
-  bobRuntimeReadiness,
   finalizeRun,
   startRun,
   type ChatExcerptRef,
@@ -44,6 +43,7 @@ import {
   playCompletionChime,
 } from "../../lib/audio/completionChime";
 import {
+  harnessCredentialStatus,
   runHarnessStream,
   subscribeHarnessRun,
 } from "../../lib/ipc/harnessClient";
@@ -78,25 +78,24 @@ export async function runAskAboutSelection(
   }
 
   // Credential preflight, exactly as in `sendChatPrompt` and driven
-  // by capability rather than `id === "bob"`. A Compose-managed-key
-  // harness can't run without its CLI + key, so we surface the
-  // precise "connect" guidance (and open Settings so the user can fix
-  // it in place) rather than spawn a doomed run. Login-managed CLIs
-  // (Claude, Codex) have nothing for Compose to check — a missing
-  // login surfaces as *that harness's* run error.
-  const harnessId = useHarnessStore.getState().selectedHarnessId;
-  if (harnessCapabilitiesOf(useHarnessStore.getState().harnessCatalog, harnessId).credentialRequired) {
-    const readiness = bobRuntimeReadiness(useHarnessStore.getState().bobAuthStatus, useHarnessStore.getState().bobInstallStatus);
-    if (!readiness.ready) {
-      // Surface the error in chat and open the Settings modal so the user
-      // can self-serve the fix in place.
+  // by capability rather than `id === "bob"`, but it opens Settings on
+  // failure so the user can self-serve the fix in place. A
+  // Compose-managed-key harness can't run without its stored key, so we
+  // surface the precise "connect" guidance rather than spawn a doomed
+  // run. Login-managed CLIs (Claude, Codex) have nothing for Compose to
+  // check — a missing login surfaces as *that harness's* run error.
+  const { selectedHarnessId: harnessId, harnessCatalog } = useHarnessStore.getState();
+  if (harnessCapabilitiesOf(harnessCatalog, harnessId).credentialRequired) {
+    const info = harnessCatalog.find((entry) => entry.id === harnessId);
+    const status = await harnessCredentialStatus(harnessId).catch(() => ({ configured: false }));
+    if (!status.configured) {
       useUiStore.setState({ chatOpen: true, settingsOpen: true });
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
           ...item,
           chatThread: {
             ...item.chatThread,
-            runError: readiness.message ?? "The assistant isn't connected yet.",
+            runError: `Add your ${info?.displayName ?? harnessId} API key in Settings to use it.`,
             runState: "error",
           },
         })),
