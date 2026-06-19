@@ -1,37 +1,6 @@
-# Cargo workspace for the Compose app's Rust crates.
-#
-# The harness layer (the framework + the unofficial bob SDK + the streaming
-# engine) lives in its OWN repository:
-#
-#     https://github.com/getlatentic/agent-harness
-#
-# as the published crates `agent-harness` / `bob-rs` / `cli-stream`.
-# Compose consumes them from **crates.io** as ordinary version deps (see
-# `src-tauri` and `crates/bob-api`), so they are NOT workspace members here.
-#
-# Members (Compose-internal only):
-#   * `crates/bob-api`    — dev-only axum HTTP+SSE server. Wraps the external
-#                           `bob-rs` so the browser preview reaches the same
-#                           spawn code as the desktop build. Not shipped.
-#   * `crates/workspace-index` (+ `-wasm`)
-#                         — pure markdown index/search core, compiled both
-#                           native (for `src-tauri`) and to WASM (for the
-#                           browser). Compose-internal.
-#   * `src-tauri`         — Tauri desktop host. Resolves the active harness
-#                           through the external `agent-harness` registry.
-#                           The production runtime.
-#
-# Developing the harness against Compose locally: rather than publish a new
-# version on every harness edit, add an (uncommitted) patch to a local
-# checkout. Since the deps come from crates.io, key the patch on `crates-io`:
-#   [patch.crates-io]
-#   agent-harness = { path = "../agent-harness/crates/agent-harness" }
-#   bob-rs        = { path = "../agent-harness/crates/bob-rs" }
-#   cli-stream    = { path = "../agent-harness/crates/cli-stream" }
 [workspace]
 resolver = "2"
 members = [
-  "crates/bob-api",
   "crates/workspace-index",
   "crates/workspace-index-wasm",
   "src-tauri",

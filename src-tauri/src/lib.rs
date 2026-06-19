@@ -1,13 +1,12 @@
-mod bob;
 pub mod db;
 pub mod events;
 pub mod export;
 pub mod files;
+mod harness;
 pub mod index;
 pub mod logging;
 mod open_with;
 pub mod review;
-mod settings;
 mod workspace;
 
 use tauri::{Emitter, Manager, RunEvent};
@@ -20,7 +19,7 @@ pub fn run() {
         .manage(workspace::WorkspaceRegistry::default())
         .manage(db::MetadataStore::default())
         .manage(files::watcher::WatcherManager::default())
-        .manage(bob::runner::BobRunnerState::default())
+        .manage(harness::runner::RunnerState::default())
         .manage(review::ReviewSessionStore::default())
         .manage(index::WorkspaceIndexStore::default())
         .manage(PendingOpenUrls::default())
@@ -56,6 +55,8 @@ pub fn run() {
             if let Err(error) = watchers.init(app_handle.clone()) {
                 eprintln!("watcher manager init failed: {error}");
             }
+            // Export stored harness keys to the env so readiness probes see them.
+            harness::credentials::export_all();
             // Purge soft-deleted files past the trash retention window. Off the
             // launch path on its own thread (nothing in the app waits on it),
             // and only after metadata init above so the store is ready.
@@ -64,10 +65,9 @@ pub fn run() {
                 let metadata = sweep_handle.state::<db::MetadataStore>();
                 files::trash_sweep::run_startup_trash_sweep(&metadata);
             });
-            // Open Safari Web Inspector on launch when this build was made
-            // with `COMPOSE_DEVTOOLS=1 pnpm tauri build`. `option_env!` evaluates
-            // at *compile time*, so a normal release build never opens the
-            // inspector — there's no runtime flag a curious user could flip.
+            // Open Safari Web Inspector on launch when this build was made with
+            // `COMPOSE_DEVTOOLS=1 pnpm tauri build`. `option_env!` evaluates at
+            // compile time, so a normal release build never opens the inspector.
             #[cfg(debug_assertions)]
             let want_devtools = true;
             #[cfg(not(debug_assertions))]
@@ -80,17 +80,17 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            bob::runner::run_harness_stream,
-            bob::runner::cancel_harness_run,
-            bob::runner::harness_list,
-            bob::runner::harness_readiness,
-            bob::runner::harness_install,
-            bob::runner::harness_login,
-            settings::settings_check_bob_install,
-            settings::settings_get_bob_auth_status,
-            settings::settings_install_bob,
-            settings::settings_set_bob_api_key,
-            settings::settings_verify_bob_runtime,
+            harness::runner::run_harness_stream,
+            harness::runner::cancel_harness_run,
+            harness::commands::harness_list,
+            harness::commands::harness_discover,
+            harness::commands::harness_readiness,
+            harness::commands::harness_install,
+            harness::commands::harness_login,
+            harness::commands::harness_verify_runtime,
+            harness::commands::harness_list_models,
+            harness::commands::harness_set_credential,
+            harness::commands::harness_credential_status,
             workspace::setup_complete_onboarding,
             workspace::setup_get_onboarding,
             workspace::workspace_add,
@@ -153,9 +153,7 @@ pub fn run() {
                 };
                 // Buffer first so a frontend that mounts later can drain it.
                 pending.push(path.clone());
-                // Best-effort live emit for the warm-start case (Compose
-                // already running). The cold-start case is covered by the
-                // buffer + drain.
+                // Best-effort live emit for the warm-start case.
                 let _ = app_handle.emit("compose:open-external-file", path);
             }
         }

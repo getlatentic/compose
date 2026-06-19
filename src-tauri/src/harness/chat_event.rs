@@ -121,29 +121,35 @@ pub fn run_event_to_chat(event: RunEvent) -> Option<ChatEvent> {
         },
         RunEvent::Text { run_id, delta } => ChatEvent::Text { run_id, delta },
         RunEvent::Thinking { run_id, delta } => ChatEvent::Thinking { run_id, delta },
+        // 0.4 renamed these to ACP's ToolCall shape (title/raw_input/content) and
+        // added locations/raw_output. Map onto Compose's existing ChatEvent so the
+        // front-end wire shape is unchanged; the new fields aren't surfaced yet.
         RunEvent::ToolStart {
             run_id,
             tool_call_id,
-            name,
-            input,
+            title,
             tool_kind,
+            raw_input,
+            locations: _,
         } => ChatEvent::ToolStart {
             run_id,
             tool_call_id,
-            name,
-            input,
+            name: title,
+            input: raw_input,
             tool_kind,
         },
         RunEvent::ToolEnd {
             run_id,
             tool_call_id,
             ok,
-            output,
+            content,
+            raw_output: _,
+            locations: _,
         } => ChatEvent::ToolEnd {
             run_id,
             tool_call_id,
             ok,
-            output,
+            output: content,
         },
         RunEvent::SuggestedEdits { run_id, edits } => ChatEvent::SuggestedEdits { run_id, edits },
         RunEvent::Activity { run_id, message } => ChatEvent::Activity { run_id, message },
@@ -178,7 +184,7 @@ pub fn run_event_to_chat(event: RunEvent) -> Option<ChatEvent> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bob_rs::ProcessEvent;
+    use harness::ProcessEvent;
 
     // --- neutral RunEvent → ChatEvent (claude/codex) ------------------------
 
@@ -204,9 +210,10 @@ mod tests {
             run_event_to_chat(RunEvent::ToolStart {
                 run_id: "r".to_owned(),
                 tool_call_id: "t".to_owned(),
-                name: "shell".to_owned(),
-                input: Some("ls -la".to_owned()),
+                title: "shell".to_owned(),
                 tool_kind: ToolKind::Execute,
+                raw_input: Some("ls -la".to_owned()),
+                locations: Vec::new(),
             }),
             Some(ChatEvent::ToolStart {
                 run_id: "r".to_owned(),
@@ -221,7 +228,9 @@ mod tests {
                 run_id: "r".to_owned(),
                 tool_call_id: "t".to_owned(),
                 ok: true,
-                output: Some("done".to_owned()),
+                content: Some("done".to_owned()),
+                raw_output: None,
+                locations: Vec::new(),
             }),
             Some(ChatEvent::ToolEnd {
                 run_id: "r".to_owned(),
@@ -253,6 +262,9 @@ mod tests {
                 input_tokens: Some(100),
                 output_tokens: Some(40),
                 total_tokens: Some(140),
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                cost_usd: None,
             }),
             Some(ChatEvent::Usage {
                 run_id: "r".to_owned(),

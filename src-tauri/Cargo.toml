@@ -4,15 +4,9 @@ version = "0.0.1-alpha.1"
 description = "Compose — local-first AI writing workspace"
 authors = ["Compose contributors"]
 edition = "2021"
-# The desktop application host — not published to crates.io.
 publish = false
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "compose_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -20,22 +14,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# `protocol-asset` registers the `asset:` protocol used to display
-# workspace-local images in the editor (gated at runtime by
-# `assetProtocol.enable` + the per-workspace scope; see files::workspace_scan).
 tauri = { version = "2", features = ["devtools", "protocol-asset"] }
-# The harness layer — an external crate family published to crates.io
-# (repo: https://github.com/getlatentic/agent-harness).
-# `bob-rs` — the unofficial bob SDK (readiness / install / keychain /
-# spawn_bob), also consumed by `crates/bob-api` so the two transports run
-# identical logic. `agent-harness` (imported as `harness`) — the framework:
-# the registry, the Harness trait, RunEvent + request/metadata types, and
-# the bob adapter's `normalize_bob_event`.
-bob-rs = "0.3.5"
-agent-harness = "0.3.5"
-# Pure markdown index/search core, shared with the browser (WASM). The
-# Tauri command scans the disk and calls this; `db::SourceRange` is
-# re-exported from it so there is one coordinate type.
+agent-harness = { path = "/Users/dev/workspace/agent-harness/crates/agent-harness", features = [
+  "acp",
+  "openai-compatible",
+] }
 workspace-index = { path = "../crates/workspace-index" }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
@@ -46,40 +29,15 @@ keyring = { version = "3.6.3", features = ["apple-native"] }
 notify = "6"
 walkdir = "2"
 sha2 = "0.10"
-# Compresses document-history snapshot blobs (db::snapshot). Already in the
-# dependency tree transitively; its default miniz_oxide backend is pure Rust,
-# so this adds no native build. The snapshot content hash stays over the
-# uncompressed bytes, so compression is invisible to callers.
 flate2 = "1"
 uuid = { version = "1", features = ["v4"] }
-# Used by settings::settings_install_bob to spool the embedded
-# install-bob.sh to disk for `bash -l` to exec. Also reused in
-# dev-only tests, but the production code path needs it too.
 tempfile = "3"
-# GFM markdown -> HTML for PDF export (export::html). Pure Rust, no native
-# build. The export concern owns its own renderer rather than reaching into
-# the front-end preview pipeline.
 comrak = "0.52"
-# Base64-encodes local images into data: URIs so the export HTML is fully
-# self-contained (the PDF webview needs no filesystem access).
 base64 = "0.22"
 
 [dev-dependencies]
-# Pulls in `tauri::test` (mock_builder / MockRuntime / get_ipc_response) so the
-# IPC-contract tests can drive `#[tauri::command]`s through the real router.
-# The `test` feature is additive and only compiled for test builds — it never
-# reaches the shipped binary, which still builds from `[dependencies]` alone.
 tauri = { version = "2", features = ["test"] }
 
-# clonefile(2) for copy-on-write workspace clones in the edit-review gate
-# (files::clone). macOS-only; other platforms use the recursive-copy
-# fallback and never link libc here.
-#
-# objc2 + objc2-web-kit drive native PDF export (export::pdf): an offscreen
-# WKWebView renders the export HTML and macOS WebKit generates the PDF. These
-# are already in the tree transitively (wry/Tauri); declaring them direct with
-# the WKWebView/PDF features keeps the build correct on its own. PDF export is
-# macOS-only in v1 — other platforms get a "not supported" error.
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
 objc2 = "0.6"

@@ -11,26 +11,22 @@
 //! What lives here:
 //!   * `HarnessRunRequest` (the IPC request shape) and the
 //!     `run_harness_stream` / `cancel_harness_run` commands.
-//!   * Run-id keyed `BobRunnerState` so `cancel_harness_run` can find
+//!   * Run-id keyed `RunnerState` so `cancel_harness_run` can find
 //!     the right handle — works for any harness, since bob's
 //!     `ProcessHandle` and the generic `RunHandle` both implement
 //!     `RunControl`.
 //!   * Bridging the neutral `RunEvent` stream to Tauri's `app.emit`
 //!     via `run_event_to_chat` (→ Compose's `ChatEvent`).
 
-use crate::bob::{BobApprovalMode, BobChatMode};
 use crate::db::MetadataStore;
+use crate::harness::chat_event::{run_event_to_chat, ChatEvent};
+use crate::harness::credentials::Credential;
+use crate::harness::registry::compose_harness_by_id;
+use crate::harness::{ApprovalMode, ChatMode};
 use crate::review::{prepare_edit_guard, EditGuard, ReviewSessionStore};
 use crate::workspace::WorkspaceRegistry;
-use crate::bob::chat_event::{run_event_to_chat, ChatEvent};
-use bob_rs::InstallEvent;
-use harness::harness_by_id;
-use harness::{
-    HarnessReadiness, InstallCallback, ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode,
-    RunRequest, RunTuning,
-};
+use harness::{ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode, RunRequest, RunTuning};
 use serde::Deserialize;
-use tauri::ipc::Channel;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -41,8 +37,8 @@ pub const HARNESS_RUN_EVENT: &str = "harness_run";
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessRunRequest {
-    pub approval_mode: BobApprovalMode,
-    pub chat_mode: BobChatMode,
+    pub approval_mode: ApprovalMode,
+    pub chat_mode: ChatMode,
     #[serde(default)]
     pub context_file_paths: Vec<String>,
     pub max_coins: u32,
@@ -99,12 +95,12 @@ fn default_harness_id() -> String {
 // so it's gone.)
 
 #[derive(Default)]
-pub struct BobRunnerState {
-    inner: Arc<Mutex<BobRunnerInner>>,
+pub struct RunnerState {
+    inner: Arc<Mutex<RunnerInner>>,
 }
 
 #[derive(Default)]
-struct BobRunnerInner {
+struct RunnerInner {
     runs: HashMap<String, ActiveRun>,
 }
 
@@ -137,12 +133,12 @@ impl ActiveRun {
     }
 }
 
-impl BobRunnerState {
+impl RunnerState {
     pub fn cancel(&self, run_id: &str) -> Result<(), String> {
         let inner = self
             .inner
             .lock()
-            .map_err(|_| "bob runner lock was poisoned".to_owned())?;
+            .map_err(|_| "harness runner lock was poisoned".to_owned())?;
         let Some(run) = inner.runs.get(run_id) else {
             return Err("run is not active".to_owned());
         };
@@ -166,13 +162,12 @@ impl BobRunnerState {
         let mut inner = self
             .inner
             .lock()
-            .map_err(|_| "bob runner lock was poisoned".to_owned())?;
+            .map_err(|_| "harness runner lock was poisoned".to_owned())?;
         let run = ActiveRun::new();
         let token = Arc::clone(&run.cancelled);
         inner.runs.insert(run_id, run);
         Ok(token)
     }
-
 
     /// Attach the spawned bob handle to an already-registered
     /// pending run. If the user cancelled while we were
@@ -182,7 +177,7 @@ impl BobRunnerState {
         let inner = self
             .inner
             .lock()
-            .map_err(|_| "bob runner lock was poisoned".to_owned())?;
+            .map_err(|_| "harness runner lock was poisoned".to_owned())?;
         let Some(run) = inner.runs.get(run_id) else {
             // Run was deregistered (likely by the exit pump).
             // Just cancel the handle to avoid leaking the process.
@@ -213,7 +208,7 @@ impl BobRunnerState {
 pub fn run_harness_stream(
     request: HarnessRunRequest,
     registry: State<'_, WorkspaceRegistry>,
-    runner: State<'_, BobRunnerState>,
+    runner: State<'_, RunnerState>,
     metadata: State<'_, MetadataStore>,
     review: State<'_, ReviewSessionStore>,
     app: AppHandle,
@@ -221,7 +216,7 @@ pub fn run_harness_stream(
     // Register the run as "pending" up front. From this moment
     // forward, `cancel_harness_run(run_id)` finds an entry and can
     // flip the cancellation token — even if we're still blocked
-    // inside the OS keychain prompt during `prepare_bob_spawn`.
+    // inside the run's preparation phase (e.g. a keychain read).
     let cancel_token = runner.register_pending(request.run_id.clone())?;
     let run_id = request.run_id.clone();
 
@@ -239,7 +234,7 @@ pub fn run_harness_stream(
 
     // Defensive: bail if the user already pressed Stop in the
     // microsecond between starting and now. (Mostly relevant
-    // when prepare_bob_spawn is itself fast and the second-IPC
+    // when run preparation is itself fast and the second-IPC
     // window is real.)
     if cancel_token.load(Ordering::SeqCst) {
         let _ = app.emit(
@@ -267,29 +262,28 @@ pub fn run_harness_stream(
 }
 
 #[tauri::command(async)]
-pub fn cancel_harness_run(run_id: String, runner: State<'_, BobRunnerState>) -> Result<(), String> {
+pub fn cancel_harness_run(run_id: String, runner: State<'_, RunnerState>) -> Result<(), String> {
     runner.cancel(&run_id)
 }
 
-/// Run a non-bob harness through the `agent-harness` registry. bob
-/// keeps its richer Tauri path in `run_harness_stream` (locator +
-/// workspace-aware argv + attached context files); this handles
-/// Claude Code, Codex, and any future adapter generically — resolve
-/// the harness, build a neutral `RunRequest`, and stream its
-/// normalized `RunEvent`s on the same IPC channel + runner state, so
-/// cancellation and run bookkeeping work identically.
+/// Run a harness through the `agent-harness` registry: resolve the harness,
+/// derive its working dir through the edit-review gate, build a neutral
+/// `RunRequest`, and stream its normalized `RunEvent`s on the IPC channel +
+/// runner state. Every harness — bob, Claude Code, Codex, and any future
+/// adapter — goes through here, so cancellation and run bookkeeping are
+/// identical across all of them.
 fn run_via_harness(
     harness_id: &str,
     request: HarnessRunRequest,
     registry: &WorkspaceRegistry,
-    runner: &BobRunnerState,
+    runner: &RunnerState,
     metadata: &MetadataStore,
     review: &ReviewSessionStore,
     app: AppHandle,
 ) -> Result<(), String> {
     let run_id = request.run_id.clone();
 
-    let Some(harness) = harness_by_id(harness_id) else {
+    let Some(harness) = compose_harness_by_id(harness_id) else {
         let message = format!("Unknown harness: {harness_id}");
         emit_error_and_exit(&app, &run_id, &message);
         runner.unregister(&run_id);
@@ -322,8 +316,8 @@ fn run_via_harness(
     // edit-capable modes map to Edit (so CLI harnesses get their
     // write-permission flags), everything else to Ask.
     let mode = match request.chat_mode {
-        BobChatMode::Code | BobChatMode::Advanced => RunMode::Edit,
-        BobChatMode::Plan | BobChatMode::Ask => RunMode::Ask,
+        ChatMode::Code | ChatMode::Advanced => RunMode::Edit,
+        ChatMode::Plan | ChatMode::Ask => RunMode::Ask,
     };
 
     // Carry the user's picker selections through to the adapter. The
@@ -331,15 +325,11 @@ fn run_via_harness(
     // max-turns; codex: model + effort) and ignores the rest. An empty
     // model string is treated as "unset" so a cleared field falls back
     // to the CLI default rather than passing `--model ""`.
-    // bob is the only harness with a coin budget. Thread the request's
-    // max_coins as `--max-coins` so it overrides the adapter's hardcoded
-    // default (bob is yargs last-wins); the other harnesses have no such flag.
-    // (A neutral RunTuning coin field would retire this bob-conditional — none
-    // exists yet, and a literal id check on a real bob-only *knob* is fine; the
-    // anti-pattern the guide warns against is id checks standing in for a
-    // capability flag, which coins don't have.)
+    // The coin budget is bob's alone (no neutral RunTuning field represents it),
+    // so it's the one place keyed to the bob id — the registry's own
+    // `BOB_HARNESS_ID`, not a Compose constant.
     let mut extra_args = request.extra_args;
-    if harness_id == harness::DEFAULT_HARNESS_ID {
+    if harness_id == harness::BOB_HARNESS_ID {
         extra_args.push("--max-coins".to_owned());
         extra_args.push(request.max_coins.to_string());
     }
@@ -357,6 +347,8 @@ fn run_via_harness(
         // (permission mode etc.) into these flags. See harnessExtraArgs in the
         // store. The adapter appends them, overriding its own defaults.
         extra_args,
+        // 0.4: structured-output JSON Schema — the bob run path doesn't use it.
+        output_schema: None,
     };
 
     let run_request = RunRequest {
@@ -368,7 +360,14 @@ fn run_via_harness(
         // Conversation continuity is still history-in-prompt today; native
         // `--resume` wiring is a follow-up. Fresh session each run for now.
         resume: None,
+        // 0.4: image attachments for multimodal models — bob is text-only here.
+        attachments: Vec::new(),
     };
+
+    // Bridge a stored API key (bob, OpenRouter, …) into the env var the harness
+    // reads it from, just before the run. Credential-free harnesses (Ollama,
+    // OpenCode, Claude, Codex) are no-ops. See harness::credentials.
+    Credential::of(harness.as_ref()).export_to_env();
 
     let app_cb = app.clone();
     let runner_inner = Arc::clone(&runner.inner);
@@ -431,54 +430,6 @@ fn emit_error_and_exit(app: &AppHandle, run_id: &str, message: &str) {
     );
 }
 
-/// `harness_list` — the harness catalog for the Settings picker
-/// (id, display name, description, whether it needs an install).
-#[tauri::command(async)]
-pub fn harness_list() -> Result<Vec<harness::HarnessInfo>, String> {
-    Ok(harness::harness_catalog())
-}
-
-/// `harness_readiness` — probe one harness (installed / version /
-/// auth / error). Drives the picker's "Ready ✓" vs "Set up" state.
-/// May shell out (`<bin> --version`); runs `(async)` so it never
-/// blocks the UI thread.
-#[tauri::command(async)]
-pub fn harness_readiness(harness_id: String) -> Result<HarnessReadiness, String> {
-    let harness =
-        harness_by_id(&harness_id).ok_or_else(|| format!("Unknown harness: {harness_id}"))?;
-    Ok(harness.readiness())
-}
-
-/// `harness_install` — stream a harness's one-time install over a
-/// Tauri `Channel`, mirroring `settings_install_bob` but resolved by
-/// id so any harness's `install()` is reachable from the picker.
-#[tauri::command(async)]
-pub fn harness_install(harness_id: String, on_event: Channel<InstallEvent>) -> Result<(), String> {
-    let harness =
-        harness_by_id(&harness_id).ok_or_else(|| format!("Unknown harness: {harness_id}"))?;
-    let callback: InstallCallback = std::sync::Arc::new(move |event| {
-        let _ = on_event.send(event);
-    });
-    // `install` returns the typed `HarnessError`; stringify at the boundary.
-    harness.install(callback).map_err(|e| e.to_string())
-}
-
-/// `harness_login` — stream a harness's interactive sign-in (its CLI's
-/// own OAuth) over a Tauri `Channel`, mirroring `harness_install`. The
-/// flow opens the user's browser; `Done { ok }` reports success so the
-/// picker can re-probe readiness. `(async)` so the blocking login wait
-/// runs on a worker thread, never the UI thread (see ipc-guide.md).
-#[tauri::command(async)]
-pub fn harness_login(harness_id: String, on_event: Channel<InstallEvent>) -> Result<(), String> {
-    let harness =
-        harness_by_id(&harness_id).ok_or_else(|| format!("Unknown harness: {harness_id}"))?;
-    let callback: InstallCallback = std::sync::Arc::new(move |event| {
-        let _ = on_event.send(event);
-    });
-    // `login` returns the typed `HarnessError`; stringify at the boundary.
-    harness.login(callback).map_err(|e| e.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -491,7 +442,7 @@ mod tests {
 
     #[test]
     fn cancel_unknown_run_returns_error() {
-        let runner = BobRunnerState::default();
+        let runner = RunnerState::default();
         assert!(runner
             .cancel("run-missing")
             .unwrap_err()
