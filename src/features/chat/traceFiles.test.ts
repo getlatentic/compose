@@ -89,6 +89,14 @@ describe("fileOpsFromTrace", () => {
     expect(fileOpsFromTrace(trace, covered).map((entry) => entry.id)).toEqual(["e1"]);
   });
 
+  it("dedupes case-insensitively (a `welcome.md` write vs a `Welcome.md` diff)", () => {
+    const trace: TraceEntry[] = [
+      tool("write", { id: "w1", input: JSON.stringify({ path: "/vault/welcome.md" }) }),
+    ];
+    const covered = appliedChangeBasenames([{ filePath: "Welcome.md" }]);
+    expect(fileOpsFromTrace(trace, covered)).toEqual([]);
+  });
+
   it("keeps a card when the op has no resolvable filename to match", () => {
     const trace: TraceEntry[] = [tool("write", { id: "w1", input: "not json" })];
     const covered = appliedChangeBasenames([{ filePath: "notes/x.md" }]);
@@ -111,6 +119,11 @@ describe("appliedChangeBasenames", () => {
     ]);
     expect(names.has("x.md")).toBe(true);
     expect(names.has("report.md")).toBe(true);
+  });
+
+  it("lower-cases basenames so a case-mismatched path still matches", () => {
+    const names = appliedChangeBasenames([{ filePath: "notes/Welcome.md" }]);
+    expect(names.has("welcome.md")).toBe(true);
   });
 
   it("returns an empty set for undefined", () => {

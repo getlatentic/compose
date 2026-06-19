@@ -1,4 +1,4 @@
-use rusqlite::{params, types::Type, Connection, OptionalExtension, Transaction};
+use rusqlite::{params, types::Type, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -939,15 +939,13 @@ impl MetadataStore {
 
     fn app_connection(&self) -> Result<Connection, String> {
         let paths = self.paths()?;
-        Connection::open(paths.app_db_path)
-            .map_err(|error| format!("could not open app metadata db: {error}"))
+        open_connection(&paths.app_db_path)
     }
 
     fn vault_connection(&self, vault_id: &str) -> Result<Connection, String> {
         let db_path = self.vault_db_path(vault_id)?;
         migrate_vault_database(&db_path)?;
-        Connection::open(db_path)
-            .map_err(|error| format!("could not open vault metadata db: {error}"))
+        open_connection(&db_path)
     }
 
     fn vault_db_path(&self, vault_id: &str) -> Result<PathBuf, String> {
@@ -1074,13 +1072,33 @@ fn byte_range_to_indices(text: &str, range: &SourceRange) -> Result<(usize, usiz
     Ok((start, end))
 }
 
+/// Open a SQLite connection tuned for Compose's concurrent access. `busy_timeout`
+/// makes a call wait for a brief writer lock instead of failing with "database
+/// is locked"; WAL lets reads proceed while a write is in flight.
+fn open_connection(db_path: &Path) -> Result<Connection, String> {
+    let mut connection = Connection::open(db_path)
+        .map_err(|error| format!("could not open metadata db: {error}"))?;
+    connection
+        .execute_batch(
+            "pragma busy_timeout = 5000;
+             pragma journal_mode = wal;
+             pragma synchronous = normal;
+             pragma foreign_keys = on;",
+        )
+        .map_err(|error| format!("could not configure metadata db: {error}"))?;
+    // Default writes to BEGIN IMMEDIATE so a read-then-write transaction takes
+    // the write lock up front instead of upgrading mid-transaction. The upgrade
+    // is what deadlocks two concurrent writers into "database is locked" —
+    // busy_timeout retries a blocked BEGIN, but not a blocked lock upgrade.
+    connection.set_transaction_behavior(TransactionBehavior::Immediate);
+    Ok(connection)
+}
+
 fn migrate_global_database(db_path: &Path) -> Result<(), String> {
-    let connection = Connection::open(db_path)
-        .map_err(|error| format!("could not open app metadata db: {error}"))?;
+    let connection = open_connection(db_path)?;
     connection
         .execute_batch(
             "
-            pragma journal_mode = wal;
             create table if not exists vaults (
               vault_id text primary key,
               display_name text not null,
@@ -1123,12 +1141,10 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("could not create vault metadata dir: {error}"))?;
     }
-    let connection = Connection::open(db_path)
-        .map_err(|error| format!("could not open vault metadata db: {error}"))?;
+    let connection = open_connection(db_path)?;
     connection
         .execute_batch(
             "
-            pragma journal_mode = wal;
             create table if not exists documents (
               doc_id text primary key,
               current_path text not null,

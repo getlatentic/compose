@@ -32,6 +32,7 @@ export function MessageComposer({
   prompt,
   runError,
   running,
+  tokenLabel,
 }: {
   assistantReady: AssistantReadiness;
   canSend: boolean;
@@ -43,6 +44,8 @@ export function MessageComposer({
   prompt: string;
   runError: string | null;
   running: boolean;
+  /** Cumulative token usage for the conversation, shown above the input. */
+  tokenLabel: string | null;
 }) {
   const textareaRef = useAutoGrowTextarea(prompt);
 
@@ -90,7 +93,19 @@ export function MessageComposer({
             </span>
           ))
         )}
+        {tokenLabel ? <span className="chat-tokens">{tokenLabel}</span> : null}
       </div>
+
+      {/* The setup prompt sits ABOVE the input so a needs-config harness can't
+          push the input/footer down or change the input's height. */}
+      {!assistantReady.ready ? (
+        <div className="chat-error chat-error--setup">
+          <span>{assistantReady.message}</span>
+          <button type="button" className="chat-setup-link" onClick={onOpenSettings}>
+            Set up your assistant →
+          </button>
+        </div>
+      ) : null}
 
       <div className="chat-input-row">
         <textarea
@@ -120,14 +135,6 @@ export function MessageComposer({
         )}
       </div>
 
-      {!assistantReady.ready ? (
-        <div className="chat-error chat-error--setup">
-          <span>{assistantReady.message}</span>
-          <button type="button" className="chat-setup-link" onClick={onOpenSettings}>
-            Set up your assistant →
-          </button>
-        </div>
-      ) : null}
       {runError ? <div className="chat-error">{runError}</div> : null}
 
       {/* The compact footer line: assistant + model selectors, token count,

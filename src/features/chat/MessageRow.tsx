@@ -4,7 +4,6 @@ import { Check, Copy, RefreshCw } from "lucide-react";
 
 import type {
   ChatExcerptRef,
-  TraceEntry,
   WorkspaceChatMessage,
   WorkspaceRunStats,
 } from "../../app/workspaceModel";
@@ -14,9 +13,8 @@ import { AppliedChanges } from "./AppliedChanges";
 import { FileOpCard } from "./FileOpCard";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { SuggestionList } from "./SuggestionList";
-import { toolActionLabel } from "./toolLabels";
+import { WorkingIndicator } from "./WorkingIndicator";
 import { appliedChangeBasenames, fileOpsFromTrace } from "./traceFiles";
-import { useDwellValue } from "./useDwellValue";
 
 export interface MessageRowCallbacks {
   onAccept: (suggestionId: string) => void;
@@ -121,10 +119,10 @@ export function MessageRow({
           <div className="message-body message-body--user">{message.content}</div>
         )
       ) : message.streaming && !opRunning ? (
-        // No answer yet — the transient status (derived from the trace) takes
-        // the slot, unless a file-op card is already running (its spinner IS
-        // the status). Replaced by the answer when it lands.
-        <StatusIndicator trace={trace} />
+        // No answer yet — the working loader takes the slot, unless a file-op
+        // card is already running (its spinner IS the status). Replaced by the
+        // answer when it lands.
+        <WorkingIndicator trace={trace} />
       ) : null}
 
       {message.suggestions?.length ? (
@@ -208,50 +206,6 @@ function ExcerptChip({ excerpt }: { excerpt: ChatExcerptRef }) {
       {excerpt.note ? <p className="excerpt-chip__note">{excerpt.note}</p> : null}
     </div>
   );
-}
-
-/**
- * The transient "what I'm doing" line shown in place of the bubble while
- * a turn runs. Its text is derived from the trace (see `liveStatus`) and
- * then run through `useDwellValue` so a fast-streaming run can't flip it
- * before it's been read — each status holds for at least STATUS_DWELL_MS.
- */
-const STATUS_DWELL_MS = 450;
-
-function StatusIndicator({ trace }: { trace: TraceEntry[] | undefined }) {
-  const status = useDwellValue(liveStatus(trace), STATUS_DWELL_MS);
-  return (
-    <div className="message-status" aria-live="polite">
-      <span className="message-status__dot" aria-hidden />
-      <span>{status}</span>
-    </div>
-  );
-}
-
-/**
- * The live status text from the trace's latest *meaningful* step:
- *  - a thinking step → "Thinking…" (we never show the reasoning text);
- *  - a tool step → its action label ("Reading Notes.md…");
- *  - a notice step → its text, but only if non-blank (bob emits a
- *    whitespace-only message after a tool — that must not blank the line;
- *    we fall through to the previous meaningful step instead).
- * "Getting started…" only before the first such step.
- */
-function liveStatus(trace: TraceEntry[] | undefined): string {
-  for (let i = (trace?.length ?? 0) - 1; i >= 0; i -= 1) {
-    const entry = trace![i];
-    if (entry.kind === "thinking") {
-      return "Thinking…";
-    }
-    if (entry.kind === "tool") {
-      return `${toolActionLabel(entry.tool.name, entry.tool.input)}…`;
-    }
-    // notice: skip whitespace-only entries (keep looking back).
-    if (entry.text.trim()) {
-      return entry.text.trim();
-    }
-  }
-  return "Getting started…";
 }
 
 /** "25.7k tokens · 0.05 coins" — compact + human-readable, only the

@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import type { ChatRunState, WorkspaceChatMessage } from "../../app/workspaceModel";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageRow, type MessageRowCallbacks } from "./MessageRow";
+import { WorkingIndicator } from "./WorkingIndicator";
 
 /**
  * The scrollable transcript: the new-conversation empty state when there are
@@ -21,11 +22,18 @@ export function ChatMessageList({
   /** The file currently in context, named in the empty state. */
   contextFileLabel: string | null;
   messages: WorkspaceChatMessage[];
-  /** Prefill the composer from an empty-state suggestion. */
-  onUseSuggestion: (text: string) => void;
+  /** Prefill the composer from an empty-state suggestion; `review` defaults the
+   * run to Review mode for read-only-intent prompts. */
+  onUseSuggestion: (text: string, opts?: { review?: boolean }) => void;
   runState: ChatRunState;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // The brief gap right after send, before the assistant message (which carries
+  // its own status line) exists: show the working loader so the turn feels
+  // responsive from the first moment.
+  const running = runState === "starting" || runState === "streaming";
+  const showStartingLoader = running && messages[messages.length - 1]?.role !== "assistant";
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -44,6 +52,7 @@ export function ChatMessageList({
           {messages.map((message) => (
             <MessageRow callbacks={callbacks} key={message.id} message={message} />
           ))}
+          {showStartingLoader ? <WorkingIndicator /> : null}
         </div>
       )}
     </div>

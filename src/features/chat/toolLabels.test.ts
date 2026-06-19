@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fileOpVerb } from "./toolLabels";
+import { fileOpVerb, toolActionLabel } from "./toolLabels";
 
 describe("fileOpVerb", () => {
   // The flicker guard: while a write runs, the per-tool card cannot know whether
@@ -23,5 +23,20 @@ describe("fileOpVerb", () => {
   it("gives a plain failure phrase on error", () => {
     expect(fileOpVerb("write", "error")).toBe("Couldn't write");
     expect(fileOpVerb("edit", "error")).toBe("Couldn't edit");
+  });
+});
+
+describe("toolActionLabel", () => {
+  it("labels a known tool with the file basename", () => {
+    expect(toolActionLabel("read_file", '{"path":"/a/b/Notes.md"}')).toBe("Reading Notes.md");
+  });
+
+  it("matches a harness's bare tool name by keyword (Ollama emits `read`)", () => {
+    expect(toolActionLabel("read", '{"path":"/a/b/Notes.md"}')).toBe("Reading Notes.md");
+    expect(toolActionLabel("read")).toBe("Reading your notes");
+  });
+
+  it("falls back to the de-underscored name for a truly unknown tool", () => {
+    expect(toolActionLabel("frobnicate_widget")).toBe("Using frobnicate widget");
   });
 });

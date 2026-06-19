@@ -1,13 +1,26 @@
 import { ArrowRight, ChatBot } from "@carbon/react/icons";
 
+/** A starting-point prompt. `review` marks read-only-intent asks (summarize,
+ * key points) that should default to Review mode — any edit the model makes is
+ * shown for approval rather than auto-applied — so a read-only ask never writes
+ * silently. The user can still flip the footer pill to Auto-apply. */
+interface Suggestion {
+  label: string;
+  review?: boolean;
+}
+
 /** Starting points offered when a chat has no messages. When a file is in
  * context they speak to "this file"; otherwise they're workspace-level. They
  * prefill the composer (not auto-send) so the user stays in control. */
-const FILE_SUGGESTIONS = ["Summarize this file", "Turn this into a table", "What are the key points?"];
-const WORKSPACE_SUGGESTIONS = [
-  "Help me outline a new note",
-  "Find notes related to what I'm writing",
-  "What can you help me with?",
+const FILE_SUGGESTIONS: Suggestion[] = [
+  { label: "Summarize this file", review: true },
+  { label: "Turn this into a table" },
+  { label: "What are the key points?", review: true },
+];
+const WORKSPACE_SUGGESTIONS: Suggestion[] = [
+  { label: "Help me outline a new note" },
+  { label: "Find notes related to what I'm writing", review: true },
+  { label: "What can you help me with?", review: true },
 ];
 
 /**
@@ -22,8 +35,9 @@ export function ChatEmptyState({
 }: {
   /** The file currently attached as context (the open note), or null. */
   contextFileLabel: string | null;
-  /** Drop a suggestion into the composer (the user reviews + sends). */
-  onUseSuggestion: (text: string) => void;
+  /** Drop a suggestion into the composer (the user reviews + sends). `review`
+   * defaults the run to Review mode for read-only-intent prompts. */
+  onUseSuggestion: (text: string, opts?: { review?: boolean }) => void;
 }) {
   const suggestions = contextFileLabel ? FILE_SUGGESTIONS : WORKSPACE_SUGGESTIONS;
 
@@ -44,15 +58,15 @@ export function ChatEmptyState({
         )}
       </p>
       <div className="chat-empty__suggestions">
-        {suggestions.map((text) => (
+        {suggestions.map((suggestion) => (
           <button
             type="button"
-            key={text}
+            key={suggestion.label}
             className="chat-empty__suggestion"
-            onClick={() => onUseSuggestion(text)}
+            onClick={() => onUseSuggestion(suggestion.label, { review: suggestion.review })}
           >
             <ArrowRight size={14} aria-hidden />
-            <span>{text}</span>
+            <span>{suggestion.label}</span>
           </button>
         ))}
       </div>

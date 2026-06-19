@@ -66,7 +66,7 @@ export function fileOpsFromTrace(
     }
     if (coveredFiles && coveredFiles.size > 0) {
       const file = toolFile(entry.tool.input);
-      if (file && coveredFiles.has(file)) {
+      if (file && coveredFiles.has(file.toLowerCase())) {
         continue;
       }
     }
@@ -89,7 +89,10 @@ export function appliedChangeBasenames(
     const segments = change.filePath.split(/[/\\]/).filter(Boolean);
     const base = segments[segments.length - 1];
     if (base) {
-      names.add(base);
+      // Lower-cased: macOS is case-insensitive, so a model that writes
+      // `welcome.md` while the file on disk is `Welcome.md` must still dedup
+      // against the applied diff — otherwise both a tool card and the diff show.
+      names.add(base.toLowerCase());
     }
   }
   return names;

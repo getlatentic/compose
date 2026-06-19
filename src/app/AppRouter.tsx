@@ -39,8 +39,11 @@ export function AppRouter() {
 
     async function loadSetupState() {
       try {
-        const [readiness, workspaceList, onboarding] = await Promise.all([
-          harnessReadiness(useHarnessStore.getState().selectedHarnessId),
+        // Don't block the splash on the harness readiness probe — the
+        // [selectedHarnessId] effect below already runs it on mount, and the
+        // editor doesn't need it to render. Gate only on the fast local reads
+        // (workspaces + onboarding, both from app-support JSON).
+        const [workspaceList, onboarding] = await Promise.all([
           listWorkspaces(),
           getOnboarding(),
         ]);
@@ -48,7 +51,6 @@ export function AppRouter() {
           return;
         }
 
-        setSelectedHarnessReadiness(readiness);
         hydrateWorkspaces(workspaceList);
         setOnboarding(onboarding);
         // Flip the boot gate LAST, after every store hydration above has

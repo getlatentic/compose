@@ -52,7 +52,10 @@ export const useHarnessStore = create<HarnessState>((set, get) => ({
   allowEdits: INITIAL_HARNESS_PREFS.allowEdits,
   harnessOptions: INITIAL_HARNESS_PREFS.harnessOptions,
   setSelectedHarness: (harnessId) => {
-    set({ selectedHarnessId: harnessId });
+    // Clear stale readiness immediately — it described the *previous* harness.
+    // AppRouter re-probes on the selection change; null meanwhile reads as
+    // "available", so the gate never flashes the wrong harness's state.
+    set({ selectedHarnessId: harnessId, selectedHarnessReadiness: null });
     persistHarnessPrefs({
       selectedHarnessId: harnessId,
       allowEdits: get().allowEdits,

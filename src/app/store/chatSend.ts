@@ -1,5 +1,6 @@
 import type { WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
 import { showErrorToast } from "../../features/toast/toastStore";
+import { formatHarnessError } from "../../lib/format/harnessError";
 import { useUiStore } from "./uiStore";
 import { useHarnessStore } from "./harnessStore";
 import {
@@ -280,7 +281,9 @@ export async function runSendChatPrompt(
       extraArgs: harnessExtraArgs(harnessId, tuning),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The assistant could not start";
+    const message = formatHarnessError(
+      error instanceof Error ? error.message : "The assistant could not start",
+    );
     const currentThread =
       get().workspaces.find((item) => item.id === workspaceId)?.chatThread ?? null;
     if (currentThread?.activeRunId === runId) {

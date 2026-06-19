@@ -44,7 +44,7 @@
       #root {
         height: 100%;
       }
-      .bob-splash {
+      .app-splash {
         position: fixed;
         inset: 0;
         display: flex;
@@ -53,12 +53,12 @@
         flex-direction: column;
         gap: 1.25rem;
         background: #ffffff;
-        animation: bob-splash-in 240ms ease-out;
+        animation: app-splash-in 240ms ease-out;
       }
       /* Square mark — matches `.bob-dashboard__brand-mark`, scaled
        * up for the splash. Carbon's brand marks are hard squares,
        * not rounded, so we keep sharp corners. */
-      .bob-splash__mark {
+      .app-splash__mark {
         inline-size: 64px;
         block-size: 64px;
         display: grid;
@@ -66,7 +66,7 @@
         background: #161616;
         color: #ffffff;
       }
-      .bob-splash__mark svg {
+      .app-splash__mark svg {
         width: 36px;
         height: 36px;
         fill: currentColor;
@@ -74,19 +74,19 @@
       /* Wordmark — mirrors `.bob-dashboard__brand-text`: bold
        * product name over a helper-grey descriptor. Centered for
        * the splash rather than left-aligned. */
-      .bob-splash__wordmark {
+      .app-splash__wordmark {
         display: grid;
         justify-items: center;
         line-height: 1.15;
         gap: 0.125rem;
       }
-      .bob-splash__name {
+      .app-splash__name {
         font-size: 1rem;
         font-weight: 600;
         color: #161616;
         letter-spacing: -0.01em;
       }
-      .bob-splash__descriptor {
+      .app-splash__descriptor {
         font-size: 0.75rem;
         font-weight: 400;
         color: #6f6f6f;
@@ -94,7 +94,7 @@
       }
       /* Carbon-blue indeterminate sweep — the only motion, kept
        * small and low so it reads as "loading", not decoration. */
-      .bob-splash__pulse {
+      .app-splash__pulse {
         width: 32px;
         height: 2px;
         margin-block-start: 0.25rem;
@@ -105,19 +105,19 @@
           transparent 100%
         );
         background-size: 200% 100%;
-        animation: bob-splash-pulse 1.2s ease-in-out infinite;
+        animation: app-splash-pulse 1.2s ease-in-out infinite;
       }
-      @keyframes bob-splash-in {
+      @keyframes app-splash-in {
         from { opacity: 0; }
         to { opacity: 1; }
       }
-      @keyframes bob-splash-pulse {
+      @keyframes app-splash-pulse {
         0% { background-position: 200% 0; }
         100% { background-position: -200% 0; }
       }
       @media (prefers-reduced-motion: reduce) {
-        .bob-splash { animation: none; }
-        .bob-splash__pulse { animation-duration: 2.4s; }
+        .app-splash { animation: none; }
+        .app-splash__pulse { animation-duration: 2.4s; }
       }
     </style>
   </head>
@@ -127,8 +127,8 @@
       <!-- Splash. Replaced by React on mount. Lives inside #root so we
         don't need an extra effect to remove it. Mirrors the dashboard
         brand so the splash → app transition is seamless. -->
-      <div class="bob-splash" aria-hidden="true">
-        <span class="bob-splash__mark">
+      <div class="app-splash" aria-hidden="true">
+        <span class="app-splash__mark">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-hidden="true">
             <path d="M16,19a6.9908,6.9908,0,0,1-5.833-3.1287l1.666-1.1074a5.0007,5.0007,0,0,0,8.334,0l1.666,1.1074A6.9908,6.9908,0,0,1,16,19Z"/>
             <path d="M20,8a2,2,0,1,0,2,2A1.9806,1.9806,0,0,0,20,8Z"/>
@@ -136,11 +136,11 @@
             <path d="M17.7358,30,16,29l4-7h6a1.9966,1.9966,0,0,0,2-2V6a1.9966,1.9966,0,0,0-2-2H6A1.9966,1.9966,0,0,0,4,6V20a1.9966,1.9966,0,0,0,2,2h9v2H6a3.9993,3.9993,0,0,1-4-4V6A3.9988,3.9988,0,0,1,6,2H26a3.9988,3.9988,0,0,1,4,4V20a3.9993,3.9993,0,0,1-4,4H21.1646Z"/>
           </svg>
         </span>
-        <div class="bob-splash__wordmark">
-          <span class="bob-splash__name">Compose</span>
-          <span class="bob-splash__descriptor">AI for everyone</span>
+        <div class="app-splash__wordmark">
+          <span class="app-splash__name">Compose</span>
+          <span class="app-splash__descriptor">AI for everyone</span>
         </div>
-        <div class="bob-splash__pulse"></div>
+        <div class="app-splash__pulse"></div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

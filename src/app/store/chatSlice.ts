@@ -124,27 +124,30 @@ export const createChatSlice = (
     ) {
       return;
     }
-    // Walk back to find the most recent user message.
-    let userText: string | null = null;
+    // Walk back to the most recent user message.
+    let userIndex = -1;
     for (let i = thread.messages.length - 1; i >= 0; i -= 1) {
       const message = thread.messages[i];
       if (message.role === "user" && message.content?.trim()) {
-        userText = message.content;
+        userIndex = i;
         break;
       }
     }
-    if (!userText) {
+    if (userIndex < 0) {
       return;
     }
-    // Stage the prompt and delegate to the standard send path. The previous
-    // assistant reply stays in history; the regen lands as a fresh turn.
+    const userText = thread.messages[userIndex].content ?? "";
+    // Regenerate replaces the turn in place: drop that user message and every
+    // response after it, then re-send its text — so a regen re-answers the same
+    // question instead of appending a duplicate turn.
     set((state) => ({
       workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
         ...item,
         chatThread: {
           ...item.chatThread,
+          messages: item.chatThread.messages.slice(0, userIndex),
           preparedCommand: null,
-          prompt: userText ?? "",
+          prompt: userText,
         },
       })),
     }));

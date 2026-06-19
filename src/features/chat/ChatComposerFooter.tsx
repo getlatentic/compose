@@ -1,29 +1,19 @@
 import { useEffect } from "react";
-import {
-  harnessCapabilitiesOf,
-  useWorkspaceStore,
-  type HarnessRunOptions,
-} from "../../app/workspaceStore";
+import { harnessCapabilitiesOf, type HarnessRunOptions } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import { sumChatThreadStats } from "../../app/workspaceModel";
 import type { HarnessInfo, HarnessModel } from "../../lib/ipc/harnessClient";
-import { formatCompact } from "../../lib/format/numbers";
 import { FooterMenu, type FooterMenuItem } from "./FooterMenu";
 
 /**
- * The composer footer line, matching the design: a compact
+ * The composer footer line, a compact
  *
- *   {assistant} ▾  /  {model} ▾  ·  {N} tokens          ↵ to send
+ *   {assistant} ▾  /  {model} ▾                       [Auto-apply]
  *
  * row pinned under the input. The assistant + model selectors are
  * {@link FooterMenu} popovers (not Carbon form fields, which shifted the
  * layout). The model selector follows the harness's *capabilities* — shown
  * only when there's something to switch among — exactly like the Settings
- * panel. Renders nothing without a catalog (the browser preview is only).
- *
- * Note: the keyboard hint reads "↵ to send" because the composer sends on
- * plain Enter (Shift+Enter = newline). The mockup's "⌘↵" would require
- * changing that binding.
+ * panel. Renders nothing without a catalog (the browser preview only).
  */
 export function ChatComposerFooterView({
   harnesses,
@@ -33,7 +23,6 @@ export function ChatComposerFooterView({
   selectedModel,
   modelLabel,
   onSelectModel,
-  tokenLabel,
   showReviewToggle = false,
   reviewEdits = false,
   onToggleReviewEdits,
@@ -47,7 +36,6 @@ export function ChatComposerFooterView({
   selectedModel: string;
   modelLabel: string;
   onSelectModel: (value: string) => void;
-  tokenLabel: string | null;
   /** Whether the inline review/auto-apply toggle applies to this harness
    * (only write-capable harnesses go through the edit-review gate). */
   showReviewToggle?: boolean;
@@ -93,25 +81,14 @@ export function ChatComposerFooterView({
             />
           </>
         ) : null}
-        {tokenLabel ? (
-          <>
-            <span className="chat-footer__dot" aria-hidden>
-              ·
-            </span>
-            <span className="chat-footer__tokens">{tokenLabel}</span>
-          </>
-        ) : null}
       </div>
-      <div className="chat-footer__end">
-        {showReviewToggle ? (
+      {showReviewToggle ? (
+        <div className="chat-footer__end">
           <button
             type="button"
             role="switch"
             aria-checked={reviewEdits}
-            className={[
-              "chat-footer__review",
-              reviewEdits ? "chat-footer__review--on" : "",
-            ]
+            className={["chat-footer__review", reviewEdits ? "chat-footer__review--on" : ""]
               .filter(Boolean)
               .join(" ")}
             disabled={disabled}
@@ -125,9 +102,8 @@ export function ChatComposerFooterView({
             <span className="chat-footer__review-dot" aria-hidden />
             <span>{reviewEdits ? "Review edits" : "Auto-apply"}</span>
           </button>
-        ) : null}
-        <span className="chat-footer__hint">↵ to send</span>
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -151,9 +127,8 @@ function modelItemsFor(models: HarnessModel[], currentModel: string): FooterMenu
 
 /**
  * Store-connected footer. Reads the catalog + selected harness + per-harness
- * model option + the conversation's token total, and writes the *same* store
- * state Settings does (`setSelectedHarness` / `setHarnessOptions`), so the two
- * stay in lockstep.
+ * model option, and writes the *same* store state Settings does
+ * (`setSelectedHarness` / `setHarnessOptions`), so the two stay in lockstep.
  */
 export function ChatComposerFooter({ disabled = false }: { disabled?: boolean }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
@@ -163,7 +138,6 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
   const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
   const harnessModels = useHarnessStore((state) => state.harnessModels);
   const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
-  const chatThread = useWorkspaceStore((state) => state.activeWorkspace()?.chatThread ?? null);
 
   const caps = harnessCapabilitiesOf(harnessCatalog, selectedHarnessId);
   // Harnesses with no curated list discover models live (Ollama/OpenCode/OpenRouter).
@@ -179,15 +153,10 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
   const modelLabel =
     modelItems.find((item) => item.value === currentModel)?.label ?? (currentModel || "Default");
 
-  const totalTokens = chatThread ? sumChatThreadStats(chatThread).totalTokens : undefined;
-  const tokenLabel = totalTokens ? `${formatCompact(totalTokens)} tokens` : null;
-
   // The inline review/auto-apply toggle mirrors the *same* per-harness
-  // `reviewEdits` option Settings owns (`setHarnessOptions`), so the two stay
-  // in sync. It shows for write-capable harnesses — the ones that write files
-  // directly (`previews_edits: false` — bob, Claude, Codex) and so run through
-  // the edit-review gate. A harness that previewed its own edits in-stream
-  // would skip the gate, hiding the toggle (none do today).
+  // `reviewEdits` option Settings owns. It shows for write-capable harnesses —
+  // the ones that write files directly (`previewsEdits: false`) and so run
+  // through the edit-review gate.
   const showReviewToggle = !caps.previewsEdits;
   const reviewEdits = options.reviewEdits ?? false;
 
@@ -200,7 +169,6 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
       selectedModel={currentModel}
       modelLabel={modelLabel}
       onSelectModel={(value) => setHarnessOptions(selectedHarnessId, { model: value || undefined })}
-      tokenLabel={tokenLabel}
       showReviewToggle={showReviewToggle}
       reviewEdits={reviewEdits}
       onToggleReviewEdits={(next) => setHarnessOptions(selectedHarnessId, { reviewEdits: next })}

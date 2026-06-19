@@ -1,4 +1,5 @@
 import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
@@ -40,7 +41,7 @@ export interface MarkdownProcessorOptions {
  * — there is no path that renders unsanitized model/user markdown.
  */
 export function createMarkdownProcessor(options: MarkdownProcessorOptions = {}) {
-  const processor = unified().use(remarkParse);
+  const processor = unified().use(remarkParse).use(remarkGfm);
   if (options.hardBreaks) {
     processor.use(remarkHardBreaks);
   }

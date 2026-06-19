@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from "react";
 import { Add, Close } from "@carbon/react/icons";
 
-import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceStore";
+import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { sumChatThreadStats } from "../../app/workspaceModel";
@@ -36,6 +36,7 @@ function ChatPanelInner() {
   const openSettings = useUiStore((state) => state.openSettings);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
+  const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
   const rejectSuggestedEdit = useWorkspaceStore((state) => state.rejectSuggestedEdit);
   const regenerateLastTurn = useWorkspaceStore((state) => state.regenerateLastTurn);
   const sendChatPrompt = useWorkspaceStore((state) => state.sendChatPrompt);
@@ -80,18 +81,23 @@ function ChatPanelInner() {
   }
 
   const running = chatThread.runState === "starting" || chatThread.runState === "streaming";
-  // Availability is capability-driven, not `id === "bob"`. A harness
-  // Compose manages a key for needs its CLI + key (the readiness
-  // check). Login-managed harnesses (Claude Code, Codex) are available
-  // once selected — if one isn't actually set up, the run surfaces that
-  // as an error event rather than blocking the box.
-  const credentialRequired = harnessCapabilitiesOf(
-    harnessCatalog,
-    selectedHarnessId,
-  ).credentialRequired;
-  const assistantReady = credentialRequired
-    ? { ready: selectedHarnessReadiness?.ready ?? false, message: selectedHarnessReadiness?.error ?? null }
-    : { ready: true, message: null };
+  // Availability is readiness-driven for every harness: picking one that needs
+  // setup (a key, a sign-in, an install) prompts you to configure it right here
+  // instead of letting a doomed run fail. Conservative — only a *definitive*
+  // not-ready readiness blocks; a not-yet-probed (null) selection stays
+  // available, so a slow or failed probe never wrongly locks the composer (the
+  // send-time credential preflight still backstops key-managed harnesses).
+  const selectedHarnessName =
+    harnessCatalog.find((entry) => entry.id === selectedHarnessId)?.displayName ?? "Your assistant";
+  const assistantReady =
+    selectedHarnessReadiness && !selectedHarnessReadiness.ready
+      ? {
+          ready: false,
+          message:
+            selectedHarnessReadiness.error ??
+            `${selectedHarnessName} needs setup before you can use it.`,
+        }
+      : { ready: true, message: null };
   const canSend = Boolean(chatThread.prompt.trim()) && !running && assistantReady.ready;
 
   // The file currently attached as context (the open note) — named in the
@@ -113,6 +119,7 @@ function ChatPanelInner() {
   // human-readable), not a message count. Empty until anything's run — no
   // placeholder, for the same reason the title is empty.
   const totals = sumChatThreadStats(chatThread);
+  const tokenLabel = totals.totalTokens ? `${formatCompact(totals.totalTokens)} tokens` : null;
   const headerMeta =
     totals.totalTokens || totals.coins
       ? [
@@ -223,7 +230,15 @@ function ChatPanelInner() {
         callbacks={callbacks}
         contextFileLabel={contextFileLabel}
         messages={chatThread.messages}
-        onUseSuggestion={setChatPrompt}
+        onUseSuggestion={(text, opts) => {
+          setChatPrompt(text);
+          // Read-only-intent suggestions default to Review so a stray edit is
+          // shown for approval, not auto-applied; the user can flip the footer
+          // pill back to Auto-apply.
+          if (opts?.review) {
+            setHarnessOptions(selectedHarnessId, { reviewEdits: true });
+          }
+        }}
         runState={chatThread.runState}
       />
 
@@ -245,6 +260,7 @@ function ChatPanelInner() {
         prompt={chatThread.prompt}
         runError={chatThread.runError}
         running={running}
+        tokenLabel={tokenLabel}
       />
     </section>
   );

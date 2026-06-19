@@ -33,17 +33,14 @@ const base = {
   selectedModel: "gpt-5-codex",
   modelLabel: "gpt-5-codex",
   onSelectModel: () => {},
-  tokenLabel: "25.7K tokens",
   disabled: false,
 };
 
 describe("ChatComposerFooterView", () => {
-  it("shows the selected harness, model, token count, and send hint", () => {
+  it("shows the selected harness and model", () => {
     const html = renderToStaticMarkup(<ChatComposerFooterView {...base} />);
     expect(html).toContain("Codex"); // harness trigger
     expect(html).toContain("gpt-5-codex"); // model trigger
-    expect(html).toContain("25.7K tokens"); // token count
-    expect(html).toContain("to send"); // the ↵ hint
   });
 
   it("omits the model selector when there's nothing to switch among", () => {

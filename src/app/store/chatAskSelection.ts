@@ -1,5 +1,6 @@
 import type { WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
 import { useUiStore } from "./uiStore";
+import { formatHarnessError } from "../../lib/format/harnessError";
 import { useHarnessStore } from "./harnessStore";
 import {
   activeRunSubscriptions,
@@ -234,7 +235,9 @@ export async function runAskAboutSelection(
       extraArgs: harnessExtraArgs(harnessId, tuning),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The assistant could not start";
+    const message = formatHarnessError(
+      error instanceof Error ? error.message : "The assistant could not start",
+    );
     const currentThread =
       get().workspaces.find((item) => item.id === workspaceId)?.chatThread ?? null;
     if (currentThread?.activeRunId === runId) {

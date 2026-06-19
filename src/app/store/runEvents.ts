@@ -18,6 +18,7 @@ import {
   type WorkspaceChatThread,
 } from "../workspaceModel";
 import { updateWorkspace } from "./internals";
+import { formatHarnessError } from "../../lib/format/harnessError";
 
 /** Live `subscribeHarnessRun` teardowns keyed by runId, so a cancel/finish can
  * detach the listener. Module-level: there is exactly one store per window. */
@@ -148,7 +149,7 @@ export function handleHarnessRunEvent(
       }));
       return;
     case "error":
-      finalize({ errorMessage: event.message });
+      finalize({ errorMessage: formatHarnessError(event.message) });
       void reportClientError("agentRun", event.message);
       return;
     case "exited":
