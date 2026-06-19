@@ -153,7 +153,7 @@ export const createChatSlice = (
     }));
     await get().sendChatPrompt();
   },
-  sendChatPrompt: () => runSendChatPrompt(set, get),
+  sendChatPrompt: (options) => runSendChatPrompt(set, get, options),
   setChatPrompt: (prompt: string) => {
     const workspace = get().activeWorkspace();
     if (!workspace) {

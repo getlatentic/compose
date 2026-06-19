@@ -22,9 +22,9 @@ export function ChatMessageList({
   /** The file currently in context, named in the empty state. */
   contextFileLabel: string | null;
   messages: WorkspaceChatMessage[];
-  /** Prefill the composer from an empty-state suggestion; `review` defaults the
-   * run to Review mode for read-only-intent prompts. */
-  onUseSuggestion: (text: string, opts?: { review?: boolean }) => void;
+  /** Use an empty-state suggestion. `readOnly` runs it in read-only mode (the
+   * harness refuses writes) for read-only-intent prompts; others just prefill. */
+  onUseSuggestion: (text: string, opts?: { readOnly?: boolean }) => void;
   runState: ChatRunState;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);

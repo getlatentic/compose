@@ -1,33 +1,32 @@
 import { ArrowRight, ChatBot } from "@carbon/react/icons";
 
-/** A starting-point prompt. `review` marks read-only-intent asks (summarize,
- * key points) that should default to Review mode — any edit the model makes is
- * shown for approval rather than auto-applied — so a read-only ask never writes
- * silently. The user can still flip the footer pill to Auto-apply. */
+/** A starting-point prompt. `readOnly` marks read-only-intent asks (summarize,
+ * key points) that run in read-only mode — the harness refuses any write, so a
+ * read-only ask can't change files. The user types a request manually for an
+ * editable run. */
 interface Suggestion {
   label: string;
-  review?: boolean;
+  readOnly?: boolean;
 }
 
 /** Starting points offered when a chat has no messages. When a file is in
- * context they speak to "this file"; otherwise they're workspace-level. They
- * prefill the composer (not auto-send) so the user stays in control. */
+ * context they speak to "this file"; otherwise they're workspace-level. */
 const FILE_SUGGESTIONS: Suggestion[] = [
-  { label: "Summarize this file", review: true },
+  { label: "Summarize this file", readOnly: true },
   { label: "Turn this into a table" },
-  { label: "What are the key points?", review: true },
+  { label: "What are the key points?", readOnly: true },
 ];
 const WORKSPACE_SUGGESTIONS: Suggestion[] = [
   { label: "Help me outline a new note" },
-  { label: "Find notes related to what I'm writing", review: true },
-  { label: "What can you help me with?", review: true },
+  { label: "Find notes related to what I'm writing", readOnly: true },
+  { label: "What can you help me with?", readOnly: true },
 ];
 
 /**
  * The new-conversation empty state: the assistant mark, a heading, a line
  * naming the file currently in context, and a few suggested prompts. Pure
- * and props-driven — the parent supplies the context file label and a
- * prefill callback.
+ * and props-driven — the parent supplies the context file label and the
+ * suggestion handler.
  */
 export function ChatEmptyState({
   contextFileLabel,
@@ -35,9 +34,9 @@ export function ChatEmptyState({
 }: {
   /** The file currently attached as context (the open note), or null. */
   contextFileLabel: string | null;
-  /** Drop a suggestion into the composer (the user reviews + sends). `review`
-   * defaults the run to Review mode for read-only-intent prompts. */
-  onUseSuggestion: (text: string, opts?: { review?: boolean }) => void;
+  /** Use a suggestion. `readOnly` runs read-only-intent prompts in read-only
+   * mode; others prefill the composer for the user to send. */
+  onUseSuggestion: (text: string, opts?: { readOnly?: boolean }) => void;
 }) {
   const suggestions = contextFileLabel ? FILE_SUGGESTIONS : WORKSPACE_SUGGESTIONS;
 
@@ -63,7 +62,7 @@ export function ChatEmptyState({
             type="button"
             key={suggestion.label}
             className="chat-empty__suggestion"
-            onClick={() => onUseSuggestion(suggestion.label, { review: suggestion.review })}
+            onClick={() => onUseSuggestion(suggestion.label, { readOnly: suggestion.readOnly })}
           >
             <ArrowRight size={14} aria-hidden />
             <span>{suggestion.label}</span>

@@ -36,7 +36,6 @@ function ChatPanelInner() {
   const openSettings = useUiStore((state) => state.openSettings);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
-  const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
   const rejectSuggestedEdit = useWorkspaceStore((state) => state.rejectSuggestedEdit);
   const regenerateLastTurn = useWorkspaceStore((state) => state.regenerateLastTurn);
   const sendChatPrompt = useWorkspaceStore((state) => state.sendChatPrompt);
@@ -232,11 +231,11 @@ function ChatPanelInner() {
         messages={chatThread.messages}
         onUseSuggestion={(text, opts) => {
           setChatPrompt(text);
-          // Read-only-intent suggestions default to Review so a stray edit is
-          // shown for approval, not auto-applied; the user can flip the footer
-          // pill back to Auto-apply.
-          if (opts?.review) {
-            setHarnessOptions(selectedHarnessId, { reviewEdits: true });
+          // Read-only-intent suggestions (Summarize / Key points) send in
+          // read-only mode — the harness refuses any write, so they can't change
+          // files. Type the request manually for an editable run.
+          if (opts?.readOnly) {
+            void sendChatPrompt({ readOnly: true });
           }
         }}
         runState={chatThread.runState}

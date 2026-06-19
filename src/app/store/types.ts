@@ -165,7 +165,7 @@ export interface WorkspaceState {
   saveActiveFile: () => Promise<void>;
   selectFile: (path: string) => Promise<void>;
   rejectSuggestedEdit: (suggestionId: string) => void;
-  sendChatPrompt: () => Promise<void>;
+  sendChatPrompt: (options?: { readOnly?: boolean }) => Promise<void>;
   sendCommentToChat: (commentId: string) => Promise<void>;
   sendCommentsToChat: (commentIds: string[]) => Promise<void>;
   setChatPrompt: (prompt: string) => void;

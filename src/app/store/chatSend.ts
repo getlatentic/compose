@@ -61,6 +61,7 @@ import {
 export async function runSendChatPrompt(
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
+  options?: { readOnly?: boolean },
 ): Promise<void> {
   const workspace = get().activeWorkspace();
   if (!workspace) {
@@ -232,7 +233,11 @@ export async function runSendChatPrompt(
     // the subscription's terminal hook (post-run diff) can close over it.
     const capabilities = harnessCapabilitiesOf(useHarnessStore.getState().harnessCatalog, harnessId);
     const tuning = useHarnessStore.getState().harnessOptions[harnessId] ?? {};
-    const editGuard = editGuardFor(capabilities, useHarnessStore.getState().allowEdits, tuning);
+    // A read-only send (the "Summarize" / "Key points" suggestions) runs in Ask
+    // mode with no edit guard — the harness then refuses any write tool call —
+    // so a read-only ask can't write, whatever the global Auto-apply toggle is.
+    const allowEdits = options?.readOnly ? false : useHarnessStore.getState().allowEdits;
+    const editGuard = editGuardFor(capabilities, allowEdits, tuning);
 
     // Snapshot mode edits the user's real files mid-run; open the agent-edit
     // window so the file watcher attributes those changes to this run (and
@@ -260,11 +265,7 @@ export async function runSendChatPrompt(
     // allow-edits toggle is moot. Direct-edit harnesses (claude/codex)
     // map the toggle onto the run mode: allow → "code" (Edit),
     // otherwise "plan" (Ask). Capability-driven, not `id === "bob"`.
-    const chatMode = capabilities.previewsEdits
-      ? "plan"
-      : useHarnessStore.getState().allowEdits
-        ? "code"
-        : "plan";
+    const chatMode = capabilities.previewsEdits ? "plan" : allowEdits ? "code" : "plan";
     await runHarnessStream({
       approvalMode: "default",
       chatMode,
