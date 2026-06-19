@@ -8,7 +8,7 @@ import { LinkInsertProvider } from "../features/dialogs/LinkInsertProvider";
 import {
   IMAGE_EDIT_ALT_EVENT,
   type ImageEditAltEventDetail,
-} from "../features/editor/codemirror/decorations/imageActionMenu";
+} from "ai-editor";
 import { useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
 
 export function App() {

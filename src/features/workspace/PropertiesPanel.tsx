@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import { Add, TrashCan } from "@carbon/react/icons";
-import { type Frontmatter, type FrontmatterValue } from "../editor/frontmatter";
+import { type Frontmatter, type FrontmatterValue } from "ai-editor";
 
 /**
  * Sidebar Properties section.

@@ -43,15 +43,8 @@ import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-mar
 import { EditorSelection, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 
-import { EditorFileActions, type DocumentExportFormat } from "../EditorFileActions";
 import { parseFrontmatter, serializeMarkdown, type Frontmatter } from "../frontmatter";
-import { CodeMirrorToolbar } from "./CodeMirrorToolbar";
-import { CommentBubble } from "../CommentBubble";
-import type {
-  DocumentTextChange,
-  SourceRange,
-  WorkspaceCommentThread,
-} from "../../comments/commentModel";
+import type { DocumentTextChange, SourceRange } from "../types";
 import { markdownDecorationsPlugin } from "./decorations/plugin";
 import { editorBaseTheme } from "./decorations/editorTheme";
 import { cursorModelKeymap } from "./decorations/cursorModel";
@@ -61,16 +54,18 @@ import { tightListKeymap } from "./decorations/listContinuation";
 import { formatCommandsKeymap } from "./decorations/formatCommands";
 import { blockCommandsKeymap } from "./decorations/blockCommands";
 import { imageContextFacet } from "./decorations/imageWidget";
+import { imageInsertHandlers } from "./decorations/imageInsertHandlers";
 import {
-  imageInsertHandlers,
-  insertImageWorkspaceFacet,
-  pickImageFileForCaret,
-} from "./decorations/imageInsertHandlers";
+  openExternalUrlFacet,
+  resolveImageSrcFacet,
+  saveImageBytesFacet,
+  type OpenExternalUrl,
+  type ResolveImageSrc,
+  type SaveImageBytes,
+} from "./decorations/hostFacets";
 import { computeFileDir, type ImageResolveContext } from "../imageSrcResolver";
 import { navigateToFacet } from "./decorations/clickModel";
 import { wikilinkFromPathFacet, wikilinkTargetsFacet } from "./decorations/wikilinkPlugin";
-import { markTabSwitchEnd } from "../../../lib/perf";
-import { registerActiveEditorFlush } from "../../../lib/editor/editorFlush";
 import {
   composeExtensions,
   footnoteExtension,
@@ -82,38 +77,64 @@ import {
 
 export type CodeMirrorEditorMode = "wysiwyg" | "source";
 
-// Props are a strict superset of TiptapMarkdownEditorProps (same
-// names + shapes for everything wired). The Phase-2+ callbacks are
-// accepted but unused — keeping the type identical means the
-// AppShell dispatch is `<Editor ...sameProps />` either way.
+/** A non-empty editor selection, in document byte offsets. */
+export interface EditorSelectionSnapshot {
+  range: SourceRange;
+  text: string;
+}
+
 export interface CodeMirrorMarkdownEditorProps {
-  comments?: WorkspaceCommentThread[];
   mode?: CodeMirrorEditorMode;
   onChange: (value: string, changes: DocumentTextChange[]) => void;
-  onAskAboutSelection?: (
-    question: string,
-    selection: { range: SourceRange; text: string },
-  ) => void;
-  onQueueComment?: (
-    note: string,
-    selection: { range: SourceRange; text: string },
-  ) => void;
-  onSelectionChange?: (selection: { range: SourceRange; text: string } | null) => void;
   value: string;
-  workspaceId?: string;
   workspaceRoot?: string;
   filePath?: string;
   linkTargets?: ReadonlySet<string>;
   onNavigateToLink?: (path: string) => void;
-  onSave?: () => void;
-  onShowVersionHistory?: () => void;
-  onExport?: (format: DocumentExportFormat) => void;
-  onToggleComments?: () => void;
-  commentsOpen?: boolean;
-  commentCount?: number;
-  onToggleChat?: () => void;
-  chatOpen?: boolean;
-  chatToggleDisabled?: boolean;
+  /**
+   * Host-rendered toolbar. The editor owns the live `EditorView` and hands it to
+   * the slot; the host builds whatever toolbar UI it wants (formatting buttons,
+   * file actions, …) around it. Omit for a chromeless editor. Return a STABLE
+   * element shape so the host's own memoisation can hold across keystrokes.
+   */
+  toolbar?: (ctx: { view: EditorView }) => ReactNode;
+  /**
+   * Host-rendered actions for the current text selection (e.g. a comment / ask
+   * bubble). Called with the live selection (or `null` when collapsed) and a
+   * `dismiss` that collapses the selection back to a caret. Omit for none.
+   */
+  selectionActions?: (ctx: {
+    selection: EditorSelectionSnapshot | null;
+    dismiss: () => void;
+  }) => ReactNode;
+  // ── Host-environment seams (all optional; browser-friendly defaults) ───────
+  /**
+   * Map a markdown image `src` to a loadable URL. Default: render the reference
+   * as-is. A desktop host maps workspace-relative paths onto its asset protocol.
+   */
+  resolveImageSrc?: ResolveImageSrc;
+  /**
+   * Persist a pasted/dropped image's bytes at a workspace-relative path.
+   * Default: omitted ⇒ the image is inlined as a `data:` URL.
+   */
+  saveImageBytes?: SaveImageBytes;
+  /**
+   * Open a clicked external link. Default: a new browser tab. A desktop host
+   * overrides this to leave the app's webview.
+   */
+  onOpenExternalUrl?: OpenExternalUrl;
+  /**
+   * Called once, right after a tab-switch content swap commits and paints.
+   * Used by the host for latency instrumentation; no-op by default.
+   */
+  onAfterContentSwap?: () => void;
+  /**
+   * Receives a synchronous `flush()` that pulls the editor's live (debounce-
+   * lagged) content into the last `onChange` immediately — the host calls it
+   * before persisting. `null` is passed on unmount. Lets a host avoid writing
+   * stale buffers on Cmd+S / tab close.
+   */
+  onFlushReady?: (flush: (() => void) | null) => void;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -134,23 +155,18 @@ function hashString(s: string): string {
 function CodeMirrorMarkdownEditorInner({
   mode = "wysiwyg",
   onChange,
-  onAskAboutSelection,
-  onQueueComment,
   value,
-  workspaceId,
   workspaceRoot,
   filePath,
   linkTargets,
   onNavigateToLink,
-  onSave,
-  onShowVersionHistory,
-  onExport,
-  onToggleComments,
-  commentsOpen = false,
-  commentCount = 0,
-  onToggleChat,
-  chatOpen = false,
-  chatToggleDisabled = false,
+  toolbar,
+  selectionActions,
+  resolveImageSrc,
+  saveImageBytes,
+  onOpenExternalUrl,
+  onAfterContentSwap,
+  onFlushReady,
 }: CodeMirrorMarkdownEditorProps) {
   // Frontmatter split — same shape as the Tiptap editor. The
   // editor surface only ever sees the body; YAML is held aside in
@@ -195,6 +211,22 @@ function CodeMirrorMarkdownEditorInner({
   const onChangeRef = useRef(onChange);
   useLayoutEffect(function syncLatestOnChangeRef() {
     onChangeRef.current = onChange;
+  });
+
+  // Host-seam callbacks are read through refs so the facet values (baked into
+  // each per-tab EditorState at build time) always call the LATEST prop, never
+  // a stale closure — even though the state is rebuilt only on mode/tab change.
+  const resolveImageSrcRef = useRef(resolveImageSrc);
+  const saveImageBytesRef = useRef(saveImageBytes);
+  const openExternalUrlRef = useRef(onOpenExternalUrl);
+  const onAfterContentSwapRef = useRef(onAfterContentSwap);
+  const onFlushReadyRef = useRef(onFlushReady);
+  useLayoutEffect(function syncHostSeamRefs() {
+    resolveImageSrcRef.current = resolveImageSrc;
+    saveImageBytesRef.current = saveImageBytes;
+    openExternalUrlRef.current = onOpenExternalUrl;
+    onAfterContentSwapRef.current = onAfterContentSwap;
+    onFlushReadyRef.current = onFlushReady;
   });
 
   // Latest mode kept in a ref so the editor lifecycle effect
@@ -270,7 +302,31 @@ function CodeMirrorMarkdownEditorInner({
       // or DataTransfer, saves through `insertImageBlob`, inserts
       // `![alt](path)` at the caret.
       imageInsertHandlers,
-      insertImageWorkspaceFacet.of(workspaceId ?? "preview"),
+      // Host-environment seams. Registered as stable wrappers (reading the
+      // latest prop through a ref) only when the host provides the capability;
+      // otherwise the facet's browser default applies. See hostFacets.ts.
+      ...(resolveImageSrc
+        ? [
+            resolveImageSrcFacet.of((rawSrc, ctx) =>
+              (resolveImageSrcRef.current ?? ((s: string) => s))(rawSrc, ctx),
+            ),
+          ]
+        : []),
+      ...(saveImageBytes
+        ? [
+            saveImageBytesFacet.of((relPath, bytes) => {
+              const fn = saveImageBytesRef.current;
+              return fn ? fn(relPath, bytes) : Promise.reject(new Error("no saver"));
+            }),
+          ]
+        : []),
+      ...(onOpenExternalUrl
+        ? [
+            openExternalUrlFacet.of((url) => {
+              openExternalUrlRef.current?.(url);
+            }),
+          ]
+        : []),
       // Wikilink resolution facets stay in both modes so Cmd-click
       // can navigate from Raw view too — only the decorating plugin
       // itself is gated by `decorationsEnabled` below.
@@ -441,10 +497,10 @@ function CodeMirrorMarkdownEditorInner({
       syncedHashRef.current.set(key, incomingHash);
       view.setState(state);
     }
-    // Tab-switch latency end: rAF puts us after CM6's measure +
-    // browser paint, so the measure covers the full "click → new
-    // content visible" interval (see docs/perf-spec.md §5).
-    requestAnimationFrame(() => markTabSwitchEnd());
+    // Content-swap end signal: rAF puts us after CM6's measure +
+    // browser paint, so a host's latency probe covers the full "click
+    // → new content visible" interval (see docs/perf-spec.md §5).
+    requestAnimationFrame(() => onAfterContentSwapRef.current?.());
   }, [filePath, value]);
 
   // Mode toggle (Rich ↔ Raw) changes the decoration extensions, so
@@ -495,9 +551,9 @@ function CodeMirrorMarkdownEditorInner({
   }, []);
 
   useEffect(function registerFlushBridge() {
-    registerActiveEditorFlush(flushPendingToBuffer);
+    onFlushReadyRef.current?.(flushPendingToBuffer);
     return function unregisterFlushBridge() {
-      registerActiveEditorFlush(null);
+      onFlushReadyRef.current?.(null);
     };
   }, [flushPendingToBuffer]);
 
@@ -537,68 +593,44 @@ function CodeMirrorMarkdownEditorInner({
     };
   }, [viewForToolbar]);
 
-  // Memoised so the (memoised) toolbar's `fileActions` prop keeps a
-  // stable identity across keystrokes — otherwise a fresh element every
-  // editor render defeats CodeMirrorToolbar's React.memo and re-renders
-  // all ~13 toolbar buttons on each keypress (react-scan caught this).
-  const fileActions = useMemo<ReactNode>(
+  // Collapse the selection back to a caret — handed to the selection-actions
+  // slot so a host can dismiss its bubble after an action lands. Stable (reads
+  // the view ref), so it doesn't churn the host's memoised slot.
+  const dismissSelection = useCallback(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const head = view.state.selection.main.head;
+    view.dispatch({ selection: EditorSelection.cursor(head) });
+  }, []);
+
+  // The toolbar slot is invoked through a memo keyed on the (mount-stable) view
+  // and the host's slot identity — NOT on every render. So when a keystroke
+  // re-renders this leaf, the toolbar element is referentially unchanged and a
+  // memoised host toolbar holds (the perf win we'd otherwise lose by calling
+  // the slot inline every render).
+  const toolbarNode = useMemo(
+    () => (viewForToolbar && toolbar ? toolbar({ view: viewForToolbar }) : null),
+    [viewForToolbar, toolbar],
+  );
+  // The selection slot, by contrast, SHOULD refresh when the selection moves —
+  // that's its input. Memoised on the selection so it's stable between
+  // selection changes but updates when one happens.
+  const selectionNode = useMemo(
     () =>
-      onSave && onShowVersionHistory && onExport && onToggleComments ? (
-        <EditorFileActions
-          onSave={onSave}
-          onShowVersionHistory={onShowVersionHistory}
-          onExport={onExport}
-          onToggleComments={onToggleComments}
-          commentsOpen={commentsOpen}
-          commentCount={commentCount}
-          onToggleChat={onToggleChat}
-          chatOpen={chatOpen}
-          chatToggleDisabled={chatToggleDisabled}
-        />
-      ) : null,
-    [
-      onSave,
-      onShowVersionHistory,
-      onExport,
-      onToggleComments,
-      commentsOpen,
-      commentCount,
-      onToggleChat,
-      chatOpen,
-      chatToggleDisabled,
-    ],
+      selectionActions
+        ? selectionActions({ selection: bubbleSelection, dismiss: dismissSelection })
+        : null,
+    [selectionActions, bubbleSelection, dismissSelection],
   );
 
-  // Stable so it doesn't break the toolbar's memo on every render.
-  const handleInsertImage = useCallback(() => {
-    if (viewForToolbar) pickImageFileForCaret(viewForToolbar);
-  }, [viewForToolbar]);
-
-  // We reuse `tiptap-editor` so the surrounding layout (status
-  // bar, comments panel sibling) keeps its sizing rules. The toolbar
-  // inside is the CM6 version that mirrors TiptapToolbar's shape.
+  // `cm-editor-host` owns the editor surface layout (toolbar row + scroll area
+  // + selection overlay). The toolbar and selection UI are host-rendered slots
+  // — the editor stays agnostic about save / export / comments / chat.
   return (
     <div className="tiptap-editor cm-editor-host">
-      <CodeMirrorToolbar
-        view={viewForToolbar}
-        mode={mode}
-        fileActions={fileActions}
-        linkTargets={linkTargets}
-        onInsertImage={handleInsertImage}
-      />
+      {toolbarNode}
       <div className="tiptap-editor__scroll cm-editor-host__scroll" ref={hostRef} />
-      <CommentBubble
-        hasEditor={Boolean(viewForToolbar)}
-        selection={bubbleSelection}
-        dismissSelection={() => {
-          const view = viewForToolbar;
-          if (!view) return;
-          const head = view.state.selection.main.head;
-          view.dispatch({ selection: EditorSelection.cursor(head) });
-        }}
-        onSendToChat={onAskAboutSelection}
-        onQueueComment={onQueueComment}
-      />
+      {selectionNode}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { AddComment, Close, ListBulleted, Send } from "@carbon/react/icons";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { bobRuntimeReadiness } from "../../app/workspaceModel";
 import { useUiStore } from "../../app/store/uiStore";
@@ -41,6 +41,138 @@ export interface CommentBubbleProps {
   onQueueComment?: (note: string, selection: { text: string; range: SourceRange }) => void;
 }
 
+const BUBBLE_OFFSET = 6;
+const COMPOSER_WIDTH = 360;
+const COMPOSER_HEIGHT_ESTIMATE = 220;
+
+/**
+ * The note composer. Split out of {@link CommentBubble} with an UNCONTROLLED
+ * textarea: the field owns its own value via the DOM and we read it only on
+ * submit, so typing a note doesn't re-render the bubble on every keystroke.
+ * The only state is a `hasContent` boolean that flips when the field goes
+ * empty↔non-empty (to enable/disable the buttons) — `setHasContent(true)` while
+ * already `true` is a no-op React bails on, so steady typing re-renders nothing.
+ */
+function CommentComposer({
+  selectionText,
+  style,
+  onSend,
+  onQueue,
+  onClose,
+}: {
+  selectionText: string;
+  style: CSSProperties;
+  onSend: (note: string) => void;
+  onQueue: (note: string) => void;
+  onClose: () => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [hasContent, setHasContent] = useState(false);
+  // Readiness drives the "set up the assistant" notice; the send still works
+  // through the run's own preflight, so the buttons don't hard-gate on it.
+  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
+  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
+  const openSettings = useUiStore((state) => state.openSettings);
+  const bobReady = bobRuntimeReadiness(bobAuthStatus, bobInstallStatus);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  // Escape cancels the composer (back to the pill).
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  function submit(kind: "send" | "queue") {
+    const note = textareaRef.current?.value.trim() ?? "";
+    if (!note) return;
+    (kind === "send" ? onSend : onQueue)(note);
+  }
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="selection-composer"
+      role="dialog"
+      aria-label="Comment on selection"
+      style={style}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <div className="selection-composer__header">
+        <span className="selection-composer__title">
+          <AddComment size={14} />
+          Comment
+        </span>
+        <button
+          type="button"
+          className="selection-composer__close"
+          aria-label="Cancel"
+          onClick={onClose}
+        >
+          <Close size={14} />
+        </button>
+      </div>
+      <blockquote className="selection-composer__selection">
+        {selectionText.length > 280 ? selectionText.slice(0, 280) + "…" : selectionText}
+      </blockquote>
+      <textarea
+        ref={textareaRef}
+        className="selection-composer__textarea"
+        placeholder="Leave a note — the assistant answers or edits based on what you write…"
+        rows={3}
+        defaultValue=""
+        onChange={(event) => setHasContent(event.target.value.trim().length > 0)}
+        onKeyDown={(event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            event.preventDefault();
+            submit("send");
+          }
+        }}
+      />
+      {!bobReady.ready ? (
+        <div className="selection-composer__notice" role="status">
+          <span>{bobReady.message ?? "The assistant isn't connected yet."}</span>
+          <button
+            type="button"
+            className="selection-composer__setup"
+            onClick={() => openSettings()}
+          >
+            Set up the assistant →
+          </button>
+        </div>
+      ) : null}
+      <div className="selection-composer__actions">
+        <button
+          type="button"
+          className="selection-composer__secondary"
+          disabled={!hasContent}
+          onClick={() => submit("queue")}
+          title="Add to the comment queue in the panel"
+        >
+          <ListBulleted size={14} />
+          Queue
+        </button>
+        <button
+          type="button"
+          className="selection-composer__primary"
+          disabled={!hasContent}
+          onClick={() => submit("send")}
+        >
+          <Send size={14} />
+          Send to chat
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function CommentBubble({
   hasEditor,
   selection,
@@ -49,15 +181,7 @@ export function CommentBubble({
   onQueueComment,
 }: CommentBubbleProps) {
   const [composing, setComposing] = useState(false);
-  const [draft, setDraft] = useState("");
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  // Readiness drives the "set up the assistant" notice; the send still works
-  // through the run's own preflight, so the buttons don't hard-gate on it.
-  const bobAuthStatus = useHarnessStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useHarnessStore((state) => state.bobInstallStatus);
-  const openSettings = useUiStore((state) => state.openSettings);
-  const bobReady = bobRuntimeReadiness(bobAuthStatus, bobInstallStatus);
 
   // Recompute the anchor rect when the editor selection changes.
   useEffect(() => {
@@ -82,61 +206,8 @@ export function CommentBubble({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasEditor, selection]);
 
-  // Focus the textarea when the composer opens.
-  useEffect(() => {
-    if (composing && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [composing]);
-
-  // Escape closes the composer.
-  useEffect(() => {
-    if (!composing) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setComposing(false);
-        setDraft("");
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [composing]);
-
   if (!anchorRect || !selection) return null;
   if (typeof document === "undefined") return null;
-
-  const BUBBLE_OFFSET = 6;
-
-  function close() {
-    setComposing(false);
-    setDraft("");
-  }
-
-  /** After a comment lands, dismiss the whole bubble — not just the
-   * composer. `close()` alone drops back to the pill, because the editor
-   * selection (which drives the upstream `bubbleSelection`) is still
-   * non-empty; collapsing it routes through the editor's selection
-   * listener, which clears the selection snapshot and unmounts the
-   * bubble. (Escape / the X keep the pill on purpose — the user may
-   * still want to comment.) */
-  function dismissAfterAction() {
-    close();
-    dismissSelection();
-  }
-
-  function sendToChat() {
-    const note = draft.trim();
-    if (!note || !selection) return;
-    onSendToChat?.(note, selection);
-    dismissAfterAction();
-  }
-
-  function queue() {
-    const note = draft.trim();
-    if (!note || !selection) return;
-    onQueueComment?.(note, selection);
-    dismissAfterAction();
-  }
 
   // ---------- Pill: a single "Comment" trigger ----------
   if (!composing) {
@@ -165,9 +236,7 @@ export function CommentBubble({
     );
   }
 
-  // ---------- Composer: a note → Send to chat / Queue ----------
-  const COMPOSER_WIDTH = 360;
-  const COMPOSER_HEIGHT_ESTIMATE = 220;
+  // ---------- Composer position ----------
   const viewportHeight = window.innerHeight;
   const viewportWidth = window.innerWidth;
   let composerTop = anchorRect.bottom + BUBBLE_OFFSET;
@@ -179,81 +248,23 @@ export function CommentBubble({
   if (composerLeft + COMPOSER_WIDTH > viewportWidth - 16) {
     composerLeft = viewportWidth - COMPOSER_WIDTH - 16;
   }
-  const hasDraft = Boolean(draft.trim());
 
-  return createPortal(
-    <div
-      className="selection-composer"
-      role="dialog"
-      aria-label="Comment on selection"
+  // After a comment lands, dismiss the whole bubble: collapse the editor
+  // selection (which clears the upstream selection snapshot and unmounts the
+  // bubble) and drop back out of compose mode.
+  const submitAndDismiss = (note: string, kind: "send" | "queue") => {
+    (kind === "send" ? onSendToChat : onQueueComment)?.(note, selection);
+    setComposing(false);
+    dismissSelection();
+  };
+
+  return (
+    <CommentComposer
+      selectionText={selection.text}
       style={{ top: composerTop, left: composerLeft, width: COMPOSER_WIDTH }}
-      onMouseDown={(event) => event.stopPropagation()}
-    >
-      <div className="selection-composer__header">
-        <span className="selection-composer__title">
-          <AddComment size={14} />
-          Comment
-        </span>
-        <button
-          type="button"
-          className="selection-composer__close"
-          aria-label="Cancel"
-          onClick={close}
-        >
-          <Close size={14} />
-        </button>
-      </div>
-      <blockquote className="selection-composer__selection">
-        {selection.text.length > 280 ? selection.text.slice(0, 280) + "…" : selection.text}
-      </blockquote>
-      <textarea
-        ref={textareaRef}
-        className="selection-composer__textarea"
-        placeholder="Leave a note — the assistant answers or edits based on what you write…"
-        rows={3}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-            event.preventDefault();
-            sendToChat();
-          }
-        }}
-      />
-      {!bobReady.ready ? (
-        <div className="selection-composer__notice" role="status">
-          <span>{bobReady.message ?? "The assistant isn't connected yet."}</span>
-          <button
-            type="button"
-            className="selection-composer__setup"
-            onClick={() => openSettings()}
-          >
-            Set up the assistant →
-          </button>
-        </div>
-      ) : null}
-      <div className="selection-composer__actions">
-        <button
-          type="button"
-          className="selection-composer__secondary"
-          disabled={!hasDraft}
-          onClick={queue}
-          title="Add to the comment queue in the panel"
-        >
-          <ListBulleted size={14} />
-          Queue
-        </button>
-        <button
-          type="button"
-          className="selection-composer__primary"
-          disabled={!hasDraft}
-          onClick={sendToChat}
-        >
-          <Send size={14} />
-          Send to chat
-        </button>
-      </div>
-    </div>,
-    document.body,
+      onSend={(note) => submitAndDismiss(note, "send")}
+      onQueue={(note) => submitAndDismiss(note, "queue")}
+      onClose={() => setComposing(false)}
+    />
   );
 }

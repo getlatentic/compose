@@ -24,7 +24,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 
-import { parseWikilinkBody } from "../../../../lib/links/wikilink";
+import { parseWikilinkBody } from "../../links/wikilink";
 
 const WIKILINK_RE = /\[\[([^\]\n]+?)\]\]/g;
 

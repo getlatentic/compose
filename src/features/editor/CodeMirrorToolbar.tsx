@@ -27,10 +27,9 @@ import { memo, useEffect, useState } from "react";
 import { syntaxTree } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 
-import { blockCommands } from "./decorations/blockCommands";
-import { formatCommands } from "./decorations/formatCommands";
-import { useTextPrompt } from "../../dialogs/TextPromptProvider";
-import { useLinkPrompt } from "../../dialogs/LinkInsertProvider";
+import { blockCommands, formatCommands } from "ai-editor";
+import { useTextPrompt } from "../dialogs/TextPromptProvider";
+import { useLinkPrompt } from "../dialogs/LinkInsertProvider";
 
 export interface CodeMirrorToolbarProps {
   view: EditorView | null;

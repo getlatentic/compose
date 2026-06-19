@@ -1,18 +1,20 @@
-import { writeBinaryFile } from "../../lib/ipc/filesClient";
-
 /**
  * Image-insertion pipeline. Used by both paste-from-clipboard and
  * drag-and-drop. Both produce a `Blob`; this module turns the blob
  * into a markdown-reference-able path:
  *
- *   * In a Tauri desktop shell: writes the bytes to
- *     `<workspace>/images/<timestamp>-<hash>.<ext>` and returns
- *     the relative path. The markdown reference is portable
- *     across machines because it's a real on-disk file.
- *   * In the browser dev preview: falls back to a data URL
- *     embedded directly in the markdown. The markdown file
- *     bloats but the image stays visible through page reload
- *     without needing a binary IPC.
+ *   * When a `saveBytes` writer is injected (a desktop host): writes
+ *     the bytes to `images/<timestamp>-<hash>.<ext>` and returns the
+ *     relative path. The markdown reference is portable across
+ *     machines because it's a real on-disk file.
+ *   * Otherwise (plain browser, or the write fails): falls back to a
+ *     data URL embedded directly in the markdown. The markdown file
+ *     bloats but the image stays visible through page reload without
+ *     needing a binary file API.
+ *
+ * The writer is injected rather than imported so this module stays
+ * environment-agnostic — the editor reads it off a CM6 facet
+ * ({@link saveImageBytesFacet}) the host wires up.
  *
  * Returned `markdownReference` is what the caller drops into
  * `![alt](…)`. `warning` is set in the data-URL fallback case so
@@ -20,8 +22,11 @@ import { writeBinaryFile } from "../../lib/ipc/filesClient";
  */
 export interface ImageInsertOptions {
   blob: Blob;
-  /** Workspace id for the on-disk save path. Required for Tauri. */
-  workspaceId: string;
+  /**
+   * Persist the bytes at a workspace-relative path. `null`/omitted ⇒
+   * inline as a data URL (browser fallback).
+   */
+  saveBytes?: ((relPath: string, bytes: Uint8Array) => Promise<void>) | null;
   /**
    * Alt text the user typed (currently always synthesized as
    * "pasted-image" or "dropped-image"; in phase 3d the inline
@@ -45,27 +50,34 @@ export async function insertImageBlob(opts: ImageInsertOptions): Promise<ImageIn
   const alt = opts.alt ?? defaultAltFromMime(opts.blob.type);
   const filename = buildImageFilename(opts.blob.type);
 
-  // Try the on-disk pipeline first. Falls back to data URL when
-  // the IPC isn't available (browser dev) or if the write fails
-  // for a recoverable reason.
-  try {
-    const bytes = new Uint8Array(await opts.blob.arrayBuffer());
-    await writeBinaryFile(opts.workspaceId, `images/${filename}`, bytes);
-    return {
-      markdownReference: `images/${filename}`,
-      alt,
-    };
-  } catch (error) {
-    const dataUrl = await blobToDataUrl(opts.blob);
-    return {
-      markdownReference: dataUrl,
-      alt,
-      warning:
-        error instanceof Error
-          ? `Saved as inline data URL: ${error.message}`
-          : "Saved as inline data URL — workspace write unavailable",
-    };
+  // Try the on-disk pipeline first. Falls back to a data URL when no
+  // writer is injected (plain browser) or the write fails for a
+  // recoverable reason.
+  if (opts.saveBytes) {
+    try {
+      const bytes = new Uint8Array(await opts.blob.arrayBuffer());
+      await opts.saveBytes(`images/${filename}`, bytes);
+      return {
+        markdownReference: `images/${filename}`,
+        alt,
+      };
+    } catch (error) {
+      return {
+        markdownReference: await blobToDataUrl(opts.blob),
+        alt,
+        warning:
+          error instanceof Error
+            ? `Saved as inline data URL: ${error.message}`
+            : "Saved as inline data URL — workspace write unavailable",
+      };
+    }
   }
+
+  return {
+    markdownReference: await blobToDataUrl(opts.blob),
+    alt,
+    warning: "Saved as inline data URL — no file storage configured",
+  };
 }
 
 /**

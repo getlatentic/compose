@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CodeMirrorMarkdownEditor } from "./codemirror/CodeMirrorMarkdownEditor";
+import type { EditorView } from "@codemirror/view";
+import {
+  CodeMirrorMarkdownEditor,
+  type EditorSelectionSnapshot,
+} from "ai-editor";
+import { CodeMirrorToolbar } from "./CodeMirrorToolbar";
+import { CommentBubble } from "./CommentBubble";
+import { pickImageFileForCaret } from "ai-editor";
 import { CommentsPanel } from "../comments/CommentsPanel";
 import type { SourceRange } from "../comments/commentModel";
 import { VersionHistory } from "../history/VersionHistory";
-import type { DocumentExportFormat } from "./EditorFileActions";
+import { EditorFileActions, type DocumentExportFormat } from "./EditorFileActions";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
 import { exportDocumentToPdf } from "../../lib/export/pdfExport";
 import { exportDocumentToHtml } from "../../lib/export/htmlExport";
+import { resolveDisplaySrc } from "./imageDisplaySrc";
+import { writeBinaryFile } from "../../lib/ipc/filesClient";
+import { openExternalUrl } from "../../lib/links/openExternal";
+import { markTabSwitchEnd } from "../../lib/perf";
+import { registerActiveEditorFlush } from "../../lib/editor/editorFlush";
 import { showToast } from "../toast/toastStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
@@ -101,6 +113,15 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
   );
 
   const navigateToFile = useCallback((path: string) => void selectFile(path), [selectFile]);
+  // Persist a pasted/dropped image to the workspace's `images/` dir via the
+  // Tauri file API. Closes over the active workspace id so the editor stays
+  // workspace-agnostic (it only knows "save these bytes at this relative path").
+  const saveImageBytes = useCallback(
+    async (relPath: string, bytes: Uint8Array) => {
+      await writeBinaryFile(activeWorkspaceId ?? "preview", relPath, bytes);
+    },
+    [activeWorkspaceId],
+  );
   // Stabilize the editor's Ask callback so React.memo on the editor can
   // short-circuit re-renders.
   const handleAskAboutSelection = useCallback(
@@ -146,27 +167,89 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
     );
   }, []);
 
+  // The host owns its toolbar actions and hands them to the editor as one
+  // stable slot — the editor itself stays agnostic about save / export /
+  // comments / chat. Memoised (its deps don't change on a keystroke) so the
+  // editor's toolbar memo holds.
+  const fileActions = useMemo(
+    () => (
+      <EditorFileActions
+        onSave={saveActiveFile}
+        onShowVersionHistory={onShowVersionHistory}
+        onExport={handleExport}
+        onToggleComments={toggleComments}
+        commentsOpen={commentsOpen}
+        commentCount={activeFileComments.length}
+        onToggleChat={toggleChat}
+        chatOpen={chatOpen}
+      />
+    ),
+    [
+      saveActiveFile,
+      onShowVersionHistory,
+      handleExport,
+      toggleComments,
+      commentsOpen,
+      activeFileComments.length,
+      toggleChat,
+      chatOpen,
+    ],
+  );
+
+  // Compose's toolbar (Carbon icons + its dialog providers) handed to the
+  // editor as a slot. Stable across keystrokes — its deps don't change while
+  // typing — so the editor's toolbar memo holds. `onInsertImage` runs the
+  // editor's own image-pick pipeline against the live view.
+  const toolbar = useCallback(
+    ({ view }: { view: EditorView }) => (
+      <CodeMirrorToolbar
+        view={view}
+        mode={editorMode}
+        fileActions={fileActions}
+        linkTargets={linkTargets}
+        onInsertImage={() => pickImageFileForCaret(view)}
+      />
+    ),
+    [editorMode, fileActions, linkTargets],
+  );
+
+  // The selection comment bubble, handed to the editor as a slot. The editor
+  // supplies the live selection + a `dismiss` that collapses it.
+  const selectionActions = useCallback(
+    ({
+      selection,
+      dismiss,
+    }: {
+      selection: EditorSelectionSnapshot | null;
+      dismiss: () => void;
+    }) => (
+      <CommentBubble
+        hasEditor
+        selection={selection}
+        dismissSelection={dismiss}
+        onSendToChat={handleAskAboutSelection}
+        onQueueComment={handleQueueComment}
+      />
+    ),
+    [handleAskAboutSelection, handleQueueComment],
+  );
+
   return (
     <CodeMirrorMarkdownEditor
-      comments={activeFileComments}
       mode={editorMode}
       value={content}
-      workspaceId={activeWorkspaceId ?? undefined}
       workspaceRoot={workspacePath ?? undefined}
       filePath={activeFilePath || undefined}
       linkTargets={linkTargets}
       onNavigateToLink={navigateToFile}
       onChange={updateActiveContent}
-      onAskAboutSelection={handleAskAboutSelection}
-      onQueueComment={handleQueueComment}
-      onSave={saveActiveFile}
-      onShowVersionHistory={onShowVersionHistory}
-      onExport={handleExport}
-      onToggleComments={toggleComments}
-      commentsOpen={commentsOpen}
-      commentCount={activeFileComments.length}
-      onToggleChat={toggleChat}
-      chatOpen={chatOpen}
+      toolbar={toolbar}
+      selectionActions={selectionActions}
+      resolveImageSrc={resolveDisplaySrc}
+      saveImageBytes={saveImageBytes}
+      onOpenExternalUrl={openExternalUrl}
+      onAfterContentSwap={markTabSwitchEnd}
+      onFlushReady={registerActiveEditorFlush}
     />
   );
 }

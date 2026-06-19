@@ -4,6 +4,7 @@ import {
   buildImageMarkdown,
   insertImageBlob,
 } from "../../imageInsert";
+import { saveImageBytesFacet } from "./hostFacets";
 
 interface ShowMenuArgs {
   x: number;
@@ -13,10 +14,9 @@ interface ShowMenuArgs {
   rawSrc: string;
   sourceFrom: number;
   sourceTo: number;
-  workspaceId: string;
 }
 
-export const IMAGE_EDIT_ALT_EVENT = "compose:edit-image-alt";
+export const IMAGE_EDIT_ALT_EVENT = "ai-editor:edit-image-alt";
 
 export interface ImageEditAltEventDetail {
   view: EditorView;
@@ -89,7 +89,10 @@ export function showImageActionMenu(args: ShowMenuArgs): void {
         if (!file) return;
         void (async () => {
           try {
-            const result = await insertImageBlob({ blob: file, workspaceId: args.workspaceId });
+            const result = await insertImageBlob({
+              blob: file,
+              saveBytes: args.view.state.facet(saveImageBytesFacet),
+            });
             const newMd = buildImageMarkdown(result);
             args.view.dispatch({
               changes: { from: args.sourceFrom, to: args.sourceTo, insert: newMd },

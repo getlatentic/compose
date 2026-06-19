@@ -4,7 +4,7 @@ import {
   parseFrontmatter,
   serializeMarkdown,
   type Frontmatter,
-} from "../editor/frontmatter";
+} from "ai-editor";
 import { PropertiesPanel } from "./PropertiesPanel";
 import type { Workspace } from "../../app/workspaceModel";
 import type { WorkspaceBacklinkRecord, WorkspaceIndexSnapshot } from "../../lib/ipc/indexClient";

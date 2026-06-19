@@ -8,7 +8,7 @@
  * but the persistence + markdown-reference logic is shared.
  */
 
-import { Facet, EditorSelection } from "@codemirror/state";
+import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import {
@@ -17,21 +17,13 @@ import {
   extractImageFiles,
   insertImageBlob,
 } from "../../imageInsert";
-
-/**
- * Workspace identity needed by `insertImageBlob`. Wired via the
- * editor's React shell — kept as a facet so the paste / drop handlers
- * (which run inside CM6's domEventHandlers, not React) can reach it.
- */
-export const insertImageWorkspaceFacet = Facet.define<string, string>({
-  combine: (vals) => vals[0] ?? "preview",
-});
+import { saveImageBytesFacet } from "./hostFacets";
 
 async function insertBlobsAtCaret(view: EditorView, blobs: Blob[]): Promise<void> {
-  const workspaceId = view.state.facet(insertImageWorkspaceFacet);
+  const saveBytes = view.state.facet(saveImageBytesFacet);
   for (const blob of blobs) {
     try {
-      const result = await insertImageBlob({ blob, workspaceId });
+      const result = await insertImageBlob({ blob, saveBytes });
       const md = buildImageMarkdown(result);
       const pos = view.state.selection.main.head;
       const insert = md + "\n\n";

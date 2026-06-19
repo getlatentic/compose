@@ -10,6 +10,7 @@
     "dev:bob-api": "cargo run --quiet --bin bob-api",
     "build": "pnpm build:wasm && pnpm typecheck && vite build",
     "build:wasm": "wasm-pack build crates/workspace-index-wasm --target web --out-dir ../../src/wasm/workspace_index_pkg --no-pack && rm -f src/wasm/workspace_index_pkg/.gitignore",
+    "build:editor": "pnpm --filter ai-editor build",
     "preview": "vite preview",
     "tauri": "tauri",
     "setup:dev-signing": "bash scripts/setup-dev-signing.sh",
@@ -43,7 +44,8 @@
     "remark-rehype": "^11.1.2",
     "unified": "^11.0.5",
     "yaml": "^2.9.0",
-    "zustand": "^5.0.8"
+    "zustand": "^5.0.8",
+    "ai-editor": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.16",

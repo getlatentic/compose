@@ -1,10 +1,19 @@
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 const host = process.env.TAURI_DEV_HOST;
 const require = createRequire(import.meta.url);
 const workerSafeCharacterDecoder = require.resolve("decode-named-character-reference");
+
+// Resolve the in-repo `ai-editor` workspace package to its TypeScript SOURCE
+// for dev / test / Compose's own build — Vite compiles it inline, so the
+// package's `dist/` (built only for npm publish) need not exist here. External
+// npm consumers get the built `dist/` via the package's `exports` field.
+const aiEditorSource = fileURLToPath(
+  new URL("./packages/rich-editor/src/index.ts", import.meta.url),
+);
 
 // Instrumented build? (react-scan overlay and/or perf marks enabled.) When set
 // we tell esbuild to KEEP function/class names through minification — otherwise
@@ -46,6 +55,7 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "decode-named-character-reference": workerSafeCharacterDecoder,
+      "ai-editor": aiEditorSource,
     },
   },
   // Build-time perf gate — symmetric with the Rust-side

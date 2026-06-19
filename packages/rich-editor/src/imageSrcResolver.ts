@@ -1,25 +1,19 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
-
 /**
- * Display-time resolution of image `src` values for the editor.
+ * Display-time resolution of image `src` values for the editor — the
+ * environment-agnostic pieces.
  *
  * Markdown stores image references **workspace-relative and portable** (e.g.
  * `images/pasted-….png`), which is what lands on disk and survives moving the
- * folder between machines. A WKWebView, though, can't load a relative path —
- * the page origin is `tauri://localhost`, so `images/foo.png` 404s and shows a
- * broken-image placeholder.
+ * folder between machines. A WebView, though, can't load a bare relative path
+ * against its app origin, so a host that streams local files needs to map the
+ * reference onto its own asset protocol.
  *
- * On the desktop the fix is Tauri's `asset:` protocol: resolve the reference
- * against the markdown file's directory to an absolute path, then
- * `convertFileSrc` it into an `asset://…` URL the webview streams straight off
- * disk. The Rust side scopes the protocol to the open workspace
- * (`asset_protocol_scope().allow_directory`). The stored attribute is never
- * touched — only the rendered `<img src>` — so serialization stays relative.
- *
- * In the browser there is no local filesystem; pasted images are already
- * inlined as `data:` URLs (which pass straight through), and any other relative
- * reference simply renders as-is.
+ * This module provides the host-independent parts: the POSIX path helpers
+ * (`computeFileDir` / `joinPath` / …), the `hasUriScheme` guard, and
+ * `defaultResolveImageSrc` (render as-is — the browser/SSR default). A desktop
+ * host composes these with its file API (e.g. Tauri `convertFileSrc`) to build
+ * its own resolver and injects it via the editor's `resolveImageSrc` prop. The
+ * stored markdown reference is never rewritten — only the rendered `<img src>`.
  *
  * Paths are treated as POSIX (`/`), matching the macOS/Linux workspace folders
  * this targets. Windows-style drive paths are passed through unresolved.
@@ -31,22 +25,28 @@ export interface ImageResolveContext {
 
 // Anything that already carries a scheme (`data:`, `http(s):`, `asset:`,
 // `blob:`, `file:`, `tauri:`, `mailto:` …), a protocol-relative `//`, or a bare
-// fragment `#` is left untouched.
+// fragment `#` is "already resolvable" — no path resolution applies.
 const HAS_SCHEME = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i;
 
-export function resolveDisplaySrc(rawSrc: string, ctx: ImageResolveContext): string {
-  const src = rawSrc.trim();
-  if (!src || HAS_SCHEME.test(src)) {
-    return src;
-  }
-  // Only the desktop can stream local files. In the browser, relative refs have
-  // no backing file (binary isn't stored in the virtual workspace), so render
-  // them as-is rather than fabricate an unreachable URL.
-  if (!isTauriRuntime() || !ctx.fileDir) {
-    return src;
-  }
-  const absolute = isAbsolutePath(src) ? src : joinPath(ctx.fileDir, src);
-  return convertFileSrc(absolute);
+/**
+ * True when `src` already carries a URI scheme, a protocol-relative `//`, or a
+ * bare fragment — i.e. it's directly loadable and needs no path resolution. A
+ * host's display-src resolver uses this to decide whether to map a relative
+ * workspace path onto its own asset protocol.
+ */
+export function hasUriScheme(src: string): boolean {
+  return HAS_SCHEME.test(src.trim());
+}
+
+/**
+ * Environment-agnostic default for the editor's `resolveImageSrcFacet`: render
+ * the reference as-is. Data URLs and absolute/schemed URLs load directly; a
+ * relative ref resolves against the page origin (or shows broken if no backing
+ * file). A desktop host overrides the facet with its own resolver, which maps
+ * relative paths onto a local asset protocol.
+ */
+export function defaultResolveImageSrc(rawSrc: string, _ctx: ImageResolveContext): string {
+  return rawSrc.trim();
 }
 
 /**

@@ -30,8 +30,8 @@ import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, Facet } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import { openExternalUrl } from "../../../../lib/links/openExternal";
-import { parseWikilinkBody, resolveWikilinkTarget } from "../../../../lib/links/wikilink";
+import { parseWikilinkBody, resolveWikilinkTarget } from "../../links/wikilink";
+import { openExternalUrlFacet } from "./hostFacets";
 import { wikilinkFromPathFacet, wikilinkTargetsFacet } from "./wikilinkPlugin";
 
 /**
@@ -96,7 +96,7 @@ export const clickModel = EditorView.domEventHandlers({
     const url = linkUrlAt(view, pos);
     if (url) {
       event.preventDefault();
-      void openExternalUrl(url);
+      view.state.facet(openExternalUrlFacet)(url);
       return true;
     }
     // Wikilink? Resolve target via the registered navigation callback.

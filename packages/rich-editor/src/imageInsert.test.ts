@@ -1,11 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-// Stub the IPC client before importing the module under test.
-vi.mock("../../lib/ipc/filesClient", () => ({
-  writeBinaryFile: vi.fn(),
-}));
-
-import { writeBinaryFile } from "../../lib/ipc/filesClient";
 import {
   buildImageMarkdown,
   extractImageBlobs,
@@ -25,19 +19,14 @@ function pngBlob(): Blob {
 }
 
 describe("insertImageBlob", () => {
-  beforeEach(() => {
-    vi.mocked(writeBinaryFile).mockReset();
-  });
-
-  it("writes to disk via IPC when available and returns the relative path", async () => {
-    vi.mocked(writeBinaryFile).mockResolvedValue({ lastModifiedMs: 0 });
+  it("saves via the injected writer and returns the relative path", async () => {
+    const saveBytes = vi.fn().mockResolvedValue(undefined);
     const result = await insertImageBlob({
       blob: pngBlob(),
-      workspaceId: "ws-1",
+      saveBytes,
     });
-    expect(writeBinaryFile).toHaveBeenCalledOnce();
-    const [wsId, relativePath, bytes] = vi.mocked(writeBinaryFile).mock.calls[0];
-    expect(wsId).toBe("ws-1");
+    expect(saveBytes).toHaveBeenCalledOnce();
+    const [relativePath, bytes] = saveBytes.mock.calls[0];
     expect(relativePath).toMatch(/^images\/pasted-.+\.png$/);
     expect(bytes).toBeInstanceOf(Uint8Array);
     expect(result.markdownReference).toMatch(/^images\/pasted-.+\.png$/);
@@ -45,21 +34,26 @@ describe("insertImageBlob", () => {
     expect(result.warning).toBeUndefined();
   });
 
-  it("falls back to a data URL when the IPC write fails", async () => {
-    vi.mocked(writeBinaryFile).mockRejectedValue(new Error("not available"));
+  it("falls back to a data URL when the injected write fails", async () => {
+    const saveBytes = vi.fn().mockRejectedValue(new Error("not available"));
     const result = await insertImageBlob({
       blob: pngBlob(),
-      workspaceId: "ws-1",
+      saveBytes,
     });
     expect(result.markdownReference.startsWith("data:image/png")).toBe(true);
     expect(result.warning).toBeDefined();
   });
 
+  it("falls back to a data URL when no writer is injected", async () => {
+    const result = await insertImageBlob({ blob: pngBlob() });
+    expect(result.markdownReference.startsWith("data:image/png")).toBe(true);
+    expect(result.warning).toBeDefined();
+  });
+
   it("uses the caller's alt text when provided", async () => {
-    vi.mocked(writeBinaryFile).mockResolvedValue({ lastModifiedMs: 0 });
     const result = await insertImageBlob({
       blob: pngBlob(),
-      workspaceId: "ws-1",
+      saveBytes: vi.fn().mockResolvedValue(undefined),
       alt: "cat looking out the window",
     });
     expect(result.alt).toBe("cat looking out the window");

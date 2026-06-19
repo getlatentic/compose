@@ -26,9 +26,10 @@ metadata lives in app-data SQLite, never inside the vault.
 
 ## 0. What's already done (the strong core — no action needed)
 
-- [x] Tiptap/ProseMirror editor: WYSIWYG + source toggle, headings, bold,
+- [x] CodeMirror 6 rich editor: WYSIWYG + source toggle, headings, bold,
       italic, strike, inline/block code, lists, tables, task lists, links,
-      images, YAML frontmatter preserved, autosave + conflict detection.
+      images, math, footnotes, YAML frontmatter preserved, autosave + conflict
+      detection. Per-tab state caching (cursor, scroll, undo history).
 - [x] AI agent runner: real streaming (`run_harness_stream`), multi-harness
       (bob/claude/codex), cancel mid-run, tool/file-op cards, usage stats,
       full conversation CRUD.
@@ -228,8 +229,8 @@ agent-skill export route are deferred (re-open below if wanted).
 - [~] **Perf baseline.** Correction: the benchmark + `baseline.json` are already
       post-Canvas (ops are `positionMapper*` / `comment*`; no Canvas ops), so the
       gate is meaningful as-is. Re-ran `pnpm bench:baseline` to refresh the
-      numbers on the current machine. (The editor itself is Tiptap-owned; the
-      benchmark covers the comment + coordinate hot paths it relies on, DOM-less.)
+      numbers on the current machine. (The benchmark covers the comment +
+      coordinate hot paths, DOM-less.)
 - [ ] **Metadata export / import / purge UI (spec R12).** Backend pieces exist;
       no user surface to back up or delete all app data. P1 for a trust story
       ("your data, your control"), but can be a thin first cut.
@@ -287,7 +288,7 @@ agent-skill export route are deferred (re-open below if wanted).
 pnpm typecheck        # tsc clean, both tsconfigs
 pnpm test             # vitest, all suites green
 pnpm test:rust        # cargo tests green
-pnpm bench:baseline   # re-baselined on Tiptap, no regression
+pnpm bench:baseline   # perf baseline, no regression
 pnpm tauri build      # signed + notarized .dmg
 ```
 

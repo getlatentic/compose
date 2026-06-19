@@ -9,13 +9,7 @@ vi.mock("../../lib/runtime/desktopRuntime", () => ({
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
-import {
-  computeFileDir,
-  dirnamePath,
-  isAbsolutePath,
-  joinPath,
-  resolveDisplaySrc,
-} from "./imageSrcResolver";
+import { resolveDisplaySrc } from "./imageDisplaySrc";
 
 const tauri = vi.mocked(isTauriRuntime);
 const convert = vi.mocked(convertFileSrc);
@@ -23,47 +17,6 @@ const convert = vi.mocked(convertFileSrc);
 afterEach(() => {
   tauri.mockReturnValue(true);
   convert.mockClear();
-});
-
-describe("path helpers", () => {
-  it("joinPath normalizes '.' and '..' segments", () => {
-    expect(joinPath("/ws", "images/a.png")).toBe("/ws/images/a.png");
-    expect(joinPath("/ws", "./images/a.png")).toBe("/ws/images/a.png");
-    expect(joinPath("/ws/sub", "../images/a.png")).toBe("/ws/images/a.png");
-    expect(joinPath("/ws/a/b", "../../images/a.png")).toBe("/ws/images/a.png");
-  });
-
-  it("joinPath keeps an absolute root and never lets '..' rise above it", () => {
-    expect(joinPath("/", "../../etc/passwd")).toBe("/etc/passwd");
-  });
-
-  it("dirnamePath returns the parent directory", () => {
-    expect(dirnamePath("/ws/sub/note.md")).toBe("/ws/sub");
-    expect(dirnamePath("/ws/note.md")).toBe("/ws");
-    expect(dirnamePath("/note.md")).toBe("/");
-    expect(dirnamePath("note.md")).toBe(".");
-  });
-
-  it("isAbsolutePath distinguishes absolute from relative", () => {
-    expect(isAbsolutePath("/ws")).toBe(true);
-    expect(isAbsolutePath("images/a.png")).toBe(false);
-  });
-});
-
-describe("computeFileDir", () => {
-  it("is null without a workspace root", () => {
-    expect(computeFileDir(undefined, "note.md")).toBeNull();
-    expect(computeFileDir(null, "note.md")).toBeNull();
-  });
-
-  it("falls back to the root when the file path is unknown", () => {
-    expect(computeFileDir("/ws", undefined)).toBe("/ws");
-  });
-
-  it("is the directory containing the active file", () => {
-    expect(computeFileDir("/ws", "note.md")).toBe("/ws");
-    expect(computeFileDir("/ws", "sub/note.md")).toBe("/ws/sub");
-  });
 });
 
 describe("resolveDisplaySrc", () => {

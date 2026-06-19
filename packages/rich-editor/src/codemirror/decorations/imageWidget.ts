@@ -17,8 +17,8 @@
 import { Facet } from "@codemirror/state";
 import { EditorView, WidgetType } from "@codemirror/view";
 
-import { resolveDisplaySrc, type ImageResolveContext } from "../../imageSrcResolver";
-import { insertImageWorkspaceFacet } from "./imageInsertHandlers";
+import { type ImageResolveContext } from "../../imageSrcResolver";
+import { resolveImageSrcFacet } from "./hostFacets";
 import { showImageActionMenu } from "./imageActionMenu";
 
 /**
@@ -59,7 +59,7 @@ export class ImageWidget extends WidgetType {
     const img = document.createElement("img");
     img.className = "cm-image-widget";
     img.alt = this.alt;
-    img.src = resolveDisplaySrc(this.rawSrc, this.ctx);
+    img.src = view.state.facet(resolveImageSrcFacet)(this.rawSrc, this.ctx);
     img.loading = "lazy";
     img.addEventListener("contextmenu", (e) => {
       e.preventDefault();
@@ -72,7 +72,6 @@ export class ImageWidget extends WidgetType {
         rawSrc: this.rawSrc,
         sourceFrom: this.sourceFrom,
         sourceTo: this.sourceTo,
-        workspaceId: view.state.facet(insertImageWorkspaceFacet),
       });
     });
     return img;
