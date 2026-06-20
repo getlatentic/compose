@@ -79,8 +79,17 @@ pub fn run() {
             let want_devtools = true;
             #[cfg(not(debug_assertions))]
             let want_devtools = option_env!("COMPOSE_DEVTOOLS").is_some();
-            if want_devtools {
-                if let Some(window) = app_handle.get_webview_window("main") {
+            if let Some(window) = app_handle.get_webview_window("main") {
+                // Force the window forward on launch. A WKWebView whose window
+                // is never visible at launch (created behind another app — a
+                // background/`open`-from-terminal launch) doesn't begin
+                // executing the page's JS, so the boot IPC handoff never runs
+                // and the splash hangs until the window is clicked. Focusing it
+                // makes the view visible so the WebView starts; once running,
+                // `backgroundThrottling: disabled` keeps it alive if the window
+                // is later occluded mid-boot.
+                let _ = window.set_focus();
+                if want_devtools {
                     window.open_devtools();
                 }
             }

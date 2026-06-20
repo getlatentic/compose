@@ -229,6 +229,12 @@ function FileTreeInner({
   const tree = useMemo(() => buildTree(files), [files]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const rows = useMemo(() => flatten(tree, collapsed), [tree, collapsed]);
+  // The active workspace's scan runs in the background (MainApp no longer gates
+  // the app on it), so an empty tree means "still scanning", not "no notes".
+  const scanning = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    return ws ? ws.scanState !== "ready" && ws.scanState !== "failed" : false;
+  });
 
   // Stable so the memoised FolderRow doesn't re-render on every keystroke /
   // file-select that re-renders FileTree.
@@ -260,8 +266,14 @@ function FileTreeInner({
   if (files.length === 0) {
     return (
       <div className="file-tree file-tree--empty">
-        <p>No Markdown files</p>
-        <p>Create a note from the toolbar.</p>
+        {scanning ? (
+          <p>Loading notes…</p>
+        ) : (
+          <>
+            <p>No Markdown files</p>
+            <p>Create a note from the toolbar.</p>
+          </>
+        )}
       </div>
     );
   }

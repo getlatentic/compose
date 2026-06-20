@@ -106,10 +106,30 @@ pub fn workspace_scan(
     }
     let entries = scan_markdown_files(&root)?;
     ensure_vault_metadata(&metadata, &workspace_id, &root)?;
-    let inventory = document_inventory_for_entries(&root, &entries)?;
-    metadata.sync_documents(&workspace_id, inventory)?;
     if let Err(message) = watchers.ensure_watcher(&workspace_id, &root) {
         eprintln!("watcher failed to start for {workspace_id}: {message}");
+    }
+    // Build the content-hash inventory off the scan's critical path. It reads
+    // every note's bytes (`std::fs::read`), which materializes dataless iCloud
+    // files and made a large vault take tens of seconds — but the file tree only
+    // needs the directory walk above. Return the entries now and let the
+    // search/metadata inventory catch up on its own thread.
+    {
+        let app = app.clone();
+        let workspace_id = workspace_id.clone();
+        let root = root.clone();
+        let entries = entries.clone();
+        std::thread::spawn(move || {
+            let metadata = app.state::<MetadataStore>();
+            match document_inventory_for_entries(&root, &entries) {
+                Ok(inventory) => {
+                    if let Err(error) = metadata.sync_documents(&workspace_id, inventory) {
+                        eprintln!("inventory sync failed for {workspace_id}: {error}");
+                    }
+                }
+                Err(error) => eprintln!("inventory scan failed for {workspace_id}: {error}"),
+            }
+        });
     }
     Ok(entries)
 }

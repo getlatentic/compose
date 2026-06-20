@@ -1,28 +1,20 @@
 import { useEffect } from "react";
 import { subscribeToWorkspaceFs } from "../lib/ipc/fileWatcherClient";
-import { SplashScreen } from "./SplashScreen";
 import { AppShell } from "./AppShell";
 import { useWorkspaceStore } from "./workspaceStore";
 
 /**
  * The main app screen (mounted by AppRouter once boot + onboarding are done).
  * Owns the workspace-level effects (file scan, fs-watch, ⌘S, unsaved-warning)
- * and the initial-scan gate. Subscribes to only `activeWorkspaceId` and the
- * active workspace's `scanState` — both change on workspace switch / scan
- * completion, never on a keystroke — so the document churn lives entirely in
- * the leaf regions under AppShell, not here.
+ * and renders the shell immediately. Subscribes to only `activeWorkspaceId`
+ * (changes on workspace switch, never on a keystroke), so document churn lives
+ * entirely in the leaf regions under AppShell, not here.
  */
 export function MainApp() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const handleFsEvent = useWorkspaceStore((state) => state.handleFsEvent);
   const loadActiveWorkspaceFiles = useWorkspaceStore((state) => state.loadActiveWorkspaceFiles);
   const saveActiveFile = useWorkspaceStore((state) => state.saveActiveFile);
-  // Primitive selector: re-renders only when the active workspace's scan state
-  // changes (or the active workspace switches) — not on content edits.
-  const scanState = useWorkspaceStore((state) => {
-    const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
-    return ws?.scanState ?? null;
-  });
 
   useEffect(() => {
     if (!activeWorkspaceId) {
@@ -91,13 +83,9 @@ export function MainApp() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
-  // This screen only mounts once boot + onboarding are done (see AppRouter), so
-  // the remaining wait is the active workspace's initial file scan. Hold the
-  // single loader (not an "empty workspace" flash) until it terminates. A
-  // failed scan surfaces its error in-pane, so it counts as resolved.
-  if (scanState && scanState !== "ready" && scanState !== "failed") {
-    return <SplashScreen />;
-  }
-
+  // Render the shell immediately — the active workspace's file scan runs in the
+  // background (loadActiveWorkspaceFiles above) and streams into the file tree,
+  // which shows its own loading state. Gating the whole app on the scan made a
+  // large iCloud vault wait seconds at launch (and stick if the scan stalled).
   return <AppShell />;
 }
