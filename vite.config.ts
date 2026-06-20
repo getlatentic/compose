@@ -69,6 +69,14 @@ export default defineConfig(async () => ({
     __COMPOSE_PERF__: JSON.stringify(process.env.COMPOSE_PERF === "1"),
   },
   build: {
+    // Don't even prefetch the lazy editor's heavy vendors (CodeMirror, KaTeX) at
+    // boot — they load when a document opens, keeping the initial parse to the
+    // shell. On a local desktop app the on-open fetch is a disk read.
+    modulePreload: {
+      resolveDependencies(_filename: string, deps: string[]) {
+        return deps.filter((dep) => !/(codemirror|katex)-[A-Za-z0-9_]+\.js$/.test(dep));
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id: string) {
@@ -82,6 +90,19 @@ export default defineConfig(async () => ({
 
           if (id.includes("node_modules/hast-util-to-jsx-runtime")) {
             return "markdown";
+          }
+
+          // Heavy editor-only vendors. Splitting them keeps the lazy-loaded
+          // EditorRegion chunk from pulling them into the initial parse — they
+          // download only when a document opens.
+          if (id.includes("node_modules/@codemirror") || id.includes("node_modules/@lezer")) {
+            return "codemirror";
+          }
+          if (id.includes("node_modules/katex")) {
+            return "katex";
+          }
+          if (id.includes("node_modules/@carbon")) {
+            return "carbon";
           }
 
           return undefined;
