@@ -85,6 +85,11 @@ pub struct ConversationSummary {
 const TITLE_MAX_CHARS: usize = 60;
 /// Longest a row preview snippet runs.
 const PREVIEW_MAX_CHARS: usize = 120;
+/// The placeholder shown for a not-yet-named conversation. Reserved: it's never
+/// treated as a real explicit title (an older build could persist it by blurring
+/// the rename field on an unnamed chat), so it always falls back to the
+/// first-message-derived title.
+const NEW_CONVERSATION_TITLE: &str = "New conversation";
 
 impl MetadataStore {
     /// The most-recently-*opened* non-archived, non-deleted conversation —
@@ -568,15 +573,20 @@ fn load_conversation_messages(
     Ok(messages)
 }
 
-/// Resolve the display title: an explicit (non-blank) title wins; otherwise
-/// derive one from the first user message; otherwise "New conversation".
+/// Resolve the display title: a real explicit (non-blank, non-placeholder) title
+/// wins; otherwise derive one from the first user message; otherwise the
+/// placeholder. The placeholder is ignored as an "explicit" title so a row that
+/// had it persisted still derives from its first message.
 fn resolve_title(explicit: Option<&str>, first_user_message: Option<&str>) -> String {
-    if let Some(title) = explicit.map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(title) = explicit
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != NEW_CONVERSATION_TITLE)
+    {
         return truncate_chars(title, TITLE_MAX_CHARS);
     }
     let derived = first_user_message.map(str::trim).unwrap_or("");
     if derived.is_empty() {
-        return "New conversation".to_owned();
+        return NEW_CONVERSATION_TITLE.to_owned();
     }
     truncate_chars(derived, TITLE_MAX_CHARS)
 }
@@ -755,6 +765,21 @@ mod tests {
     use super::*;
     use std::path::Path;
     use tempfile::tempdir;
+
+    #[test]
+    fn resolve_title_ignores_placeholder_and_derives_from_first_message() {
+        // A real explicit title wins.
+        assert_eq!(resolve_title(Some("My chat"), Some("hello")), "My chat");
+        // The placeholder is reserved — never treated as an explicit title, so a
+        // row that had it persisted still derives from its first message.
+        assert_eq!(
+            resolve_title(Some(NEW_CONVERSATION_TITLE), Some("Summarize this file")),
+            "Summarize this file",
+        );
+        // Nothing to derive → placeholder.
+        assert_eq!(resolve_title(None, None), NEW_CONVERSATION_TITLE);
+        assert_eq!(resolve_title(Some("   "), None), NEW_CONVERSATION_TITLE);
+    }
 
     fn store() -> (tempfile::TempDir, MetadataStore, &'static str) {
         let dir = tempdir().expect("temp dir");

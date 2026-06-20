@@ -79,7 +79,6 @@ export function SidebarChatList() {
               <ConversationListRow
                 key={conversation.conversationId}
                 conversation={conversation}
-                now={now}
                 onOpen={(id) => void openConversationFromSidebar(id)}
                 actions={makeActions(conversation)}
               />
@@ -100,7 +99,6 @@ export function SidebarChatList() {
               <ConversationListRow
                 key={conversation.conversationId}
                 conversation={conversation}
-                now={now}
                 onOpen={(id) => void openConversationFromSidebar(id)}
                 actions={makeActions(conversation)}
               />

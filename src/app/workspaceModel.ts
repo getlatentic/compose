@@ -741,13 +741,40 @@ export function setWorkspaceCommentStatus(
   };
 }
 
-function fileContextItem(workspaceId: string, filePath: string): WorkspaceContextItem {
+function fileContextItem(workspaceId: string, filePath: string): WorkspaceFileContextItem {
   return {
     id: createContextId(workspaceId, filePath),
     kind: "file",
     label: filePath,
     path: filePath,
     workspaceId,
+  };
+}
+
+/**
+ * Add a file as chat context (deduped by id), with an explicit display label —
+ * for an attachment whose label isn't its path (e.g. "Pasted text (12 KB)").
+ * Re-adding the same path replaces the existing chip so the label stays current.
+ */
+export function addFileContextItem(
+  chatThread: WorkspaceChatThread,
+  workspaceId: string,
+  filePath: string,
+  label: string,
+): WorkspaceChatThread {
+  const item: WorkspaceFileContextItem = { ...fileContextItem(workspaceId, filePath), label };
+  const withoutDup = chatThread.contextItems.filter((existing) => existing.id !== item.id);
+  return { ...chatThread, contextItems: [...withoutDup, item] };
+}
+
+/** Remove a chat context item by id (a chip's ✕). */
+export function removeContextItem(
+  chatThread: WorkspaceChatThread,
+  id: string,
+): WorkspaceChatThread {
+  return {
+    ...chatThread,
+    contextItems: chatThread.contextItems.filter((item) => item.id !== id),
   };
 }
 
@@ -979,6 +1006,13 @@ export function applyFsEvent(
   };
 }
 
+/** A globally-unique chat-message id. `conversation_messages.message_id` is a
+ *  global primary key, so a per-conversation scheme like `message-1` collides
+ *  the moment a second conversation persists its first message. */
+function newMessageId(): string {
+  return crypto.randomUUID();
+}
+
 export function appendUserChatMessage(
   chatThread: WorkspaceChatThread,
   userContent: string,
@@ -991,8 +1025,6 @@ export function appendUserChatMessage(
     return chatThread;
   }
 
-  const nextMessageNumber = chatThread.messages.length + 1;
-
   return {
     ...chatThread,
     messages: [
@@ -1000,7 +1032,7 @@ export function appendUserChatMessage(
       {
         activity: null,
         content: trimmedUserContent,
-        id: `message-${nextMessageNumber}`,
+        id: newMessageId(),
         ...(llmThreadId ? { llmThreadId } : {}),
         ...(excerpt ? { excerpt } : {}),
         role: "user",
@@ -1035,7 +1067,7 @@ export function markRunStreaming(
   const placeholder: WorkspaceChatMessage = {
     activity: null,
     content: "",
-    id: `message-${chatThread.messages.length + 1}`,
+    id: newMessageId(),
     ...(chatThread.activeLlmThreadId ? { llmThreadId: chatThread.activeLlmThreadId } : {}),
     role: "assistant",
     runId,
@@ -1059,7 +1091,7 @@ function ensureAssistantMessage(
   const placeholder: WorkspaceChatMessage = {
     activity: null,
     content: "",
-    id: `message-${chatThread.messages.length + 1}`,
+    id: newMessageId(),
     ...(chatThread.activeLlmThreadId ? { llmThreadId: chatThread.activeLlmThreadId } : {}),
     role: "assistant",
     runId,
@@ -1615,7 +1647,7 @@ export function serializeChatMessages(
   return thread.messages
     .filter((message) => message.content.trim())
     .map((message, index) => ({
-      messageId: message.id || `message-${index + 1}`,
+      messageId: message.id || newMessageId(),
       role: message.role,
       content: message.content,
       ...(message.trace?.length ? { traceJson: JSON.stringify(message.trace) } : {}),
@@ -1775,6 +1807,38 @@ function replaceByByteRange(mapper: PositionMapper, range: SourceRange, replacem
 export const CONVERSATION_REPLAY_LIMIT = 12;
 
 /**
+ * Inline a file-context item's content only up to this many characters. A larger
+ * file (or the pasted-text attachment) would crowd out a small (~4K) context
+ * window, so it's referenced by path instead and the model reads it on demand
+ * via the `read` tool. The single knob to tune for the context budget.
+ */
+export const FILE_CONTEXT_INLINE_LIMIT = 4000;
+
+/**
+ * Render the file-context block, budgeted for small windows: each item's
+ * content (from `contentByPath`) is inlined as `### <path>\n<content>` when it's
+ * small enough, otherwise reduced to a `- <path> (large; read it for details)`
+ * pointer so a big attachment can't blow the prompt. A path absent from the map
+ * (content not loaded) also degrades to the reference form. Pure — takes the
+ * pre-fetched content map so it stays unit-testable without IO.
+ */
+export function buildFileContextBlock(
+  fileItems: WorkspaceFileContextItem[],
+  contentByPath: Map<string, string>,
+  inlineLimit = FILE_CONTEXT_INLINE_LIMIT,
+): string {
+  return fileItems
+    .map((item) => {
+      const content = contentByPath.get(item.path);
+      if (content != null && content.length <= inlineLimit) {
+        return `### ${item.path}\n${content}`;
+      }
+      return `- ${item.path} (large; read it for details)`;
+    })
+    .join("\n\n");
+}
+
+/**
  * Build the harness prompt: the prior-conversation transcript (for
  * continuity), then the open-file / comment context, then the new
  * prompt. The transcript is harness-neutral — it's just text every
@@ -1785,20 +1849,27 @@ export const CONVERSATION_REPLAY_LIMIT = 12;
  * never the agent trace (that is display history, not model input). The
  * replay is capped at `CONVERSATION_REPLAY_LIMIT` most-recent prior
  * messages so a long thread can't blow the prompt size.
+ *
+ * File context carries each attached file's CONTENT (budgeted — see
+ * {@link buildFileContextBlock}), so a small model can act on an attached chip
+ * without a separate read. `contentByPath` is pre-fetched by the caller
+ * (keeping this function pure); a path missing from it falls back to a
+ * read-on-demand reference.
  */
 export function createPromptWithContext(
   prompt: string,
   contextItems: WorkspaceContextItem[],
   priorMessages: WorkspaceChatMessage[] = [],
+  contentByPath: Map<string, string> = new Map(),
 ) {
   const trimmedPrompt = prompt.trim();
 
   const transcript = buildConversationTranscript(priorMessages);
 
-  const fileContext = contextItems
-    .filter((item): item is WorkspaceFileContextItem => item.kind === "file")
-    .map((item) => `- ${item.path}`)
-    .join("\n");
+  const fileContext = buildFileContextBlock(
+    contextItems.filter((item): item is WorkspaceFileContextItem => item.kind === "file"),
+    contentByPath,
+  );
   const commentContext = contextItems
     .filter((item): item is WorkspaceCommentContextItem => item.kind === "comment")
     .map(

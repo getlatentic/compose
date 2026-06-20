@@ -20,6 +20,7 @@ pub fn run() {
         .manage(db::MetadataStore::default())
         .manage(files::watcher::WatcherManager::default())
         .manage(harness::runner::RunnerState::default())
+        .manage(harness::model_manager::ModelPullState::default())
         .manage(review::ReviewSessionStore::default())
         .manage(index::WorkspaceIndexStore::default())
         .manage(PendingOpenUrls::default())
@@ -55,8 +56,14 @@ pub fn run() {
             if let Err(error) = watchers.init(app_handle.clone()) {
                 eprintln!("watcher manager init failed: {error}");
             }
-            // Export stored harness keys to the env so readiness probes see them.
-            harness::credentials::export_all();
+            // Off the main thread: reading the keychain blocks on a macOS ACL
+            // prompt when the app signature doesn't match the stored item (any
+            // re-signed build), and inline that stalls the setup hook — so
+            // `app.run()` never starts and the boot IPC responses never reach
+            // the webview, leaving the splash up forever. Nothing on the launch
+            // path awaits the export; a harness whose key hasn't landed yet just
+            // probes "not ready" until it does.
+            std::thread::spawn(harness::credentials::export_all);
             // Purge soft-deleted files past the trash retention window. Off the
             // launch path on its own thread (nothing in the app waits on it),
             // and only after metadata init above so the store is ready.
@@ -91,6 +98,12 @@ pub fn run() {
             harness::commands::harness_list_models,
             harness::commands::harness_set_credential,
             harness::commands::harness_credential_status,
+            harness::input_spill::spill_chat_input,
+            harness::model_manager::harness_model_management,
+            harness::model_manager::harness_installed_models,
+            harness::model_manager::harness_pull_model,
+            harness::model_manager::harness_cancel_pull,
+            harness::model_manager::harness_delete_model,
             workspace::setup_complete_onboarding,
             workspace::setup_get_onboarding,
             workspace::workspace_add,

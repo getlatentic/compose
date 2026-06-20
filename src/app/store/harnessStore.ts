@@ -2,8 +2,11 @@ import { create } from "zustand";
 import {
   harnessList,
   harnessListModels,
+  harnessModelManagement,
+  harnessReadiness,
   type HarnessInfo,
   type HarnessModel,
+  type HarnessModelManagement,
   type HarnessReadiness,
 } from "../../lib/ipc/harnessClient";
 import { persistHarnessPrefs } from "./harnessConfig";
@@ -40,11 +43,21 @@ export interface HarnessState {
    * none (the picker then falls back to a free-text model field). */
   harnessModels: Record<string, HarnessModel[]>;
   loadHarnessModels: (harnessId: string) => Promise<void>;
+  /** Per-harness local-model management capability (`harness_model_management`),
+   * loaded lazily by the Settings panel. `null` once probed for a harness that
+   * manages no models (every harness but Ollama); absent until probed. Drives
+   * whether the "Manage models" section renders. */
+  harnessModelManagement: Record<string, HarnessModelManagement | null>;
+  loadHarnessModelManagement: (harnessId: string) => Promise<void>;
   /** Readiness of the *selected* harness, refreshed on boot and whenever the
    * selection changes or its credential/install is updated. Drives the send
    * gate and the setup-complete check for key-backed harnesses. */
   selectedHarnessReadiness: HarnessReadiness | null;
   setSelectedHarnessReadiness: (readiness: HarnessReadiness | null) => void;
+  /** Re-probe the selected harness's readiness (+ refresh its live model list),
+   * for the composer's "Retry" after a failure. Best-effort; a probe failure
+   * resets readiness to null (reads as available, so Retry never locks the UI). */
+  reloadSelectedHarnessReadiness: () => Promise<void>;
 }
 
 export const useHarnessStore = create<HarnessState>((set, get) => ({
@@ -97,8 +110,24 @@ export const useHarnessStore = create<HarnessState>((set, get) => ({
     const models = await harnessListModels(harnessId).catch(() => [] as HarnessModel[]);
     set((state) => ({ harnessModels: { ...state.harnessModels, [harnessId]: models } }));
   },
+  harnessModelManagement: {},
+  loadHarnessModelManagement: async (harnessId) => {
+    // Best-effort; a failure resolves to null (no management surface shown).
+    const management = await harnessModelManagement(harnessId).catch(() => null);
+    set((state) => ({
+      harnessModelManagement: { ...state.harnessModelManagement, [harnessId]: management },
+    }));
+  },
   selectedHarnessReadiness: null,
   setSelectedHarnessReadiness: (readiness) => {
     set({ selectedHarnessReadiness: readiness });
+  },
+  reloadSelectedHarnessReadiness: async () => {
+    const harnessId = get().selectedHarnessId;
+    const readiness = await harnessReadiness(harnessId).catch(() => null);
+    set({ selectedHarnessReadiness: readiness });
+    // A harness that discovers models live (Ollama) couldn't list them while it
+    // was down — refresh now that it may be back so the picker repopulates.
+    void get().loadHarnessModels(harnessId);
   },
 }));

@@ -25,6 +25,12 @@ import {
   updateWorkspace,
 } from "./internals";
 
+/** Per-workspace request counter so a stale `loadConversations` response can't
+ *  overwrite a newer one — they race on workspace open vs. the post-send
+ *  refresh, and an earlier fetch landing last would drop a just-created
+ *  conversation from history until the next app reload. */
+const conversationLoadSeq = new Map<string, number>();
+
 export const createConversationsSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
@@ -35,8 +41,16 @@ export const createConversationsSlice = (
     // The list always includes archived rows (the UI filters by the
     // `archived` flag), so the history dropdown, All view, and Archived
     // filter all read from one fetch.
-    const summaries = await listConversations(workspaceId, true).catch(() => null);
-    if (!summaries) {
+    const seq = (conversationLoadSeq.get(workspaceId) ?? 0) + 1;
+    conversationLoadSeq.set(workspaceId, seq);
+    const summaries = await listConversations(workspaceId, true).catch((error) => {
+      // Surface (don't swallow) — a silent failure here is what leaves history
+      // empty until the next reload.
+      console.error(`loadConversations(${workspaceId}) failed`, error);
+      return null;
+    });
+    // Drop a stale or failed response; a newer load already superseded this one.
+    if (!summaries || conversationLoadSeq.get(workspaceId) !== seq) {
       return;
     }
     set((state) => ({ conversations: { ...state.conversations, [workspaceId]: summaries } }));

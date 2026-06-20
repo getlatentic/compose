@@ -10,6 +10,7 @@ import {
   TabPanel,
   TabPanels,
   Tabs,
+  TextArea,
   TextInput,
   Toggle,
 } from "@carbon/react";
@@ -33,6 +34,12 @@ import {
 import { revealErrorLog } from "../../lib/diagnostics/errorReporter";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { HarnessPicker } from "./HarnessPicker";
+import { OllamaModelManager } from "./OllamaModelManager";
+
+/** Character cap on per-harness custom instructions (~500 tokens). They live in
+ * the system prompt's user-configurable section; capping keeps them from
+ * crowding out the workspace context on a small local model's window. */
+const MAX_CUSTOM_INSTRUCTIONS_CHARS = 2000;
 
 /** bob's `readiness().details` payload (a JSON object on the wire). Read for
  * the Node.js diagnostics the setup UI surfaces ("Runtime: Node …"). */
@@ -313,6 +320,10 @@ function ExternalHarnessOptions({ harnessId, name }: { harnessId: string; name: 
   const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
   const harnessModels = useHarnessStore((state) => state.harnessModels);
   const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
+  const modelManagement = useHarnessStore((state) => state.harnessModelManagement[harnessId]);
+  const loadHarnessModelManagement = useHarnessStore(
+    (state) => state.loadHarnessModelManagement,
+  );
   const caps = harnessCapabilitiesOf(harnessCatalog, harnessId);
 
   // Discover models live for harnesses without a curated compile-time list
@@ -323,10 +334,29 @@ function ExternalHarnessOptions({ harnessId, name }: { harnessId: string; name: 
       void loadHarnessModels(harnessId);
     }
   }, [harnessId, caps.models.length, loadHarnessModels]);
+
+  // Probe whether this harness manages its own local models (Ollama). Drives the
+  // "Manage models" section below; null for every other harness.
+  useEffect(() => {
+    void loadHarnessModelManagement(harnessId);
+  }, [harnessId, loadHarnessModelManagement]);
   const dynamicModels = harnessModels[harnessId] ?? [];
   const currentModel = options.model ?? "";
 
+  // Re-fetch the live model list (Ollama's /api/tags etc.) so a model pulled
+  // after the app started shows up without a restart.
+  const [refreshingModels, setRefreshingModels] = useState(false);
+  const refreshModels = async () => {
+    setRefreshingModels(true);
+    try {
+      await loadHarnessModels(harnessId);
+    } finally {
+      setRefreshingModels(false);
+    }
+  };
+
   return (
+    <>
     <div className="settings-section">
       <h3>{name} setup</h3>
       <p className="settings-helper">
@@ -405,6 +435,20 @@ function ExternalHarnessOptions({ harnessId, name }: { harnessId: string; name: 
           </Select>
         ) : null}
 
+        {/* Live-discovery harnesses (Ollama / OpenRouter) can gain models after
+            launch; let the user re-pull the list without restarting. */}
+        {caps.models.length === 0 ? (
+          <Button
+            kind="ghost"
+            size="sm"
+            disabled={refreshingModels}
+            onClick={() => void refreshModels()}
+            style={{ justifySelf: "start", marginBlockStart: "-0.5rem" }}
+          >
+            {refreshingModels ? "Refreshing…" : "Refresh models"}
+          </Button>
+        ) : null}
+
         {supportsPermissionMode(harnessId) ? (
           <Select
             id={`${harnessId}-permission-mode`}
@@ -458,8 +502,33 @@ function ExternalHarnessOptions({ harnessId, name }: { harnessId: string; name: 
             ))}
           </Select>
         ) : null}
+
+        {/* Custom instructions are appended to the system prompt by the
+            openai-compatible adapter (Ollama / OpenRouter). Only shown where the
+            harness honors them, so the field is never a dead control. */}
+        {caps.supportsCustomInstructions ? (
+          <TextArea
+            id={`${harnessId}-custom-instructions`}
+            labelText="Custom instructions"
+            helperText="Added to the assistant's system prompt for this harness — a persona, house style, or rules it should always follow. Keep it short so it leaves room for your files on small local models."
+            placeholder="e.g. Answer in British English and keep summaries to 3 bullet points."
+            rows={3}
+            // Capped (~500 tokens) so a long instruction block can't crowd out
+            // the workspace context in a small model's window.
+            enableCounter
+            maxCount={MAX_CUSTOM_INSTRUCTIONS_CHARS}
+            value={options.customInstructions ?? ""}
+            onChange={(event) =>
+              setHarnessOptions(harnessId, { customInstructions: event.target.value || undefined })
+            }
+          />
+        ) : null}
       </div>
     </div>
+    {modelManagement ? (
+      <OllamaModelManager harnessId={harnessId} management={modelManagement} />
+    ) : null}
+    </>
   );
 }
 

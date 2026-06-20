@@ -53,6 +53,12 @@ export interface HarnessRunRequest {
    * configurable, not hardcoded in the adapter. Omitted/empty → adapter defaults.
    */
   extraArgs?: string[];
+  /**
+   * The user's per-harness "custom instructions", appended to the system prompt
+   * via `RunTuning.extra_instructions`. Honored by the openai-compatible adapter
+   * (Ollama / OpenRouter); ignored by the CLI harnesses. Omitted/empty → none.
+   */
+  extraInstructions?: string;
 }
 
 /** A model the harness can be pointed at (mirrors
@@ -84,6 +90,10 @@ export interface HarnessCapabilities {
   /** Supports an interactive sign-in flow (claude/codex OAuth) the picker
    * can trigger when installed-but-not-signed-in. */
   supportsLogin: boolean;
+  /** Honors per-harness custom instructions (appended to the system prompt via
+   * `RunTuning.extra_instructions`). True for the openai-compatible adapter
+   * (Ollama / OpenRouter); the picker hides the field for harnesses that don't. */
+  supportsCustomInstructions: boolean;
 }
 
 /** One entry in the harness catalog (`harness_list` command). */
@@ -186,6 +196,19 @@ export async function runHarnessStream(request: HarnessRunRequest): Promise<void
   await invoke<void>("run_harness_stream", { request });
 }
 
+/**
+ * Spill a large chat message to a scratch file the harness `read` tool can fetch
+ * on demand, returning its absolute path. Lets a big paste stay out of the first
+ * turn's inline prompt so it can't blow a small model's context window. Throws in
+ * the browser preview — the caller only invokes it on the desktop send path.
+ */
+export async function spillChatInput(workspaceId: string, text: string): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error(DESKTOP_RUNTIME_REQUIRED);
+  }
+  return invoke<string>("spill_chat_input", { workspaceId, text });
+}
+
 export async function cancelHarnessRun(runId: string): Promise<void> {
   if (!isTauriRuntime()) {
     throw new Error(DESKTOP_RUNTIME_REQUIRED);
@@ -235,6 +258,103 @@ export async function harnessListModels(harnessId: string): Promise<HarnessModel
     return [];
   }
   return invoke<HarnessModel[]>("harness_list_models", { harnessId });
+}
+
+/**
+ * A harness's local-model management capability (mirrors
+ * `harness::ModelManagement`). `null` when the harness manages no models — the
+ * Settings "Manage models" section appears only when this is non-null (Ollama).
+ */
+export interface HarnessModelManagement {
+  /** The model server's base URL (e.g. `http://localhost:11434`) — shown / linked. */
+  baseUrl: string;
+}
+
+/**
+ * Whether a harness can install/list/delete its own local models, and if so its
+ * endpoint metadata. `null` for every harness but Ollama (and in the browser
+ * preview, which has no registry).
+ */
+export async function harnessModelManagement(
+  harnessId: string,
+): Promise<HarnessModelManagement | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+  return invoke<HarnessModelManagement | null>("harness_model_management", { harnessId });
+}
+
+/** One installed local model with the metadata the manager shows (mirrors
+ * `harness::InstalledModel`). `size` is on-disk bytes. */
+export interface InstalledModel {
+  name: string;
+  size: number;
+  parameterSize: string | null;
+  quantizationLevel: string | null;
+}
+
+/** Installed local models with size + details, for the manager list. `[]` in the
+ * browser preview or on any backend error (e.g. the server is offline). */
+export async function harnessInstalledModels(harnessId: string): Promise<InstalledModel[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+  return invoke<InstalledModel[]>("harness_installed_models", { harnessId });
+}
+
+/**
+ * A streamed model-pull event (mirrors `harness::model_manager::PullEvent`).
+ * `progress.percent` is the aggregated overall percentage (0–100), absent until
+ * a byte total is known; `status` is the server's raw phase text.
+ */
+export type PullEvent =
+  | {
+      kind: "progress";
+      status: string;
+      percent?: number;
+      digest?: string;
+      total?: number;
+      completed?: number;
+    }
+  | { kind: "done" }
+  | { kind: "error"; message: string };
+
+/**
+ * Pull (download) a model, invoking `onEvent` for each progress update and
+ * resolving when the pull finishes. Terminal status arrives as a `done` or
+ * `error` event (the promise still resolves — inspect the events for outcome).
+ * Cancel an in-flight pull with {@link harnessCancelPull} for the same
+ * `harnessId` + `model`. No-op in the browser preview (it has no registry).
+ */
+export async function harnessPullModel(
+  harnessId: string,
+  model: string,
+  onEvent: (event: PullEvent) => void,
+): Promise<void> {
+  if (!isTauriRuntime()) {
+    onEvent({ kind: "error", message: DESKTOP_RUNTIME_REQUIRED });
+    return;
+  }
+  const { Channel } = await import("@tauri-apps/api/core");
+  const channel = new Channel<PullEvent>();
+  channel.onmessage = onEvent;
+  await invoke<void>("harness_pull_model", { harnessId, model, onEvent: channel });
+}
+
+/** Cancel an in-flight {@link harnessPullModel} for this `harnessId` + `model`. */
+export async function harnessCancelPull(harnessId: string, model: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+  await invoke<void>("harness_cancel_pull", { harnessId, model });
+}
+
+/** Delete an installed local model. Removing one already absent succeeds. */
+export async function harnessDeleteModel(harnessId: string, model: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+  await invoke<void>("harness_delete_model", { harnessId, model });
 }
 
 /**

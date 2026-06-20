@@ -104,6 +104,7 @@ export function harnessCapabilitiesOf(
     supportsEffort: false,
     supportsMaxTurns: false,
     supportsLogin: false,
+    supportsCustomInstructions: false,
   };
 }
 

@@ -9,11 +9,13 @@ import type { EditGuard } from "../../lib/ipc/harnessClient";
 import {
   appendAppliedChanges,
   appendReviewChangeSuggestions,
+  applyScanResult,
   markWorkspaceSuggestion,
   type Workspace,
   type WorkspaceDocumentSuggestion,
   type WorkspaceReviewSuggestionDraft,
 } from "../workspaceModel";
+import { scanWorkspace } from "../../lib/ipc/filesClient";
 import { errorMessage, updateWorkspace } from "./internals";
 import type { WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
 import { showErrorToast } from "../../features/toast/toastStore";
@@ -187,6 +189,19 @@ export async function applyFileReviewChange(
         markWorkspaceSuggestion(workspace, suggestion.id, "accepted", null, Date.now()),
       ),
     }));
+    // The fs watcher also fires, but it's async, debounced, and best-effort —
+    // a newly *created* file otherwise wouldn't show in the tree until a
+    // reload. Rescan deterministically on accept so it appears at once.
+    try {
+      const entries = await scanWorkspace(workspaceId);
+      set((state) => ({
+        workspaces: updateWorkspace(state.workspaces, workspaceId, (workspace) =>
+          applyScanResult(workspace, entries),
+        ),
+      }));
+    } catch {
+      // best-effort — the watcher remains the backstop
+    }
   } catch (error) {
     const message = errorMessage(error, "Could not apply this change");
     set((state) => ({

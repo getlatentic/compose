@@ -39,7 +39,6 @@ import {
   finishReviewRun,
 } from "./reviewFlow";
 import {
-  newConversation,
 } from "../../lib/ipc/conversationsClient";
 import {
   persistConversation,
@@ -52,6 +51,12 @@ import {
   runHarnessStream,
   subscribeHarnessRun,
 } from "../../lib/ipc/harnessClient";
+import {
+  spillChatInputForPrompt,
+} from "./chatInputSpill";
+import {
+  collectFileContextContent,
+} from "./fileContextContent";
 
 /**
  * Run a chat-send turn: optimistic user message, credential preflight, then
@@ -126,35 +131,47 @@ export async function runSendChatPrompt(
     }
   }
   const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // A very large paste is spilled to a scratch file and replaced — in the *sent*
+  // prompt only — with a short reference the model reads on demand, so it can't
+  // blow a small context window in turn one. The chat-visible message (appended
+  // optimistically above) stays the full original text.
+  const sentUserMessage = await spillChatInputForPrompt(workspaceId, userMessage);
+  const contextFilePaths = thread.contextItems
+    .filter((item) => item.kind === "file")
+    .map((item) => item.path);
+  // Attached files carry their CONTENT into the prompt (budgeted) so a small
+  // model can act on a chip without a separate read — big files fall back to a
+  // read-on-demand reference. Fetched here (IO) and passed in to keep the
+  // prompt builder pure.
+  const fileContextContent = await collectFileContextContent(workspace, contextFilePaths);
   // `thread` is the pre-append snapshot, so `thread.messages` are the
   // *prior* turns — replay them into the prompt for harness-neutral
   // continuity (the agent "remembers" the conversation). Trace excluded.
   const promptWithContext = createPromptWithContext(
-    userMessage,
+    sentUserMessage,
     thread.contextItems,
     thread.messages,
+    fileContextContent,
   );
-  const contextFilePaths = thread.contextItems
-    .filter((item) => item.kind === "file")
-    .map((item) => item.path);
 
-  // Ensure the thread maps to a persisted conversation, then save the
-  // just-appended user message (so a mid-stream crash keeps the
-  // question). Lazily create the conversation on first send.
+  // Map the thread to a persisted conversation. The id is generated client-side
+  // and the row is created by the first `saveConversation` upsert below — there's
+  // no separate "create empty row" step that could strand a 0-message "zombie"
+  // (hidden from history) if the message-save didn't follow.
   let conversationId = thread.conversationId;
   if (!conversationId) {
-    conversationId = await newConversation(workspaceId, harnessId).catch(() => null);
-    if (conversationId) {
-      const id = conversationId;
-      set((state) => ({
-        workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
-          ...item,
-          chatThread: { ...item.chatThread, conversationId: id },
-        })),
-      }));
-    }
+    const id = crypto.randomUUID();
+    conversationId = id;
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+        ...item,
+        chatThread: { ...item.chatThread, conversationId: id },
+      })),
+    }));
   }
-  persistConversation(get, workspaceId);
+  // Awaited so the first message is committed before the run (and before the
+  // concurrent LLM-thread write), not racing it fire-and-forget.
+  await persistConversation(get, workspaceId);
 
   // Batched setter — folds all stream-driven state changes for
   // this run into one set() per animation frame. See
@@ -197,7 +214,7 @@ export async function runSendChatPrompt(
     batched.flushNow();
     batched.dispose();
     // Turn settled — persist the final answer (+ its trace + stats).
-    persistConversation(get, workspaceId);
+    void persistConversation(get, workspaceId);
     if (releaseSubscription) {
       releaseSubscription();
       releaseSubscription = null;
@@ -280,6 +297,7 @@ export async function runSendChatPrompt(
       maxTurns: tuning.maxTurns,
       editGuard,
       extraArgs: harnessExtraArgs(harnessId, tuning),
+      extraInstructions: tuning.customInstructions,
     });
   } catch (error) {
     const message = formatHarnessError(

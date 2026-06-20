@@ -13,12 +13,17 @@ import { WorkingIndicator } from "./WorkingIndicator";
  */
 export function ChatMessageList({
   callbacks,
+  composerHeight,
   contextFileLabel,
   messages,
   onUseSuggestion,
   runState,
 }: {
   callbacks: MessageRowCallbacks;
+  /** Live height (px) of the floating composer. An end spacer of this height
+   * reserves room so the last turn scrolls clear of it; re-pinning to bottom
+   * also keys off it so a composer resize keeps the latest message in view. */
+  composerHeight: number;
   /** The file currently in context, named in the empty state. */
   contextFileLabel: string | null;
   messages: WorkspaceChatMessage[];
@@ -35,13 +40,16 @@ export function ChatMessageList({
   const running = runState === "starting" || runState === "streaming";
   const showStartingLoader = running && messages[messages.length - 1]?.role !== "assistant";
 
+  // Re-pin on `composerHeight` too: the spacer below grows in the same commit,
+  // so reading `scrollHeight` here already includes the reserved space — no
+  // race with the composer's resize observer.
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) {
       return;
     }
     element.scrollTop = element.scrollHeight;
-  }, [messages, runState]);
+  }, [messages, runState, composerHeight]);
 
   return (
     <div ref={scrollRef} className="chat-messages">
@@ -53,6 +61,10 @@ export function ChatMessageList({
             <MessageRow callbacks={callbacks} key={message.id} message={message} />
           ))}
           {showStartingLoader ? <WorkingIndicator /> : null}
+          {/* Reserves room for the floating composer so the last turn scrolls
+              fully clear of it. A real layout element (not CSS-var padding) so
+              `scrollHeight` reflects it deterministically when re-pinning. */}
+          <div className="chat-messages__composer-spacer" style={{ blockSize: composerHeight }} />
         </div>
       )}
     </div>

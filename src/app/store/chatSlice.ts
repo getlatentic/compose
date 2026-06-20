@@ -2,9 +2,11 @@ import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./typ
 import { showErrorToast } from "../../features/toast/toastStore";
 import {
   acceptWorkspaceSuggestion,
+  addFileContextItem,
   appendUserChatMessage,
   finalizeRun,
   rejectWorkspaceSuggestion,
+  removeContextItem,
 } from "../workspaceModel";
 import {
   applyFileReviewChange,
@@ -33,7 +35,7 @@ import {
 export const createChatSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "appendUserChatMessage" | "acceptSuggestedEdit" | "rejectSuggestedEdit" | "askAboutSelectionStream" | "cancelActiveRun" | "regenerateLastTurn" | "sendChatPrompt" | "setChatPrompt"> => ({
+): Pick<WorkspaceState, "appendUserChatMessage" | "acceptSuggestedEdit" | "rejectSuggestedEdit" | "askAboutSelectionStream" | "cancelActiveRun" | "regenerateLastTurn" | "sendChatPrompt" | "setChatPrompt" | "addChatFileContext" | "removeChatContextItem"> => ({
   appendUserChatMessage: (userContent: string, preparedCommand: string | null) => {
     const workspace = get().activeWorkspace();
     if (!workspace) {
@@ -168,6 +170,30 @@ export const createChatSlice = (
           preparedCommand: null,
           prompt,
         },
+      })),
+    }));
+  },
+  addChatFileContext: ({ label, path }) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
+        ...item,
+        chatThread: addFileContextItem(item.chatThread, item.id, path, label),
+      })),
+    }));
+  },
+  removeChatContextItem: (id: string) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
+        ...item,
+        chatThread: removeContextItem(item.chatThread, id),
       })),
     }));
   },

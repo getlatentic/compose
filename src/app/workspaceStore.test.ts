@@ -108,6 +108,7 @@ describe("workspace store", () => {
             supportsEffort: false,
             supportsMaxTurns: false,
             supportsLogin: false,
+            supportsCustomInstructions: false,
           },
         },
       ],
@@ -169,6 +170,7 @@ describe("workspace store", () => {
             supportsEffort: false,
             supportsMaxTurns: false,
             supportsLogin: false,
+            supportsCustomInstructions: false,
           },
         },
       ],
@@ -205,6 +207,7 @@ describe("workspace store", () => {
             supportsEffort: false,
             supportsMaxTurns: false,
             supportsLogin: false,
+            supportsCustomInstructions: false,
           },
         },
       ],
@@ -522,6 +525,7 @@ describe("workspace store", () => {
       supportsEffort: false,
       supportsMaxTurns: false,
       supportsLogin: false,
+      supportsCustomInstructions: false,
       ...overrides,
     });
 

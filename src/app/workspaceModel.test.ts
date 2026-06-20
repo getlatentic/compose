@@ -14,8 +14,12 @@ import {
   setAssistantSession,
   setAssistantStats,
   startAssistantToolCall,
+  addFileContextItem,
+  buildFileContextBlock,
   createPromptWithContext,
+  FILE_CONTEXT_INLINE_LIMIT,
   hydrateChatThread,
+  removeContextItem,
   resetChatThread,
   serializeChatMessages,
   CONVERSATION_REPLAY_LIMIT,
@@ -42,6 +46,7 @@ import {
   setCurrentTabContext,
   startRun,
   type Workspace,
+  type WorkspaceFileContextItem,
   type WorkspaceFileEntry,
 } from "./workspaceModel";
 import type { HarnessReadiness } from "../lib/ipc/harnessClient";
@@ -195,14 +200,27 @@ describe("workspace model", () => {
 
     expect(chatThread.prompt).toBe("");
     expect(chatThread.preparedCommand).toContain("--auth-method api-key");
+    // Message ids are globally-unique (UUIDs), not a per-conversation `message-N`
+    // sequence — `seq` already orders them, and the DB PK is global.
+    expect(chatThread.messages[0].id).toEqual(expect.any(String));
     expect(chatThread.messages).toEqual([
       {
         activity: null,
         content: "Summarize this note",
-        id: "message-1",
+        id: chatThread.messages[0].id,
         role: "user",
       },
     ]);
+  });
+
+  it("gives each message a globally-unique id, not a per-conversation message-N", () => {
+    // `conversation_messages.message_id` is a global primary key, so two
+    // different conversations' first messages must not share an id (the old
+    // `message-${n}` scheme collided the moment a second conversation saved).
+    const a = appendUserChatMessage(createWorkspaceFromPath("/tmp/a").chatThread, "hi", null);
+    const b = appendUserChatMessage(createWorkspaceFromPath("/tmp/b").chatThread, "hi", null);
+    expect(a.messages[0].id).not.toBe(b.messages[0].id);
+    expect(a.messages[0].id).not.toMatch(/^message-\d+$/);
   });
 
   it("links persisted LLM thread ids to the auditable chat messages", () => {
@@ -594,7 +612,7 @@ describe("workspace model", () => {
         kind: "replace",
         createdAt: 123,
         filePath: "a.md",
-        id: "message-2-suggestion-1",
+        id: withSuggestion.messages[1].suggestions![0].id,
         originalText: "Old title",
         range: { start: 2, end: 11 },
         replacement: "Launch plan",
@@ -628,7 +646,8 @@ describe("workspace model", () => {
       chatThread: appendAssistantSuggestions(started, runId, drafts, 123),
     };
 
-    const accepted = acceptWorkspaceSuggestion(withSuggestion, "message-2-suggestion-1", 456);
+    const suggestionId = withSuggestion.chatThread.messages[1].suggestions![0].id;
+    const accepted = acceptWorkspaceSuggestion(withSuggestion, suggestionId, 456);
 
     expect(accepted.fileContents["a.md"].content).toBe("# Launch plan\n");
     expect(accepted.fileContents["a.md"].dirty).toBe(true);
@@ -663,7 +682,8 @@ describe("workspace model", () => {
     };
     const changed = markBufferDirty(withSuggestion, "a.md", "# Changed\n");
 
-    const accepted = acceptWorkspaceSuggestion(changed, "message-2-suggestion-1", 456);
+    const suggestionId = withSuggestion.chatThread.messages[1].suggestions![0].id;
+    const accepted = acceptWorkspaceSuggestion(changed, suggestionId, 456);
 
     expect(accepted.fileContents["a.md"].content).toBe("# Changed\n");
     expect(accepted.chatThread.messages[1].suggestions?.[0]).toMatchObject({
@@ -693,7 +713,8 @@ describe("workspace model", () => {
       chatThread: appendAssistantSuggestions(started, runId, drafts, 123),
     };
 
-    const rejected = rejectWorkspaceSuggestion(withSuggestion, "message-2-suggestion-1", 456);
+    const suggestionId = withSuggestion.chatThread.messages[1].suggestions![0].id;
+    const rejected = rejectWorkspaceSuggestion(withSuggestion, suggestionId, 456);
 
     expect(rejected.fileContents["a.md"].content).toBe("# Old title\n");
     expect(rejected.chatThread.messages[1].suggestions?.[0]).toMatchObject({
@@ -830,12 +851,13 @@ describe("workspace model", () => {
 
     // File-level kinds don't touch the in-memory buffer here — the store
     // applies them to disk through the review session, so accept is a no-op.
-    const untouched = acceptWorkspaceSuggestion(workspace, "message-2-suggestion-1", 300);
+    const suggestionId = workspace.chatThread.messages[1].suggestions![0].id;
+    const untouched = acceptWorkspaceSuggestion(workspace, suggestionId, 300);
     expect(untouched.chatThread.messages[1].suggestions?.[0]?.status).toBe("pending");
     expect(untouched.fileContents).toEqual(base.fileContents);
 
     // The store records the outcome after applying on disk.
-    const marked = markWorkspaceSuggestion(workspace, "message-2-suggestion-1", "accepted", null, 300);
+    const marked = markWorkspaceSuggestion(workspace, suggestionId, "accepted", null, 300);
     expect(marked.chatThread.messages[1].suggestions?.[0]).toMatchObject({
       status: "accepted",
       updatedAt: 300,
@@ -967,5 +989,78 @@ describe("workspace model", () => {
 
   it("createPromptWithContext with no prior turns and no context is just the prompt", () => {
     expect(createPromptWithContext("hello", [])).toBe("hello");
+  });
+
+  it("buildFileContextBlock inlines small file content and references large ones", () => {
+    const fileItem = (path: string): WorkspaceFileContextItem => ({
+      id: path,
+      kind: "file",
+      label: path,
+      path,
+      workspaceId: "w1",
+    });
+    const big = "x".repeat(FILE_CONTEXT_INLINE_LIMIT + 1);
+    const block = buildFileContextBlock(
+      [fileItem("small.md"), fileItem("big.md"), fileItem("missing.md")],
+      new Map([
+        ["small.md", "hello world"],
+        ["big.md", big],
+      ]),
+    );
+    // Small file: inlined under a `### <path>` heading with its content.
+    expect(block).toContain("### small.md\nhello world");
+    // Large file: referenced by path, content withheld (read on demand).
+    expect(block).toContain("- big.md (large; read it for details)");
+    expect(block).not.toContain(big);
+    // Path with no content in the map also degrades to a reference.
+    expect(block).toContain("- missing.md (large; read it for details)");
+  });
+
+  it("addFileContextItem adds a labelled chip and dedupes by path", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const added = addFileContextItem(
+      workspace.chatThread,
+      workspace.id,
+      "/scratch/paste-1.md",
+      "Pasted text (12 KB)",
+    );
+    expect(added.contextItems).toHaveLength(1);
+    expect(added.contextItems[0]).toMatchObject({
+      kind: "file",
+      label: "Pasted text (12 KB)",
+      path: "/scratch/paste-1.md",
+    });
+    // Re-adding the same path replaces (keeps one chip, updates the label).
+    const again = addFileContextItem(added, workspace.id, "/scratch/paste-1.md", "Pasted text (13 KB)");
+    expect(again.contextItems).toHaveLength(1);
+    expect(again.contextItems[0].label).toBe("Pasted text (13 KB)");
+  });
+
+  it("removeContextItem drops the chip with the given id", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const added = addFileContextItem(workspace.chatThread, workspace.id, "/scratch/p.md", "Pasted");
+    const id = added.contextItems[0].id;
+    expect(removeContextItem(added, id).contextItems).toHaveLength(0);
+    // Unknown id is a no-op.
+    expect(removeContextItem(added, "nope").contextItems).toHaveLength(1);
+  });
+
+  it("createPromptWithContext inlines attached file content from the content map", () => {
+    const fileItem: WorkspaceFileContextItem = {
+      id: "notes/a.md",
+      kind: "file",
+      label: "notes/a.md",
+      path: "notes/a.md",
+      workspaceId: "w1",
+    };
+    const prompt = createPromptWithContext(
+      "summarize this",
+      [fileItem],
+      [],
+      new Map([["notes/a.md", "the file body"]]),
+    );
+    expect(prompt).toContain("Context files:");
+    expect(prompt).toContain("### notes/a.md\nthe file body");
+    expect(prompt.endsWith("summarize this")).toBe(true);
   });
 });

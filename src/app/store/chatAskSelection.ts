@@ -35,7 +35,6 @@ import {
   finishReviewRun,
 } from "./reviewFlow";
 import {
-  newConversation,
 } from "../../lib/ipc/conversationsClient";
 import {
   persistConversation,
@@ -48,6 +47,9 @@ import {
   runHarnessStream,
   subscribeHarnessRun,
 } from "../../lib/ipc/harnessClient";
+import {
+  spillChatInputForPrompt,
+} from "./chatInputSpill";
 
 /**
  * Run a "chat about this selection" turn: open chat, append the quoted excerpt
@@ -108,9 +110,9 @@ export async function runAskAboutSelection(
   const workspaceId = workspace.id;
   const runId = `ask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  // Build the user-visible chat message: quoted selection + question.
-  // The same string is what the harness sees, so the model has the
-  // excerpt inline rather than via some side-channel context packet.
+  // Build the user-visible chat message: quoted selection + question. This is
+  // also what the harness sees inline (no side-channel context packet), unless
+  // the selection is large enough to spill (see `sentUserMessage` below).
   const filePath = workspace.activeFilePath || "the current note";
   const quotedSelection = selection.text
     .split("\n")
@@ -120,7 +122,7 @@ export async function runAskAboutSelection(
     `About this excerpt from \`${filePath}\`:\n\n${quotedSelection}\n\n${trimmedQuestion}`;
 
   // The chat renders this message as a chip (file + line:col + excerpt + note)
-  // via the `excerpt` metadata; `userMessage` above stays the model's prompt.
+  // via the `excerpt` metadata.
   const fileContent = workspace.activeFilePath
     ? (workspace.fileContents[workspace.activeFilePath]?.content ?? "")
     : "";
@@ -156,7 +158,7 @@ export async function runAskAboutSelection(
     batched.flushNow();
     batched.dispose();
     // Turn settled — persist the final answer (+ its trace + stats).
-    persistConversation(get, workspaceId);
+    void persistConversation(get, workspaceId);
     if (releaseSubscription) {
       releaseSubscription();
       releaseSubscription = null;
@@ -177,21 +179,25 @@ export async function runAskAboutSelection(
     })),
   }));
 
-  // Ensure a persisted conversation + save the question (same as the
-  // main send path).
-  const existingConversationId = workspace.chatThread.conversationId;
-  if (!existingConversationId) {
-    const created = await newConversation(workspaceId, harnessId).catch(() => null);
-    if (created) {
-      set((state) => ({
-        workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
-          ...item,
-          chatThread: { ...item.chatThread, conversationId: created },
-        })),
-      }));
-    }
+  // Map to a persisted conversation + save the question (same as the main send
+  // path): client-generated id, created by the first `saveConversation` upsert,
+  // so there's no empty-row window that could strand a 0-message zombie.
+  if (!workspace.chatThread.conversationId) {
+    const id = crypto.randomUUID();
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+        ...item,
+        chatThread: { ...item.chatThread, conversationId: id },
+      })),
+    }));
   }
-  persistConversation(get, workspaceId);
+  await persistConversation(get, workspaceId);
+
+  // A huge selection (e.g. select-all + ask) is spilled to a scratch file and
+  // replaced — in the *sent* prompt only — with a short reference the model
+  // reads on demand, so it can't blow a small context window. The chat-visible
+  // message + excerpt chip stay the full original text.
+  const sentUserMessage = await spillChatInputForPrompt(workspaceId, userMessage);
 
   try {
     // The note decides intent — the assistant may answer OR edit based on
@@ -224,7 +230,7 @@ export async function runAskAboutSelection(
       approvalMode: "default",
       chatMode,
       maxCoins: 30,
-      prompt: prefixWorkspaceContext(userMessage, workspace.path, workspace.activeFilePath),
+      prompt: prefixWorkspaceContext(sentUserMessage, workspace.path, workspace.activeFilePath),
       runId,
       workspaceId,
       harnessId,
@@ -233,6 +239,7 @@ export async function runAskAboutSelection(
       maxTurns: tuning.maxTurns,
       editGuard,
       extraArgs: harnessExtraArgs(harnessId, tuning),
+      extraInstructions: tuning.customInstructions,
     });
   } catch (error) {
     const message = formatHarnessError(

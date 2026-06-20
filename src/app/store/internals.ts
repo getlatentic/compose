@@ -40,24 +40,22 @@ export function nextUntitledPath(workspace: Workspace): string {
 }
 
 /**
- * Prefix every harness prompt with the workspace context so the model knows
- * where it is — its working directory is the workspace root, and which file is
- * in focus — instead of hunting for files (the cause of the "let me search for
- * this file" flailing). Added to the *sent* prompt only; the user-visible chat
- * message stays clean.
+ * Prefix the sent prompt with the one piece of context only the app knows: which
+ * file the user is currently looking at, as an absolute path. The working
+ * directory itself is stated by the harness — in the openai-compatible system
+ * prompt's trailing environment section, and by the Claude/Codex CLIs' own
+ * environment — so it isn't repeated here. Added to the *sent* prompt only; the
+ * user-visible chat message stays clean.
  */
 export function prefixWorkspaceContext(
   prompt: string,
   workspaceRoot: string | undefined,
   activeFilePath: string | null | undefined,
 ): string {
-  const root = workspaceRoot?.trim() || "the current folder";
-  const viewing = activeFilePath
-    ? ` The user is currently viewing \`${activeFilePath}\` (relative to that directory).`
-    : "";
-  return (
-    `You are working in a local Markdown workspace. Your working directory is ` +
-    `\`${root}\` — read and edit files directly by their path relative to it; ` +
-    `do not search for them.${viewing}\n\n${prompt}`
-  );
+  if (!activeFilePath) {
+    return prompt;
+  }
+  const root = workspaceRoot?.trim().replace(/\/+$/, "");
+  const absolutePath = root ? `${root}/${activeFilePath}` : activeFilePath;
+  return `The user is currently viewing the file \`${absolutePath}\`.\n\n${prompt}`;
 }

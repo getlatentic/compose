@@ -77,6 +77,11 @@ pub struct HarnessRunRequest {
     /// backend just passes it through. Empty → the adapter's own defaults.
     #[serde(default)]
     pub extra_args: Vec<String>,
+    /// The user's per-harness "custom instructions", appended to the system
+    /// prompt via `RunTuning.extra_instructions`. Honored by the
+    /// `openai-compatible` adapter (Ollama / OpenRouter); ignored by the rest.
+    #[serde(default)]
+    pub extra_instructions: Option<String>,
 }
 
 fn default_harness_id() -> String {
@@ -349,6 +354,9 @@ fn run_via_harness(
         extra_args,
         // 0.4: structured-output JSON Schema — the bob run path doesn't use it.
         output_schema: None,
+        // Per-harness custom instructions (openai-compatible adapter appends
+        // them to the system prompt; trimmed-empty is treated as unset).
+        extra_instructions: request.extra_instructions.filter(|s| !s.trim().is_empty()),
     };
 
     let run_request = RunRequest {

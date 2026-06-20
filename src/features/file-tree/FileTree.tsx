@@ -1,8 +1,13 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
 import { CaretDown, CaretRight, Document } from "@carbon/react/icons";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useWorkspaceStore } from "../../app/workspaceStore";
+
+/** Fixed row height in px — must match `.file-row` `block-size: 1.75rem` (28px)
+ * in global.scss. The virtualizer needs it to place rows without measuring each. */
+const ROW_HEIGHT = 28;
 
 /**
  * The unsaved-edit dot for one file row. Self-subscribes to just that file's
@@ -48,11 +53,22 @@ const FileRow = memo(function FileRow({
   onRename: (relativePath: string) => void;
   onDelete: (relativePath: string) => void;
 }) {
+  // Carbon's `OverflowMenu` mounts a whole Popover + floating-ui + Icon stack
+  // even while closed. Mounting one per row meant a large vault paid that cost
+  // ×N up front — a 194-note vault tanked first paint to ~20 FPS (react-scan:
+  // Popover ×590, Icon ×691, OverflowMenuVertical2 ×388). The kebab is only
+  // revealed on hover/focus anyway (CSS opacity), so mount it lazily then; at
+  // rest the slot is an empty same-size spacer (no layout shift), and a freshly
+  // opened vault mounts ZERO menus.
+  const [menuMounted, setMenuMounted] = useState(false);
+  const mountMenu = useCallback(() => setMenuMounted(true), []);
   return (
     <div
       className={["file-row-wrapper", active ? "file-row-wrapper--active" : ""]
         .filter(Boolean)
         .join(" ")}
+      onMouseEnter={mountMenu}
+      onFocus={mountMenu}
     >
       <button
         type="button"
@@ -67,10 +83,14 @@ const FileRow = memo(function FileRow({
         <span className="truncate">{name}</span>
         <FileRowDirtyDot path={path} />
       </button>
-      <OverflowMenu aria-label={`Actions for ${path}`} size="sm" flipped align="bottom">
-        <OverflowMenuItem itemText="Rename..." onClick={() => onRename(path)} />
-        <OverflowMenuItem hasDivider isDelete itemText="Delete" onClick={() => onDelete(path)} />
-      </OverflowMenu>
+      {menuMounted ? (
+        <OverflowMenu aria-label={`Actions for ${path}`} size="sm" flipped align="bottom">
+          <OverflowMenuItem itemText="Rename..." onClick={() => onRename(path)} />
+          <OverflowMenuItem hasDivider isDelete itemText="Delete" onClick={() => onDelete(path)} />
+        </OverflowMenu>
+      ) : (
+        <span className="file-row-kebab-spacer" aria-hidden />
+      )}
     </div>
   );
 });
@@ -119,6 +139,12 @@ interface FileNode {
 }
 
 type TreeNode = FolderNode | FileNode;
+
+/** Stable virtual-list key for a row, so collapse/expand reorders reconcile
+ * by identity rather than index. */
+function rowKey(node: TreeNode): string {
+  return node.type === "folder" ? `folder:${node.path}` : `file:${node.path}`;
+}
 
 function buildTree(files: WorkspaceFileEntry[]): TreeNode[] {
   const root: TreeNode[] = [];
@@ -218,6 +244,19 @@ function FileTreeInner({
     });
   }, []);
 
+  // Window the (already collapse-flattened) rows: only ~a viewport-worth mount,
+  // regardless of vault size. `rows` already excludes descendants of collapsed
+  // folders, so the count is exactly the currently-visible rows. Fixed row
+  // height means no per-row measurement.
+  const scrollRef = useRef<HTMLElement>(null);
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 12,
+    getItemKey: (index) => rowKey(rows[index]),
+  });
+
   if (files.length === 0) {
     return (
       <div className="file-tree file-tree--empty">
@@ -228,30 +267,39 @@ function FileTreeInner({
   }
 
   return (
-    <nav className="file-tree" aria-label="Files">
-      {rows.map((node) =>
-        node.type === "folder" ? (
-          <FolderRow
-            key={`folder:${node.path}`}
-            path={node.path}
-            name={node.name}
-            depth={node.depth}
-            open={!collapsed.has(node.path)}
-            onToggle={toggleFolder}
-          />
-        ) : (
-          <FileRow
-            key={`file:${node.path}`}
-            path={node.path}
-            name={node.name}
-            depth={node.depth}
-            active={node.path === activePath}
-            onSelect={onSelectFile}
-            onRename={onRename}
-            onDelete={onDelete}
-          />
-        ),
-      )}
+    <nav ref={scrollRef} className="file-tree" aria-label="Files">
+      <div className="file-tree__sizer" style={{ blockSize: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map((item) => {
+          const node = rows[item.index];
+          return (
+            <div
+              key={item.key}
+              className="file-tree__row"
+              style={{ blockSize: item.size, transform: `translateY(${item.start}px)` }}
+            >
+              {node.type === "folder" ? (
+                <FolderRow
+                  path={node.path}
+                  name={node.name}
+                  depth={node.depth}
+                  open={!collapsed.has(node.path)}
+                  onToggle={toggleFolder}
+                />
+              ) : (
+                <FileRow
+                  path={node.path}
+                  name={node.name}
+                  depth={node.depth}
+                  active={node.path === activePath}
+                  onSelect={onSelectFile}
+                  onRename={onRename}
+                  onDelete={onDelete}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
     </nav>
   );
 }

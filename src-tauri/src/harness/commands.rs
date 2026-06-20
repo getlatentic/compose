@@ -10,7 +10,7 @@ use crate::harness::verify::{self, HarnessRuntimeVerification};
 use harness::{Harness, HarnessInfo, HarnessModel, HarnessReadiness, InstallCallback, InstallEvent};
 use tauri::ipc::Channel;
 
-fn resolve(harness_id: &str) -> Result<Box<dyn Harness>, String> {
+pub(crate) fn resolve(harness_id: &str) -> Result<Box<dyn Harness>, String> {
     compose_harness_by_id(harness_id).ok_or_else(|| format!("Unknown assistant: {harness_id}"))
 }
 

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { WarningAltFilled } from "@carbon/react/icons";
 import { harnessCapabilitiesOf, type HarnessRunOptions } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import type { HarnessInfo, HarnessModel } from "../../lib/ipc/harnessClient";
@@ -26,6 +27,7 @@ export function ChatComposerFooterView({
   showReviewToggle = false,
   reviewEdits = false,
   onToggleReviewEdits,
+  unavailable = false,
   disabled = false,
 }: {
   harnesses: HarnessInfo[];
@@ -36,6 +38,8 @@ export function ChatComposerFooterView({
   selectedModel: string;
   modelLabel: string;
   onSelectModel: (value: string) => void;
+  /** The selected harness probed as not-ready → a ⚠️ Offline marker by the model. */
+  unavailable?: boolean;
   /** Whether the inline review/auto-apply toggle applies to this harness
    * (only write-capable harnesses go through the edit-review gate). */
   showReviewToggle?: boolean;
@@ -80,6 +84,12 @@ export function ChatComposerFooterView({
               disabled={disabled}
             />
           </>
+        ) : null}
+        {unavailable ? (
+          <span className="chat-footer__status" title="This assistant isn't available right now">
+            <WarningAltFilled size={14} aria-hidden />
+            Offline
+          </span>
         ) : null}
       </div>
       {showReviewToggle ? (
@@ -138,8 +148,13 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
   const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
   const harnessModels = useHarnessStore((state) => state.harnessModels);
   const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
+  const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
 
   const caps = harnessCapabilitiesOf(harnessCatalog, selectedHarnessId);
+  // Only a *definitive* not-ready probe marks Offline; a not-yet-probed (null)
+  // selection stays unmarked — mirrors the composer's send-gate conservatism so
+  // a slow/failed probe never wrongly flags an available harness.
+  const unavailable = Boolean(selectedHarnessReadiness && !selectedHarnessReadiness.ready);
   // Harnesses with no curated list discover models live (Ollama/OpenCode/OpenRouter).
   useEffect(() => {
     if (caps.models.length === 0) {
@@ -172,6 +187,7 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
       showReviewToggle={showReviewToggle}
       reviewEdits={reviewEdits}
       onToggleReviewEdits={(next) => setHarnessOptions(selectedHarnessId, { reviewEdits: next })}
+      unavailable={unavailable}
       disabled={disabled}
     />
   );

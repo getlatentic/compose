@@ -18,6 +18,7 @@ function harness(id: string, displayName: string): HarnessInfo {
       supportsEffort: false,
       supportsMaxTurns: false,
       supportsLogin: false,
+      supportsCustomInstructions: false,
     },
   };
 }
@@ -81,5 +82,14 @@ describe("ChatComposerFooterView", () => {
     );
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain("Review edits");
+  });
+
+  it("shows an Offline marker beside the model when the harness is unavailable", () => {
+    const html = renderToStaticMarkup(<ChatComposerFooterView {...base} unavailable />);
+    expect(html).toContain("Offline");
+  });
+
+  it("hides the Offline marker when the harness is available", () => {
+    expect(renderToStaticMarkup(<ChatComposerFooterView {...base} />)).not.toContain("Offline");
   });
 });

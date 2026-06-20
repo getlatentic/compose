@@ -1907,6 +1907,65 @@ mod tests {
         }
     }
 
+    // Reproduce the chat-send write pattern: many conversations created
+    // concurrently, each racing its first-message `save_conversation` against a
+    // `record_llm_thread` on the SAME vault DB (both fire near-simultaneously in
+    // `runSendChatPrompt`). A silently-failed save strands a 0-message "zombie"
+    // hidden from the sidebar — the reported bug.
+    #[test]
+    fn concurrent_send_writes_never_zombie_a_conversation() {
+        use std::sync::{Arc, Mutex};
+        use std::thread;
+
+        let (_dir, store, vault) = synced_store();
+        let store = Arc::new(store);
+        let errors = Arc::new(Mutex::new(Vec::<String>::new()));
+
+        let handles: Vec<_> = (0..24)
+            .map(|i| {
+                let store = Arc::clone(&store);
+                let errors = Arc::clone(&errors);
+                thread::spawn(move || {
+                    let conv = match store.new_conversation(vault, "ollama") {
+                        Ok(id) => id,
+                        Err(e) => return errors.lock().unwrap().push(format!("new[{i}]: {e}")),
+                    };
+                    let racer = {
+                        let store = Arc::clone(&store);
+                        thread::spawn(move || {
+                            store.record_llm_thread(LlmThreadRecordRequest {
+                                context_items: Vec::new(),
+                                prompt: format!("hello {i}"),
+                                workspace_id: vault.to_owned(),
+                            })
+                        })
+                    };
+                    let msg = ConversationMessageRecord {
+                        message_id: format!("m{i}"),
+                        role: "user".to_owned(),
+                        content: format!("hello {i}"),
+                        trace_json: None,
+                        stats_json: None,
+                        created_at: 0,
+                    };
+                    if let Err(e) = store.save_conversation(vault, &conv, vec![msg], Vec::new()) {
+                        errors.lock().unwrap().push(format!("save[{i}]: {e}"));
+                    }
+                    let _ = racer.join();
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        let errs = errors.lock().unwrap().clone();
+        let convos = store.list_conversations(vault, true).expect("list");
+        let zombies = convos.iter().filter(|c| c.message_count == 0).count();
+        assert!(errs.is_empty(), "concurrent vault writes failed: {errs:?}");
+        assert_eq!(zombies, 0, "{zombies} of {} conversations are 0-message zombies", convos.len());
+    }
+
     fn synced_store() -> (tempfile::TempDir, MetadataStore, &'static str) {
         let dir = tempdir().expect("temp dir");
         let store = MetadataStore::default();

@@ -7,6 +7,7 @@ import {
   type Workspace,
 } from "../workspaceModel";
 import { errorMessage } from "./internals";
+import { showErrorToast } from "../../features/toast/toastStore";
 import type { WorkspaceStoreGet } from "./types";
 
 export function persistTabs(workspaces: Workspace[], workspaceId: string) {
@@ -22,32 +23,35 @@ export function persistTabs(workspaces: Workspace[], workspaceId: string) {
 }
 
 /**
- * Fire-and-forget persist of a workspace's active conversation (settled
- * turns only — `serializeChatMessages` skips in-flight messages). Called
- * on send and on turn completion; a no-op when the thread has no
- * conversation id yet. Best-effort, off the input thread. Persists the
- * thread's context-file labels too (so the history list shows file chips),
- * and refreshes the history list once the save commits so titles / previews
- * / counts stay live.
+ * Persist a workspace's active conversation (settled turns only —
+ * `serializeChatMessages` skips in-flight messages). Called on send (awaited, so
+ * the first message lands before the run) and on turn completion. A no-op when
+ * the thread has no conversation id yet. The save is a single upsert that
+ * creates the row *with* its messages, so a conversation can never exist as a
+ * 0-message "zombie". Retries once on a transient failure, refreshes the history
+ * list on success, and surfaces a persistent failure as a toast — the webview
+ * has no console in a release build, so a swallowed error would be invisible.
  */
-export function persistConversation(get: WorkspaceStoreGet, workspaceId: string) {
+export async function persistConversation(get: WorkspaceStoreGet, workspaceId: string): Promise<void> {
   const workspace = get().workspaces.find((item) => item.id === workspaceId);
   const conversationId = workspace?.chatThread.conversationId;
   if (!workspace || !conversationId) {
     return;
   }
-  void saveConversation(
-    workspaceId,
-    conversationId,
-    serializeChatMessages(workspace.chatThread),
-    chatThreadContextFileLabels(workspace.chatThread),
-  )
-    .then(() => {
+  const messages = serializeChatMessages(workspace.chatThread);
+  const contextFiles = chatThreadContextFileLabels(workspace.chatThread);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await saveConversation(workspaceId, conversationId, messages, contextFiles);
       void get().loadConversations(workspaceId);
-    })
-    .catch(() => {
-      // best-effort — a failed save shouldn't disrupt the chat
-    });
+      return;
+    } catch (error) {
+      if (attempt === 0) {
+        continue;
+      }
+      showErrorToast(errorMessage(error, "Couldn't save this conversation"));
+    }
+  }
 }
 
 export function persistComments(

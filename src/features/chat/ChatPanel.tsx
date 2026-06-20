@@ -33,6 +33,9 @@ function ChatPanelInner() {
   const acceptSuggestedEdit = useWorkspaceStore((state) => state.acceptSuggestedEdit);
   const cancelActiveRun = useWorkspaceStore((state) => state.cancelActiveRun);
   const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
+  const reloadSelectedHarnessReadiness = useHarnessStore(
+    (state) => state.reloadSelectedHarnessReadiness,
+  );
   const openSettings = useUiStore((state) => state.openSettings);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
@@ -41,6 +44,8 @@ function ChatPanelInner() {
   const sendChatPrompt = useWorkspaceStore((state) => state.sendChatPrompt);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const setChatPrompt = useWorkspaceStore((state) => state.setChatPrompt);
+  const addChatFileContext = useWorkspaceStore((state) => state.addChatFileContext);
+  const removeChatContextItem = useWorkspaceStore((state) => state.removeChatContextItem);
   // Narrow selector: the chat panel only needs the active workspace's
   // chat thread, NOT the whole `workspaces` array. The store preserves
   // `chatThread`'s reference when other workspace fields change (e.g. a
@@ -64,6 +69,11 @@ function ChatPanelInner() {
   const deleteNotice = useWorkspaceStore((state) => state.conversationDeleteNotice);
 
   const [editingTitle, setEditingTitle] = useState(false);
+  // Live height of the floating composer, measured by `MessageComposer`. The
+  // transcript reserves matching bottom space and re-pins to bottom off it, so
+  // the last turn always clears the composer. Seeded near the resting height
+  // (~9rem) so the first paint reserves sensibly before measurement lands.
+  const [composerHeight, setComposerHeight] = useState(144);
 
   const callbacks = useMemo<MessageRowCallbacks>(
     () => ({
@@ -112,7 +122,19 @@ function ChatPanelInner() {
   // render NO title — the `+ × ⋮` actions already say "this is the chat panel."
   // A "New chat" / "New conversation" placeholder competed with the `+` button
   // and made it look like two buttons for the same action.
-  const openTitle = openSummary?.title ?? null;
+  //
+  // The summary's title lags: the history list refreshes asynchronously after a
+  // send, so a freshly-titled conversation reads back as the "New conversation"
+  // placeholder until that lands. Fall back to deriving the title from the
+  // thread's own first user message (already on screen), so the header is
+  // correct immediately rather than stuck on "New conversation".
+  const derivedTitle =
+    chatThread.messages.find((message) => message.role === "user")?.content.trim().slice(0, 60) ||
+    null;
+  const openTitle =
+    openSummary && openSummary.title !== "New conversation"
+      ? openSummary.title
+      : derivedTitle ?? openSummary?.title ?? null;
 
   // Header total: the thread's cumulative token + coin usage (compact,
   // human-readable), not a message count. Empty until anything's run — no
@@ -227,6 +249,7 @@ function ChatPanelInner() {
 
       <ChatMessageList
         callbacks={callbacks}
+        composerHeight={composerHeight}
         contextFileLabel={contextFileLabel}
         messages={chatThread.messages}
         onUseSuggestion={(text, opts) => {
@@ -252,14 +275,20 @@ function ChatPanelInner() {
         assistantReady={assistantReady}
         canSend={canSend}
         contextItems={chatThread.contextItems}
+        harnessName={selectedHarnessName}
+        onAddFileContext={addChatFileContext}
+        onHeightChange={setComposerHeight}
         onOpenSettings={openSettings}
         onPromptChange={setChatPrompt}
+        onRemoveContextItem={removeChatContextItem}
+        onRetry={() => void reloadSelectedHarnessReadiness()}
         onSend={() => void sendChatPrompt()}
         onStop={() => void cancelActiveRun()}
         prompt={chatThread.prompt}
         runError={chatThread.runError}
         running={running}
         tokenLabel={tokenLabel}
+        workspaceId={activeWorkspaceId}
       />
     </section>
   );

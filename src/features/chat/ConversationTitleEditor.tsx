@@ -34,6 +34,19 @@ export function ConversationTitleEditor({
     run();
   };
 
+  // Only persist a real edit. Opening the field and clicking away (or pressing
+  // Enter) without changing anything must NOT write the current title back —
+  // otherwise the "New conversation" placeholder gets saved as an explicit
+  // title and blocks the first-message-derived name.
+  const commit = () => {
+    const trimmed = value.trim();
+    if (trimmed === initialTitle.trim()) {
+      onCancel();
+    } else {
+      onCommit(trimmed);
+    }
+  };
+
   return (
     <input
       ref={inputRef}
@@ -44,13 +57,13 @@ export function ConversationTitleEditor({
       onKeyDown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
-          settle(() => onCommit(value.trim()));
+          settle(commit);
         } else if (event.key === "Escape") {
           event.preventDefault();
           settle(onCancel);
         }
       }}
-      onBlur={() => settle(() => onCommit(value.trim()))}
+      onBlur={() => settle(commit)}
     />
   );
 }

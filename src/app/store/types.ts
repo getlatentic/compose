@@ -54,6 +54,13 @@ export interface HarnessRunOptions {
    * the harness via `extraArgs`, so it's config, never hardcoded.
    */
   permissionMode?: string;
+  /**
+   * Extra system-prompt instructions for this harness (a persona, house style,
+   * domain rules). Appended to the system prompt by the openai-compatible
+   * adapter (Ollama / OpenRouter) via `RunTuning.extra_instructions`; the CLI
+   * harnesses ignore it for now. Empty → none.
+   */
+  customInstructions?: string;
 }
 
 export interface WorkspaceState {
@@ -169,6 +176,11 @@ export interface WorkspaceState {
   sendCommentToChat: (commentId: string) => Promise<void>;
   sendCommentsToChat: (commentIds: string[]) => Promise<void>;
   setChatPrompt: (prompt: string) => void;
+  /** Attach a file as chat context (a chip in the context row). Used by the
+   * large-paste handler, which spills the text to a file and adds its path. */
+  addChatFileContext: (input: { label: string; path: string }) => void;
+  /** Remove a chat context item by id (the chip's ✕). */
+  removeChatContextItem: (id: string) => void;
   switchWorkspace: (workspaceId: string) => void;
   updateActiveContent: (markdown: string, changes?: DocumentTextChange[]) => void;
   workspaces: Workspace[];
