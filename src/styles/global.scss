@@ -2006,6 +2006,21 @@ select {
   font-weight: 600;
 }
 
+// "Loading file…" shown while a file's buffer is read from disk. It reveals only
+// after a beat — the zero-duration `empty-state-reveal` with a 150ms delay — so a
+// warm read swaps in the editor before it paints, and only a slow/cold-iCloud
+// read ever shows the text.
+.empty-state--loading {
+  opacity: 0;
+  animation: empty-state-reveal 0s linear 150ms forwards;
+}
+
+@keyframes empty-state-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
 /* Empty-folder welcome — the first-run landing in the editor area. */
 .welcome {
   display: flex;

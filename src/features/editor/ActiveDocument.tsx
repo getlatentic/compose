@@ -305,14 +305,14 @@ export function ActiveDocument() {
   const handleRestored = useCallback(() => void reloadActiveFile(), [reloadActiveFile]);
 
   // Buffer not loaded yet (file is in the scan list, its contents are still
-  // being read). EditorRegion already confirmed the file exists.
+  // being read). EditorRegion already confirmed the file exists. The text is
+  // invisible until ~150ms in (a CSS-delayed reveal), so a warm read swaps in
+  // the editor before anything paints and only a slow read ever shows it.
   if (!bufferLoaded) {
     return (
       <div className="editor-body">
-        <div className="empty-state">
-          <div>
-            <p className="empty-state__title">Loading file…</p>
-          </div>
+        <div className="empty-state empty-state--loading" aria-busy="true">
+          <p className="empty-state__title">Loading file…</p>
         </div>
       </div>
     );
