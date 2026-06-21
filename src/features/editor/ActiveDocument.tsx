@@ -6,6 +6,7 @@ import {
 } from "ai-editor";
 import { CodeMirrorToolbar } from "./CodeMirrorToolbar";
 import { CommentBubble } from "./CommentBubble";
+import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { pickImageFileForCaret } from "ai-editor";
 import { CommentsPanel } from "../comments/CommentsPanel";
 import type { SourceRange } from "../comments/commentModel";
@@ -85,6 +86,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
   const toggleChat = useUiStore((state) => state.toggleChat);
 
   const linkTargets = useWorkspaceLinkTargets();
+  const promptText = useTextPrompt();
 
   const activeFileComments = useMemo(() => {
     if (!activeFilePath) {
@@ -129,6 +131,24 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
       void askAboutSelectionStream(question, selection);
     },
     [askAboutSelectionStream],
+  );
+  // Send a table row/column to the assistant: take a question via the in-app
+  // prompt (window.prompt is dead in the packaged app), then run it through the
+  // same selection→chat path the comment bubble uses, with the row/column as the
+  // quoted excerpt.
+  const handleSendTableToAssistant = useCallback(
+    async (excerpt: { range: SourceRange; text: string }) => {
+      const question = await promptText({
+        title: "Ask the assistant",
+        label: "What would you like to ask about this?",
+        placeholder: "e.g. Summarise this row",
+        submitLabel: "Send",
+      });
+      if (question) {
+        void askAboutSelectionStream(question, excerpt);
+      }
+    },
+    [promptText, askAboutSelectionStream],
   );
   // Stable identity so the memoised editor's `onQueueComment` prop doesn't
   // change every render — an inline arrow defeats the editor's React.memo.
@@ -248,6 +268,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
       resolveImageSrc={resolveDisplaySrc}
       saveImageBytes={saveImageBytes}
       onOpenExternalUrl={openExternalUrl}
+      onSendToAssistant={handleSendTableToAssistant}
       onAfterContentSwap={markTabSwitchEnd}
       onFlushReady={registerActiveEditorFlush}
     />
