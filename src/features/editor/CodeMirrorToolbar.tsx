@@ -18,6 +18,7 @@ import {
   ListBulleted,
   ListNumbered,
   Quotes,
+  Table,
   TextBold,
   TextItalic,
   TextLink,
@@ -240,6 +241,11 @@ function FormattingButtons({
         label="Code block"
         onClick={() => run(blockCommands.toggleCodeBlock)}
         icon={<span style={{ fontFamily: "monospace", fontWeight: 700 }}>{"{}"}</span>}
+      />
+      <Button
+        label="Insert table"
+        onClick={() => run(blockCommands.insertTable)}
+        icon={<Table size={16} />}
       />
       <Divider />
       <Button
