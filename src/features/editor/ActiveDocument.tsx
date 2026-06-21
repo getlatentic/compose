@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { EditorView } from "@codemirror/view";
 import {
   CodeMirrorMarkdownEditor,
   type EditorSelectionSnapshot,
 } from "ai-editor";
 import { CodeMirrorToolbar } from "./CodeMirrorToolbar";
-import { CommentBubble } from "./CommentBubble";
-import { useTextPrompt } from "../dialogs/TextPromptProvider";
+import { CommentBubble, CommentComposer } from "./CommentBubble";
 import { pickImageFileForCaret } from "ai-editor";
 import { CommentsPanel } from "../comments/CommentsPanel";
 import type { SourceRange } from "../comments/commentModel";
@@ -86,7 +85,12 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
   const toggleChat = useUiStore((state) => state.toggleChat);
 
   const linkTargets = useWorkspaceLinkTargets();
-  const promptText = useTextPrompt();
+  // An open "comment on this table row/column" composer: the excerpt to comment
+  // on + the viewport point to anchor it near. Null when none is open.
+  const [tableComment, setTableComment] = useState<{
+    excerpt: { range: SourceRange; text: string };
+    anchor: { x: number; y: number };
+  } | null>(null);
 
   const activeFileComments = useMemo(() => {
     if (!activeFilePath) {
@@ -132,24 +136,24 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
     },
     [askAboutSelectionStream],
   );
-  // Send a table row/column to the assistant: take a question via the in-app
-  // prompt (window.prompt is dead in the packaged app), then run it through the
-  // same selection→chat path the comment bubble uses, with the row/column as the
-  // quoted excerpt.
-  const handleSendTableToAssistant = useCallback(
-    async (excerpt: { range: SourceRange; text: string }) => {
-      const question = await promptText({
-        title: "Ask the assistant",
-        label: "What would you like to ask about this?",
-        placeholder: "e.g. Summarise this row",
-        submitLabel: "Send",
-      });
-      if (question) {
-        void askAboutSelectionStream(question, excerpt);
-      }
+  // "Comment on this table row/column" from the right-click menu: open the same
+  // comment composer a text selection uses, anchored near the click, seeded with
+  // the row/column excerpt. Queue / Send to chat then run the existing comment
+  // and selection→chat paths (below), so a table comment is just a comment.
+  const handleCommentOnExcerpt = useCallback(
+    (excerpt: { range: SourceRange; text: string }, anchor: { x: number; y: number }) => {
+      setTableComment({ excerpt, anchor });
     },
-    [promptText, askAboutSelectionStream],
+    [],
   );
+  // Close the composer and drop the persistent tint the menu left on the
+  // commented row/column (a theme class the editor set; cleared by class here).
+  const closeTableComment = useCallback(() => {
+    document
+      .querySelectorAll(".cm-table-cell--commenting")
+      .forEach((cell) => cell.classList.remove("cm-table-cell--commenting"));
+    setTableComment(null);
+  }, []);
   // Stable identity so the memoised editor's `onQueueComment` prop doesn't
   // change every render — an inline arrow defeats the editor's React.memo.
   const handleQueueComment = useCallback(
@@ -255,24 +259,50 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
   );
 
   return (
-    <CodeMirrorMarkdownEditor
-      mode={editorMode}
-      value={content}
-      workspaceRoot={workspacePath ?? undefined}
-      filePath={activeFilePath || undefined}
-      linkTargets={linkTargets}
-      onNavigateToLink={navigateToFile}
-      onChange={updateActiveContent}
-      toolbar={toolbar}
-      selectionActions={selectionActions}
-      resolveImageSrc={resolveDisplaySrc}
-      saveImageBytes={saveImageBytes}
-      onOpenExternalUrl={openExternalUrl}
-      onSendToAssistant={handleSendTableToAssistant}
-      onAfterContentSwap={markTabSwitchEnd}
-      onFlushReady={registerActiveEditorFlush}
-    />
+    <>
+      <CodeMirrorMarkdownEditor
+        mode={editorMode}
+        value={content}
+        workspaceRoot={workspacePath ?? undefined}
+        filePath={activeFilePath || undefined}
+        linkTargets={linkTargets}
+        onNavigateToLink={navigateToFile}
+        onChange={updateActiveContent}
+        toolbar={toolbar}
+        selectionActions={selectionActions}
+        resolveImageSrc={resolveDisplaySrc}
+        saveImageBytes={saveImageBytes}
+        onOpenExternalUrl={openExternalUrl}
+        onCommentOnExcerpt={handleCommentOnExcerpt}
+        onAfterContentSwap={markTabSwitchEnd}
+        onFlushReady={registerActiveEditorFlush}
+      />
+      {tableComment ? (
+        <CommentComposer
+          selectionText={tableComment.excerpt.text}
+          style={tableComposerStyle(tableComment.anchor)}
+          onSend={(note) => {
+            handleAskAboutSelection(note, tableComment.excerpt);
+            closeTableComment();
+          }}
+          onQueue={(note) => {
+            handleQueueComment(note, tableComment.excerpt);
+            closeTableComment();
+          }}
+          onClose={closeTableComment}
+        />
+      ) : null}
+    </>
   );
+}
+
+/** Place the table-comment composer just below the click, clamped to the
+ *  viewport. Matches the width the selection composer uses. */
+function tableComposerStyle(anchor: { x: number; y: number }): CSSProperties {
+  const WIDTH = 360;
+  const left = Math.min(Math.max(16, anchor.x - WIDTH / 2), window.innerWidth - WIDTH - 16);
+  const top = Math.min(anchor.y + 8, window.innerHeight - 240);
+  return { top, left, width: WIDTH };
 }
 
 // ── ActiveDocument — the stable per-document shell ──────────────────────────

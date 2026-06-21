@@ -2394,6 +2394,11 @@ select {
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
   line-height: 1.25rem;
+  // Keep a multi-line excerpt's structure (a table row/column lands here as a
+  // markdown fragment) instead of collapsing it onto one line; still wrap a long
+  // single line of prose.
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .excerpt-chip__note {

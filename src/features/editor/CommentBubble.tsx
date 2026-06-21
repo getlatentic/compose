@@ -53,7 +53,7 @@ const COMPOSER_HEIGHT_ESTIMATE = 220;
  * empty↔non-empty (to enable/disable the buttons) — `setHasContent(true)` while
  * already `true` is a no-op React bails on, so steady typing re-renders nothing.
  */
-function CommentComposer({
+export function CommentComposer({
   selectionText,
   style,
   onSend,
