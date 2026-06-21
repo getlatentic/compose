@@ -17,7 +17,7 @@ import {
   loadWorkspaceComments,
 } from "../../lib/ipc/commentsClient";
 import {
-  markWorkspaceOpened,
+  switchWorkspace as switchWorkspaceIpc,
 } from "../../lib/ipc/workspaceClient";
 import {
   persistTabs,
@@ -105,7 +105,10 @@ export const createLifecycleSlice = (
         ? { activeWorkspaceId: workspace.id, workspaces: updated, ...navPatch }
         : { activeWorkspaceId: workspace.id, workspaces: updated };
     });
-    void markWorkspaceOpened(workspaceId).catch(() => undefined);
+    // Persist the active workspace AND its open timestamp on the backend so the
+    // next launch restores this workspace (workspace_switch is the only command
+    // that writes active_workspace_id; mark_opened bumps last_opened_at only).
+    void switchWorkspaceIpc(workspaceId).catch(() => undefined);
   },
   hydrateWorkspaces: (workspaceList: WorkspaceListResult) => {
     set((state) => {

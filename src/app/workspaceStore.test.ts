@@ -17,6 +17,7 @@ import { useUiStore } from "./store/uiStore";
 import { useToastStore } from "../features/toast/toastStore";
 import type { HarnessCapabilities } from "../lib/ipc/harnessClient";
 import { FileConflictError, readFile, writeFile } from "../lib/ipc/filesClient";
+import { switchWorkspace as switchWorkspaceIpc } from "../lib/ipc/workspaceClient";
 
 vi.mock("../lib/ipc/filesClient", () => ({
   createFile: vi.fn(),
@@ -43,9 +44,10 @@ vi.mock("../lib/ipc/llmContextClient", () => ({
 }));
 
 vi.mock("../lib/ipc/workspaceClient", () => ({
-  // Both return Promise<void> in real life; `persistTabs` chains `.catch` on
-  // the result, so the mocks must resolve rather than return undefined.
-  markWorkspaceOpened: vi.fn(() => Promise.resolve()),
+  // `switchWorkspace` persists the active workspace on the backend (fired and
+  // caught in the store); `persistTabs` chains `.catch` on `saveWorkspaceTabs`.
+  // Both must resolve rather than return undefined.
+  switchWorkspace: vi.fn(() => Promise.resolve()),
   saveWorkspaceTabs: vi.fn(() => Promise.resolve()),
 }));
 
@@ -513,6 +515,33 @@ describe("workspace store", () => {
       expect(buffer?.conflict).toBe(true);
       expect(buffer?.content).toBe("local edits");
       expect(useToastStore.getState().toasts.slice(-1)[0]?.message).toContain("changed on disk");
+    });
+  });
+
+  describe("workspace switch persistence", () => {
+    it("persists the active workspace on the backend so the next launch restores it", () => {
+      const first = useWorkspaceStore.getState().addWorkspace("/tmp/first");
+      const second = useWorkspaceStore.getState().addWorkspace("/tmp/second");
+      // addWorkspace activates the most-recently-added one.
+      expect(useWorkspaceStore.getState().activeWorkspaceId).toBe(second);
+
+      useWorkspaceStore.getState().switchWorkspace(first);
+
+      expect(useWorkspaceStore.getState().activeWorkspaceId).toBe(first);
+      // workspace_switch is the only backend command that writes
+      // active_workspace_id; mark_opened would only bump last_opened_at and the
+      // wrong workspace would be restored on the next boot.
+      expect(switchWorkspaceIpc).toHaveBeenCalledWith(first);
+    });
+
+    it("ignores a switch to an unknown workspace", () => {
+      const only = useWorkspaceStore.getState().addWorkspace("/tmp/only");
+      vi.mocked(switchWorkspaceIpc).mockClear();
+
+      useWorkspaceStore.getState().switchWorkspace("does-not-exist");
+
+      expect(useWorkspaceStore.getState().activeWorkspaceId).toBe(only);
+      expect(switchWorkspaceIpc).not.toHaveBeenCalled();
     });
   });
 
