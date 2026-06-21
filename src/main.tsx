@@ -2,7 +2,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./app/App";
 import { installGlobalErrorReporter } from "./lib/diagnostics/errorReporter";
+import { markBoot } from "./lib/perf";
 import "./styles/global.scss";
+
+// First executed line: its timestamp is the boot bundle's parse+compile cost.
+markBoot("entry");
 
 // Capture uncaught errors / rejections to the local log before anything renders.
 installGlobalErrorReporter();
@@ -15,6 +19,7 @@ installGlobalErrorReporter();
 // so react-scan hooks the reconciler before React runs. Normal builds
 // never reference reactScanInit, so it tree-shakes to zero bytes.
 
+markBoot("render");
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <App />

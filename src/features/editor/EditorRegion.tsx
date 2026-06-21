@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { PaneTabs, type EditorTab } from "./PaneTabs";
 import { ActiveDocument } from "./ActiveDocument";
 import { DocumentStatusBar } from "./DocumentStatusBar";
@@ -7,6 +7,7 @@ import { MAC_TRAFFIC_LIGHTS_INSET } from "../workspace/WorkspaceSidebar";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
+import { markBoot } from "../../lib/perf";
 
 /**
  * The editor region — a LAYOUT SHELL: the tab strip, the editor body (which
@@ -18,6 +19,9 @@ import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
  * `editorOpen`.
  */
 export function EditorRegion() {
+  useEffect(() => {
+    markBoot("editor");
+  }, []);
   const activeFilePath = useWorkspaceStore(
     (state) => selectActiveWorkspace(state)?.activeFilePath ?? "",
   );

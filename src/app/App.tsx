@@ -10,8 +10,12 @@ import {
   type ImageEditAltEventDetail,
 } from "ai-editor";
 import { useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
+import { markBoot } from "../lib/perf";
 
 export function App() {
+  useEffect(() => {
+    markBoot("shell");
+  }, []);
   return (
     <TextPromptProvider>
       <LinkInsertProvider>

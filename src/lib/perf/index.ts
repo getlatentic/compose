@@ -33,6 +33,29 @@ export function perfMeasure(label: string, start: string, end: string): number |
 }
 
 /**
+ * Boot-phase timeline. Each call logs `performance.now()` — ms since the
+ * WebView document started — for one named phase, so a COMPOSE_PERF build
+ * prints the JS-boot breakdown to the console:
+ *
+ *   entry  → time to fetch+parse+compile the boot bundle (everything before
+ *            the first executed line: the shell entry + its static vendors).
+ *   render → just before React mounts (delta from `entry` ≈ module-exec).
+ *   shell  → the shell tree committed (delta ≈ React's first render); the
+ *            lazy editor is still a Suspense fallback at this point.
+ *   editor → the lazy EditorRegion chunk loaded + its EditorView mounted
+ *            (delta from `shell` = the deferred editor cost).
+ *
+ * Tree-shakes to nothing in release (the `__COMPOSE_PERF__` guard).
+ */
+export function markBoot(phase: string): void {
+  if (!__COMPOSE_PERF__) return;
+  const now = performance.now();
+  performance.mark(`boot:${phase}`);
+  // eslint-disable-next-line no-console
+  console.log(`[perf] boot:${phase} @ ${now.toFixed(0)}ms`);
+}
+
+/**
  * Tab-switch latency tracker. The two halves of the measurement live
  * in different components (the tab strip dispatches the click; the
  * editor commits the new value), so we coordinate via a counter
