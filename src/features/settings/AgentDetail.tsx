@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Button, InlineNotification, Tag } from "@carbon/react";
 import { ArrowLeft } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
+import { harnessRemoveCustom } from "../../lib/ipc/harnessClient";
 import { agentStatus, statusTagType } from "./agentStatus";
 import { ExternalHarnessSetup, ManagedHarnessSetup } from "./agentConfigControls";
 import { useHarnessSetup } from "./useHarnessSetup";
@@ -88,11 +90,68 @@ export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () =
           <ExternalHarnessSetup harnessId={agentId} />
         </>
       )}
+      {agentId.startsWith("custom:") ? (
+        <RemoveAgentSection agentId={agentId} name={name} onRemoved={onBack} />
+      ) : null}
     </div>
   );
 }
 
 type Setup = ReturnType<typeof useHarnessSetup>;
+
+/** Remove a custom agent (built-ins can't be removed). Clears its keychain key,
+ *  and falls the default back to Claude if this was the active agent. */
+function RemoveAgentSection({
+  agentId,
+  name,
+  onRemoved,
+}: {
+  agentId: string;
+  name: string;
+  onRemoved: () => void;
+}) {
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
+  const loadHarnessCatalog = useHarnessStore((state) => state.loadHarnessCatalog);
+  // Two-step confirm in the UI — `window.confirm` is blocked by the Tauri
+  // dialog ACL in the packaged app (like `window.prompt`).
+  const [armed, setArmed] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  async function remove() {
+    setRemoving(true);
+    try {
+      await harnessRemoveCustom(agentId);
+      if (selectedHarnessId === agentId) setSelectedHarness("claude");
+      await loadHarnessCatalog();
+      onRemoved();
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div className="settings-section">
+      {armed ? (
+        <>
+          <p className="settings-helper">Remove {name}? Any saved key is deleted too.</p>
+          <div className="settings-actions">
+            <Button size="sm" kind="danger" disabled={removing} onClick={() => void remove()}>
+              {removing ? "Removing…" : "Remove"}
+            </Button>
+            <Button size="sm" kind="ghost" onClick={() => setArmed(false)}>
+              Cancel
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Button size="sm" kind="danger--tertiary" onClick={() => setArmed(true)}>
+          Remove agent
+        </Button>
+      )}
+    </div>
+  );
+}
 
 /** Install step for a CLI agent that isn't on disk yet (Claude/Codex). */
 function InstallBlock({ name, setup }: { name: string; setup: Setup }) {
