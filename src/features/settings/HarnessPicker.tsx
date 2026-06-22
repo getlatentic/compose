@@ -9,6 +9,7 @@ import {
   type HarnessInfo,
   type HarnessReadiness,
 } from "../../lib/ipc/harnessClient";
+import { agentStatus, statusTagType } from "./agentStatus";
 
 /**
  * The AI-assistant ("harness") picker.
@@ -200,8 +201,7 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
         <ul className="harness-list" style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "0.5rem" }}>
           {rows.map(({ info, readiness }) => {
             const selected = info.id === selectedHarnessId;
-            const ready = readiness?.ready ?? false;
-            const installed = readiness?.installed ?? false;
+            const status = agentStatus(info, readiness);
             return (
               <li
                 key={info.id}
@@ -237,22 +237,16 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
                     {info.id === suggestedId ? (
                       <Tag size="sm" type="blue">Recommended</Tag>
                     ) : null}
-                    {ready ? (
-                      <Tag size="sm" type="green">Ready</Tag>
-                    ) : installed ? (
-                      <Tag size="sm" type="warm-gray">Needs sign-in</Tag>
-                    ) : info.requiresInstall ? (
-                      <Tag size="sm" type="warm-gray">Not installed</Tag>
-                    ) : (
-                      <Tag size="sm" type="warm-gray">Add a key</Tag>
-                    )}
+                    <Tag size="sm" type={statusTagType(status.tone)}>
+                      {status.label}
+                    </Tag>
                   </span>
                   <span style={{ fontSize: "0.75rem", color: "#6f6f6f" }}>{info.description}</span>
                   {readiness?.version ? (
                     <span style={{ fontSize: "0.6875rem", color: "#8d8d8d" }}>{readiness.version}</span>
                   ) : null}
                 </button>
-                {info.requiresInstall && !installed ? (
+                {status.action === "install" ? (
                   <Button
                     size="sm"
                     kind="tertiary"
@@ -261,7 +255,7 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
                   >
                     {installingId === info.id ? "Installing…" : "Install"}
                   </Button>
-                ) : installed && !ready && info.capabilities.supportsLogin ? (
+                ) : status.action === "signIn" ? (
                   <Button
                     size="sm"
                     kind="tertiary"

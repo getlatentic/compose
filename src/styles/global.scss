@@ -4467,6 +4467,113 @@ select {
   color: var(--cds-support-warning, #b28600);
 }
 
+// ----- AI agents registry (list + detail) -----------------------------------
+.agent-list {
+  list-style: none;
+  margin: 0;
+  padding: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  inline-size: 100%;
+  text-align: start;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cds-layer-01, #f4f4f4);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.agent-row:hover {
+  border-color: var(--cds-border-strong-01, #8d8d8d);
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.agent-row--skeleton {
+  display: block;
+  cursor: default;
+}
+
+.agent-row__body {
+  flex: 1;
+  min-inline-size: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.agent-row__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.agent-row__head strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.agent-row__desc {
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.agent-row__chevron {
+  flex: none;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.agent-row--add {
+  justify-content: flex-start;
+  color: var(--cds-text-secondary, #525252);
+  border-style: dashed;
+  background: transparent;
+}
+
+.agent-row--add:hover {
+  color: var(--cds-text-primary, #161616);
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.agent-detail__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.agent-detail__back:hover {
+  color: var(--cds-text-primary, #161616);
+}
+
+.agent-detail__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.agent-detail__head h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+}
+
 // ----- Ollama model manager -------------------------------------------------
 .model-manager__list {
   display: grid;
