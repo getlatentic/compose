@@ -1,21 +1,34 @@
 import { useEffect } from "react";
-import { WarningAltFilled } from "@carbon/react/icons";
 import { harnessCapabilitiesOf, type HarnessRunOptions } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import type { HarnessInfo, HarnessModel } from "../../lib/ipc/harnessClient";
-import { FooterMenu, type FooterMenuItem } from "./FooterMenu";
+import { AssistantPickerView, type ModelOption } from "./AssistantPicker";
 
 /**
  * The composer footer line, a compact
  *
- *   {assistant} ▾  /  {model} ▾                       [Auto-apply]
+ *   {assistant/model} ▾                                [Auto-apply]
  *
- * row pinned under the input. The assistant + model selectors are
- * {@link FooterMenu} popovers (not Carbon form fields, which shifted the
- * layout). The model selector follows the harness's *capabilities* — shown
- * only when there's something to switch among — exactly like the Settings
- * panel. Renders nothing without a catalog (the browser preview only).
+ * row pinned under the input. The assistant + model live in a single
+ * {@link AssistantPickerView} — one plain-text label that opens a popup with an
+ * Assistant section and a Model section. The model selector follows the
+ * harness's *capabilities* (shown only when there's something to switch among),
+ * exactly like the Settings panel. Renders nothing without a catalog (the
+ * browser preview only).
  */
+
+/** The footer's single label: the model when one is chosen (prefixed with the
+ *  assistant unless the model id already carries it), else just the assistant. */
+function combinedLabel(harnessName: string, modelLabel: string, selectedModel: string): string {
+  if (!selectedModel) {
+    return harnessName;
+  }
+  if (modelLabel.toLowerCase().startsWith(harnessName.toLowerCase())) {
+    return modelLabel;
+  }
+  return `${harnessName}/${modelLabel}`;
+}
+
 export function ChatComposerFooterView({
   harnesses,
   selectedHarnessId,
@@ -33,12 +46,12 @@ export function ChatComposerFooterView({
   harnesses: HarnessInfo[];
   selectedHarnessId: string;
   onSelectHarness: (id: string) => void;
-  /** Empty → the harness has no model to switch among, so no model selector. */
-  modelItems: FooterMenuItem[];
+  /** Empty → the harness has no model to switch among, so no Model section. */
+  modelItems: ModelOption[];
   selectedModel: string;
   modelLabel: string;
   onSelectModel: (value: string) => void;
-  /** The selected harness probed as not-ready → a ⚠️ Offline marker by the model. */
+  /** The selected harness probed as not-ready → a ⚠️ Offline marker. */
   unavailable?: boolean;
   /** Whether the inline review/auto-apply toggle applies to this harness
    * (only write-capable harnesses go through the edit-review gate). */
@@ -52,46 +65,25 @@ export function ChatComposerFooterView({
     return null;
   }
 
-  const harnessItems = harnesses.map((harness) => ({
-    value: harness.id,
-    label: harness.displayName,
-  }));
+  const assistants = harnesses.map((harness) => ({ id: harness.id, name: harness.displayName }));
   const selectedHarnessName =
     harnesses.find((harness) => harness.id === selectedHarnessId)?.displayName ?? selectedHarnessId;
+  const label = combinedLabel(selectedHarnessName, modelLabel, selectedModel);
 
   return (
     <div className="chat-footer">
       <div className="chat-footer__meta">
-        <FooterMenu
-          label={selectedHarnessName}
-          ariaLabel="Assistant"
-          items={harnessItems}
-          selected={selectedHarnessId}
-          onSelect={onSelectHarness}
+        <AssistantPickerView
+          label={label}
+          assistants={assistants}
+          selectedAssistantId={selectedHarnessId}
+          onSelectAssistant={onSelectHarness}
+          models={modelItems}
+          selectedModel={selectedModel}
+          onSelectModel={onSelectModel}
+          unavailable={unavailable}
           disabled={disabled}
         />
-        {modelItems.length > 0 ? (
-          <>
-            <span className="chat-footer__sep" aria-hidden>
-              /
-            </span>
-            <FooterMenu
-              label={modelLabel}
-              ariaLabel="Model"
-              items={modelItems}
-              selected={selectedModel}
-              onSelect={onSelectModel}
-              disabled={disabled}
-              className="footer-menu--grow"
-            />
-          </>
-        ) : null}
-        {unavailable ? (
-          <span className="chat-footer__status" title="This assistant isn't available right now">
-            <WarningAltFilled size={14} aria-hidden />
-            Offline
-          </span>
-        ) : null}
       </div>
       {showReviewToggle ? (
         <div className="chat-footer__end">
@@ -121,12 +113,12 @@ export function ChatComposerFooterView({
 
 /** Build the model selector's options — Default plus the harness's models, plus
  * an active custom model not already listed. Empty when there's nothing to switch
- * among (no models and no model set), so the selector hides. */
-function modelItemsFor(models: HarnessModel[], currentModel: string): FooterMenuItem[] {
+ * among (no models and no model set), so the Model section hides. */
+function modelItemsFor(models: HarnessModel[], currentModel: string): ModelOption[] {
   if (models.length === 0 && !currentModel) {
     return [];
   }
-  const items: FooterMenuItem[] = [{ value: "", label: "Default" }];
+  const items: ModelOption[] = [{ value: "", label: "Default" }];
   for (const model of models) {
     items.push({ value: model.value, label: model.label });
   }

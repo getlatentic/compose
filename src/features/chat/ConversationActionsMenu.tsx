@@ -29,10 +29,10 @@ interface MenuItem {
 
 /**
  * The per-conversation overflow (⋮) menu: Rename, Duplicate, Export to
- * Markdown, Archive / Unarchive, Delete. A lightweight inline popover in the
- * spirit of [FooterMenu](FooterMenu.tsx) — no Carbon `OverflowMenu` chrome —
- * opening downward from the chat header. Delete is styled as a destructive
- * item; archive's label flips with the conversation's current state.
+ * Markdown, Archive / Unarchive, Delete. A lightweight inline popover — no
+ * Carbon `OverflowMenu` chrome — opening downward from the chat header. Delete
+ * is styled as a destructive item; archive's label flips with the
+ * conversation's current state.
  */
 export function ConversationActionsMenu({
   archived,
