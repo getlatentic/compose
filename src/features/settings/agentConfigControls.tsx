@@ -88,7 +88,7 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
 
   return (
     <Tabs>
-      <TabList aria-label="Agent settings" contained fullWidth>
+      <TabList aria-label="Agent settings">
         <Tab>Settings</Tab>
         <Tab>Models</Tab>
       </TabList>

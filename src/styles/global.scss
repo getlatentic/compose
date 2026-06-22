@@ -4360,7 +4360,14 @@ select {
 }
 
 .settings-dialog {
-  inline-size: min(100%, 30rem);
+  inline-size: min(100%, 40rem);
+  // A flex column at a FIXED height (capped to the viewport): the header stays
+  // pinned and the body (nav + content) fills the rest, with only the content
+  // pane scrolling — so switching agents or tabs never resizes the dialog.
+  display: flex;
+  flex-direction: column;
+  block-size: min(36rem, calc(100vh - 4rem));
+  overflow: hidden;
   background: var(--cds-layer-02, #ffffff);
   box-shadow: 0 1rem 4rem rgb(0 0 0 / 22%);
 }
@@ -4399,26 +4406,6 @@ select {
 .settings-runtime .cds--inline-notification__subtitle {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.settings-dialog {
-  inline-size: min(100%, 40rem);
-  // A flex column capped to the viewport: the header stays pinned and the body
-  // (nav + content) takes the rest, with only the content pane scrolling.
-  display: flex;
-  flex-direction: column;
-  max-block-size: calc(100vh - 4rem);
-  overflow: hidden;
-}
-
-// Fixed region for the per-provider detail. Always rendered (content
-// swaps in place per provider) with a reserved height that clears the
-// tallest provider's steady-state content (Bob's install + key form), so
-// switching the AI provider never resizes the panel or shifts the cards
-// above it. Shorter providers (Claude/Codex) simply top-align in the
-// reserved space.
-.settings-provider-detail {
-  min-block-size: 24rem;
 }
 
 .settings-section {
