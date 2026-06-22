@@ -20,6 +20,7 @@ export function FooterMenu({
   selected,
   onSelect,
   disabled = false,
+  className = "",
 }: {
   /** Text shown in the trigger (current selection's label). */
   label: string;
@@ -29,6 +30,9 @@ export function FooterMenu({
   selected: string;
   onSelect: (value: string) => void;
   disabled?: boolean;
+  /** Extra class on the root — e.g. `footer-menu--grow` to let a long label
+   *  share and truncate the footer's free space instead of overflowing it. */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -56,13 +60,15 @@ export function FooterMenu({
   }, [open]);
 
   return (
-    <div className="footer-menu" ref={rootRef}>
+    <div className={["footer-menu", className].filter(Boolean).join(" ")} ref={rootRef}>
       <button
         type="button"
         className="footer-menu__trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
+        // Surfaces the full label when a long one is truncated to fit the row.
+        title={label}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >

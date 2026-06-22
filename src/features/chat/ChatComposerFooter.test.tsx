@@ -92,4 +92,15 @@ describe("ChatComposerFooterView", () => {
   it("hides the Offline marker when the harness is available", () => {
     expect(renderToStaticMarkup(<ChatComposerFooterView {...base} />)).not.toContain("Offline");
   });
+
+  it("lets only the model selector shrink-and-truncate, keeping the full name as a tooltip", () => {
+    const html = renderToStaticMarkup(
+      <ChatComposerFooterView {...base} modelLabel="opencode/deepseek-v4-flash-free" />,
+    );
+    // The model selector opts into the grow/truncate variant; the harness (short,
+    // fixed name) does not — so a long model id can't push out the toggle.
+    expect(html.match(/footer-menu--grow/g)).toHaveLength(1);
+    // The full label stays reachable as a tooltip when visually truncated.
+    expect(html).toContain('title="opencode/deepseek-v4-flash-free"');
+  });
 });

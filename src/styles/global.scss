@@ -3644,19 +3644,22 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.25rem 0.5rem;
   padding-block-start: 0.125rem;
   font-size: 0.75rem;
   color: var(--cds-text-helper, #6f6f6f);
 }
 
-// Selectors size to their content and wrap (harness / model onto two lines if
-// needed) instead of truncating — the labels stay fully readable.
+// Harness + model selectors share one line with the Auto-apply toggle. The meta
+// can shrink (min-inline-size: 0) so a long model label truncates to fit instead
+// of wrapping the toggle onto a second line (see `.footer-menu--grow`).
 .chat-footer__meta {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-inline-size: 0;
+  flex: 0 1 auto;
   gap: 0.25rem 0.375rem;
 }
 
@@ -3666,6 +3669,7 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 0.1875rem;
+  flex-shrink: 0;
   color: var(--cds-text-error, #da1e28);
   font-size: 0.6875rem;
   white-space: nowrap;
@@ -3730,6 +3734,25 @@ select {
 .footer-menu {
   position: relative;
   display: inline-flex;
+  // Hold size by default (the harness name is short and stays whole)…
+  flex: 0 0 auto;
+}
+
+// …but the model selector takes the leftover space and truncates when its label
+// is long, so it never shoves the Auto-apply toggle off the footer line.
+.footer-menu--grow {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+
+  .footer-menu__trigger {
+    min-inline-size: 0;
+  }
+
+  .footer-menu__label {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
 }
 
 .footer-menu__trigger {
@@ -3760,8 +3783,8 @@ select {
   color: var(--cds-icon-secondary, #525252);
 }
 
-// The label shows in full — a model name like `granite4:micro` must never
-// clip. It can break across lines on a very narrow panel rather than truncate.
+// The harness label shows in full (it's short). A long model label truncates
+// instead — see `.footer-menu--grow` — so it can't overflow the footer row.
 .footer-menu__label {
   overflow-wrap: anywhere;
 }

@@ -82,6 +82,7 @@ export function ChatComposerFooterView({
               selected={selectedModel}
               onSelect={onSelectModel}
               disabled={disabled}
+              className="footer-menu--grow"
             />
           </>
         ) : null}
