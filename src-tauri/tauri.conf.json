@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm dev:vite",
     "devUrl": "http://localhost:1421",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "bash src-tauri/scripts/fetch-runtime.sh && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -36,6 +36,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "binaries/runtime/": "runtime"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
