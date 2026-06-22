@@ -502,6 +502,38 @@ describe("workspace store", () => {
       expect(useToastStore.getState().toasts).toHaveLength(0);
     });
 
+    it("handleFsEvent ignores its own autosave echo (disk byte-identical to the buffer)", async () => {
+      vi.mocked(readFile).mockResolvedValueOnce({ content: "# Hello", lastModifiedMs: 100 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      // Watcher fires with a newer mtime (our own save, before the buffer mtime
+      // caught up) but the disk content is unchanged → no reload.
+      vi.mocked(readFile).mockResolvedValueOnce({ content: "# Hello", lastModifiedMs: 200 });
+      await useWorkspaceStore.getState().handleFsEvent(workspaceId, {
+        kind: "modified",
+        relativePath: "a.md",
+        lastModifiedMs: 200,
+      });
+      const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
+      expect(buffer?.content).toBe("# Hello");
+      expect(buffer?.lastModifiedMs).toBe(100); // unchanged ⇒ reload skipped
+    });
+
+    it("handleFsEvent reloads when the disk content genuinely differs", async () => {
+      vi.mocked(readFile).mockResolvedValueOnce({ content: "# Hello", lastModifiedMs: 100 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      vi.mocked(readFile).mockResolvedValueOnce({ content: "# External", lastModifiedMs: 200 });
+      await useWorkspaceStore.getState().handleFsEvent(workspaceId, {
+        kind: "modified",
+        relativePath: "a.md",
+        lastModifiedMs: 200,
+      });
+      const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
+      expect(buffer?.content).toBe("# External");
+      expect(buffer?.lastModifiedMs).toBe(200);
+    });
+
     it("saveActiveFile refuses to clobber a file changed on disk, keeping local edits", async () => {
       vi.mocked(readFile).mockResolvedValue({ content: "old", lastModifiedMs: 100 });
       vi.mocked(writeFile).mockRejectedValue(new FileConflictError(200));

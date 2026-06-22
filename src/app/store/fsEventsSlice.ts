@@ -53,6 +53,19 @@ export const createFsEventsSlice = (
     if (effect.type === "reloadFile") {
       try {
         const fileBuffer = await readFileIpc(workspaceId, effect.relativePath);
+        // Self-write guard (Zettlr does the same — see Zettlr PR #4760).
+        // `applyFsEvent`'s mtime check can race our own autosave and read its
+        // watcher echo as an external edit, yielding `reloadFile`. If the file
+        // on disk is byte-identical to the buffer we already hold, there is
+        // nothing to reload — re-applying it would needlessly churn the editor
+        // (e.g. jump the caret out of a table cell). Reload only on a genuine
+        // difference; a true external edit still differs and reloads.
+        const open = get()
+          .workspaces.find((item) => item.id === workspaceId)
+          ?.fileContents[effect.relativePath];
+        if (open && open.content === fileBuffer.content) {
+          return;
+        }
         set((state) => ({
           workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
             applyFileBuffer(item, effect.relativePath, fileBuffer),
