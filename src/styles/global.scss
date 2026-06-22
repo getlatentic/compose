@@ -22,6 +22,7 @@
   $css--font-face: false
 );
 @use "@carbon/react/scss/reset";
+@use "@carbon/react/scss/components/accordion";
 @use "@carbon/react/scss/components/button";
 @use "@carbon/react/scss/components/inline-loading";
 @use "@carbon/react/scss/components/modal";

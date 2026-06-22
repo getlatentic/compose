@@ -34,10 +34,14 @@ pub(crate) fn extra_harnesses() -> Vec<Box<dyn Harness>> {
 /// recommended default, so reordering this list reorders the picker and the
 /// auto-pick. The single source for resolution, the catalog, and discovery.
 pub fn compose_registry() -> Registry {
-    let mut registry = Registry::new().register(Claude::new()).register(Codex::new());
-    for harness in extra_harnesses() {
-        registry = registry.register_boxed(harness);
-    }
+    // Ollama (local, free, private) leads — the local-first pick for this app;
+    // the first *available* harness here is the recommended auto-pick default.
+    let mut registry = Registry::new()
+        .register(OpenHarness::ollama())
+        .register(Claude::new())
+        .register(Codex::new())
+        .register(openrouter())
+        .register(AcpHarness::opencode());
     // User-registered agents rank after the built-in providers, before bob.
     for harness in crate::harness::custom::custom_agent_store().build_harnesses() {
         registry = registry.register_boxed(harness);

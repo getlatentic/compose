@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import {
+  Accordion,
+  AccordionItem,
   Button,
   InlineNotification,
   PasswordInput,
@@ -60,15 +62,15 @@ export function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
   return (
     <>
       {caps.credentialRequired ? <HarnessCredentialForm harnessId={harnessId} name={name} /> : null}
-      <ExternalHarnessOptions harnessId={harnessId} name={name} />
+      <ExternalHarnessOptions harnessId={harnessId} />
     </>
   );
 }
 
 /** The per-agent model + run-option controls (model, permission mode, max
- *  turns, effort, edit-review). Driven by the agent's declared capabilities —
- *  a new agent needs zero edits here. */
-export function ExternalHarnessOptions({ harnessId, name }: { harnessId: string; name: string }) {
+ *  turns, effort), in a collapsed "Model & run options" accordion. Driven by the
+ *  agent's declared capabilities — a new agent needs zero edits here. */
+export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const options =
     useHarnessStore((state) => state.harnessOptions[harnessId]) ?? ({} as HarnessRunOptions);
@@ -112,17 +114,16 @@ export function ExternalHarnessOptions({ harnessId, name }: { harnessId: string;
 
   return (
     <>
+      {modelManagement ? (
+        <OllamaModelManager harnessId={harnessId} management={modelManagement} />
+      ) : null}
+      {/* Model + run-tuning are tucked into a collapsed "Advanced" accordion: the
+          default model/options work for most, so the detail leads with setup
+          (a key / Ollama's model download) rather than a wall of knobs. */}
       <div className="settings-section">
-        <h3>{name} setup</h3>
-        <p className="settings-helper">
-          {caps.credentialRequired
-            ? `Add your ${name} API key above. Choose a model and run options below; leave a field on "Default" to use ${name}'s own default.`
-            : caps.supportsLogin
-              ? `${name} uses your existing ${name} login. Choose a model and run options below; leave a field on "Default" to use ${name}'s own default.`
-              : `Choose a model and run options below; leave a field on "Default" to use ${name}'s own default.`}
-        </p>
-
-        <div style={{ display: "grid", gap: "1rem", maxWidth: "22rem", marginBlockStart: "0.75rem" }}>
+        <Accordion>
+          <AccordionItem title="Model & run options">
+            <div style={{ display: "grid", gap: "1rem", maxWidth: "22rem" }}>
           {/* Model picker, in priority: a live-discovered list (Ollama/OpenCode/
               OpenRouter/Codex) → dropdown; else free-text where custom ids are
               allowed; else a curated dropdown (claude). A discovered list that came
@@ -239,11 +240,10 @@ export function ExternalHarnessOptions({ harnessId, name }: { harnessId: string;
               ))}
             </Select>
           ) : null}
-        </div>
+            </div>
+          </AccordionItem>
+        </Accordion>
       </div>
-      {modelManagement ? (
-        <OllamaModelManager harnessId={harnessId} management={modelManagement} />
-      ) : null}
     </>
   );
 }
