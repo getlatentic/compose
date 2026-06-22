@@ -158,8 +158,6 @@ export function OllamaModelManager({ harnessId }: { harnessId: string }) {
 
   return (
     <div className="settings-section">
-      <h3>Models</h3>
-
       {listError ? (
         // Ollama is unreachable: nothing here works until it's running, so guide
         // the user to start it. We poll in the background, so this recovers on

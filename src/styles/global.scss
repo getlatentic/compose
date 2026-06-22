@@ -4718,6 +4718,10 @@ select {
   margin: 0;
   padding: 0;
   list-style: none;
+  // Cap the height so a machine with many models pulled scrolls the list
+  // instead of stretching the whole settings panel into an endless scroll.
+  max-block-size: 17rem;
+  overflow-y: auto;
 }
 
 .model-manager__item {
@@ -4821,6 +4825,22 @@ select {
   color: var(--cds-text-disabled, #c6c6c6);
   cursor: default;
   text-decoration: none;
+}
+
+// A saved default that vanished from the discovered list — a soft caution, not
+// an error (it may still work if the provider kept it), so it stays quiet.
+.model-picker__stale {
+  margin-block-start: 0.5rem;
+  max-inline-size: 24rem;
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+// The stacked knobs inside the "Advanced" accordion.
+.agent-advanced {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 22rem;
 }
 
 .setup-page {

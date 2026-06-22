@@ -47,6 +47,17 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
 
   const selectedItem = items.find((model) => model.value === currentModel) ?? null;
 
+  // A saved default that's absent from a non-empty discovered list is probably
+  // gone — an Ollama model that was deleted, or a provider id dropped from the
+  // catalog. It stays selectable (above), but flag it so a new chat doesn't just
+  // fail later with a cryptic "model not found". Only when the list actually
+  // loaded (length > 0); an empty list means offline/undiscovered, not missing.
+  const savedModelMissing =
+    !!currentModel &&
+    !!discovered &&
+    discovered.length > 0 &&
+    !discovered.some((model) => model.value === currentModel);
+
   // Live-discovery agents (no curated list) can gain models after launch — an
   // Ollama pull, a provider catalog refresh — so let the list be re-pulled.
   const canRefresh = caps.models.length === 0;
@@ -103,6 +114,11 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
           </button>
         ) : null}
       </div>
+      {savedModelMissing ? (
+        <p className="model-picker__stale">
+          “{currentModel}” isn’t in the list — it may no longer be available. Pick another above.
+        </p>
+      ) : null}
     </div>
   );
 }

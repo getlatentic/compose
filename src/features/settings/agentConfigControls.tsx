@@ -1,19 +1,16 @@
 import { FormEvent, useEffect, useState } from "react";
 import {
-  Accordion,
-  AccordionItem,
   Button,
   InlineNotification,
   PasswordInput,
-  Select,
-  SelectItem,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
 } from "@carbon/react";
 
-import {
-  harnessCapabilitiesOf,
-  supportsPermissionMode,
-  type HarnessRunOptions,
-} from "../../app/workspaceStore";
+import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import {
   harnessCredentialStatus,
@@ -21,6 +18,7 @@ import {
   type HarnessInstallEvent,
   type HarnessRuntimeVerification,
 } from "../../lib/ipc/harnessClient";
+import { AdvancedRunOptions } from "./AdvancedRunOptions";
 import { ModelPicker } from "./ModelPicker";
 import { OllamaModelManager } from "./OllamaModelManager";
 
@@ -29,26 +27,6 @@ import { OllamaModelManager } from "./OllamaModelManager";
  * These are capability-driven and id-agnostic: each renders only the fields the
  * agent's declared capabilities support, so a new agent needs no edits here.
  */
-
-/** Reasoning-effort levels (Codex's `model_reasoning_effort`). Neutral
- *  presets — whether an agent honors them is decided by its `supportsEffort`
- *  capability, not this list. */
-const EFFORT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: "", label: "Default" },
-  { value: "minimal", label: "Minimal" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
-
-/** Preset turn caps for Claude (`--max-turns`). */
-const MAX_TURNS_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: "", label: "Default (no cap)" },
-  { value: "3", label: "3 turns" },
-  { value: "5", label: "5 turns" },
-  { value: "10", label: "10 turns" },
-  { value: "20", label: "20 turns" },
-];
 
 /** Setup for an agent that manages its own login (Claude/Codex) or needs a key
  *  (OpenRouter): a key form where one is required, plus the model + run options.
@@ -67,15 +45,14 @@ export function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
   );
 }
 
-/** The per-agent run-tuning controls (permission mode, max turns, effort) in a
- *  collapsed "Advanced" accordion. The model itself is picked in the main detail
- *  via {@link ModelPicker} — only these power-user knobs are tucked away. Driven
- *  by the agent's declared capabilities, so a new agent needs zero edits here. */
+/** The per-agent model + run-tuning controls. The model picker leads (it's the
+ *  setting most people touch) with the power-user knobs behind {@link
+ *  AdvancedRunOptions}. An agent that manages local models (Ollama) splits the
+ *  download/inventory off into a "Models" tab so a long list never buries the
+ *  config; everything else renders the config flat. Capability-driven — a new
+ *  agent needs zero edits here. */
 export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
-  const options =
-    useHarnessStore((state) => state.harnessOptions[harnessId]) ?? ({} as HarnessRunOptions);
-  const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
   const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
   const modelManagement = useHarnessStore((state) => state.harnessModelManagement[harnessId]);
   const loadHarnessModelManagement = useHarnessStore(
@@ -93,86 +70,35 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
   }, [harnessId, caps.models.length, loadHarnessModels]);
 
   // Probe whether this agent manages its own local models (Ollama). Drives the
-  // model-management section below; null for every other agent.
+  // "Models" tab below; null for every other agent.
   useEffect(() => {
     void loadHarnessModelManagement(harnessId);
   }, [harnessId, loadHarnessModelManagement]);
 
-  // Only build the accordion when the agent actually has a knob to show — most
-  // agents have none, and an empty "Advanced" twisty is just noise.
-  const hasAdvanced =
-    supportsPermissionMode(harnessId) || caps.supportsMaxTurns || caps.supportsEffort;
+  const config = (
+    <>
+      <ModelPicker harnessId={harnessId} />
+      <AdvancedRunOptions harnessId={harnessId} />
+    </>
+  );
+
+  if (!modelManagement) {
+    return config;
+  }
 
   return (
-    <>
-      {/* The model picker leads (most-touched setting); Ollama's download/manage
-          section follows; the power-user knobs hide in "Advanced". */}
-      <ModelPicker harnessId={harnessId} />
-      {modelManagement ? <OllamaModelManager harnessId={harnessId} /> : null}
-      {hasAdvanced ? (
-      <div className="settings-section">
-        <Accordion>
-          <AccordionItem title="Advanced">
-            <div style={{ display: "grid", gap: "1rem", maxWidth: "22rem" }}>
-          {supportsPermissionMode(harnessId) ? (
-            <Select
-              id={`${harnessId}-permission-mode`}
-              labelText="How much it can do on its own"
-              helperText="Default runs autonomously in your folder; every change is undoable from a file's “Previous versions”."
-              value={options.permissionMode ?? ""}
-              onChange={(event) =>
-                setHarnessOptions(harnessId, { permissionMode: event.target.value || undefined })
-              }
-            >
-              {/* Only headless-safe modes: "" (Compose's bypass default) and auto
-                  both run without an unanswerable prompt. acceptEdits/default
-                  would deadlock a headless run on the first Bash call. */}
-              <SelectItem value="" text="Autonomous — no prompts (recommended)" />
-              <SelectItem value="auto" text="Guarded — vet risky actions (Sonnet/Opus 4.6+)" />
-            </Select>
-          ) : null}
-
-          {caps.supportsMaxTurns ? (
-            <Select
-              id={`${harnessId}-max-turns`}
-              labelText="Max turns"
-              helperText="Stop the agent after this many turns."
-              value={options.maxTurns != null ? String(options.maxTurns) : ""}
-              onChange={(event) =>
-                setHarnessOptions(harnessId, {
-                  maxTurns: event.target.value ? Number(event.target.value) : undefined,
-                })
-              }
-            >
-              {MAX_TURNS_OPTIONS.map((turns) => (
-                <SelectItem key={turns.value} value={turns.value} text={turns.label} />
-              ))}
-            </Select>
-          ) : null}
-
-          {caps.supportsEffort ? (
-            <Select
-              id={`${harnessId}-effort`}
-              labelText="Reasoning effort"
-              helperText="How hard the model thinks before acting."
-              value={options.effort ?? ""}
-              onChange={(event) =>
-                setHarnessOptions(harnessId, {
-                  effort: (event.target.value || undefined) as HarnessRunOptions["effort"],
-                })
-              }
-            >
-              {EFFORT_OPTIONS.map((effort) => (
-                <SelectItem key={effort.value} value={effort.value} text={effort.label} />
-              ))}
-            </Select>
-          ) : null}
-            </div>
-          </AccordionItem>
-        </Accordion>
-      </div>
-      ) : null}
-    </>
+    <Tabs>
+      <TabList aria-label="Agent settings" contained fullWidth>
+        <Tab>Settings</Tab>
+        <Tab>Models</Tab>
+      </TabList>
+      <TabPanels>
+        <TabPanel>{config}</TabPanel>
+        <TabPanel>
+          <OllamaModelManager harnessId={harnessId} />
+        </TabPanel>
+      </TabPanels>
+    </Tabs>
   );
 }
 
