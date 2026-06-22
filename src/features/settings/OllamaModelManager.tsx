@@ -9,6 +9,7 @@ import {
 } from "@carbon/react";
 import { Add, TrashCan } from "@carbon/react/icons";
 import { useHarnessStore } from "../../app/store/harnessStore";
+import { openExternalUrl } from "../../lib/links/openExternal";
 import {
   harnessCancelPull,
   harnessDeleteModel,
@@ -17,6 +18,10 @@ import {
   type InstalledModel,
   type PullEvent,
 } from "../../lib/ipc/harnessClient";
+
+/** How often to re-check for Ollama while it's down, so the section recovers on
+ *  its own the moment the user starts it — no button to press. */
+const OLLAMA_POLL_MS = 3500;
 
 /** A few small, popular, currently-valid Ollama models as one-click pulls, so a
  * first-time user isn't staring at an empty text field. The free-text field
@@ -88,6 +93,16 @@ export function OllamaModelManager({ harnessId }: { harnessId: string }) {
     void refreshInstalled();
   }, [refreshInstalled]);
 
+  // While Ollama is unreachable, poll quietly so the list fills in the moment
+  // the user starts it — this replaces a manual "check again" button.
+  useEffect(() => {
+    if (!listError) {
+      return;
+    }
+    const timer = window.setInterval(() => void refreshInstalled(), OLLAMA_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [listError, refreshInstalled]);
+
   async function handlePull(model: string) {
     const name = model.trim();
     if (!name || pull) {
@@ -147,22 +162,14 @@ export function OllamaModelManager({ harnessId }: { harnessId: string }) {
 
       {listError ? (
         // Ollama is unreachable: nothing here works until it's running, so guide
-        // the user to start it rather than show a dead download form.
+        // the user to start it. We poll in the background, so this recovers on
+        // its own — no dead download form, no button to press.
         <>
           <p className="settings-helper">
-            Ollama isn't running. Start the Ollama app on your computer, then your models show up
-            here.
+            Ollama isn't running. Start the Ollama app on your computer — your models show up here
+            on their own.
           </p>
-          <div className="model-manager__actions">
-            <Button
-              kind="tertiary"
-              size="sm"
-              disabled={loading}
-              onClick={() => void refreshInstalled()}
-            >
-              {loading ? "Checking…" : "Check again"}
-            </Button>
-          </div>
+          <InlineLoading description="Looking for Ollama…" status="active" />
         </>
       ) : (
         <>
@@ -216,14 +223,16 @@ export function OllamaModelManager({ harnessId }: { harnessId: string }) {
                   <span className="model-manager__picks-label">Popular — tap to download:</span>
                   <div className="model-manager__picks">
                     {QUICK_PICKS.filter((pick) => !installedNames.has(pick.name)).map((pick) => (
-                      <OperationalTag
-                        key={pick.name}
-                        size="sm"
-                        text={pick.name}
-                        renderIcon={Add}
-                        title={`Download ${pick.name} (${pick.note})`}
-                        onClick={() => void handlePull(pick.name)}
-                      />
+                      // Native title for the hover hint; OperationalTag's own
+                      // `title` prop is deprecated and isn't a tooltip anyway.
+                      <span key={pick.name} title={`Download ${pick.name} (${pick.note})`}>
+                        <OperationalTag
+                          size="sm"
+                          text={pick.name}
+                          renderIcon={Add}
+                          onClick={() => void handlePull(pick.name)}
+                        />
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -243,9 +252,7 @@ export function OllamaModelManager({ harnessId }: { harnessId: string }) {
                   <Button
                     kind="ghost"
                     size="sm"
-                    href={OLLAMA_LIBRARY_URL}
-                    target="_blank"
-                    rel="noreferrer noopener"
+                    onClick={() => void openExternalUrl(OLLAMA_LIBRARY_URL)}
                   >
                     Browse the library
                   </Button>

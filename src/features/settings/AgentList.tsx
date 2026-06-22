@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { SkeletonText, Tag } from "@carbon/react";
-import { Add, CheckmarkFilled, ChevronRight } from "@carbon/react/icons";
+import { Add, ChevronRight, RadioButton, RadioButtonChecked } from "@carbon/react/icons";
 
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessReadiness, type HarnessReadiness } from "../../lib/ipc/harnessClient";
@@ -16,9 +16,11 @@ let cachedReadiness: Record<string, HarnessReadiness | null> = {};
  * parallel* (`harness_readiness` per id), so a row appears at once with a
  * "Checking…" status that resolves on its own — rather than blocking the whole
  * list on the serial `harness_discover` (one `<cli> --version` / Ollama ping per
- * agent, summed). Clicking a row opens its setup/detail; it does not switch the
- * active agent (the chat footer's job). A ready agent shows just a check; only a
- * state that needs action gets a labelled pill.
+ * agent, summed). Each row carries a radio that sets the default agent (a tinted
+ * row marks the current one); the rest of the row opens the agent's setup/detail.
+ * Readiness shows as a muted dot, kept visually distinct from that radio so a
+ * ready agent never reads as "selected"; a state that needs action keeps a
+ * labelled pill.
  */
 export function AgentList({
   onOpenAgent,
@@ -28,6 +30,7 @@ export function AgentList({
   onAddAgent: () => void;
 }) {
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const loadHarnessCatalog = useHarnessStore((state) => state.loadHarnessCatalog);
   const [readiness, setReadiness] = useState<Record<string, HarnessReadiness | null>>(cachedReadiness);
@@ -86,20 +89,33 @@ export function AgentList({
             const status = checking ? null : agentStatus(info, readiness[info.id]);
             const isDefault = info.id === selectedHarnessId;
             return (
-              <li key={info.id}>
-                <button type="button" className="agent-row" onClick={() => onOpenAgent(info.id)}>
+              <li key={info.id} className={`agent-row${isDefault ? " agent-row--default" : ""}`}>
+                <button
+                  type="button"
+                  className="agent-row__default"
+                  aria-pressed={isDefault}
+                  aria-label={
+                    isDefault
+                      ? `${info.displayName} is the default agent`
+                      : `Make ${info.displayName} the default agent`
+                  }
+                  title={isDefault ? "Default agent" : "Set as default"}
+                  onClick={() => setSelectedHarness(info.id)}
+                >
+                  {isDefault ? <RadioButtonChecked /> : <RadioButton />}
+                </button>
+                <button
+                  type="button"
+                  className="agent-row__open"
+                  onClick={() => onOpenAgent(info.id)}
+                >
                   <span className="agent-row__body">
                     <span className="agent-row__head">
                       <strong>{info.displayName}</strong>
-                      {isDefault ? (
-                        <Tag size="sm" type="blue">
-                          Default
-                        </Tag>
-                      ) : null}
                       {checking ? (
                         <span className="agent-row__checking">Checking…</span>
                       ) : status?.kind === "ready" ? (
-                        <CheckmarkFilled className="agent-row__ready" aria-label="Ready" />
+                        <span className="agent-row__status agent-row__status--success">Ready</span>
                       ) : status ? (
                         <Tag size="sm" type={statusTagType(status.tone)}>
                           {status.label}

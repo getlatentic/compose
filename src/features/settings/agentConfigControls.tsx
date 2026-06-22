@@ -7,7 +7,6 @@ import {
   PasswordInput,
   Select,
   SelectItem,
-  TextInput,
 } from "@carbon/react";
 
 import {
@@ -22,6 +21,7 @@ import {
   type HarnessInstallEvent,
   type HarnessRuntimeVerification,
 } from "../../lib/ipc/harnessClient";
+import { ModelPicker } from "./ModelPicker";
 import { OllamaModelManager } from "./OllamaModelManager";
 
 /**
@@ -67,15 +67,15 @@ export function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
   );
 }
 
-/** The per-agent model + run-option controls (model, permission mode, max
- *  turns, effort), in a collapsed "Model & run options" accordion. Driven by the
- *  agent's declared capabilities — a new agent needs zero edits here. */
+/** The per-agent run-tuning controls (permission mode, max turns, effort) in a
+ *  collapsed "Advanced" accordion. The model itself is picked in the main detail
+ *  via {@link ModelPicker} — only these power-user knobs are tucked away. Driven
+ *  by the agent's declared capabilities, so a new agent needs zero edits here. */
 export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const options =
     useHarnessStore((state) => state.harnessOptions[harnessId]) ?? ({} as HarnessRunOptions);
   const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
-  const harnessModels = useHarnessStore((state) => state.harnessModels);
   const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
   const modelManagement = useHarnessStore((state) => state.harnessModelManagement[harnessId]);
   const loadHarnessModelManagement = useHarnessStore(
@@ -84,8 +84,8 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
   const caps = harnessCapabilitiesOf(harnessCatalog, harnessId);
 
   // Discover models live for agents without a curated compile-time list
-  // (Ollama / OpenCode / OpenRouter / Codex). claude ships `caps.models`, so skip
-  // the probe for it. Failures resolve to [] → the free-text field below.
+  // (Ollama / OpenCode / OpenRouter / Codex), so the picker has options. claude
+  // ships `caps.models`, so skip the probe for it.
   useEffect(() => {
     if (caps.models.length === 0) {
       void loadHarnessModels(harnessId);
@@ -93,101 +93,27 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
   }, [harnessId, caps.models.length, loadHarnessModels]);
 
   // Probe whether this agent manages its own local models (Ollama). Drives the
-  // "Manage models" section below; null for every other agent.
+  // model-management section below; null for every other agent.
   useEffect(() => {
     void loadHarnessModelManagement(harnessId);
   }, [harnessId, loadHarnessModelManagement]);
-  const dynamicModels = harnessModels[harnessId] ?? [];
-  const currentModel = options.model ?? "";
 
-  // Re-fetch the live model list (Ollama's /api/tags etc.) so a model pulled
-  // after the app started shows up without a restart.
-  const [refreshingModels, setRefreshingModels] = useState(false);
-  const refreshModels = async () => {
-    setRefreshingModels(true);
-    try {
-      await loadHarnessModels(harnessId);
-    } finally {
-      setRefreshingModels(false);
-    }
-  };
+  // Only build the accordion when the agent actually has a knob to show — most
+  // agents have none, and an empty "Advanced" twisty is just noise.
+  const hasAdvanced =
+    supportsPermissionMode(harnessId) || caps.supportsMaxTurns || caps.supportsEffort;
 
   return (
     <>
+      {/* The model picker leads (most-touched setting); Ollama's download/manage
+          section follows; the power-user knobs hide in "Advanced". */}
+      <ModelPicker harnessId={harnessId} />
       {modelManagement ? <OllamaModelManager harnessId={harnessId} /> : null}
-      {/* Model + run-tuning are tucked into a collapsed "Advanced" accordion: the
-          default model/options work for most, so the detail leads with setup
-          (a key / Ollama's model download) rather than a wall of knobs. */}
+      {hasAdvanced ? (
       <div className="settings-section">
         <Accordion>
-          <AccordionItem title="Model & run options">
+          <AccordionItem title="Advanced">
             <div style={{ display: "grid", gap: "1rem", maxWidth: "22rem" }}>
-          {/* Model picker, in priority: a live-discovered list (Ollama/OpenCode/
-              OpenRouter/Codex) → dropdown; else free-text where custom ids are
-              allowed; else a curated dropdown (claude). A discovered list that came
-              back empty (offline, Ollama down) falls through to free-text so the
-              field is never a dead end. The current value is always selectable even
-              if it predates the discovered list. */}
-          {dynamicModels.length > 0 ? (
-            <Select
-              id={`${harnessId}-model`}
-              labelText="Default model"
-              helperText="Used for new chats. Leave on Automatic to let the agent pick."
-              value={currentModel}
-              onChange={(event) =>
-                setHarnessOptions(harnessId, { model: event.target.value || undefined })
-              }
-            >
-              <SelectItem value="" text="Automatic" />
-              {dynamicModels.map((model) => (
-                <SelectItem key={model.value} value={model.value} text={model.label} />
-              ))}
-              {currentModel && !dynamicModels.some((model) => model.value === currentModel) ? (
-                <SelectItem value={currentModel} text={currentModel} />
-              ) : null}
-            </Select>
-          ) : caps.allowsCustomModel ? (
-            <TextInput
-              id={`${harnessId}-model`}
-              labelText="Default model"
-              placeholder="Automatic"
-              helperText="Used for new chats. Leave blank to let the agent pick its default."
-              value={currentModel}
-              onChange={(event) =>
-                setHarnessOptions(harnessId, { model: event.target.value || undefined })
-              }
-            />
-          ) : caps.models.length > 0 ? (
-            <Select
-              id={`${harnessId}-model`}
-              labelText="Default model"
-              helperText="Used for new chats. Leave on Automatic to let the agent pick."
-              value={currentModel}
-              onChange={(event) =>
-                setHarnessOptions(harnessId, { model: event.target.value || undefined })
-              }
-            >
-              <SelectItem value="" text="Automatic" />
-              {caps.models.map((model) => (
-                <SelectItem key={model.value} value={model.value} text={model.label} />
-              ))}
-            </Select>
-          ) : null}
-
-          {/* Live-discovery agents (Ollama / OpenRouter) can gain models after
-              launch; let the user re-pull the list without restarting. */}
-          {caps.models.length === 0 ? (
-            <Button
-              kind="ghost"
-              size="sm"
-              disabled={refreshingModels}
-              onClick={() => void refreshModels()}
-              style={{ justifySelf: "start", marginBlockStart: "-0.5rem" }}
-            >
-              {refreshingModels ? "Refreshing…" : "Refresh models"}
-            </Button>
-          ) : null}
-
           {supportsPermissionMode(harnessId) ? (
             <Select
               id={`${harnessId}-permission-mode`}
@@ -245,6 +171,7 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
           </AccordionItem>
         </Accordion>
       </div>
+      ) : null}
     </>
   );
 }

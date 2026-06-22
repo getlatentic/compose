@@ -13,14 +13,13 @@ import { useHarnessSetup } from "./useHarnessSetup";
  * One agent's setup + configuration screen, reached from {@link AgentList}. The
  * setup is capability-driven: a Compose-managed agent (bob) gets the install +
  * key + test panel; everything else gets an install and/or OAuth sign-in step
- * where its status calls for one, then the key form + model/run options. "Set as
- * default" makes this the agent new chats start with (the same preference the
- * footer writes).
+ * where its status calls for one, then the key form + model/run options. The
+ * default agent is chosen from the {@link AgentList} (its radio); here a "Default"
+ * tag just confirms which one this is.
  */
 export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () => void }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
-  const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
   const info = harnessCatalog.find((entry) => entry.id === agentId);
   const caps = harnessCapabilitiesOf(harnessCatalog, agentId);
   const name = info?.displayName ?? agentId;
@@ -53,14 +52,6 @@ export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () =
           ) : null}
         </div>
         {info ? <p className="settings-helper">{info.description}</p> : null}
-
-        {!isDefault ? (
-          <div className="settings-actions">
-            <Button size="sm" kind="tertiary" onClick={() => setSelectedHarness(agentId)}>
-              Set as default
-            </Button>
-          </div>
-        ) : null}
       </div>
 
       {usesManagedSetup ? (
