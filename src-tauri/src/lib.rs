@@ -1,3 +1,4 @@
+mod bundled_runtime;
 pub mod db;
 pub mod events;
 pub mod export;
@@ -71,6 +72,12 @@ pub fn run() {
             // dir, so the model picker works offline after one online fetch.
             if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
                 std::env::set_var("AGENT_HARNESS_CACHE_DIR", cache_dir);
+            }
+            // Put Compose's bundled Node + uv ahead of any system install, so a
+            // user needs no developer-tool setup. Before the keychain export /
+            // readiness probes below, so the harness's cached PATH includes it.
+            if let Ok(resource_dir) = app_handle.path().resource_dir() {
+                bundled_runtime::prepend_bundled_runtime(&resource_dir);
             }
             let metadata = app_handle.state::<db::MetadataStore>();
             if let Err(error) = metadata.init_from_app(&app_handle) {
