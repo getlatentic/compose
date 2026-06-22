@@ -274,44 +274,182 @@ select {
 
 // === Sidebar: workspace switcher (pinned top) ===
 .workspace-switcher {
-  display: flex;
+  position: relative;
   flex: 0 0 auto;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.workspace-switcher__trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  padding: 0.5rem 0.5rem 0.5rem 0.625rem;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  color: var(--cds-text-primary, #161616);
+  cursor: pointer;
+}
+
+.workspace-switcher__trigger:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.workspace-switcher__trigger-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 4px;
+
+  svg {
+    fill: var(--cds-icon-secondary, #525252);
+  }
 }
 
 .workspace-switcher__name {
   flex: 1 1 auto;
   min-inline-size: 0;
-  color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
   font-weight: 600;
 }
 
-.workspace-switcher__menu.cds--overflow-menu {
+.workspace-switcher__chevron {
   flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  background: transparent;
-  border-radius: 2px;
-}
-
-.workspace-switcher__menu.cds--overflow-menu:hover,
-.workspace-switcher__menu.cds--overflow-menu[aria-expanded="true"] {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-}
-
-.workspace-switcher__menu.cds--overflow-menu svg {
   fill: var(--cds-icon-secondary, #525252);
 }
 
-.workspace-switcher__forget .cds--overflow-menu-options__option-content {
-  font-size: 0.75rem;
+// The dropdown is portaled to <body> and fixed-positioned in JS (the sidebar
+// clips overflow and is short), so these rules can't assume any parent.
+.workspace-switcher__popover {
+  position: fixed;
+  z-index: 9000;
+  max-block-size: min(28rem, 70vh);
+  overflow-y: auto;
+  padding-block: 0.25rem;
+  background: var(--cds-background, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.workspace-switcher__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-item {
+  position: relative;
+}
+
+.ws-item__open {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  // Right padding reserves room for the trailing check / hover-✕.
+  padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  color: var(--cds-text-primary, #161616);
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--cds-layer-hover-01, #e8e8e8);
+    outline: none;
+  }
+}
+
+.ws-item__icon {
+  flex: 0 0 auto;
+  fill: var(--cds-icon-secondary, #525252);
+}
+
+.ws-item__name {
+  // Don't shrink: keep the name whole and let the path truncate instead.
+  flex: 0 0 auto;
+  max-inline-size: 12rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.ws-item__path {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 0.6875rem;
+}
+
+.ws-item__check {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0.625rem;
+  transform: translateY(-50%);
+  fill: var(--cds-icon-primary, #161616);
+  pointer-events: none;
+}
+
+.ws-item__remove {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0.375rem;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+
+  svg {
+    fill: var(--cds-icon-secondary, #525252);
+  }
+
+  &:hover {
+    background: var(--cds-layer-selected-01, #e0e0e0);
+
+    svg {
+      fill: var(--cds-icon-primary, #161616);
+    }
+  }
+}
+
+.ws-item:hover .ws-item__remove,
+.ws-item__remove:focus-visible {
+  opacity: 1;
+}
+
+.ws-item--active {
+  // Accent bar + tint live on the button: an inset shadow on the <li> would be
+  // painted over by the button's own background.
+  .ws-item__open {
+    background: var(--cds-layer-selected-01, #e0e0e0);
+    box-shadow: inset 3px 0 0 var(--cds-border-interactive, #0f62fe);
+
+    &:hover {
+      background: var(--cds-layer-selected-hover-01, #d1d1d1);
+    }
+  }
+
+  .ws-item__name {
+    font-weight: 600;
+  }
+}
+
+.workspace-switcher__footer {
+  margin-block-start: 0.25rem;
+  padding-block-start: 0.25rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
 // === Sidebar title-bar row — owned by the OS, sized by --titlebar-height ===
