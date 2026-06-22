@@ -1,8 +1,10 @@
 //! The dependency recipe model and Compose's recipe set.
 //!
-//! Each recipe is static data: how to detect a dependency and how to install
-//! it. `requires` encodes prerequisite ordering (CLT → Homebrew → Node/uv) so
-//! the doctor installs in order and the UI gates rows until prerequisites land.
+//! Node and uv ship bundled in the app (`bundled_runtime`), so they aren't here:
+//! this set is the *optional* local-AI path — Ollama plus its install
+//! prerequisites. Each recipe is static data: how to detect a dependency and how
+//! to install it. `requires` encodes ordering (CLT → Homebrew → Ollama) so the
+//! doctor installs in order and the UI gates rows until prerequisites land.
 
 use serde::Serialize;
 
@@ -34,8 +36,6 @@ pub enum CheckSpec {
 
 /// How to install a dependency.
 pub enum InstallSpec {
-    /// `brew install <formula>` (unprivileged once Homebrew owns its prefix).
-    Brew(&'static str),
     /// `brew install <formula>` plus `brew services start` — a persistent,
     /// auto-starting background server (Ollama), via a user-level launchd agent
     /// (no sudo).
@@ -81,7 +81,7 @@ pub const RECIPES: &[DependencyRecipe] = &[
     DependencyRecipe {
         id: "homebrew",
         name: "Homebrew",
-        description: "The macOS package manager Compose uses to install the tools below.",
+        description: "The macOS package manager used to install Ollama, below.",
         provides: &["brew"],
         requires: &["xcode-clt"],
         requires_admin: true,
@@ -105,32 +105,6 @@ pub const RECIPES: &[DependencyRecipe] = &[
             min_version: None,
         },
         install: InstallSpec::BrewService("ollama"),
-    },
-    DependencyRecipe {
-        id: "node",
-        name: "Node.js",
-        description: "The runtime the AI assistants (Claude Code, Codex, bob) run on.",
-        provides: &["node", "npm"],
-        requires: &["homebrew"],
-        requires_admin: false,
-        check: CheckSpec::LoginShell {
-            probe: "node --version",
-            min_version: Some("22.0.0"),
-        },
-        install: InstallSpec::Brew("node"),
-    },
-    DependencyRecipe {
-        id: "uv",
-        name: "uv (Python)",
-        description: "A fast Python runner used by document skills (PDF, Word, Excel).",
-        provides: &["uv", "python"],
-        requires: &["homebrew"],
-        requires_admin: false,
-        check: CheckSpec::LoginShell {
-            probe: "uv --version",
-            min_version: None,
-        },
-        install: InstallSpec::Brew("uv"),
     },
 ];
 

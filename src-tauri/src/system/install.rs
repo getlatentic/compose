@@ -27,7 +27,6 @@ const HOMEBREW_PREP: &str = r#"PFX=/opt/homebrew; [ "$(uname -m)" = arm64 ] || P
 /// fire-and-stream Tauri command.
 pub fn run_install(recipe: &DependencyRecipe, on_event: InstallCallback) {
     match &recipe.install {
-        InstallSpec::Brew(formula) => stream_or_fail(&brew_install_script(formula, false), &on_event),
         InstallSpec::BrewService(formula) => {
             stream_or_fail(&brew_install_script(formula, true), &on_event)
         }

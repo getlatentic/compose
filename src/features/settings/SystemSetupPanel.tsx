@@ -5,10 +5,10 @@ import { systemInstallDependency, type DependencyStatus } from "../../lib/ipc/sy
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 
 /**
- * The "Get ready" doctor: detects the developer tools the AI assistants and
- * skills need (Command Line Tools, Homebrew, Node, uv) and installs the missing
- * ones. Mirrors {@link HarnessPicker} — status badges, a live install log, and a
- * re-probe after each install — and is reused by both Settings and onboarding.
+ * The "Get ready" doctor: detects and installs the *optional* tools for local AI
+ * and advanced skills (Command Line Tools, Homebrew, Ollama). Node and uv ship
+ * bundled, so they aren't here. Mirrors {@link HarnessPicker} — status badges, a
+ * live install log, and a re-probe after each install. Settings only now.
  *
  * Installs run in dependency order: a row is gated until its prerequisites are
  * present, and "Get me set up" walks the chain. The one privileged step
@@ -97,8 +97,8 @@ export function SystemSetupPanel() {
     <div className="settings-section">
       <p className="settings-helper">
         {allReady
-          ? "Your computer has everything the AI assistants need."
-          : "Compose needs a few developer tools to run the AI assistants and skills. Install the missing ones below."}
+          ? "Your Mac is set up for local AI and advanced skills."
+          : "Optional extras — Ollama for private on-device AI, plus build tools a few advanced skills use. Compose works without them; add any you'd like."}
       </p>
 
       {!loaded ? (
@@ -209,7 +209,7 @@ export function SystemSetupPanel() {
           kind="success"
           lowContrast
           title="You're all set"
-          subtitle="Everything the AI assistants need is installed."
+          subtitle="The optional local-AI and skill tools are installed."
         />
       ) : null}
 
