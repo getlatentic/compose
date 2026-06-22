@@ -5,8 +5,8 @@ import { useEffect, type RefObject } from "react";
  * key. Shared by the conversation history dropdown, the actions menu, and the
  * all-conversations view so each doesn't re-implement the same listeners. No-op
  * while `open` is false, so listeners are only attached when something is showing.
- * (A portaled popover whose content lives outside `rootRef` needs its own check —
- * see {@link AssistantPickerView} — so it doesn't use this hook.)
+ * (A portaled popover whose content lives outside `rootRef` must also test the
+ * popover element — see {@link useAnchoredPopover} — so it uses that instead.)
  */
 export function useDismissableLayer(
   open: boolean,

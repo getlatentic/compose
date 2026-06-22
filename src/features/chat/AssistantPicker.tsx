@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Checkmark, ChevronDown, WarningAltFilled } from "@carbon/react/icons";
+
+import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 
 /**
  * The composer's combined assistant + model selector. The footer shows a single
@@ -18,20 +19,6 @@ export interface AssistantOption {
 export interface ModelOption {
   value: string;
   label: string;
-}
-
-interface Coords {
-  bottom: number;
-  left: number;
-  width: number;
-}
-
-/** Anchor the popup just above the trigger, clamped into the viewport. */
-function anchorAbove(trigger: HTMLElement): Coords {
-  const rect = trigger.getBoundingClientRect();
-  const width = Math.min(300, window.innerWidth - 16);
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-  return { bottom: window.innerHeight - rect.top + 6, left, width };
 }
 
 export interface AssistantPickerViewProps {
@@ -60,63 +47,18 @@ export function AssistantPickerView({
   unavailable = false,
   disabled = false,
 }: AssistantPickerViewProps) {
-  const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState<Coords | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const focused = useRef(false);
-
-  // Position above the trigger once open, and keep anchored on resize. (The
-  // popup is gated on `coords`, so it never paints before it's placed.)
-  useEffect(() => {
-    const trigger = triggerRef.current;
-    if (!open || !trigger) {
-      setCoords(null);
-      return;
-    }
-    const reposition = () => setCoords(anchorAbove(trigger));
-    reposition();
-    window.addEventListener("resize", reposition);
-    return () => window.removeEventListener("resize", reposition);
-  }, [open]);
-
-  // Dismiss on outside pointer-down (trigger + portaled popup count as inside)
-  // or Escape — Escape returns focus to the trigger.
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: PointerEvent) {
-      const target = event.target as Node;
-      if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
-      setOpen(false);
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  // Move focus into the popup once it's mounted (once per open).
-  useEffect(() => {
-    if (!open) {
-      focused.current = false;
-      return;
-    }
-    if (focused.current || !coords) return;
-    focused.current = true;
-    const pop = popoverRef.current;
-    (
-      pop?.querySelector<HTMLButtonElement>('.assistant-picker__item[aria-checked="true"]') ??
-      pop?.querySelector<HTMLButtonElement>(".assistant-picker__item")
-    )?.focus();
-  }, [open, coords]);
+  const { open, setOpen, coords, triggerRef, popoverRef } = useAnchoredPopover<
+    HTMLButtonElement,
+    HTMLDivElement
+  >({
+    placement: "above",
+    maxWidth: 300,
+    gap: 6,
+    // Move focus to the selected item, else the first, once the popup mounts.
+    getInitialFocus: (pop) =>
+      pop.querySelector<HTMLButtonElement>('.assistant-picker__item[aria-checked="true"]') ??
+      pop.querySelector<HTMLButtonElement>(".assistant-picker__item"),
+  });
 
   return (
     <div className="assistant-picker">

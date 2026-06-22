@@ -1,10 +1,11 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo } from "react";
 import { createPortal } from "react-dom";
 import { Add, Checkmark, ChevronDown, Close, Folder } from "@carbon/react/icons";
 
 import { tildePath } from "../../lib/workspace/displayPath";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useWorkspaceActions } from "./useWorkspaceActions";
+import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 
 /**
  * The sidebar workspace switcher, pinned to the top of {@link WorkspaceSidebar}.
@@ -42,20 +43,6 @@ export interface WorkspaceMenuViewProps {
 
 const ROW = ".ws-item__open";
 
-interface PopoverCoords {
-  top: number;
-  left: number;
-  width: number;
-}
-
-/** Anchor the dropdown just under the trigger, clamped into the viewport. */
-function anchorBelow(trigger: HTMLElement): PopoverCoords {
-  const rect = trigger.getBoundingClientRect();
-  const width = Math.min(320, window.innerWidth - 16);
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-  return { top: rect.bottom + 4, left, width };
-}
-
 export function WorkspaceMenuView({
   activeName,
   activePath,
@@ -66,65 +53,16 @@ export function WorkspaceMenuView({
   onOpenFolder,
   onOpenSample,
 }: WorkspaceMenuViewProps) {
-  const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState<PopoverCoords | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const focused = useRef(false);
-
-  // Position the dropdown under the trigger before paint and keep it anchored on
-  // resize; cleared on close so the next open recomputes from scratch.
-  useLayoutEffect(() => {
-    const trigger = triggerRef.current;
-    if (!open || !trigger) {
-      setCoords(null);
-      return;
-    }
-    const reposition = () => setCoords(anchorBelow(trigger));
-    reposition();
-    window.addEventListener("resize", reposition);
-    return () => window.removeEventListener("resize", reposition);
-  }, [open]);
-
-  // Dismiss on outside click (the trigger and the portaled popover both count as
-  // "inside") or Escape — Escape restores focus to the trigger.
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-      if (rootRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
-      setOpen(false);
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  // Land focus on the active row (else the first) once the dropdown is mounted —
-  // once per open, so a resize-driven reposition doesn't yank focus back.
-  useEffect(() => {
-    if (!open) {
-      focused.current = false;
-      return;
-    }
-    if (focused.current || !coords) return;
-    focused.current = true;
-    const pop = popoverRef.current;
-    (
-      pop?.querySelector<HTMLButtonElement>(`${ROW}[data-active="true"]`) ??
-      pop?.querySelector<HTMLButtonElement>(ROW)
-    )?.focus();
-  }, [open, coords]);
+  const { open, setOpen, coords, triggerRef, popoverRef } = useAnchoredPopover<
+    HTMLButtonElement,
+    HTMLDivElement
+  >({
+    placement: "below",
+    // Land focus on the active row, else the first, once the dropdown mounts.
+    getInitialFocus: (pop) =>
+      pop.querySelector<HTMLButtonElement>(`${ROW}[data-active="true"]`) ??
+      pop.querySelector<HTMLButtonElement>(ROW),
+  });
 
   // Roving Up/Down between rows (Tab still reaches the per-row ✕ and footer).
   function onArrowKeys(event: React.KeyboardEvent) {
@@ -138,7 +76,7 @@ export function WorkspaceMenuView({
   }
 
   return (
-    <div className="workspace-switcher" ref={rootRef}>
+    <div className="workspace-switcher">
       <button
         ref={triggerRef}
         type="button"
