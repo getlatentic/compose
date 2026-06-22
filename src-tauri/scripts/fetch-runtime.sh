@@ -25,6 +25,21 @@ if [ ! -x "$DEST/node/bin/node" ]; then
   rm -f /tmp/compose-node.tar.gz
 fi
 
+# npm/npx ship as symlinks into lib/, and Tauri's resource bundler dereferences
+# symlinks — which relocates npm-cli.js and breaks its relative require. Replace
+# them with shell wrappers (regular files survive the copy) that run the bundled
+# node on the real cli.js, so npm works from inside the read-only .app. Run
+# unconditionally so it also repairs an already-fetched node.
+for tool in npm npx; do
+  rm -f "$DEST/node/bin/$tool" # don't write THROUGH the symlink onto cli.js
+  cat > "$DEST/node/bin/$tool" <<EOF
+#!/bin/sh
+here=\$(cd "\$(dirname "\$0")" && pwd)
+exec "\$here/node" "\$here/../lib/node_modules/npm/bin/$tool-cli.js" "\$@"
+EOF
+  chmod +x "$DEST/node/bin/$tool"
+done
+
 # --- uv (darwin-arm64) ---
 if [ ! -x "$DEST/bin/uv" ]; then
   echo "[runtime] uv ($ARCH)…"
