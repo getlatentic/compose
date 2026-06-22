@@ -8,10 +8,13 @@ const MAX_CUSTOM_INSTRUCTIONS_CHARS = 2000;
 
 /**
  * Settings that apply to every agent, not one in particular: file-edit
- * permission + review mode, and the shared custom instructions. They live with
- * the agent list (above the per-agent detail) and write the global, sticky store
- * values the run pipeline reads — so the same choice carries across whichever
- * agent you pick in the footer.
+ * permission + review mode, and the shared custom instructions. They write the
+ * global, sticky store values the run pipeline reads, so the same choice carries
+ * across whichever agent you pick in the footer.
+ *
+ * The two file-access toggles are distinct: the first is *permission* (may an
+ * agent change files at all), the second is *workflow* (how an allowed edit
+ * lands) — and the second only shows when editing is on.
  */
 export function FileAccessSection() {
   const allowEdits = useHarnessStore((state) => state.allowEdits);
@@ -22,28 +25,28 @@ export function FileAccessSection() {
   return (
     <div className="settings-section">
       <h3>File access</h3>
-      <p className="settings-helper">
-        Applies to every agent — and only inside your workspace folder.
-      </p>
+      <p className="settings-helper">What agents can do with files — only inside your workspace folder.</p>
       <Toggle
         id="agents-allow-edits"
         size="sm"
-        labelText="Let the AI edit files"
+        labelText="Let agents change files"
         labelA="Read & suggest only"
-        labelB="Can edit my files"
+        labelB="Can create, edit & delete"
         toggled={allowEdits}
         onToggle={(checked) => setAllowEdits(checked)}
       />
       {allowEdits ? (
-        <Toggle
-          id="agents-review-edits"
-          size="sm"
-          labelText="Review changes before applying"
-          labelA="Off — apply directly (undo anytime)"
-          labelB="On — approve a copy first"
-          toggled={reviewEdits}
-          onToggle={(checked) => setReviewEdits(checked)}
-        />
+        <div className="settings-subsetting">
+          <Toggle
+            id="agents-review-edits"
+            size="sm"
+            labelText="How edits are applied"
+            labelA="Apply directly — undo anytime"
+            labelB="Show me each change to approve first"
+            toggled={reviewEdits}
+            onToggle={(checked) => setReviewEdits(checked)}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -58,8 +61,8 @@ export function CustomInstructionsSection() {
       <TextArea
         id="global-custom-instructions"
         labelText="Custom instructions"
-        helperText="Added to every agent's system prompt where supported — a persona, house style, or rules to always follow. Keep it short so it leaves room for your files on small local models."
-        placeholder="e.g. Answer in British English and keep summaries to 3 bullet points."
+        helperText="Added to every agent's system prompt, where supported."
+        placeholder="e.g. Answer in British English; keep summaries to 3 bullets."
         rows={3}
         enableCounter
         maxCount={MAX_CUSTOM_INSTRUCTIONS_CHARS}

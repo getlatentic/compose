@@ -1,32 +1,24 @@
 import { useEffect, useState } from "react";
-import { InlineNotification, SkeletonText, Tag } from "@carbon/react";
+import { SkeletonText, Tag } from "@carbon/react";
 import { Add, CheckmarkFilled, ChevronRight } from "@carbon/react/icons";
 
 import { useHarnessStore } from "../../app/store/harnessStore";
-import {
-  harnessDiscover,
-  harnessList,
-  type HarnessInfo,
-  type HarnessReadiness,
-} from "../../lib/ipc/harnessClient";
+import { harnessReadiness, type HarnessReadiness } from "../../lib/ipc/harnessClient";
 import { agentStatus, statusTagType } from "./agentStatus";
 
-interface AgentRow {
-  info: HarnessInfo;
-  readiness: HarnessReadiness | null;
-}
-
-// Cached across mounts so returning from a detail screen renders the list
-// instantly instead of re-flashing skeletons; the probe still refreshes it.
-let cachedRows: AgentRow[] = [];
+// Per-agent readiness, cached across mounts so returning from a detail screen
+// shows last-known statuses instantly while a background re-probe refreshes them.
+let cachedReadiness: Record<string, HarnessReadiness | null> = {};
 
 /**
- * The registry of AI agents. Lists every registered agent with its
- * capability-accurate {@link agentStatus} and marks the current default;
- * clicking a row opens its setup/detail screen — it does not switch the active
- * agent, which is the chat footer's job. "Add agent" registers a custom ACP /
- * OpenAI-compatible endpoint. A ready agent shows just a check; only a state
- * that needs action gets a labelled pill.
+ * The registry of AI agents. The catalog (names + descriptions) comes from the
+ * store and renders immediately; each agent's readiness is then probed *in
+ * parallel* (`harness_readiness` per id), so a row appears at once with a
+ * "Checking…" status that resolves on its own — rather than blocking the whole
+ * list on the serial `harness_discover` (one `<cli> --version` / Ollama ping per
+ * agent, summed). Clicking a row opens its setup/detail; it does not switch the
+ * active agent (the chat footer's job). A ready agent shows just a check; only a
+ * state that needs action gets a labelled pill.
  */
 export function AgentList({
   onOpenAgent,
@@ -36,49 +28,43 @@ export function AgentList({
   onAddAgent: () => void;
 }) {
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
-  const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
+  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
+  const loadHarnessCatalog = useHarnessStore((state) => state.loadHarnessCatalog);
+  const [readiness, setReadiness] = useState<Record<string, HarnessReadiness | null>>(cachedReadiness);
 
-  const [rows, setRows] = useState<AgentRow[]>(cachedRows);
-  const [loading, setLoading] = useState(cachedRows.length === 0);
-  const [error, setError] = useState<string | null>(null);
+  // Keep the catalog fresh (cheap — static info, no probes) and re-probe each
+  // agent's readiness in parallel, updating its row as the probe resolves.
+  useEffect(() => {
+    void loadHarnessCatalog();
+  }, [loadHarnessCatalog]);
 
-  // Probe on mount, then re-probe quietly when the active agent's readiness
-  // changes (e.g. a key saved in a detail screen), so a status flips on return
-  // to the list. Seeds from the cross-mount cache, so only the first-ever open
-  // shows skeletons.
   useEffect(() => {
     let active = true;
-    async function refresh() {
-      setError(null);
-      try {
-        const [list, discovered] = await Promise.all([harnessList(), harnessDiscover()]);
-        if (!active) return;
-        cachedRows = list.map((info) => ({
-          info,
-          readiness: discovered.find((readiness) => readiness.harnessId === info.id) ?? null,
-        }));
-        setRows(cachedRows);
-      } catch (caught) {
-        if (active) setError(caught instanceof Error ? caught.message : "Could not load AI agents");
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    void refresh();
+    harnessCatalog.forEach((info) => {
+      harnessReadiness(info.id)
+        .then((result) => {
+          if (!active) return;
+          cachedReadiness = { ...cachedReadiness, [info.id]: result };
+          setReadiness((prev) => ({ ...prev, [info.id]: result }));
+        })
+        .catch(() => {
+          if (!active) return;
+          cachedReadiness = { ...cachedReadiness, [info.id]: null };
+          setReadiness((prev) => ({ ...prev, [info.id]: null }));
+        });
+    });
     return () => {
       active = false;
     };
-  }, [selectedHarnessReadiness]);
+  }, [harnessCatalog]);
 
   return (
     <div className="settings-section">
       <p className="settings-helper">
-        {loading
-          ? "Checking your computer for AI agents you already have…"
-          : "Your AI agents. Open one to set it up or configure it; pick which to use from the chat footer."}
+        Your AI agents. Open one to set it up or configure it; pick which to use from the chat footer.
       </p>
 
-      {loading ? (
+      {harnessCatalog.length === 0 ? (
         <ul className="agent-list" aria-hidden>
           {[0, 1, 2].map((i) => (
             <li key={i} className="agent-row agent-row--skeleton">
@@ -89,8 +75,9 @@ export function AgentList({
         </ul>
       ) : (
         <ul className="agent-list">
-          {rows.map(({ info, readiness }) => {
-            const status = agentStatus(info, readiness);
+          {harnessCatalog.map((info) => {
+            const checking = !(info.id in readiness);
+            const status = checking ? null : agentStatus(info, readiness[info.id]);
             const isDefault = info.id === selectedHarnessId;
             return (
               <li key={info.id}>
@@ -103,13 +90,15 @@ export function AgentList({
                           Default
                         </Tag>
                       ) : null}
-                      {status.kind === "ready" ? (
+                      {checking ? (
+                        <span className="agent-row__checking">Checking…</span>
+                      ) : status?.kind === "ready" ? (
                         <CheckmarkFilled className="agent-row__ready" aria-label="Ready" />
-                      ) : (
+                      ) : status ? (
                         <Tag size="sm" type={statusTagType(status.tone)}>
                           {status.label}
                         </Tag>
-                      )}
+                      ) : null}
                     </span>
                     <span className="agent-row__desc">{info.description}</span>
                   </span>
@@ -126,10 +115,6 @@ export function AgentList({
           </li>
         </ul>
       )}
-
-      {error ? (
-        <InlineNotification hideCloseButton kind="error" lowContrast subtitle={error} title="AI setup" />
-      ) : null}
     </div>
   );
 }

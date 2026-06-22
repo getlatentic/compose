@@ -27,10 +27,12 @@
 @use "@carbon/react/scss/components/modal";
 @use "@carbon/react/scss/components/notification";
 @use "@carbon/react/scss/components/overflow-menu";
+@use "@carbon/react/scss/components/radio-button";
 @use "@carbon/react/scss/components/select";
 @use "@carbon/react/scss/components/skeleton-styles";
 @use "@carbon/react/scss/components/tabs";
 @use "@carbon/react/scss/components/tag";
+@use "@carbon/react/scss/components/text-area";
 @use "@carbon/react/scss/components/text-input";
 @use "@carbon/react/scss/components/toggle";
 
@@ -4439,6 +4441,13 @@ select {
   color: var(--cds-text-secondary, #525252);
 }
 
+// A setting that only applies when its parent toggle is on — indented under it.
+.settings-subsetting {
+  margin-inline-start: 0.5rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
 .settings-install-log {
   margin: 0;
   padding: 0.5rem 0.75rem;
@@ -4579,6 +4588,12 @@ select {
 .agent-row__ready {
   flex: none;
   color: var(--cds-support-success, #24a148);
+}
+
+.agent-row__checking {
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-style: italic;
 }
 
 .agent-row--add {
