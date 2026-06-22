@@ -113,6 +113,20 @@ export async function runSendChatPrompt(
   // missing login surfaces as *that harness's* run error, not a
   // misleading "Connect your Bob API key". Same gate as ChatPanel.
   const { selectedHarnessId: harnessId, harnessCatalog } = useHarnessStore.getState();
+  // No agent set up yet (first run, nothing ready) — AI is off until one is added.
+  if (!harnessId) {
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
+        ...item,
+        chatThread: {
+          ...item.chatThread,
+          runError: "Set up an AI agent in Settings to start chatting.",
+          runState: "error",
+        },
+      })),
+    }));
+    return;
+  }
   if (harnessCapabilitiesOf(harnessCatalog, harnessId).credentialRequired) {
     const info = harnessCatalog.find((entry) => entry.id === harnessId);
     const status = await harnessCredentialStatus(harnessId).catch(() => ({ configured: false }));

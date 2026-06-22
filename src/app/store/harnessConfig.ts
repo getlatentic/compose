@@ -47,12 +47,12 @@ export interface HarnessPrefs {
 }
 
 /** Load the persisted harness selection + edit permission + per-harness run
- * options. Fresh-start default is Ollama — the zero-config local agent, so a
- * first-run user with no cloud account can chat immediately; onboarding's
- * detection-driven pick (and a future setup-derived default) can refine it. */
+ * options. Fresh start leaves the agent *unset* (`""`): boot derives it from the
+ * first ready agent in Ollama-first order, and a "set up an agent" nudge shows if
+ * none is ready (AI is optional). An explicit pick is persisted and always wins. */
 export function loadHarnessPrefs(): HarnessPrefs {
   const fallback: HarnessPrefs = {
-    selectedHarnessId: "ollama",
+    selectedHarnessId: "",
     allowEdits: true,
     reviewEdits: false,
     customInstructions: "",

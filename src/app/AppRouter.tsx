@@ -70,8 +70,12 @@ export function AppRouter() {
 
     void loadSetupState();
     // Load the harness capability catalog once — drives credential gating and
-    // the per-harness options UI declaratively.
-    void useHarnessStore.getState().loadHarnessCatalog();
+    // the per-harness options UI declaratively — then, on a first run with no
+    // agent chosen yet, derive the default from the first ready agent.
+    void useHarnessStore
+      .getState()
+      .loadHarnessCatalog()
+      .then(() => useHarnessStore.getState().resolveDefaultHarness());
 
     return () => {
       cancelled = true;
@@ -82,6 +86,12 @@ export function AppRouter() {
   // track the new selection after a switch. The boot effect seeds the first
   // probe; this fires on every subsequent change.
   useEffect(() => {
+    // No agent selected (first run, nothing ready) → nothing to probe; the
+    // composer handles the "set up an agent" state.
+    if (!selectedHarnessId) {
+      setSelectedHarnessReadiness(null);
+      return;
+    }
     harnessReadiness(selectedHarnessId)
       .then(setSelectedHarnessReadiness)
       .catch(() => setSelectedHarnessReadiness(null));

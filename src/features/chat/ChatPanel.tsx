@@ -98,8 +98,9 @@ function ChatPanelInner() {
   // send-time credential preflight still backstops key-managed harnesses).
   const selectedHarnessName =
     harnessCatalog.find((entry) => entry.id === selectedHarnessId)?.displayName ?? "Your assistant";
-  const assistantReady =
-    selectedHarnessReadiness && !selectedHarnessReadiness.ready
+  const assistantReady = !selectedHarnessId
+    ? { ready: false, message: "Set up an AI agent in Settings to start chatting." }
+    : selectedHarnessReadiness && !selectedHarnessReadiness.ready
       ? {
           ready: false,
           message:
@@ -278,7 +279,7 @@ function ChatPanelInner() {
         harnessName={selectedHarnessName}
         onAddFileContext={addChatFileContext}
         onHeightChange={setComposerHeight}
-        onOpenSettings={() => openSettings(selectedHarnessId)}
+        onOpenSettings={() => openSettings(selectedHarnessId || undefined)}
         onPromptChange={setChatPrompt}
         onRemoveContextItem={removeChatContextItem}
         onRetry={() => void reloadSelectedHarnessReadiness()}

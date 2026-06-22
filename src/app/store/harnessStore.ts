@@ -64,6 +64,12 @@ export interface HarnessState {
    * for the composer's "Retry" after a failure. Best-effort; a probe failure
    * resets readiness to null (reads as available, so Retry never locks the UI). */
   reloadSelectedHarnessReadiness: () => Promise<void>;
+  /** First-run only (no agent chosen yet): select the first *ready* agent in
+   * catalog order — which is Ollama-first — so the out-of-box default reflects
+   * what the user actually has working. None ready → stays unset and AI is off
+   * (the composer nudges to Settings). Probes in order and stops at the first
+   * hit, so it never spins up every CLI. */
+  resolveDefaultHarness: () => Promise<void>;
 }
 
 export const useHarnessStore = create<HarnessState>((set, get) => {
@@ -89,6 +95,20 @@ export const useHarnessStore = create<HarnessState>((set, get) => {
     // "available", so the gate never flashes the wrong harness's state.
     set({ selectedHarnessId: harnessId, selectedHarnessReadiness: null });
     persist();
+  },
+  resolveDefaultHarness: async () => {
+    // Respect an explicit choice; only fill in an out-of-box default.
+    if (get().selectedHarnessId) {
+      return;
+    }
+    for (const entry of get().harnessCatalog) {
+      const readiness = await harnessReadiness(entry.id).catch(() => null);
+      if (readiness?.ready) {
+        get().setSelectedHarness(entry.id);
+        return;
+      }
+    }
+    // None ready — leave it unset; the composer shows a "set up an agent" nudge.
   },
   setAllowEdits: (allow) => {
     set({ allowEdits: allow });

@@ -15,7 +15,7 @@ import { editGuardFor, reviewChangeToDraft, useWorkspaceStore } from "./workspac
 import { useHarnessStore } from "./store/harnessStore";
 import { useUiStore } from "./store/uiStore";
 import { useToastStore } from "../features/toast/toastStore";
-import type { HarnessCapabilities } from "../lib/ipc/harnessClient";
+import type { HarnessCapabilities, HarnessInfo, HarnessReadiness } from "../lib/ipc/harnessClient";
 import { FileConflictError, readFile, writeFile } from "../lib/ipc/filesClient";
 import { switchWorkspace as switchWorkspaceIpc } from "../lib/ipc/workspaceClient";
 
@@ -625,6 +625,65 @@ describe("workspace store", () => {
       expect(reviewChangeToDraft({ ...base, kind: "created" }).kind).toBe("create");
       expect(reviewChangeToDraft({ ...base, kind: "modified" }).kind).toBe("rewrite");
       expect(reviewChangeToDraft({ ...base, kind: "deleted" }).kind).toBe("delete");
+    });
+  });
+
+  describe("resolveDefaultHarness (first-run default)", () => {
+    const agent = (id: string): HarnessInfo => ({
+      id,
+      displayName: id,
+      description: "",
+      requiresInstall: false,
+      capabilities: {
+        credentialRequired: false,
+        previewsEdits: false,
+        models: [],
+        allowsCustomModel: false,
+        supportsEffort: false,
+        supportsMaxTurns: false,
+        supportsLogin: false,
+        supportsCustomInstructions: false,
+      },
+    });
+    const readiness = (harnessId: string, ready: boolean): HarnessReadiness => ({
+      harnessId,
+      ready,
+      installed: ready,
+      version: null,
+      authConfigured: ready,
+      error: null,
+      details: null,
+    });
+
+    it("picks the first ready agent in catalog (Ollama-first) order", async () => {
+      useHarnessStore.setState({
+        selectedHarnessId: "",
+        harnessCatalog: [agent("ollama"), agent("claude"), agent("codex")],
+      });
+      // Ollama not running; Claude signed in — Claude wins as the first ready.
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, id === "claude"));
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("claude");
+    });
+
+    it("leaves the agent unset when none are ready (AI is optional)", async () => {
+      useHarnessStore.setState({
+        selectedHarnessId: "",
+        harnessCatalog: [agent("ollama"), agent("claude")],
+      });
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, false));
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("");
+    });
+
+    it("respects an explicit choice and never probes", async () => {
+      useHarnessStore.setState({
+        selectedHarnessId: "codex",
+        harnessCatalog: [agent("ollama"), agent("claude"), agent("codex")],
+      });
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("codex");
+      expect(harnessReadiness).not.toHaveBeenCalled();
     });
   });
 });
