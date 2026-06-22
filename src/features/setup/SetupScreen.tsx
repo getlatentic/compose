@@ -31,14 +31,15 @@ import { harnessCapabilitiesOf, useWorkspaceStore } from "../../app/workspaceSto
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { HarnessPicker } from "../settings/HarnessPicker";
+import { SystemSetupPanel } from "../settings/SystemSetupPanel";
 
 // Browser-preview only: the virtual "sample workspace" id (the path is just an
 // identifier in the browser — no disk access). Overridable for local dev.
 const browserPreviewWorkspacePath =
   import.meta.env.VITE_SAMPLE_WORKSPACE ?? "/sample-vault";
 
-type Screen = "welcome" | "value" | "choose" | "folder";
-const SCREENS: Screen[] = ["welcome", "value", "choose", "folder"];
+type Screen = "welcome" | "value" | "choose" | "ready" | "folder";
+const SCREENS: Screen[] = ["welcome", "value", "ready", "choose", "folder"];
 
 export function SetupScreen() {
   const hydrateWorkspaces = useWorkspaceStore((state) => state.hydrateWorkspaces);
@@ -142,6 +143,10 @@ export function SetupScreen() {
 
         {screen === "choose" ? (
           <ChooseAiScreen onBack={goBack} onNext={goNext} />
+        ) : null}
+
+        {screen === "ready" ? (
+          <ReadyScreen onBack={goBack} onNext={goNext} />
         ) : null}
 
         {screen === "folder" ? (
@@ -261,7 +266,7 @@ function ChooseAiScreen({ onBack, onNext }: { onBack: () => void; onNext: () => 
 
   return (
     <ScreenShell>
-      <span className="onboard__eyebrow">Step 3 of 4</span>
+      <span className="onboard__eyebrow">Step 4 of 5</span>
       <h1 className="onboard__title">Choose your AI</h1>
       <p className="onboard__lead">
         Compose works with the AI agents already on your computer. We checked for the ones we
@@ -357,6 +362,26 @@ function HarnessKeyForm({
   );
 }
 
+/**
+ * "Get your computer ready" — the optional dependency bootstrap step. Reuses the
+ * {@link SystemSetupPanel} doctor; never blocks, so a user can finish setup now
+ * and install the developer tools later from Settings.
+ */
+function ReadyScreen({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  return (
+    <ScreenShell>
+      <span className="onboard__eyebrow">Step 3 of 5</span>
+      <h1 className="onboard__title">Get your computer ready</h1>
+      <p className="onboard__lead">
+        Compose uses a few developer tools to run the AI assistants and skills. We checked what's
+        already installed — set up anything missing, or skip and do it later from Settings.
+      </p>
+      <SystemSetupPanel />
+      <NavRow onBack={onBack} onNext={onNext} nextLabel="Continue" />
+    </ScreenShell>
+  );
+}
+
 function FolderScreen({
   adding,
   error,
@@ -372,7 +397,7 @@ function FolderScreen({
 }) {
   return (
     <ScreenShell>
-      <span className="onboard__eyebrow">Step 4 of 4</span>
+      <span className="onboard__eyebrow">Step 5 of 5</span>
       <h1 className="onboard__title">Where your notes live</h1>
       <p className="onboard__lead">
         Compose can set up a notes folder for you, or you can use one you already have. Either way

@@ -3,9 +3,11 @@ import { useState } from "react";
 import { AgentsSettings } from "./AgentsSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { AboutSettings } from "./AboutSettings";
+import { SystemSetupPanel } from "./SystemSetupPanel";
 
 const CATEGORIES = [
   { id: "agents", label: "AI agents" },
+  { id: "getready", label: "Get ready" },
   { id: "general", label: "General" },
   { id: "about", label: "About" },
 ] as const;
@@ -44,6 +46,8 @@ export function SettingsPanel() {
       <div className="settings-content">
         {category === "agents" ? (
           <AgentsSettings />
+        ) : category === "getready" ? (
+          <SystemSetupPanel />
         ) : category === "general" ? (
           <GeneralSettings />
         ) : (

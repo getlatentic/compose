@@ -465,15 +465,16 @@ export async function verifyHarnessRuntime(
 }
 
 /**
- * Bridge a streaming subprocess Tauri command (install or login) onto an
- * async generator: yields each `HarnessInstallEvent` as it arrives on the
- * `Channel`, resolves when the process exits (`done`). Shared by
- * `harnessInstall` and `harnessLogin` — both are "spawn a CLI, stream its
- * output, wait for exit," so they share one channel-bridging loop.
+ * Bridge a streaming subprocess Tauri command onto an async generator: yields
+ * each `HarnessInstallEvent` as it arrives on the `Channel`, resolves when the
+ * process exits (`done`). Shared by `harnessInstall`, `harnessLogin`, and the
+ * system dependency installer — all are "spawn a process, stream its output,
+ * wait for exit," so they share one channel-bridging loop. `payload` is merged
+ * into the invoke args alongside the `onEvent` channel.
  */
-async function* streamSubprocessCommand(
-  command: "harness_install" | "harness_login",
-  harnessId: string,
+export async function* streamSubprocessCommand(
+  command: string,
+  payload: Record<string, unknown>,
 ): AsyncGenerator<HarnessInstallEvent, void, void> {
   if (!isTauriRuntime()) {
     yield { kind: "stderr", text: DESKTOP_RUNTIME_REQUIRED };
@@ -499,7 +500,7 @@ async function* streamSubprocessCommand(
     }
     wake();
   };
-  const invokePromise = invoke<void>(command, { harnessId, onEvent: channel }).catch((err) => {
+  const invokePromise = invoke<void>(command, { ...payload, onEvent: channel }).catch((err) => {
     queue.push({ kind: "stderr", text: String(err) });
     queue.push({ kind: "done", exitCode: null, ok: false });
     finished = true;
@@ -528,7 +529,7 @@ async function* streamSubprocessCommand(
  * Tauri `Channel`; resolves when the install process exits.
  */
 export function harnessInstall(harnessId: string): AsyncGenerator<HarnessInstallEvent, void, void> {
-  return streamSubprocessCommand("harness_install", harnessId);
+  return streamSubprocessCommand("harness_install", { harnessId });
 }
 
 /**
@@ -537,7 +538,7 @@ export function harnessInstall(harnessId: string): AsyncGenerator<HarnessInstall
  * exits with a `done` carrying success. Same event shape as install.
  */
 export function harnessLogin(harnessId: string): AsyncGenerator<HarnessInstallEvent, void, void> {
-  return streamSubprocessCommand("harness_login", harnessId);
+  return streamSubprocessCommand("harness_login", { harnessId });
 }
 
 export async function subscribeHarnessRun(

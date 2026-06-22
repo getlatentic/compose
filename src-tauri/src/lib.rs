@@ -8,6 +8,7 @@ pub mod logging;
 mod open_with;
 mod profile_migration;
 pub mod review;
+mod system;
 mod workspace;
 
 use tauri::{Emitter, Manager, RunEvent};
@@ -140,6 +141,8 @@ pub fn run() {
             harness::model_manager::harness_pull_model,
             harness::model_manager::harness_cancel_pull,
             harness::model_manager::harness_delete_model,
+            system::commands::system_readiness,
+            system::commands::system_install_dependency,
             workspace::setup_complete_onboarding,
             workspace::setup_get_onboarding,
             workspace::workspace_add,

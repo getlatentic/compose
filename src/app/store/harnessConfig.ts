@@ -47,11 +47,12 @@ export interface HarnessPrefs {
 }
 
 /** Load the persisted harness selection + edit permission + per-harness run
- * options. Fresh-start default is Claude (the top of the availability priority,
- * before onboarding's detection-driven pick refines it). */
+ * options. Fresh-start default is Ollama — the zero-config local agent, so a
+ * first-run user with no cloud account can chat immediately; onboarding's
+ * detection-driven pick (and a future setup-derived default) can refine it. */
 export function loadHarnessPrefs(): HarnessPrefs {
   const fallback: HarnessPrefs = {
-    selectedHarnessId: "claude",
+    selectedHarnessId: "ollama",
     allowEdits: true,
     reviewEdits: false,
     customInstructions: "",
