@@ -5,13 +5,6 @@
 use harness::{CredentialSpec, Harness};
 use serde::Serialize;
 
-/// Keychain services this app stored keys under before the service was
-/// standardized to the agent id (older builds used the bundle id / app name).
-/// A key found under one of these for the same account is migrated forward on
-/// read, so users upgrading from an old build keep their saved keys instead of
-/// silently getting "Add a key".
-const LEGACY_KEYCHAIN_SERVICES: &[&str] = &["ai.latentic.calibrate", "bob4everyone"];
-
 pub struct Credential {
     spec: CredentialSpec,
 }
@@ -43,29 +36,8 @@ impl Credential {
         if !self.host_managed() {
             return None;
         }
-        self.read_from(&self.spec.keychain_service)
-            .or_else(|| self.read_legacy())
-    }
-
-    /// A non-empty key stored under `service` for this credential's account.
-    fn read_from(&self, service: &str) -> Option<String> {
-        let value = keyring::Entry::new(service, &self.spec.keychain_account)
-            .ok()?
-            .get_password()
-            .ok()?;
+        let value = self.entry().ok()?.get_password().ok()?;
         (!value.trim().is_empty()).then_some(value)
-    }
-
-    /// Look for the key under the app's former keychain services and, on a hit,
-    /// carry it forward to the current service so later reads find it directly.
-    fn read_legacy(&self) -> Option<String> {
-        for service in LEGACY_KEYCHAIN_SERVICES {
-            if let Some(value) = self.read_from(service) {
-                let _ = self.store(&value);
-                return Some(value);
-            }
-        }
-        None
     }
 
     pub fn status(&self) -> CredentialStatus {
