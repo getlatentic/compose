@@ -114,9 +114,7 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
 
   return (
     <>
-      {modelManagement ? (
-        <OllamaModelManager harnessId={harnessId} management={modelManagement} />
-      ) : null}
+      {modelManagement ? <OllamaModelManager harnessId={harnessId} /> : null}
       {/* Model + run-tuning are tucked into a collapsed "Advanced" accordion: the
           default model/options work for most, so the detail leads with setup
           (a key / Ollama's model download) rather than a wall of knobs. */}
@@ -133,13 +131,14 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
           {dynamicModels.length > 0 ? (
             <Select
               id={`${harnessId}-model`}
-              labelText="Model"
+              labelText="Default model"
+              helperText="Used for new chats. Leave on Automatic to let the agent pick."
               value={currentModel}
               onChange={(event) =>
                 setHarnessOptions(harnessId, { model: event.target.value || undefined })
               }
             >
-              <SelectItem value="" text="Default (the model decides)" />
+              <SelectItem value="" text="Automatic" />
               {dynamicModels.map((model) => (
                 <SelectItem key={model.value} value={model.value} text={model.label} />
               ))}
@@ -150,8 +149,9 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
           ) : caps.allowsCustomModel ? (
             <TextInput
               id={`${harnessId}-model`}
-              labelText="Model"
-              placeholder="Default (the CLI decides)"
+              labelText="Default model"
+              placeholder="Automatic"
+              helperText="Used for new chats. Leave blank to let the agent pick its default."
               value={currentModel}
               onChange={(event) =>
                 setHarnessOptions(harnessId, { model: event.target.value || undefined })
@@ -160,13 +160,14 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
           ) : caps.models.length > 0 ? (
             <Select
               id={`${harnessId}-model`}
-              labelText="Model"
+              labelText="Default model"
+              helperText="Used for new chats. Leave on Automatic to let the agent pick."
               value={currentModel}
               onChange={(event) =>
                 setHarnessOptions(harnessId, { model: event.target.value || undefined })
               }
             >
-              <SelectItem value="" text="Default (the CLI decides)" />
+              <SelectItem value="" text="Automatic" />
               {caps.models.map((model) => (
                 <SelectItem key={model.value} value={model.value} text={model.label} />
               ))}

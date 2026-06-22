@@ -38,11 +38,9 @@ import { OllamaModelManager } from "./OllamaModelManager";
 let container: HTMLElement;
 let root: Root;
 
-const management = { baseUrl: "http://localhost:11434" };
-
 async function renderManager(): Promise<void> {
   await act(async () => {
-    root.render(<OllamaModelManager harnessId="ollama" management={management} />);
+    root.render(<OllamaModelManager harnessId="ollama" />);
   });
 }
 
@@ -89,8 +87,8 @@ describe("OllamaModelManager", () => {
     await renderManager();
     expect(installedModels).toHaveBeenCalledTimes(1);
 
-    // Trigger a pull via the first quick-pick chip.
-    const chip = container.querySelector<HTMLButtonElement>(".model-manager__pick");
+    // Trigger a pull via the first quick-pick chip (a Carbon OperationalTag).
+    const chip = container.querySelector<HTMLButtonElement>(".model-manager__picks button");
     expect(chip).not.toBeNull();
     await act(async () => {
       chip!.click();
@@ -114,12 +112,13 @@ describe("OllamaModelManager", () => {
   });
 
   it("surfaces a pull error inline without refreshing", async () => {
+    installedModels.mockResolvedValue([]);
     let emit: (event: PullEvent) => void = () => {};
     pullModel.mockImplementation(async (_h, _m, onEvent) => {
       emit = onEvent;
     });
     await renderManager();
-    const chip = container.querySelector<HTMLButtonElement>(".model-manager__pick");
+    const chip = container.querySelector<HTMLButtonElement>(".model-manager__picks button");
     await act(async () => {
       chip!.click();
     });

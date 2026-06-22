@@ -14,7 +14,6 @@ import {
   harnessDeleteModel,
   harnessInstalledModels,
   harnessPullModel,
-  type HarnessModelManagement,
   type InstalledModel,
   type PullEvent,
 } from "../../lib/ipc/harnessClient";
@@ -62,13 +61,7 @@ interface PullState {
  * model-management capability, so it never appears for cloud/CLI harnesses.
  * Offline (the server isn't running) shows an inline hint and an empty list.
  */
-export function OllamaModelManager({
-  harnessId,
-  management,
-}: {
-  harnessId: string;
-  management: HarnessModelManagement;
-}) {
+export function OllamaModelManager({ harnessId }: { harnessId: string }) {
   const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
   const [installed, setInstalled] = useState<InstalledModel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,113 +143,128 @@ export function OllamaModelManager({
 
   return (
     <div className="settings-section">
-      <h3>Manage models</h3>
-      <p className="settings-helper">
-        Download models to run locally, or remove ones you no longer need. Models are stored on your
-        computer by Ollama at {management.baseUrl}.
-      </p>
+      <h3>Models</h3>
 
-      {/* ----- Installed list ----------------------------------- */}
-      {loading ? (
-        <InlineLoading description="Loading installed models…" />
-      ) : installed.length > 0 ? (
-        <ul className="model-manager__list">
-          {installed.map((model) => (
-            <li key={model.name} className="model-manager__item">
-              <div className="model-manager__meta">
-                <span className="model-manager__name">{model.name}</span>
-                <span className="model-manager__detail">
-                  {formatModelSize(model.size)}
-                  {model.parameterSize ? ` · ${model.parameterSize}` : ""}
-                  {model.quantizationLevel ? ` · ${model.quantizationLevel}` : ""}
-                </span>
-              </div>
-              <Button
-                kind="ghost"
-                size="sm"
-                hasIconOnly
-                iconDescription={`Delete ${model.name}`}
-                renderIcon={TrashCan}
-                disabled={deleting === model.name || pull !== null}
-                onClick={() => void handleDelete(model.name)}
-              />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="settings-helper">No models installed yet. Download one below to get started.</p>
-      )}
       {listError ? (
-        <InlineNotification
-          hideCloseButton
-          kind="warning"
-          lowContrast
-          title="Models unavailable"
-          subtitle={listError}
-        />
-      ) : null}
-
-      {/* ----- Pull a new model --------------------------------- */}
-      {pull ? (
-        <div className="model-manager__pull" aria-live="polite">
-          <ProgressBar
-            label={`Downloading ${pull.model}`}
-            helperText={pull.status}
-            value={pull.percent ?? undefined}
-            max={100}
-            size="small"
-          />
-          <Button kind="ghost" size="sm" onClick={() => void handleCancelPull()}>
-            Cancel download
-          </Button>
-        </div>
-      ) : (
-        <form className="model-manager__form" onSubmit={onSubmit}>
-          <TextInput
-            id={`${harnessId}-pull-model`}
-            labelText="Download a model"
-            placeholder="e.g. llama3.2:3b"
-            helperText="Enter a model name and tag, then Download. Browse names in the Ollama library."
-            value={pullName}
-            onChange={(event) => setPullName(event.target.value)}
-          />
+        // Ollama is unreachable: nothing here works until it's running, so guide
+        // the user to start it rather than show a dead download form.
+        <>
+          <p className="settings-helper">
+            Ollama isn't running. Start the Ollama app on your computer, then your models show up
+            here.
+          </p>
           <div className="model-manager__actions">
-            <Button size="sm" type="submit" disabled={!pullName.trim()}>
-              Download
-            </Button>
             <Button
-              kind="ghost"
+              kind="tertiary"
               size="sm"
-              href={OLLAMA_LIBRARY_URL}
-              target="_blank"
-              rel="noreferrer noopener"
+              disabled={loading}
+              onClick={() => void refreshInstalled()}
             >
-              Browse all models
+              {loading ? "Checking…" : "Check again"}
             </Button>
           </div>
-          <div className="model-manager__picks">
-            {QUICK_PICKS.filter((pick) => !installedNames.has(pick.name)).map((pick) => (
-              <OperationalTag
-                key={pick.name}
-                size="sm"
-                text={pick.name}
-                renderIcon={Add}
-                title={`Download ${pick.name} (${pick.note})`}
-                onClick={() => void handlePull(pick.name)}
+        </>
+      ) : (
+        <>
+          {loading ? (
+            <InlineLoading description="Loading models…" />
+          ) : installed.length > 0 ? (
+            <ul className="model-manager__list">
+              {installed.map((model) => (
+                <li key={model.name} className="model-manager__item">
+                  <div className="model-manager__meta">
+                    <span className="model-manager__name">{model.name}</span>
+                    <span className="model-manager__detail">
+                      {formatModelSize(model.size)}
+                      {model.parameterSize ? ` · ${model.parameterSize}` : ""}
+                      {model.quantizationLevel ? ` · ${model.quantizationLevel}` : ""}
+                    </span>
+                  </div>
+                  <Button
+                    kind="ghost"
+                    size="sm"
+                    hasIconOnly
+                    iconDescription={`Delete ${model.name}`}
+                    renderIcon={TrashCan}
+                    disabled={deleting === model.name || pull !== null}
+                    onClick={() => void handleDelete(model.name)}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="settings-helper">No models yet — tap one below to download.</p>
+          )}
+
+          {pull ? (
+            <div className="model-manager__pull" aria-live="polite">
+              <ProgressBar
+                label={`Downloading ${pull.model}`}
+                helperText={pull.status}
+                value={pull.percent ?? undefined}
+                max={100}
+                size="small"
               />
-            ))}
-          </div>
-        </form>
+              <Button kind="ghost" size="sm" onClick={() => void handleCancelPull()}>
+                Cancel download
+              </Button>
+            </div>
+          ) : (
+            <>
+              {QUICK_PICKS.some((pick) => !installedNames.has(pick.name)) ? (
+                <div className="model-manager__suggest">
+                  <span className="model-manager__picks-label">Popular — tap to download:</span>
+                  <div className="model-manager__picks">
+                    {QUICK_PICKS.filter((pick) => !installedNames.has(pick.name)).map((pick) => (
+                      <OperationalTag
+                        key={pick.name}
+                        size="sm"
+                        text={pick.name}
+                        renderIcon={Add}
+                        title={`Download ${pick.name} (${pick.note})`}
+                        onClick={() => void handlePull(pick.name)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <form className="model-manager__form" onSubmit={onSubmit}>
+                <TextInput
+                  id={`${harnessId}-pull-model`}
+                  labelText="Add another by name"
+                  placeholder="e.g. mistral:7b"
+                  value={pullName}
+                  onChange={(event) => setPullName(event.target.value)}
+                />
+                <div className="model-manager__actions">
+                  <Button size="sm" type="submit" disabled={!pullName.trim()}>
+                    Download
+                  </Button>
+                  <Button
+                    kind="ghost"
+                    size="sm"
+                    href={OLLAMA_LIBRARY_URL}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    Browse the library
+                  </Button>
+                </div>
+              </form>
+            </>
+          )}
+
+          {pullError ? (
+            <InlineNotification
+              hideCloseButton
+              kind="error"
+              lowContrast
+              title="Download failed"
+              subtitle={pullError}
+            />
+          ) : null}
+        </>
       )}
-      {pullError ? (
-        <InlineNotification
-          hideCloseButton
-          kind="error"
-          lowContrast
-          title="Download failed"
-          subtitle={pullError}
-        />
-      ) : null}
     </div>
   );
 }
