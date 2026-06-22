@@ -60,6 +60,11 @@ pub fn run() {
                 }
                 Err(error) => eprintln!("app config dir unavailable for custom agents: {error}"),
             }
+            // Point agent-harness's models.dev catalog cache at the app cache
+            // dir, so the model picker works offline after one online fetch.
+            if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
+                std::env::set_var("AGENT_HARNESS_CACHE_DIR", cache_dir);
+            }
             let metadata = app_handle.state::<db::MetadataStore>();
             if let Err(error) = metadata.init_from_app(&app_handle) {
                 eprintln!("metadata store init failed: {error}");
