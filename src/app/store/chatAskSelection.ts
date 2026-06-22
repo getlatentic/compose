@@ -205,7 +205,11 @@ export async function runAskAboutSelection(
     // guard, exactly like a normal chat send (not the old read-only "ask").
     const capabilities = harnessCapabilitiesOf(useHarnessStore.getState().harnessCatalog, harnessId);
     const tuning = useHarnessStore.getState().harnessOptions[harnessId] ?? {};
-    const editGuard = editGuardFor(capabilities, useHarnessStore.getState().allowEdits, tuning);
+    const editGuard = editGuardFor(
+      capabilities,
+      useHarnessStore.getState().allowEdits,
+      useHarnessStore.getState().reviewEdits,
+    );
     const chatMode = capabilities.previewsEdits ? "plan" : useHarnessStore.getState().allowEdits ? "code" : "plan";
 
     // Snapshot mode edits real files mid-run — attribute the watcher's events
@@ -239,7 +243,7 @@ export async function runAskAboutSelection(
       maxTurns: tuning.maxTurns,
       editGuard,
       extraArgs: harnessExtraArgs(harnessId, tuning),
-      extraInstructions: tuning.customInstructions,
+      extraInstructions: useHarnessStore.getState().customInstructions || undefined,
     });
   } catch (error) {
     const message = formatHarnessError(

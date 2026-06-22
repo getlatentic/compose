@@ -39,14 +39,6 @@ export interface HarnessRunOptions {
   /** Claude max agentic turns. */
   maxTurns?: number;
   /**
-   * Review a write-capable harness's edits before they touch your files.
-   * Default ON: undefined is treated as enabled, so a fresh harness lands its
-   * edits in a sandbox you approve. Set false to let it edit directly (still
-   * undoable via a baseline snapshot). Ignored by harnesses that preview their
-   * own edits (bob). See `editGuardFor`.
-   */
-  reviewEdits?: boolean;
-  /**
    * Permission mode passed to a CLI harness that supports one (Claude Code's
    * `--permission-mode`). Unset → Compose's per-harness default (Claude runs
    * fully headless, so `bypassPermissions`; the edit-review gate is the undo
@@ -54,13 +46,6 @@ export interface HarnessRunOptions {
    * the harness via `extraArgs`, so it's config, never hardcoded.
    */
   permissionMode?: string;
-  /**
-   * Extra system-prompt instructions for this harness (a persona, house style,
-   * domain rules). Appended to the system prompt by the openai-compatible
-   * adapter (Ollama / OpenRouter) via `RunTuning.extra_instructions`; the CLI
-   * harnesses ignore it for now. Empty → none.
-   */
-  customInstructions?: string;
 }
 
 export interface WorkspaceState {

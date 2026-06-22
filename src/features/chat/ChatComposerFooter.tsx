@@ -139,6 +139,8 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
   const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
   const harnessOptions = useHarnessStore((state) => state.harnessOptions);
   const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
+  const reviewEdits = useHarnessStore((state) => state.reviewEdits);
+  const setReviewEdits = useHarnessStore((state) => state.setReviewEdits);
   const harnessModels = useHarnessStore((state) => state.harnessModels);
   const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
   const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
@@ -161,12 +163,11 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
   const modelLabel =
     modelItems.find((item) => item.value === currentModel)?.label ?? (currentModel || "Default");
 
-  // The inline review/auto-apply toggle mirrors the *same* per-harness
-  // `reviewEdits` option Settings owns. It shows for write-capable harnesses —
-  // the ones that write files directly (`previewsEdits: false`) and so run
-  // through the edit-review gate.
+  // The inline review/auto-apply toggle mirrors the *same* global `reviewEdits`
+  // setting Settings owns. It shows for write-capable agents — the ones that
+  // write files directly (`previewsEdits: false`) and so run through the
+  // edit-review gate.
   const showReviewToggle = !caps.previewsEdits;
-  const reviewEdits = options.reviewEdits ?? false;
 
   return (
     <ChatComposerFooterView
@@ -179,7 +180,7 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
       onSelectModel={(value) => setHarnessOptions(selectedHarnessId, { model: value || undefined })}
       showReviewToggle={showReviewToggle}
       reviewEdits={reviewEdits}
-      onToggleReviewEdits={(next) => setHarnessOptions(selectedHarnessId, { reviewEdits: next })}
+      onToggleReviewEdits={(next) => setReviewEdits(next)}
       unavailable={unavailable}
       disabled={disabled}
     />

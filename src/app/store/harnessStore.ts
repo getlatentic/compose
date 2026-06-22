@@ -26,12 +26,18 @@ import type { HarnessRunOptions } from "./types";
 export interface HarnessState {
   /** The harness the user picked (bob / claude / codex / …). Persisted. */
   selectedHarnessId: string;
-  /** Whether the active harness may edit files. Persisted. */
+  /** Whether the AI may edit files. Global, persisted. */
   allowEdits: boolean;
+  /** Global edit-review mode, sticky across agents. Persisted. */
+  reviewEdits: boolean;
+  /** Global extra system-prompt instructions for agents that honor them. Persisted. */
+  customInstructions: string;
   /** Per-harness run tuning, keyed by harness id. Persisted. */
   harnessOptions: Record<string, HarnessRunOptions>;
   setSelectedHarness: (harnessId: string) => void;
   setAllowEdits: (allow: boolean) => void;
+  setReviewEdits: (review: boolean) => void;
+  setCustomInstructions: (instructions: string) => void;
   setHarnessOptions: (harnessId: string, options: Partial<HarnessRunOptions>) => void;
   /** Declarative capabilities for every registered harness, loaded once at
    * bootstrap. Empty in the browser preview (the registry is desktop-only). */
@@ -60,28 +66,41 @@ export interface HarnessState {
   reloadSelectedHarnessReadiness: () => Promise<void>;
 }
 
-export const useHarnessStore = create<HarnessState>((set, get) => ({
+export const useHarnessStore = create<HarnessState>((set, get) => {
+  const persist = () => {
+    const state = get();
+    persistHarnessPrefs({
+      selectedHarnessId: state.selectedHarnessId,
+      allowEdits: state.allowEdits,
+      reviewEdits: state.reviewEdits,
+      customInstructions: state.customInstructions,
+      harnessOptions: state.harnessOptions,
+    });
+  };
+  return {
   selectedHarnessId: INITIAL_HARNESS_PREFS.selectedHarnessId,
   allowEdits: INITIAL_HARNESS_PREFS.allowEdits,
+  reviewEdits: INITIAL_HARNESS_PREFS.reviewEdits,
+  customInstructions: INITIAL_HARNESS_PREFS.customInstructions,
   harnessOptions: INITIAL_HARNESS_PREFS.harnessOptions,
   setSelectedHarness: (harnessId) => {
     // Clear stale readiness immediately — it described the *previous* harness.
     // AppRouter re-probes on the selection change; null meanwhile reads as
     // "available", so the gate never flashes the wrong harness's state.
     set({ selectedHarnessId: harnessId, selectedHarnessReadiness: null });
-    persistHarnessPrefs({
-      selectedHarnessId: harnessId,
-      allowEdits: get().allowEdits,
-      harnessOptions: get().harnessOptions,
-    });
+    persist();
   },
   setAllowEdits: (allow) => {
     set({ allowEdits: allow });
-    persistHarnessPrefs({
-      selectedHarnessId: get().selectedHarnessId,
-      allowEdits: allow,
-      harnessOptions: get().harnessOptions,
-    });
+    persist();
+  },
+  setReviewEdits: (review) => {
+    set({ reviewEdits: review });
+    persist();
+  },
+  setCustomInstructions: (instructions) => {
+    set({ customInstructions: instructions });
+    persist();
   },
   setHarnessOptions: (harnessId, options) => {
     set((state) => ({
@@ -90,11 +109,7 @@ export const useHarnessStore = create<HarnessState>((set, get) => ({
         [harnessId]: { ...state.harnessOptions[harnessId], ...options },
       },
     }));
-    persistHarnessPrefs({
-      selectedHarnessId: get().selectedHarnessId,
-      allowEdits: get().allowEdits,
-      harnessOptions: get().harnessOptions,
-    });
+    persist();
   },
   harnessCatalog: [],
   loadHarnessCatalog: async () => {
@@ -130,4 +145,5 @@ export const useHarnessStore = create<HarnessState>((set, get) => ({
     // was down — refresh now that it may be back so the picker repopulates.
     void get().loadHarnessModels(harnessId);
   },
-}));
+  };
+});

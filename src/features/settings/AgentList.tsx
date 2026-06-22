@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { InlineNotification, SkeletonText, Tag, Toggle } from "@carbon/react";
-import { Add, ChevronRight } from "@carbon/react/icons";
+import { InlineNotification, SkeletonText, Tag } from "@carbon/react";
+import { Add, CheckmarkFilled, ChevronRight } from "@carbon/react/icons";
 
 import { useHarnessStore } from "../../app/store/harnessStore";
 import {
@@ -20,23 +20,13 @@ interface AgentRow {
 // instantly instead of re-flashing skeletons; the probe still refreshes it.
 let cachedRows: AgentRow[] = [];
 
-/** Recommended default, in catalog order: the first ready, else the first
- *  installed, else the first registered. */
-function suggestedDefaultId(rows: AgentRow[]): string | null {
-  return (
-    rows.find((row) => row.readiness?.ready)?.info.id ??
-    rows.find((row) => row.readiness?.installed)?.info.id ??
-    rows[0]?.info.id ??
-    null
-  );
-}
-
 /**
  * The registry of AI agents. Lists every registered agent with its
  * capability-accurate {@link agentStatus} and marks the current default;
  * clicking a row opens its setup/detail screen — it does not switch the active
  * agent, which is the chat footer's job. "Add agent" registers a custom ACP /
- * OpenAI-compatible endpoint.
+ * OpenAI-compatible endpoint. A ready agent shows just a check; only a state
+ * that needs action gets a labelled pill.
  */
 export function AgentList({
   onOpenAgent,
@@ -47,8 +37,6 @@ export function AgentList({
 }) {
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
   const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
-  const allowEdits = useHarnessStore((state) => state.allowEdits);
-  const setAllowEdits = useHarnessStore((state) => state.setAllowEdits);
 
   const [rows, setRows] = useState<AgentRow[]>(cachedRows);
   const [loading, setLoading] = useState(cachedRows.length === 0);
@@ -82,8 +70,6 @@ export function AgentList({
     };
   }, [selectedHarnessReadiness]);
 
-  const suggestedId = suggestedDefaultId(rows);
-
   return (
     <div className="settings-section">
       <p className="settings-helper">
@@ -108,11 +94,7 @@ export function AgentList({
             const isDefault = info.id === selectedHarnessId;
             return (
               <li key={info.id}>
-                <button
-                  type="button"
-                  className="agent-row"
-                  onClick={() => onOpenAgent(info.id)}
-                >
+                <button type="button" className="agent-row" onClick={() => onOpenAgent(info.id)}>
                   <span className="agent-row__body">
                     <span className="agent-row__head">
                       <strong>{info.displayName}</strong>
@@ -120,14 +102,14 @@ export function AgentList({
                         <Tag size="sm" type="blue">
                           Default
                         </Tag>
-                      ) : info.id === suggestedId ? (
-                        <Tag size="sm" type="outline">
-                          Recommended
-                        </Tag>
                       ) : null}
-                      <Tag size="sm" type={statusTagType(status.tone)}>
-                        {status.label}
-                      </Tag>
+                      {status.kind === "ready" ? (
+                        <CheckmarkFilled className="agent-row__ready" aria-label="Ready" />
+                      ) : (
+                        <Tag size="sm" type={statusTagType(status.tone)}>
+                          {status.label}
+                        </Tag>
+                      )}
                     </span>
                     <span className="agent-row__desc">{info.description}</span>
                   </span>
@@ -148,23 +130,6 @@ export function AgentList({
       {error ? (
         <InlineNotification hideCloseButton kind="error" lowContrast subtitle={error} title="AI setup" />
       ) : null}
-
-      {/* The single edit-permission toggle. Workspace-scoped, so it sits with the
-          list rather than any one agent's detail. */}
-      <div style={{ marginBlockStart: "0.75rem" }}>
-        <Toggle
-          id="agents-allow-edits"
-          size="sm"
-          labelText="Let the AI edit files in this folder"
-          labelA="Read & suggest only"
-          labelB="Can edit my files"
-          toggled={allowEdits}
-          onToggle={(checked) => setAllowEdits(checked)}
-        />
-        <p className="settings-helper">
-          Only in your workspace folder — never anywhere else on your computer.
-        </p>
-      </div>
     </div>
   );
 }

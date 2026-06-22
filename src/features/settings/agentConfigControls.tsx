@@ -5,9 +5,7 @@ import {
   PasswordInput,
   Select,
   SelectItem,
-  TextArea,
   TextInput,
-  Toggle,
 } from "@carbon/react";
 
 import {
@@ -29,11 +27,6 @@ import { OllamaModelManager } from "./OllamaModelManager";
  * These are capability-driven and id-agnostic: each renders only the fields the
  * agent's declared capabilities support, so a new agent needs no edits here.
  */
-
-/** Character cap on per-agent custom instructions (~500 tokens). They live in
- * the system prompt's user-configurable section; capping keeps them from
- * crowding out the workspace context on a small local model's window. */
-const MAX_CUSTOM_INSTRUCTIONS_CHARS = 2000;
 
 /** Reasoning-effort levels (Codex's `model_reasoning_effort`). Neutral
  *  presets — whether an agent honors them is decided by its `supportsEffort`
@@ -130,26 +123,6 @@ export function ExternalHarnessOptions({ harnessId, name }: { harnessId: string;
         </p>
 
         <div style={{ display: "grid", gap: "1rem", maxWidth: "22rem", marginBlockStart: "0.75rem" }}>
-          {/* Edit-safety control. Off by default: {name} works in your real
-              folder (so its paths, skills, and memory line up), and a pre-run
-              baseline makes every edit undoable. On is strict pre-approval —
-              {name} works on a throwaway copy and you approve the diff first,
-              at the cost of isolating it from your real folder. */}
-          <Toggle
-            id={`${harnessId}-review-edits`}
-            size="sm"
-            labelText="Review changes before applying"
-            labelA="Off — work in my folder (undo anytime)"
-            labelB="On — work on a copy, approve first"
-            toggled={options.reviewEdits ?? false}
-            onToggle={(checked) => setHarnessOptions(harnessId, { reviewEdits: checked })}
-          />
-          <p className="settings-helper" style={{ marginBlockStart: "-0.5rem" }}>
-            Off (default): changes apply to your files as {name} works, and you can undo any of them
-            from a file's “Previous versions”. On: {name} works on a copy and you approve each change
-            before it lands — safer to preview, but {name} can't see your real folder or its tools.
-          </p>
-
           {/* Model picker, in priority: a live-discovered list (Ollama/OpenCode/
               OpenRouter/Codex) → dropdown; else free-text where custom ids are
               allowed; else a curated dropdown (claude). A discovered list that came
@@ -265,27 +238,6 @@ export function ExternalHarnessOptions({ harnessId, name }: { harnessId: string;
                 <SelectItem key={effort.value} value={effort.value} text={effort.label} />
               ))}
             </Select>
-          ) : null}
-
-          {/* Custom instructions are appended to the system prompt by the
-              openai-compatible adapter (Ollama / OpenRouter). Only shown where the
-              agent honors them, so the field is never a dead control. */}
-          {caps.supportsCustomInstructions ? (
-            <TextArea
-              id={`${harnessId}-custom-instructions`}
-              labelText="Custom instructions"
-              helperText="Added to the agent's system prompt — a persona, house style, or rules it should always follow. Keep it short so it leaves room for your files on small local models."
-              placeholder="e.g. Answer in British English and keep summaries to 3 bullet points."
-              rows={3}
-              // Capped (~500 tokens) so a long instruction block can't crowd out
-              // the workspace context in a small model's window.
-              enableCounter
-              maxCount={MAX_CUSTOM_INSTRUCTIONS_CHARS}
-              value={options.customInstructions ?? ""}
-              onChange={(event) =>
-                setHarnessOptions(harnessId, { customInstructions: event.target.value || undefined })
-              }
-            />
           ) : null}
         </div>
       </div>

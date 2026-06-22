@@ -254,7 +254,7 @@ export async function runSendChatPrompt(
     // mode with no edit guard — the harness then refuses any write tool call —
     // so a read-only ask can't write, whatever the global Auto-apply toggle is.
     const allowEdits = options?.readOnly ? false : useHarnessStore.getState().allowEdits;
-    const editGuard = editGuardFor(capabilities, allowEdits, tuning);
+    const editGuard = editGuardFor(capabilities, allowEdits, useHarnessStore.getState().reviewEdits);
 
     // Snapshot mode edits the user's real files mid-run; open the agent-edit
     // window so the file watcher attributes those changes to this run (and
@@ -297,7 +297,7 @@ export async function runSendChatPrompt(
       maxTurns: tuning.maxTurns,
       editGuard,
       extraArgs: harnessExtraArgs(harnessId, tuning),
-      extraInstructions: tuning.customInstructions,
+      extraInstructions: useHarnessStore.getState().customInstructions || undefined,
     });
   } catch (error) {
     const message = formatHarnessError(

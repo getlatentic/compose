@@ -4467,11 +4467,57 @@ select {
   color: var(--cds-support-warning, #b28600);
 }
 
+// ----- Settings shell: vertical category rail + content pane -----------------
+.settings-shell {
+  display: flex;
+  align-items: flex-start;
+  min-block-size: 24rem;
+}
+
+.settings-nav {
+  flex: 0 0 auto;
+  inline-size: 9.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.75rem 0.5rem;
+  position: sticky;
+  inset-block-start: 0;
+}
+
+.settings-nav__item {
+  text-align: start;
+  padding: 0.375rem 0.625rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.settings-nav__item:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.settings-nav__item--active {
+  background: var(--cds-layer-selected-01, #e0e0e0);
+  color: var(--cds-text-primary, #161616);
+  font-weight: 600;
+}
+
+.settings-content {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  border-inline-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
 // ----- AI agents registry (list + detail) -----------------------------------
 .agent-list {
   list-style: none;
   margin: 0;
-  padding: 1rem;
+  padding: 0;
   display: grid;
   gap: 0.5rem;
 }
@@ -4528,6 +4574,11 @@ select {
 .agent-row__chevron {
   flex: none;
   color: var(--cds-icon-secondary, #525252);
+}
+
+.agent-row__ready {
+  flex: none;
+  color: var(--cds-support-success, #24a148);
 }
 
 .agent-row--add {

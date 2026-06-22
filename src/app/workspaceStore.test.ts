@@ -591,24 +591,23 @@ describe("workspace store", () => {
     });
 
     it("never gates a harness that previews its own edits (bob)", () => {
-      expect(editGuardFor(caps({ previewsEdits: true }), true, {})).toBe("none");
-      expect(editGuardFor(caps({ previewsEdits: true }), false, { reviewEdits: true })).toBe("none");
+      expect(editGuardFor(caps({ previewsEdits: true }), true, false)).toBe("none");
+      expect(editGuardFor(caps({ previewsEdits: true }), false, true)).toBe("none");
     });
 
     it("does not gate a read-only (plan/ask) run", () => {
-      expect(editGuardFor(caps(), false, {})).toBe("none");
+      expect(editGuardFor(caps(), false, false)).toBe("none");
     });
 
     it("runs in the real folder by default for a write-capable harness", () => {
       // Decision: CLI harnesses run in your real folder by default so paths /
-      // skills / memory line up — undefined reviewEdits → snapshot (undo via a
+      // skills / memory line up — reviewEdits off → snapshot (undo via a
       // pre-run baseline). See editGuardFor + review-guide.
-      expect(editGuardFor(caps(), true, {})).toBe("snapshot");
-      expect(editGuardFor(caps(), true, { reviewEdits: false })).toBe("snapshot");
+      expect(editGuardFor(caps(), true, false)).toBe("snapshot");
     });
 
     it("uses the clone sandbox only when the user opts into pre-approval", () => {
-      expect(editGuardFor(caps(), true, { reviewEdits: true })).toBe("clone");
+      expect(editGuardFor(caps(), true, true)).toBe("clone");
     });
   });
 

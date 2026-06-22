@@ -36,6 +36,12 @@ export function supportsPermissionMode(harnessId: string): boolean {
 export interface HarnessPrefs {
   selectedHarnessId: string;
   allowEdits: boolean;
+  /** Global edit-review mode, sticky across agents: true → review edits on a
+   *  copy before they apply; false → apply directly (undoable via a snapshot). */
+  reviewEdits: boolean;
+  /** Global extra system-prompt instructions, applied to every agent that honors
+   *  them (the openai-compatible adapters). Empty → none. */
+  customInstructions: string;
   /** Keyed by harness id (`bob` / `claude` / `codex`). */
   harnessOptions: Record<string, HarnessRunOptions>;
 }
@@ -44,7 +50,13 @@ export interface HarnessPrefs {
  * options. Fresh-start default is Claude (the top of the availability priority,
  * before onboarding's detection-driven pick refines it). */
 export function loadHarnessPrefs(): HarnessPrefs {
-  const fallback: HarnessPrefs = { selectedHarnessId: "claude", allowEdits: true, harnessOptions: {} };
+  const fallback: HarnessPrefs = {
+    selectedHarnessId: "claude",
+    allowEdits: true,
+    reviewEdits: false,
+    customInstructions: "",
+    harnessOptions: {},
+  };
   if (typeof localStorage === "undefined") {
     return fallback;
   }
@@ -60,6 +72,12 @@ export function loadHarnessPrefs(): HarnessPrefs {
           ? parsed.selectedHarnessId
           : fallback.selectedHarnessId,
       allowEdits: typeof parsed.allowEdits === "boolean" ? parsed.allowEdits : fallback.allowEdits,
+      reviewEdits:
+        typeof parsed.reviewEdits === "boolean" ? parsed.reviewEdits : fallback.reviewEdits,
+      customInstructions:
+        typeof parsed.customInstructions === "string"
+          ? parsed.customInstructions
+          : fallback.customInstructions,
       harnessOptions:
         parsed.harnessOptions && typeof parsed.harnessOptions === "object"
           ? (parsed.harnessOptions as Record<string, HarnessRunOptions>)
@@ -116,12 +134,12 @@ export function harnessCapabilitiesOf(
  * real paths, keeps one stable project identity, and its skills/memory line up.
  * Cloning to a throwaway copy fragments all of that (see review-guide). Strict
  * pre-approval (`clone` — work on a copy, approve the diff before it lands) is
- * opt-in via the per-harness "Review changes before applying" toggle.
+ * opt-in via the global "Review changes before applying" toggle.
  */
 export function editGuardFor(
   capabilities: HarnessCapabilities,
   allowEdits: boolean,
-  options: HarnessRunOptions,
+  reviewEdits: boolean,
 ): EditGuard {
   if (capabilities.previewsEdits) {
     return "none";
@@ -129,5 +147,5 @@ export function editGuardFor(
   if (!allowEdits) {
     return "none";
   }
-  return options.reviewEdits === true ? "clone" : "snapshot";
+  return reviewEdits ? "clone" : "snapshot";
 }
