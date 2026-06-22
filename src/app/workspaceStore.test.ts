@@ -685,5 +685,20 @@ describe("workspace store", () => {
       expect(useHarnessStore.getState().selectedHarnessId).toBe("codex");
       expect(harnessReadiness).not.toHaveBeenCalled();
     });
+
+    it("skips an agent whose probe fails (offline) and keeps going", async () => {
+      useHarnessStore.setState({
+        selectedHarnessId: "",
+        harnessCatalog: [agent("ollama"), agent("openrouter")],
+      });
+      // Ollama unreachable (offline / not running) throws; OpenRouter's keychain
+      // probe is ready. A thrown probe must not abort the cascade.
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => {
+        if (id === "ollama") throw new Error("connection refused");
+        return readiness(id, true);
+      });
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("openrouter");
+    });
   });
 });
