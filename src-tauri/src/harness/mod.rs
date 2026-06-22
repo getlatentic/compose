@@ -1,6 +1,8 @@
 pub mod chat_event;
 pub mod commands;
 pub mod credentials;
+pub mod custom;
+pub mod custom_commands;
 pub mod input_spill;
 pub mod model_manager;
 pub mod registry;

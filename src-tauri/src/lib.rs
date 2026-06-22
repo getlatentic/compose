@@ -48,6 +48,18 @@ pub fn run() {
             if let Err(error) = registry.init_from_app(&app_handle) {
                 eprintln!("workspace registry init failed: {error}");
             }
+            // Load user-registered custom agents before export_all (below) reads
+            // their keys. A plain JSON read, so safe inline (unlike the keychain).
+            match app_handle.path().app_config_dir() {
+                Ok(config_dir) => {
+                    if let Err(error) =
+                        harness::custom::custom_agent_store().init_from_dir(&config_dir)
+                    {
+                        eprintln!("custom-agent store init failed: {error}");
+                    }
+                }
+                Err(error) => eprintln!("app config dir unavailable for custom agents: {error}"),
+            }
             let metadata = app_handle.state::<db::MetadataStore>();
             if let Err(error) = metadata.init_from_app(&app_handle) {
                 eprintln!("metadata store init failed: {error}");
@@ -107,6 +119,10 @@ pub fn run() {
             harness::commands::harness_list_models,
             harness::commands::harness_set_credential,
             harness::commands::harness_credential_status,
+            harness::custom_commands::harness_list_custom,
+            harness::custom_commands::harness_add_custom,
+            harness::custom_commands::harness_update_custom,
+            harness::custom_commands::harness_remove_custom,
             harness::input_spill::spill_chat_input,
             harness::model_manager::harness_model_management,
             harness::model_manager::harness_installed_models,

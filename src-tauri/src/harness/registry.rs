@@ -38,6 +38,10 @@ pub fn compose_registry() -> Registry {
     for harness in extra_harnesses() {
         registry = registry.register_boxed(harness);
     }
+    // User-registered agents rank after the built-in providers, before bob.
+    for harness in crate::harness::custom::custom_agent_store().build_harnesses() {
+        registry = registry.register_boxed(harness);
+    }
     registry.register(Bob::new())
 }
 

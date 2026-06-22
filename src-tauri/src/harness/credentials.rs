@@ -77,4 +77,8 @@ pub fn export_all() {
     for harness in crate::harness::registry::extra_harnesses() {
         Credential::of(harness.as_ref()).export_to_env();
     }
+    // User-registered OpenAI-compatible agents store a key the same way.
+    for harness in crate::harness::custom::custom_agent_store().build_harnesses() {
+        Credential::of(harness.as_ref()).export_to_env();
+    }
 }
