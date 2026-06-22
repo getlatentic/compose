@@ -6,6 +6,7 @@ mod harness;
 pub mod index;
 pub mod logging;
 mod open_with;
+mod profile_migration;
 pub mod review;
 mod workspace;
 
@@ -15,6 +16,11 @@ use crate::open_with::PendingOpenUrls;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before Tauri creates the webview (which would make its own empty data
+    // dirs under the new bundle id), carry a previous identity's profile
+    // forward so a rename doesn't reset the user's workspaces or settings.
+    profile_migration::migrate_legacy_profile();
+
     let app = tauri::Builder::default()
         .manage(workspace::WorkspaceRegistry::default())
         .manage(db::MetadataStore::default())
