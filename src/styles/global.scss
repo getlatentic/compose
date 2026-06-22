@@ -4363,11 +4363,14 @@ select {
 }
 
 .settings-header {
+  // Fixed top row of the flex-column dialog; the body scrolls beneath it.
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 1rem;
+  background: var(--cds-layer-02, #ffffff);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
@@ -4396,13 +4399,13 @@ select {
 }
 
 .settings-dialog {
-  // The install log + key form together exceed the original 30rem
-  // viewport on smaller screens. Cap the dialog at ~40rem and let
-  // it scroll internally so the close button + headers stay in
-  // view while a long install log streams below.
   inline-size: min(100%, 40rem);
+  // A flex column capped to the viewport: the header stays pinned and the body
+  // (nav + content) takes the rest, with only the content pane scrolling.
+  display: flex;
+  flex-direction: column;
   max-block-size: calc(100vh - 4rem);
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 // Fixed region for the per-provider detail. Always rendered (content
@@ -4479,8 +4482,10 @@ select {
 // ----- Settings shell: vertical category rail + content pane -----------------
 .settings-shell {
   display: flex;
-  align-items: flex-start;
-  min-block-size: 24rem;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: hidden;
 }
 
 .settings-nav {
@@ -4490,8 +4495,7 @@ select {
   flex-direction: column;
   gap: 0.125rem;
   padding: 0.75rem 0.5rem;
-  position: sticky;
-  inset-block-start: 0;
+  overflow-y: auto;
 }
 
 .settings-nav__item {
@@ -4519,6 +4523,7 @@ select {
 .settings-content {
   flex: 1 1 auto;
   min-inline-size: 0;
+  overflow-y: auto;
   border-inline-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
@@ -4694,14 +4699,6 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-}
-
-// A bare button wrapping a Tag — strip native button chrome so only the Tag shows.
-.model-manager__pick {
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
 }
 
 .model-manager__pull {

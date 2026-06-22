@@ -39,7 +39,10 @@ export interface UiState {
   editorMode: "wysiwyg" | "source";
   toggleEditorMode: () => void;
   settingsOpen: boolean;
-  openSettings: () => void;
+  /** When set, Settings opens straight to this agent's detail (a deep link from
+   *  the chat "Set up" action); cleared on close. */
+  settingsAgentId: string | null;
+  openSettings: (agentId?: string) => void;
   closeSettings: () => void;
   soundOnComplete: boolean;
   setSoundOnComplete: (enabled: boolean) => void;
@@ -116,10 +119,12 @@ export const useUiStore = create<UiState>((set, get) => ({
     }));
   },
   settingsOpen: false,
+  settingsAgentId: null,
   // Settings always opens as a modal (the SettingsDialog), reachable from any
-  // state — there is no longer a Settings-as-a-tab path.
-  openSettings: () => set({ settingsOpen: true }),
-  closeSettings: () => set({ settingsOpen: false }),
+  // state — there is no longer a Settings-as-a-tab path. An optional agent id
+  // deep-links to that agent's detail (the chat "Set up" action).
+  openSettings: (agentId) => set({ settingsOpen: true, settingsAgentId: agentId ?? null }),
+  closeSettings: () => set({ settingsOpen: false, settingsAgentId: null }),
   soundOnComplete: INITIAL_UI_PREFS.soundOnComplete,
   setSoundOnComplete: (enabled) => {
     set({ soundOnComplete: enabled });

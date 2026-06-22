@@ -278,7 +278,7 @@ function ChatPanelInner() {
         harnessName={selectedHarnessName}
         onAddFileContext={addChatFileContext}
         onHeightChange={setComposerHeight}
-        onOpenSettings={openSettings}
+        onOpenSettings={() => openSettings(selectedHarnessId)}
         onPromptChange={setChatPrompt}
         onRemoveContextItem={removeChatContextItem}
         onRetry={() => void reloadSelectedHarnessReadiness()}

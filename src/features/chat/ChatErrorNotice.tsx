@@ -41,7 +41,10 @@ export function ChatErrorNotice({
               Set up
             </button>
           ) : null}
-          {detail ? (
+          {/* Raw "Details" is for run errors. A setup error (onOpenSettings)
+              instead routes to the agent's page, where the full status lives —
+              so it shows just Retry + Set up, not a third button. */}
+          {detail && !onOpenSettings ? (
             <button
               type="button"
               className="chat-notice__action"

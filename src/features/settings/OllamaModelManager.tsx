@@ -3,11 +3,11 @@ import {
   Button,
   InlineLoading,
   InlineNotification,
+  OperationalTag,
   ProgressBar,
-  Tag,
   TextInput,
 } from "@carbon/react";
-import { TrashCan } from "@carbon/react/icons";
+import { Add, TrashCan } from "@carbon/react/icons";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import {
   harnessCancelPull,
@@ -236,17 +236,14 @@ export function OllamaModelManager({
           </div>
           <div className="model-manager__picks">
             {QUICK_PICKS.filter((pick) => !installedNames.has(pick.name)).map((pick) => (
-              <button
+              <OperationalTag
                 key={pick.name}
-                type="button"
-                className="model-manager__pick"
+                size="sm"
+                text={pick.name}
+                renderIcon={Add}
                 title={`Download ${pick.name} (${pick.note})`}
                 onClick={() => void handlePull(pick.name)}
-              >
-                <Tag size="sm" type="outline">
-                  {pick.name}
-                </Tag>
-              </button>
+              />
             ))}
           </div>
         </form>

@@ -40,19 +40,25 @@ export function AgentList({
 
   useEffect(() => {
     let active = true;
-    harnessCatalog.forEach((info) => {
-      harnessReadiness(info.id)
-        .then((result) => {
-          if (!active) return;
-          cachedReadiness = { ...cachedReadiness, [info.id]: result };
-          setReadiness((prev) => ({ ...prev, [info.id]: result }));
-        })
-        .catch(() => {
-          if (!active) return;
-          cachedReadiness = { ...cachedReadiness, [info.id]: null };
-          setReadiness((prev) => ({ ...prev, [info.id]: null }));
-        });
-    });
+    const ids = harnessCatalog.map((info) => info.id);
+    let next = 0;
+    // A small worker pool: at most PROBE_LIMIT readiness probes run at once
+    // (each spawns a `<cli> --version` / Ollama ping), so a large registry
+    // doesn't fire dozens of subprocesses simultaneously. Rows still update
+    // independently as each probe resolves.
+    const PROBE_LIMIT = 4;
+    async function worker() {
+      while (active && next < ids.length) {
+        const id = ids[next++];
+        const result = await harnessReadiness(id).catch(() => null);
+        if (!active) return;
+        cachedReadiness = { ...cachedReadiness, [id]: result };
+        setReadiness((prev) => ({ ...prev, [id]: result }));
+      }
+    }
+    for (let i = 0; i < Math.min(PROBE_LIMIT, ids.length); i++) {
+      void worker();
+    }
     return () => {
       active = false;
     };

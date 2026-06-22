@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { useUiStore } from "../../app/store/uiStore";
 import { AgentList } from "./AgentList";
 import { AgentDetail } from "./AgentDetail";
 import { AddAgentForm } from "./AddAgentForm";
@@ -16,7 +17,17 @@ type AgentView = { kind: "list" } | { kind: "detail"; id: string } | { kind: "ad
  * agent's detail, since they apply to every agent.
  */
 export function AgentsSettings() {
-  const [view, setView] = useState<AgentView>({ kind: "list" });
+  const settingsAgentId = useUiStore((state) => state.settingsAgentId);
+  const [view, setView] = useState<AgentView>(() =>
+    settingsAgentId ? { kind: "detail", id: settingsAgentId } : { kind: "list" },
+  );
+  // Consume the deep-link target once (the chat "Set up" action sets it), so
+  // leaving and returning to this pane starts at the list, not this agent.
+  useEffect(() => {
+    if (settingsAgentId) {
+      useUiStore.setState({ settingsAgentId: null });
+    }
+  }, [settingsAgentId]);
 
   if (view.kind === "detail") {
     return <AgentDetail agentId={view.id} onBack={() => setView({ kind: "list" })} />;
