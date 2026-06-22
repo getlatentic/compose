@@ -41,6 +41,9 @@ export function MessageComposer({
   onAddFileContext,
   onHeightChange,
   onOpenSettings,
+  onInstall,
+  installing,
+  installError,
   onPromptChange,
   onRemoveContextItem,
   onRetry,
@@ -63,6 +66,12 @@ export function MessageComposer({
    * transcript can reserve matching bottom space and re-pin to bottom. */
   onHeightChange: (height: number) => void;
   onOpenSettings: () => void;
+  /** When set, the selected agent needs a one-time install — the not-ready
+   *  banner offers an inline "Set up" action (it installs on the bundled npm)
+   *  instead of only the Settings link. */
+  onInstall?: () => void;
+  installing?: boolean;
+  installError?: string | null;
   onPromptChange: (value: string) => void;
   /** Remove a context chip by id (the chip's ✕). */
   onRemoveContextItem: (id: string) => void;
@@ -172,12 +181,30 @@ export function MessageComposer({
         <ChatErrorNotice raw={runError} harnessName={harnessName} onRetry={onRetry} />
       ) : null}
       {!assistantReady.ready ? (
-        <ChatErrorNotice
-          raw={assistantReady.message ?? ""}
-          harnessName={harnessName}
-          onRetry={onRetry}
-          onOpenSettings={onOpenSettings}
-        />
+        onInstall ? (
+          <div className="chat-setup-notice" role="status">
+            <span className="chat-setup-notice__text">
+              {installing
+                ? `Setting up ${harnessName}…`
+                : (installError ?? `${harnessName} needs a one-time setup.`)}
+            </span>
+            <button
+              type="button"
+              className="chat-setup-notice__action"
+              disabled={installing}
+              onClick={onInstall}
+            >
+              {installing ? "Setting up…" : installError ? "Try again" : `Set up ${harnessName}`}
+            </button>
+          </div>
+        ) : (
+          <ChatErrorNotice
+            raw={assistantReady.message ?? ""}
+            harnessName={harnessName}
+            onRetry={onRetry}
+            onOpenSettings={onOpenSettings}
+          />
+        )
       ) : null}
 
       <div className="chat-context-row">

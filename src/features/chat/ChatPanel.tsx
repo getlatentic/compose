@@ -1,9 +1,11 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Add, Close } from "@carbon/react/icons";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
+import { harnessInstall } from "../../lib/ipc/harnessClient";
+import { agentStatus } from "../settings/agentStatus";
 import { sumChatThreadStats } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
@@ -96,8 +98,34 @@ function ChatPanelInner() {
   // not-ready readiness blocks; a not-yet-probed (null) selection stays
   // available, so a slow or failed probe never wrongly locks the composer (the
   // send-time credential preflight still backstops key-managed harnesses).
-  const selectedHarnessName =
-    harnessCatalog.find((entry) => entry.id === selectedHarnessId)?.displayName ?? "Your assistant";
+  const selectedInfo = harnessCatalog.find((entry) => entry.id === selectedHarnessId);
+  const selectedHarnessName = selectedInfo?.displayName ?? "Your assistant";
+  // A CLI agent that isn't on disk yet → offer a one-click install right here
+  // (it runs on the bundled npm), instead of sending the user off to Settings.
+  const needsInstall =
+    !!selectedInfo && agentStatus(selectedInfo, selectedHarnessReadiness).action === "install";
+  const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const installSelected = useCallback(async () => {
+    if (!selectedHarnessId) return;
+    setInstalling(true);
+    setInstallError(null);
+    try {
+      for await (const event of harnessInstall(selectedHarnessId)) {
+        if (event.kind === "done" && !event.ok) {
+          setInstallError(`Couldn't set up ${selectedHarnessName}. Open Settings for details.`);
+        }
+      }
+    } catch (error) {
+      setInstallError(
+        error instanceof Error ? error.message : `Couldn't set up ${selectedHarnessName}.`,
+      );
+    } finally {
+      setInstalling(false);
+      void reloadSelectedHarnessReadiness();
+    }
+  }, [selectedHarnessId, selectedHarnessName, reloadSelectedHarnessReadiness]);
+
   const assistantReady = !selectedHarnessId
     ? { ready: false, message: "Set up an AI agent in Settings to start chatting." }
     : selectedHarnessReadiness && !selectedHarnessReadiness.ready
@@ -280,6 +308,9 @@ function ChatPanelInner() {
         onAddFileContext={addChatFileContext}
         onHeightChange={setComposerHeight}
         onOpenSettings={() => openSettings(selectedHarnessId || undefined)}
+        onInstall={needsInstall ? () => void installSelected() : undefined}
+        installing={installing}
+        installError={installError}
         onPromptChange={setChatPrompt}
         onRemoveContextItem={removeChatContextItem}
         onRetry={() => void reloadSelectedHarnessReadiness()}
