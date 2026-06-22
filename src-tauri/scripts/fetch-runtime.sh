@@ -22,6 +22,13 @@ if [ ! -x "$DEST/node/bin/node" ]; then
   tar -xzf /tmp/compose-node.tar.gz -C "$DEST/node" --strip-components=1
   # Trim what a runtime never needs (keep bin/ + lib/node_modules/npm).
   rm -rf "$DEST/node/include" "$DEST/node/share/doc" "$DEST/node/share/man" "$DEST/node/share/systemtap"
+  # Shrink: strip ~22 MB of debug symbols off the node binary, and drop corepack
+  # (the yarn/pnpm shims we don't use — we install via npm). Stripping breaks the
+  # Mach-O code signature, so re-sign ad-hoc or macOS kills it (the app's own
+  # signing re-signs it again at release).
+  strip "$DEST/node/bin/node" 2>/dev/null || true
+  codesign --force --sign - "$DEST/node/bin/node" 2>/dev/null || true
+  rm -rf "$DEST/node/lib/node_modules/corepack" "$DEST/node/bin/corepack"
   rm -f /tmp/compose-node.tar.gz
 fi
 
