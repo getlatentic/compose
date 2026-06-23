@@ -1,7 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Compose — pencil + bloom. Matches the app icon (navy tile, cyan glyph). -->
-  <rect width="64" height="64" rx="14" fill="#0F1419"/>
-  <g transform="translate(14.72,14.72) scale(1.44)">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Compose app icon — pencil + bloom (write/create, bloom = the AI thread).
+       Navy squircle on the macOS icon grid (824 tile, 100 padding, ~22% corners). -->
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="#0F1419"/>
+  <!-- glyph (0..24 viewBox) scaled to 54% of the tile, centred -->
+  <g transform="translate(289.5,289.5) scale(18.54)">
     <g fill="none" stroke="#00E5FF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M15.4 4.6a2 2 0 0 1 2.8 2.8L8 17.6l-3.8 1 1-3.8Z"/>
       <path d="M13.5 6.5l2.8 2.8"/>
