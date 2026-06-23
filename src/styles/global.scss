@@ -3628,7 +3628,6 @@ select {
 .chat-notice--error {
   background: var(--cds-notification-background-error, rgba(218, 30, 40, 0.12));
   color: var(--cds-text-error, #da1e28);
-  box-shadow: inset 2px 0 0 var(--cds-support-error, #da1e28);
 }
 
 .chat-notice__dot {
