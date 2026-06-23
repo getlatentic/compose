@@ -8,6 +8,7 @@ import {
   Folder,
   FolderOpen,
 } from "@carbon/react/icons";
+import { ComposeMark } from "./ComposeMark";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
@@ -125,7 +126,7 @@ export function SetupScreen() {
       <header className="onboard__topbar">
         <div className="onboard__brand">
           <span className="onboard__mark" aria-hidden="true">
-            <ChatBot size={16} />
+            <ComposeMark size={16} />
           </span>
           <span>Compose</span>
         </div>
@@ -166,7 +167,7 @@ function WelcomeScreen({ onStart, onSkip }: { onStart: () => void; onSkip: () =>
   return (
     <ScreenShell>
       <div className="onboard__hero-mark" aria-hidden="true">
-        <ChatBot size={36} />
+        <ComposeMark size={36} />
       </div>
       <h1 className="onboard__title">Welcome to Compose</h1>
       <p className="onboard__lead">
