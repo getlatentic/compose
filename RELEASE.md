@@ -54,23 +54,28 @@ metadata lives in app-data SQLite, never inside the vault.
 Without these the app cannot reach a non-technical macOS user cleanly. None of
 these are product work; they're the ship vehicle.
 
-> **⛔ Blocked on the Apple Developer Program ($99/yr) — deferred until enrolled.**
-> Signing, notarization, the auto-updater, and every "verify in the packaged
-> `.app`" pass below all depend on it. (The updater is coupled too: it installs a
-> downloaded `.app`, which macOS quarantines/Gatekeeper-blocks unless it's
-> notarized — so there's no point wiring the updater until signing exists.)
-> Everything *not* in this block is actionable now; see §2–§6.
+> **Apple Developer Program: enrolled** (individual account; Team ID `94SW7AUBMX`,
+> Developer ID Application certificate). **Signing + notarization are wired** — see
+> the first item below. Still gated on that: the **auto-updater** (now unblocked,
+> just not built) and the **clean-machine verification** of a downloaded `.dmg`.
 
-- [ ] **[Apple] Code signing + notarization.** `tauri.conf.json` has no Developer
-      ID identity or entitlements (only `scripts/setup-dev-signing.sh` for local).
-      Unsigned/un-notarized → Gatekeeper blocks first launch. A free Apple ID only
-      does local/ad-hoc signing, which is not distributable; notarization is
-      included in the program (no extra cost).
-  - [ ] Enroll in the Apple Developer Program; create a **Developer ID
-        Application** certificate.
-  - [ ] Add `bundle.macOS` signing identity + hardened-runtime entitlements.
-  - [ ] Wire notarization (notarytool) + stapling into the build/release script.
-  - [ ] Verify a downloaded `.dmg` opens clean on a machine that never built it.
+- [~] **[Apple] Code signing + notarization — DONE + Apple-verified; one clean-machine check left.**
+      A full `scripts/build-release.sh` run produced a `.app` **and** `.dmg` both
+      **Accepted by Apple's notary service**, stapled, and Gatekeeper-assessed as
+      `Notarized Developer ID`. Driven entirely by env vars, so no personal identity
+      lives in committed config and dev builds stay unsigned: a release sets
+      `APPLE_SIGNING_IDENTITY` (Tauri signs the app, frameworks and main binary with
+      hardened runtime — its default) plus `APPLE_ID` / `APPLE_PASSWORD` /
+      `APPLE_TEAM_ID`. The script loads `src-tauri/.env.release` (gitignored), runs
+      the build, notarizes the DMG, and verifies signature + Gatekeeper + staple.
+  - [x] Enrolled; **Developer ID Application** certificate installed (Team `94SW7AUBMX`).
+  - [x] Hardened runtime (Tauri default) + bundled-runtime entitlements
+        (`entitlements/runtime.plist`: JIT + unsigned-memory + library-validation
+        exceptions). The bundled `node` / `uv` / `uvx` are Resources Tauri doesn't
+        sign, so `fetch-runtime.sh` signs them with the same Developer ID.
+  - [x] Notarization + stapling of **both** the `.app` (Tauri, automatic) and the
+        `.dmg` (a `build-release.sh` post-step — Tauri only *signs* the DMG wrapper).
+  - [ ] Verify the downloaded `.dmg` opens clean on a machine that never built it.
 - [ ] **[Apple] Auto-updater.** No `tauri-plugin-updater`, no `updater` config.
       How it works: the app checks a static manifest you host (GitHub Releases /
       S3 — no backend), and if there's a newer version downloads + verifies +
@@ -289,7 +294,7 @@ pnpm typecheck        # tsc clean, both tsconfigs
 pnpm test             # vitest, all suites green
 pnpm test:rust        # cargo tests green
 pnpm bench:baseline   # perf baseline, no regression
-pnpm tauri build      # signed + notarized .dmg
+bash src-tauri/scripts/build-release.sh   # signed + notarized + stapled .app and .dmg
 ```
 
 Then **drive the packaged `.app`** (a real `.app` proves what tests can't):

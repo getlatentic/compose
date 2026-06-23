@@ -10,6 +10,24 @@ DEST="$HERE/binaries/runtime"
 ARCH="arm64"
 mkdir -p "$DEST"
 
+# Sign one bundled Mach-O. Tauri signs the app/frameworks/sidecars but never
+# Resources, so these binaries must be signed here, before the bundler seals the
+# .app. A release sets APPLE_SIGNING_IDENTITY (the same Developer ID Tauri uses):
+# real signature + hardened runtime + secure timestamp, so the app notarizes.
+# Without it (local dev), fall back to ad-hoc so macOS still runs the binary.
+# $2 (optional) is an entitlements plist — node needs the JIT/library-validation
+# exceptions; uv/uvx need none.
+sign_binary() {
+  local bin="$1" entitlements="${2:-}"
+  if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+    local args=(--force --timestamp --options runtime -s "$APPLE_SIGNING_IDENTITY")
+    [ -n "$entitlements" ] && args+=(--entitlements "$entitlements")
+    codesign "${args[@]}" "$bin"
+  else
+    codesign --force --sign - "$bin"
+  fi
+}
+
 # --- Node (latest LTS 22, darwin-arm64) ---
 if [ ! -x "$DEST/node/bin/node" ]; then
   NODE_VERSION="$(curl -fsSL https://nodejs.org/dist/index.json |
@@ -24,10 +42,8 @@ if [ ! -x "$DEST/node/bin/node" ]; then
   rm -rf "$DEST/node/include" "$DEST/node/share/doc" "$DEST/node/share/man" "$DEST/node/share/systemtap"
   # Shrink: strip ~22 MB of debug symbols off the node binary, and drop corepack
   # (the yarn/pnpm shims we don't use — we install via npm). Stripping breaks the
-  # Mach-O code signature, so re-sign ad-hoc or macOS kills it (the app's own
-  # signing re-signs it again at release).
+  # Mach-O signature; the unconditional sign step at the end re-signs it.
   strip "$DEST/node/bin/node" 2>/dev/null || true
-  codesign --force --sign - "$DEST/node/bin/node" 2>/dev/null || true
   rm -rf "$DEST/node/lib/node_modules/corepack" "$DEST/node/bin/corepack"
   rm -f /tmp/compose-node.tar.gz
 fi
@@ -58,5 +74,12 @@ if [ ! -x "$DEST/bin/uv" ]; then
   chmod +x "$DEST/bin/uv" "$DEST/bin/uvx"
   rm -rf /tmp/compose-uv.tar.gz /tmp/uv-aarch64-apple-darwin
 fi
+
+# Sign the bundled Mach-O binaries (unconditional: a release re-signs an
+# already-fetched, ad-hoc node/uv with the Developer ID). npm/npx are shell
+# wrappers, not Mach-O — nothing to sign.
+sign_binary "$DEST/node/bin/node" "$HERE/entitlements/runtime.plist"
+sign_binary "$DEST/bin/uv"
+sign_binary "$DEST/bin/uvx"
 
 echo "[runtime] ready: node $("$DEST/node/bin/node" --version), npm $("$DEST/node/bin/npm" --version), uv $("$DEST/bin/uv" --version)"
