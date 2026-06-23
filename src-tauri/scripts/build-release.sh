@@ -46,6 +46,13 @@ fi
 # bundle). Safe here — pnpm/cargo/node resolve from their own PATH entries.
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
+# Detach any stale Compose disk image first: a mounted /Volumes/Compose (from a
+# prior .dmg, or a leftover rw temp from a failed run) makes bundle_dmg.sh fail
+# to create the new one ("failed to run bundle_dmg.sh").
+hdiutil detach /Volumes/Compose -force >/dev/null 2>&1 || true
+hdiutil info | awk '/^image-path/{i=$0} /^\/dev\/disk[0-9]+[ \t]/{if(i ~ /Compose.*\.dmg/) print $1}' \
+  | while read -r dev; do hdiutil detach "$dev" -force >/dev/null 2>&1 || true; done
+
 echo "[release] building, signing + notarizing — several minutes (notarization waits on Apple)…"
 ( cd "$ROOT" && pnpm tauri build )
 
