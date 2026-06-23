@@ -246,6 +246,16 @@ export async function harnessDiscover(): Promise<HarnessReadiness[]> {
   return invoke<HarnessReadiness[]>("harness_discover");
 }
 
+/** Launch the local Ollama app so its server comes up — the one-click fix for an
+ * "Ollama isn't running" state. Rejects (with a friendly message) when Ollama
+ * isn't installed. No-op in the browser preview. */
+export async function startOllama(): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+  await invoke<void>("ollama_start");
+}
+
 /**
  * The model ids a harness offers, discovered live (Ollama `/api/tags`, OpenCode
  * `opencode models`, models.dev for cloud providers) or its static curated list.

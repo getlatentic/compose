@@ -4,7 +4,7 @@ import { Add, Close } from "@carbon/react/icons";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import { harnessInstall } from "../../lib/ipc/harnessClient";
+import { harnessInstall, startOllama } from "../../lib/ipc/harnessClient";
 import { agentStatus } from "../settings/agentStatus";
 import { sumChatThreadStats } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
@@ -125,6 +125,30 @@ function ChatPanelInner() {
       void reloadSelectedHarnessReadiness();
     }
   }, [selectedHarnessId, selectedHarnessName, reloadSelectedHarnessReadiness]);
+
+  // Ollama isn't a CLI we install — it's a local app that may just be stopped.
+  // Offer a one-click start (launches the app, which boots its server) and then
+  // re-probe; the brief pause gives the server a moment to accept connections.
+  const [startingOllama, setStartingOllama] = useState(false);
+  const [startOllamaError, setStartOllamaError] = useState<string | null>(null);
+  const startSelectedOllama = useCallback(async () => {
+    setStartingOllama(true);
+    setStartOllamaError(null);
+    try {
+      await startOllama();
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    } catch (error) {
+      setStartOllamaError(error instanceof Error ? error.message : "Couldn't start Ollama.");
+    } finally {
+      setStartingOllama(false);
+      void reloadSelectedHarnessReadiness();
+    }
+  }, [reloadSelectedHarnessReadiness]);
+  const needsOllamaStart =
+    selectedHarnessId === "ollama" &&
+    !!selectedHarnessReadiness &&
+    !selectedHarnessReadiness.ready &&
+    !needsInstall;
 
   const assistantReady = !selectedHarnessId
     ? { ready: false, message: "Set up an AI agent in Settings to start chatting." }
@@ -311,6 +335,9 @@ function ChatPanelInner() {
         onInstall={needsInstall ? () => void installSelected() : undefined}
         installing={installing}
         installError={installError}
+        onStartOllama={needsOllamaStart ? () => void startSelectedOllama() : undefined}
+        startingOllama={startingOllama}
+        startOllamaError={startOllamaError}
         onPromptChange={setChatPrompt}
         onRemoveContextItem={removeChatContextItem}
         onRetry={() => void reloadSelectedHarnessReadiness()}

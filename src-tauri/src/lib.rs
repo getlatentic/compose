@@ -82,6 +82,14 @@ pub fn run() {
             {
                 bundled_runtime::configure(&resource_dir, &data_dir);
             }
+            // Adopt the user's login-shell PATH (nvm/Homebrew/…) into the process
+            // environment so a Finder-launched .app detects the CLIs they already
+            // installed. bob-rs probes `bob` via `$SHELL -l -c` — a login shell
+            // that never sources the nvm init in ~/.zshrc — but the child shell
+            // inherits this PATH, so `command -v bob` resolves. Reuses the
+            // harness's own resolution (login shell + bounded fallback), computed
+            // and cached once; the cost is paid here instead of the first probe.
+            std::env::set_var("PATH", ::harness::augmented_node_path());
             let metadata = app_handle.state::<db::MetadataStore>();
             if let Err(error) = metadata.init_from_app(&app_handle) {
                 eprintln!("metadata store init failed: {error}");
@@ -151,6 +159,7 @@ pub fn run() {
             harness::model_manager::harness_pull_model,
             harness::model_manager::harness_cancel_pull,
             harness::model_manager::harness_delete_model,
+            harness::ollama_runtime::ollama_start,
             system::commands::system_readiness,
             system::commands::system_install_dependency,
             workspace::setup_complete_onboarding,

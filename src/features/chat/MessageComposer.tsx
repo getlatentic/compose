@@ -44,6 +44,9 @@ export function MessageComposer({
   onInstall,
   installing,
   installError,
+  onStartOllama,
+  startingOllama,
+  startOllamaError,
   onPromptChange,
   onRemoveContextItem,
   onRetry,
@@ -72,6 +75,12 @@ export function MessageComposer({
   onInstall?: () => void;
   installing?: boolean;
   installError?: string | null;
+  /** When set, the selected agent is Ollama and its server isn't running — the
+   *  not-ready banner offers a one-click "Start Ollama" (launches the app)
+   *  instead of just telling the user to start it themselves. */
+  onStartOllama?: () => void;
+  startingOllama?: boolean;
+  startOllamaError?: string | null;
   onPromptChange: (value: string) => void;
   /** Remove a context chip by id (the chip's ✕). */
   onRemoveContextItem: (id: string) => void;
@@ -181,7 +190,23 @@ export function MessageComposer({
         <ChatErrorNotice raw={runError} harnessName={harnessName} onRetry={onRetry} />
       ) : null}
       {!assistantReady.ready ? (
-        onInstall ? (
+        onStartOllama ? (
+          <div className="chat-setup-notice" role="status">
+            <span className="chat-setup-notice__text">
+              {startingOllama
+                ? "Starting Ollama…"
+                : (startOllamaError ?? "Ollama isn't running.")}
+            </span>
+            <button
+              type="button"
+              className="chat-setup-notice__action"
+              disabled={startingOllama}
+              onClick={onStartOllama}
+            >
+              {startingOllama ? "Starting…" : startOllamaError ? "Try again" : "Start Ollama"}
+            </button>
+          </div>
+        ) : onInstall ? (
           <div className="chat-setup-notice" role="status">
             <span className="chat-setup-notice__text">
               {installing
