@@ -82,18 +82,17 @@ pub fn run() {
             {
                 bundled_runtime::configure(&resource_dir, &data_dir);
             }
-            // Adopt the user's login-shell PATH (nvm/Homebrew/…) into the process
-            // environment so a Finder-launched .app — which inherits only the
-            // minimal launchd PATH — sees the CLIs they already installed. Reuses
-            // the harness's own resolution (login shell + bounded fallback),
-            // computed and cached once.
+            // A Finder-launched .app inherits only the minimal launchd PATH, and
+            // the login-shell PATH query can come back without nvm (a heavy
+            // ~/.zshrc whose lazy nvm init no-ops under a stripped PATH). Add the
+            // user's toolchain dirs deterministically so an nvm-installed bob/codex
+            // resolves, then adopt the login-shell PATH on top. Both before the
+            // first augmented_node_path call (it caches), so detection sees them.
+            bundled_runtime::append_user_tool_dirs();
             std::env::set_var("PATH", ::harness::augmented_node_path());
-            // Prime bob's CLI detection on this (main) thread. bob-rs resolves the
-            // CLI through its own cached PATH; first-computed on a Tauri command
-            // worker thread it can miss the nvm bin, so an installed bob reads
-            // "not installed". Priming here makes the later probe correct; the log
-            // line records what detection actually saw (readiness is not otherwise
-            // logged, so a wrong answer was invisible).
+            // Prime bob's detection on the main thread and log the result —
+            // readiness isn't otherwise recorded (it's not an error), so a wrong
+            // answer would be invisible.
             {
                 use ::harness::Harness;
                 let bob = ::harness::Bob::new().readiness();

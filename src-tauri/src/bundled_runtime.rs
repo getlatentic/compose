@@ -40,3 +40,47 @@ pub fn configure(resource_dir: &Path, data_dir: &Path) {
     };
     std::env::set_var("PATH", path);
 }
+
+/// Append the user's own toolchain dirs (every nvm node version, Homebrew, the
+/// official-installer `~/.local/bin`) to PATH. A Finder-launched `.app` gets the
+/// minimal launchd PATH, and the harness's login-shell PATH query can come back
+/// *without* nvm — a heavy `~/.zshrc` whose lazy nvm init silently no-ops when
+/// spawned with a stripped inherited PATH — so `bob`/`codex` (npm-global under
+/// nvm) look "not installed" even though `node` (bundled) resolves. This adds
+/// those dirs deterministically (no shell spawn), after the bundled binaries so
+/// they still win. Runs before the first `augmented_node_path` call so the
+/// cached PATH includes them.
+pub fn append_user_tool_dirs() {
+    let Ok(home) = std::env::var("HOME") else {
+        return;
+    };
+    let home = Path::new(&home);
+    let mut dirs: Vec<String> = Vec::new();
+    // nvm-managed node versions — where npm-global CLIs (bob/claude/codex) live.
+    if let Ok(entries) = std::fs::read_dir(home.join(".nvm/versions/node")) {
+        for entry in entries.flatten() {
+            let bin = entry.path().join("bin");
+            if let (true, Some(dir)) = (bin.is_dir(), bin.to_str()) {
+                dirs.push(dir.to_owned());
+            }
+        }
+    }
+    for system in ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin"] {
+        if Path::new(system).is_dir() {
+            dirs.push(system.to_owned());
+        }
+    }
+    let local = home.join(".local/bin");
+    if let (true, Some(dir)) = (local.is_dir(), local.to_str()) {
+        dirs.push(dir.to_owned());
+    }
+    if dirs.is_empty() {
+        return;
+    }
+    let appended = dirs.join(":");
+    let path = match std::env::var("PATH") {
+        Ok(existing) if !existing.is_empty() => format!("{existing}:{appended}"),
+        _ => appended,
+    };
+    std::env::set_var("PATH", path);
+}
