@@ -83,13 +83,33 @@ pub fn run() {
                 bundled_runtime::configure(&resource_dir, &data_dir);
             }
             // Adopt the user's login-shell PATH (nvm/Homebrew/…) into the process
-            // environment so a Finder-launched .app detects the CLIs they already
-            // installed. bob-rs probes `bob` via `$SHELL -l -c` — a login shell
-            // that never sources the nvm init in ~/.zshrc — but the child shell
-            // inherits this PATH, so `command -v bob` resolves. Reuses the
-            // harness's own resolution (login shell + bounded fallback), computed
-            // and cached once; the cost is paid here instead of the first probe.
+            // environment so a Finder-launched .app — which inherits only the
+            // minimal launchd PATH — sees the CLIs they already installed. Reuses
+            // the harness's own resolution (login shell + bounded fallback),
+            // computed and cached once.
             std::env::set_var("PATH", ::harness::augmented_node_path());
+            // Prime bob's CLI detection on this (main) thread. bob-rs resolves the
+            // CLI through its own cached PATH; first-computed on a Tauri command
+            // worker thread it can miss the nvm bin, so an installed bob reads
+            // "not installed". Priming here makes the later probe correct; the log
+            // line records what detection actually saw (readiness is not otherwise
+            // logged, so a wrong answer was invisible).
+            {
+                use ::harness::Harness;
+                let bob = ::harness::Bob::new().readiness();
+                if let Ok(log_path) = logging::error_log_path(&app_handle) {
+                    let _ = logging::append_error_line(
+                        &log_path,
+                        "bobReadiness",
+                        &format!(
+                            "installed={} ready={} error={:?}",
+                            bob.installed, bob.ready, bob.error
+                        ),
+                        None,
+                        logging::now_ms(),
+                    );
+                }
+            }
             let metadata = app_handle.state::<db::MetadataStore>();
             if let Err(error) = metadata.init_from_app(&app_handle) {
                 eprintln!("metadata store init failed: {error}");
