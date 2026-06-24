@@ -537,28 +537,15 @@ export function applyScanResult(
   workspace: Workspace,
   entries: WorkspaceFileEntry[],
 ): Workspace {
-  const knownPaths = new Set(entries.map((entry) => entry.relativePath));
-  const openFilePaths = workspace.openFilePaths.filter((path) => knownPaths.has(path));
-  const fileContents: Record<string, WorkspaceFileBuffer> = {};
-  for (const [path, buffer] of Object.entries(workspace.fileContents)) {
-    if (knownPaths.has(path)) {
-      fileContents[path] = buffer;
-    }
-  }
-
-  let activeFilePath = workspace.activeFilePath;
-  if (activeFilePath && !knownPaths.has(activeFilePath)) {
-    activeFilePath = openFilePaths[0] ?? "";
-  }
-
+  // A scan refreshes the file LIST only. It deliberately does NOT prune open
+  // tabs, their buffers, comments, or the active file when a path is missing
+  // from `entries`: a partial or racing scan would otherwise wipe the user's
+  // open work (and the empty-tabs fallback would then swap in Welcome.md). A
+  // genuine deletion closes its tab via the `removed` fs-event (applyFsEvent);
+  // a tab whose file is truly gone just errors gracefully when opened.
   return {
     ...workspace,
-    activeFilePath,
-    chatThread: setCurrentTabContext(workspace.chatThread, workspace.id, activeFilePath),
-    comments: workspace.comments.filter((comment) => knownPaths.has(comment.filePath)),
-    fileContents,
     files: [...entries].sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
-    openFilePaths,
     scanError: null,
     scanState: "ready",
   };
@@ -957,7 +944,16 @@ export function applyFsEvent(
    */
   agentEdit = false,
 ): { workspace: Workspace; effect: FsEventEffect } {
-  if (event.kind === "created" || event.kind === "removed") {
+  if (event.kind === "removed") {
+    // A confirmed deletion: close that file's tab + drop it from the list now,
+    // rather than letting a rescan's absence do it — a transient scan miss must
+    // not be mistaken for a deletion (see applyScanResult). Still rescan to
+    // reconcile the rest of the tree (e.g. a directory removal).
+    const closed = closeWorkspaceFileTab(workspace, event.relativePath);
+    const files = closed.files.filter((entry) => entry.relativePath !== event.relativePath);
+    return { workspace: { ...closed, files }, effect: { type: "rescan" } };
+  }
+  if (event.kind === "created") {
     return { workspace, effect: { type: "rescan" } };
   }
 

@@ -243,7 +243,7 @@ describe("workspace model", () => {
     });
   });
 
-  it("applyScanResult preserves open tabs and buffers that still exist on disk", () => {
+  it("applyScanResult refreshes the file list without dropping open tabs (a scan miss isn't a deletion)", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md"]);
     const opened = applyFileBuffer(
       openWorkspaceFile(openWorkspaceFile(workspace, "a.md"), "b.md"),
@@ -251,13 +251,30 @@ describe("workspace model", () => {
       { content: "# A", lastModifiedMs: 1_500 },
     );
 
+    // b.md is absent from this scan (a partial/racing scan). Its tab + the active
+    // file must survive — only a confirmed `removed` event closes a tab.
     const rescanned = applyScanResult(opened, [makeEntry("a.md", 2_000), makeEntry("c.md")]);
 
     expect(rescanned.files.map((entry) => entry.relativePath)).toEqual(["a.md", "c.md"]);
-    expect(rescanned.openFilePaths).toEqual(["a.md"]);
-    expect(rescanned.activeFilePath).toBe("a.md");
+    expect(rescanned.openFilePaths).toEqual(["a.md", "b.md"]);
+    expect(rescanned.activeFilePath).toBe("b.md");
     expect(rescanned.fileContents["a.md"].content).toBe("# A");
-    expect(rescanned.fileContents).not.toHaveProperty("b.md");
+  });
+
+  it("applyFsEvent on a removed file closes that tab (a confirmed deletion)", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md"]);
+    const opened = openWorkspaceFile(openWorkspaceFile(workspace, "a.md"), "b.md");
+
+    const { workspace: next, effect } = applyFsEvent(opened, {
+      kind: "removed",
+      lastModifiedMs: null,
+      relativePath: "b.md",
+    });
+
+    expect(effect.type).toBe("rescan");
+    expect(next.openFilePaths).toEqual(["a.md"]);
+    expect(next.activeFilePath).toBe("a.md");
+    expect(next.files.map((entry) => entry.relativePath)).toEqual(["a.md"]);
   });
 
   it("applyFsEvent on a dirty buffer marks it as conflicted", () => {
