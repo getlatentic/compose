@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo } from "react";
 import { PaneTabs, type EditorTab } from "./PaneTabs";
 import { ActiveDocument } from "./ActiveDocument";
 import { DocumentStatusBar } from "./DocumentStatusBar";
+import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_NAME } from "./welcomeNote";
 import { WorkspaceWelcome } from "../workspace/WorkspaceWelcome";
 import { MAC_TRAFFIC_LIGHTS_INSET } from "../workspace/WorkspaceSidebar";
+import { useWorkspaceActions } from "../workspace/useWorkspaceActions";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
+import { useHarnessStore } from "../../app/store/harnessStore";
 import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
 import { markBoot } from "../../lib/perf";
 
@@ -18,6 +21,11 @@ import { markBoot } from "../../lib/perf";
  * this shell, the tabs, the sidebar, or chat. Rendered by AppShell only when
  * `editorOpen`.
  */
+/** The starter the empty-state "Ask the assistant" sends: a first-note demo, so
+ * the button drafts a note rather than opening an empty chat. */
+const FIRST_NOTE_PROMPT =
+  "Create my first note — a short Hello World that shows what Compose can do.";
+
 export function EditorRegion() {
   useEffect(() => {
     markBoot("editor");
@@ -34,6 +42,14 @@ export function EditorRegion() {
     return Boolean(path && workspace!.files.some((entry) => entry.relativePath === path));
   });
   const fileCount = useWorkspaceStore((state) => selectActiveWorkspace(state)?.files.length ?? 0);
+  // The first scan hasn't landed yet (idle/loading) — render blank, not the
+  // empty-folder card, so a fresh open doesn't flash "empty" before its files
+  // (and the auto-opened note) arrive. The scan runs concurrently with the file
+  // read, so this is near-instant — a loader would only flash.
+  const scanPending = useWorkspaceStore((state) => {
+    const scanState = selectActiveWorkspace(state)?.scanState;
+    return scanState === "idle" || scanState === "loading";
+  });
   // Open paths as a string KEY — stable across edits/saves so the memoised
   // PaneTabs re-renders only when a tab opens/closes (dirty is read per-tab by
   // TabDirtyDot).
@@ -44,11 +60,14 @@ export function EditorRegion() {
   const closeFileTab = useWorkspaceStore((state) => state.closeFileTab);
   const createNote = useWorkspaceStore((state) => state.createNote);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
+  const setChatPrompt = useWorkspaceStore((state) => state.setChatPrompt);
+  const sendChatPrompt = useWorkspaceStore((state) => state.sendChatPrompt);
   const chatOpen = useUiStore((state) => state.chatOpen);
   const toggleChat = useUiStore((state) => state.toggleChat);
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const requestComposerFocus = useUiStore((state) => state.requestComposerFocus);
+  const { openFolder, canOpenNativeFolder } = useWorkspaceActions();
 
   const openTabs = useMemo<EditorTab[]>(() => {
     const ws = useWorkspaceStore.getState().activeWorkspace();
@@ -85,6 +104,22 @@ export function EditorRegion() {
     [closeFileTab],
   );
 
+  // Empty-state "Ask the assistant": open the chat, pre-fill a first-note starter,
+  // and SEND it if an agent is ready — so the click drafts a note instead of just
+  // opening an empty chat. Not ready → leave it staged to send once an agent is set up.
+  const askAssistantToStart = useCallback(() => {
+    if (!chatOpen) toggleChat();
+    setChatPrompt(FIRST_NOTE_PROMPT);
+    const { selectedHarnessId, selectedHarnessReadiness } = useHarnessStore.getState();
+    const ready =
+      Boolean(selectedHarnessId) && (!selectedHarnessReadiness || selectedHarnessReadiness.ready);
+    if (ready) {
+      void sendChatPrompt();
+    } else {
+      requestComposerFocus();
+    }
+  }, [chatOpen, toggleChat, setChatPrompt, sendChatPrompt, requestComposerFocus]);
+
   return (
     <main id="main-content" className="editor-region">
       <PaneTabs
@@ -97,27 +132,42 @@ export function EditorRegion() {
       />
       {activeFileExists ? (
         <ActiveDocument />
-      ) : fileCount === 0 ? (
-        <div className="editor-body">
-          <WorkspaceWelcome
-            onNewNote={() => void createNote()}
-            onAskAssistant={() => {
-              if (!chatOpen) toggleChat();
-              requestComposerFocus();
-            }}
-          />
-        </div>
+      ) : scanPending ? (
+        <div className="editor-body" />
       ) : (
         <div className="editor-body">
-          <div className="empty-state">
-            <div>
-              <p className="empty-state__title">No file open</p>
-              <p>Choose a Markdown file from the workspace sidebar.</p>
-            </div>
-          </div>
+          <WorkspaceWelcome
+            title={fileCount === 0 ? "Start your first document" : "No note open"}
+            lead={
+              fileCount === 0
+                ? "Create a note, open an existing folder, or ask the assistant to help you begin."
+                : "Pick a note from the sidebar, or start a new one."
+            }
+            newNoteLabel={fileCount === 0 ? "Create a note" : "New note"}
+            onOpenFolder={
+              fileCount === 0 && canOpenNativeFolder ? () => void openFolder() : undefined
+            }
+            onNewNote={
+              fileCount === 0
+                ? () =>
+                    void createNote({
+                      relativePath: WELCOME_NOTE_NAME,
+                      content: WELCOME_NOTE_CONTENT,
+                    })
+                : () => void createNote()
+            }
+            onAskAssistant={
+              fileCount === 0
+                ? askAssistantToStart
+                : () => {
+                    if (!chatOpen) toggleChat();
+                    requestComposerFocus();
+                  }
+            }
+          />
         </div>
       )}
-      <DocumentStatusBar />
+      {activeFileExists ? <DocumentStatusBar /> : null}
     </main>
   );
 }

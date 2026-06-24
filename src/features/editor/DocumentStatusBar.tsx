@@ -14,10 +14,6 @@ import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
  * preview for the count.
  */
 export function DocumentStatusBar() {
-  const activeFilePath = useWorkspaceStore(
-    (state) => selectActiveWorkspace(state)?.activeFilePath ?? "",
-  );
-  const workspacePath = useWorkspaceStore((state) => selectActiveWorkspace(state)?.path);
   const activeFileExists = useWorkspaceStore((state) => {
     const workspace = selectActiveWorkspace(state);
     const path = workspace?.activeFilePath;
@@ -53,9 +49,6 @@ export function DocumentStatusBar() {
 
   return (
     <div className="status-bar">
-      <span className="status-bar__path">
-        {(activeFileExists ? activeFilePath : undefined) ?? workspacePath ?? ""}
-      </span>
       <span className="status-bar__meta">
         {activeFileExists ? (
           <span className="mode-toggle" role="group" aria-label="Editor mode">

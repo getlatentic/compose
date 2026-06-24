@@ -17,9 +17,9 @@ const FILE_SUGGESTIONS: Suggestion[] = [
   { label: "What are the key points?", readOnly: true },
 ];
 const WORKSPACE_SUGGESTIONS: Suggestion[] = [
-  { label: "Help me outline a new note" },
-  { label: "Find notes related to what I'm writing", readOnly: true },
-  { label: "What can you help me with?", readOnly: true },
+  { label: "Help me start a new document" },
+  { label: "Brainstorm ideas for something I'm writing", readOnly: true },
+  { label: "What can you help me do?", readOnly: true },
 ];
 
 /**
@@ -39,21 +39,24 @@ export function ChatEmptyState({
   onUseSuggestion: (text: string, opts?: { readOnly?: boolean }) => void;
 }) {
   const suggestions = contextFileLabel ? FILE_SUGGESTIONS : WORKSPACE_SUGGESTIONS;
+  // Name just the file, not its full workspace-relative path — a deep path
+  // overflows the narrow panel (break-word CSS handles a long name on top).
+  const contextFileName = contextFileLabel?.split("/").pop() || contextFileLabel;
 
   return (
     <div className="chat-empty">
       <span className="chat-empty__mark" aria-hidden>
         <ChatBot size={20} />
       </span>
-      <h3 className="chat-empty__title">New conversation</h3>
+      <h3 className="chat-empty__title">Ask the assistant</h3>
       <p className="chat-empty__hint">
         {contextFileLabel ? (
           <>
-            I can already see <strong>{contextFileLabel}</strong> — the file you&rsquo;re viewing.
+            I can already see <strong>{contextFileName}</strong> — the file you&rsquo;re viewing.
             Ask anything, or start with one of these.
           </>
         ) : (
-          <>Ask anything about your workspace, or start with one of these.</>
+          <>I can read, edit, and organize the notes in this workspace. Start a draft, or try one of these.</>
         )}
       </p>
       <div className="chat-empty__suggestions">
