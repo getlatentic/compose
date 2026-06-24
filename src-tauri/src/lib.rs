@@ -1,4 +1,5 @@
 mod bundled_runtime;
+mod data_reset;
 pub mod db;
 pub mod events;
 pub mod export;
@@ -18,6 +19,10 @@ use crate::open_with::PendingOpenUrls;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // A "Reset all data" requested last session is applied here — before the
+    // migration below or the webview can repopulate anything — so the app comes
+    // up as a clean first-run.
+    data_reset::apply_pending_reset();
     // Before Tauri creates the webview (which would make its own empty data
     // dirs under the new bundle id), carry a previous identity's profile
     // forward so a rename doesn't reset the user's workspaces or settings.
@@ -86,29 +91,18 @@ pub fn run() {
             // the login-shell PATH query can come back without nvm (a heavy
             // ~/.zshrc whose lazy nvm init no-ops under a stripped PATH). Add the
             // user's toolchain dirs deterministically so an nvm-installed bob/codex
-            // resolves, then adopt the login-shell PATH on top. Both before the
-            // first augmented_node_path call (it caches), so detection sees them.
+            // resolves — a fast directory scan, so it stays on the launch path.
             bundled_runtime::append_user_tool_dirs();
-            std::env::set_var("PATH", ::harness::augmented_node_path());
-            // Prime bob's detection on the main thread and log the result —
-            // readiness isn't otherwise recorded (it's not an error), so a wrong
-            // answer would be invisible.
-            {
-                use ::harness::Harness;
-                let bob = ::harness::Bob::new().readiness();
-                if let Ok(log_path) = logging::error_log_path(&app_handle) {
-                    let _ = logging::append_error_line(
-                        &log_path,
-                        "bobReadiness",
-                        &format!(
-                            "installed={} ready={} error={:?}",
-                            bob.installed, bob.ready, bob.error
-                        ),
-                        None,
-                        logging::now_ms(),
-                    );
-                }
-            }
+            // Warm the harness PATH cache OFF the main thread: augmented_node_path
+            // runs a login-shell query (`$SHELL -lic env`) that can take ~1-2s
+            // against a heavy ~/.zshrc. Doing it here, not on the launch path, lets
+            // the window paint immediately and makes the first interaction with ANY
+            // harness fast — it's harness-neutral, not tied to whichever CLI is the
+            // default. The deterministic dirs added above already make an
+            // nvm-installed CLI resolvable, so detection is correct before this lands.
+            std::thread::spawn(|| {
+                let _ = ::harness::augmented_node_path();
+            });
             let metadata = app_handle.state::<db::MetadataStore>();
             if let Err(error) = metadata.init_from_app(&app_handle) {
                 eprintln!("metadata store init failed: {error}");
@@ -179,8 +173,10 @@ pub fn run() {
             harness::model_manager::harness_cancel_pull,
             harness::model_manager::harness_delete_model,
             harness::ollama_runtime::ollama_start,
+            harness::ollama_runtime::ollama_installed,
             system::commands::system_readiness,
             system::commands::system_install_dependency,
+            data_reset::app_reset_all_data,
             workspace::setup_complete_onboarding,
             workspace::setup_get_onboarding,
             workspace::workspace_add,

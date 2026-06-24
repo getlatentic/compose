@@ -11,6 +11,7 @@
     "build:editor": "pnpm --filter ai-editor build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "clean": "rm -rf target dist",
     "setup:dev-signing": "bash scripts/setup-dev-signing.sh",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",

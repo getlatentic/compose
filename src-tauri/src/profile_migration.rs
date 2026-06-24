@@ -8,19 +8,19 @@
 
 /// The current bundle identifier (must match `tauri.conf.json`).
 #[cfg(target_os = "macos")]
-const CURRENT_BUNDLE_ID: &str = "ai.latentic.compose";
+pub(crate) const CURRENT_BUNDLE_ID: &str = "ai.latentic.compose";
 
 /// Bundle ids this app shipped under earlier, newest first. The first one whose
 /// profile still exists is carried forward.
 #[cfg(target_os = "macos")]
-const LEGACY_BUNDLE_IDS: &[&str] = &["com.compose.app"];
+pub(crate) const LEGACY_BUNDLE_IDS: &[&str] = &["com.compose.app"];
 
 /// `~/Library` subdirectories macOS keys by bundle id that hold app state worth
 /// preserving: Application Support (workspaces, vaults, custom agents, metadata
 /// db) and WebKit (the webview's localStorage — every UI setting). `Caches` is
 /// intentionally skipped: it only holds the models.dev catalog, which re-fetches.
 #[cfg(target_os = "macos")]
-const PROFILE_SUBDIRS: &[&str] = &["Application Support", "WebKit"];
+pub(crate) const PROFILE_SUBDIRS: &[&str] = &["Application Support", "WebKit"];
 
 #[cfg(target_os = "macos")]
 pub fn migrate_legacy_profile() {
