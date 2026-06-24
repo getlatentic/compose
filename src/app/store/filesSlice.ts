@@ -119,14 +119,16 @@ export const createFilesSlice = (
     }));
     persistTabs(get().workspaces, workspace.id);
   },
-  createNote: async () => {
+  createNote: async (seed) => {
     const workspace = get().activeWorkspace();
     if (!workspace) {
       return;
     }
 
-    const relativePath = nextUntitledPath(workspace);
-    const content = `# Untitled\n\n`;
+    // A seed (the empty view's first "New note") writes the welcome note; the
+    // plain `+` falls back to a blank untitled note.
+    const relativePath = seed?.relativePath ?? nextUntitledPath(workspace);
+    const content = seed?.content ?? `# Untitled\n\n`;
 
     try {
       const result = await createFileIpc(workspace.id, relativePath, content);

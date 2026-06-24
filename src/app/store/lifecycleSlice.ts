@@ -7,6 +7,7 @@ import {
   createWorkspaceFromPath,
   hydrateChatThread,
   hydrateWorkspaceRecords,
+  openWorkspaceFile,
   type WorkspaceListResult,
 } from "../workspaceModel";
 import { useIndexStore } from "./indexStore";
@@ -35,6 +36,20 @@ import {
 import {
   updateWorkspace,
 } from "./internals";
+
+/**
+ * Run a task once the app is idle. Keeps a heavy job (the full search-index
+ * build) off the launch critical path: run inline with load it competes with
+ * first paint and makes a large workspace feel slow to open. Falls back to a
+ * short timeout where `requestIdleCallback` is unavailable (e.g. jsdom).
+ */
+function whenIdle(task: () => void): void {
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(() => task(), { timeout: 2000 });
+  } else {
+    setTimeout(task, 1200);
+  }
+}
 
 export const createLifecycleSlice = (
   set: WorkspaceStoreSet,
@@ -134,19 +149,53 @@ export const createLifecycleSlice = (
       ),
     }));
 
+    // The file already open (a reopened workspace) is known before the scan —
+    // read its content CONCURRENTLY with the scan/comments/conversation so the
+    // editor paints in one round-trip, not a second sequential read. A fresh
+    // folder has no active file yet; its note is read after the scan.
+    const knownActiveFile = get().activeWorkspace()?.activeFilePath || "";
     try {
-      const entries = await scanWorkspace(workspaceId);
-      const comments = await loadWorkspaceComments(workspaceId);
-      // Restore the workspace's active conversation (most-recently-OPENED
-      // non-archived, non-deleted) so the chat survives reload. Best-effort:
-      // a load failure shouldn't block the scan/comments restore.
-      const conversation = await loadActiveConversation(workspaceId).catch(() => null);
+      // Independent IPC calls, run concurrently rather than awaited in series —
+      // the load is a single round-trip instead of four.
+      const [entries, comments, conversation, knownBuffer] = await Promise.all([
+        scanWorkspace(workspaceId),
+        loadWorkspaceComments(workspaceId),
+        // Active conversation (most-recently-OPENED, non-archived) so the chat
+        // survives reload. Best-effort — a failure mustn't block the scan.
+        loadActiveConversation(workspaceId).catch(() => null),
+        knownActiveFile
+          ? readFileIpc(workspaceId, knownActiveFile).catch(() => null)
+          : Promise.resolve(null),
+      ]);
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => {
-          const scanned = applyScanResult({ ...item, comments }, entries);
+          let scanned = applyScanResult({ ...item, comments }, entries);
+          // Apply the concurrently-read buffer if its file survived the scan.
+          if (knownActiveFile && knownBuffer && scanned.activeFilePath === knownActiveFile) {
+            scanned = applyFileBuffer(scanned, knownActiveFile, knownBuffer);
+          }
+          // Open the seeded Welcome note (or the first note) as PART of the scan
+          // result — a freshly opened folder (the onboarding starter, or any
+          // first open) then resolves straight to a document, with no "No note
+          // open" flicker between the scan landing and the file opening.
+          const withActiveFile =
+            !scanned.activeFilePath &&
+            scanned.openFilePaths.length === 0 &&
+            scanned.files.length > 0
+              ? openWorkspaceFile(
+                  scanned,
+                  (
+                    scanned.files.find((entry) => entry.relativePath === "Welcome.md") ??
+                    scanned.files[0]
+                  ).relativePath,
+                )
+              : scanned;
           return conversation
-            ? { ...scanned, chatThread: hydrateChatThread(scanned.chatThread, conversation) }
-            : scanned;
+            ? {
+                ...withActiveFile,
+                chatThread: hydrateChatThread(withActiveFile.chatThread, conversation),
+              }
+            : withActiveFile;
         }),
       }));
       persistTabs(get().workspaces, workspaceId);
@@ -167,7 +216,10 @@ export const createLifecycleSlice = (
           showErrorToast(`Could not restore open file: ${activeFilePath}`);
         }
       }
-      void get().rebuildWorkspaceIndex(workspaceId);
+      // Build the search index off the launch path: for a large workspace the
+      // full snapshot build is CPU-heavy and, run inline with load, competes
+      // with first paint. Defer to idle — search shows "Indexing…" until it lands.
+      whenIdle(() => void get().rebuildWorkspaceIndex(workspaceId));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Workspace scan failed";
       set((state) => ({

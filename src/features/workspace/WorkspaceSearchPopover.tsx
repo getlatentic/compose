@@ -20,8 +20,10 @@ export function WorkspaceSearchPopover() {
   const close = useUiStore((state) => state.closeSearch);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
+  const rebuildIndex = useWorkspaceStore((state) => state.rebuildWorkspaceIndex);
   const index = useWorkspaceIndex(activeWorkspaceId);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const triggeredRef = useRef(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<WorkspaceSearchHit[]>([]);
   const [status, setStatus] = useState<"idle" | "searching">("idle");
@@ -31,13 +33,25 @@ export function WorkspaceSearchPopover() {
   useEffect(() => {
     if (open) {
       inputRef.current?.focus();
+      // Opening search is a natural retry point: kick a rebuild (once per open)
+      // when the index never built or previously failed, so a stuck index
+      // recovers on its own rather than leaving a dead search box.
+      if (
+        !triggeredRef.current &&
+        activeWorkspaceId &&
+        (index.state === "idle" || index.state === "failed")
+      ) {
+        triggeredRef.current = true;
+        void rebuildIndex(activeWorkspaceId);
+      }
       return;
     }
+    triggeredRef.current = false;
     setQuery("");
     setResults([]);
     setError(null);
     setStatus("idle");
-  }, [open]);
+  }, [open, activeWorkspaceId, index.state, rebuildIndex]);
 
   useEffect(() => {
     if (!open) {
@@ -123,7 +137,25 @@ export function WorkspaceSearchPopover() {
           />
         </label>
         <div className="search-popover__results">
-          {error ? (
+          {index.state === "failed" ? (
+            <div className="search-popover__message">
+              <p>Couldn't build the search index.</p>
+              {index.error ? <p className="search-popover__detail">{index.error}</p> : null}
+              <button
+                type="button"
+                className="search-popover__retry"
+                onClick={() => {
+                  if (activeWorkspaceId) {
+                    void rebuildIndex(activeWorkspaceId);
+                  }
+                }}
+              >
+                Try again
+              </button>
+            </div>
+          ) : activeWorkspaceId && index.state !== "ready" ? (
+            <p className="search-popover__message">Indexing your notes…</p>
+          ) : error ? (
             <p className="search-popover__message">{error}</p>
           ) : status === "searching" ? (
             <p className="search-popover__message">Searching…</p>

@@ -46,19 +46,22 @@ pub fn workspace_rebuild_index(
     metadata.sync_documents(&workspace_id, inventory)?;
     let doc_ids = metadata.document_ids_by_path(&workspace_id)?;
     let mut documents = Vec::with_capacity(entries.len());
+    let mut skipped = 0usize;
 
     for entry in entries {
         let absolute = root.join(&entry.relative_path);
-        let content = std::fs::read_to_string(&absolute).map_err(|error| {
-            format!(
-                "could not read {} for indexing: {error}",
-                entry.relative_path
-            )
-        })?;
-        let doc_id = doc_ids
-            .get(&entry.relative_path)
-            .cloned()
-            .ok_or_else(|| format!("{} is missing document metadata", entry.relative_path))?;
+        // A single unreadable or non-UTF-8 file (a binary mis-named `.md`, a
+        // permission glitch), or a doc with no metadata row yet, must not sink
+        // the whole index — skip it and keep going. Aborting here left search
+        // silently disabled for an entire workspace over one bad file.
+        let Ok(content) = std::fs::read_to_string(&absolute) else {
+            skipped += 1;
+            continue;
+        };
+        let Some(doc_id) = doc_ids.get(&entry.relative_path).cloned() else {
+            skipped += 1;
+            continue;
+        };
         // Title + content hash are computed here (rather than in the core)
         // so the desktop snapshot keeps using the app's SHA-256 hash and
         // the same title fallback it always has — no behavior change.
@@ -73,6 +76,9 @@ pub fn workspace_rebuild_index(
             content,
         ));
     }
+    if skipped > 0 {
+        eprintln!("workspace index ({workspace_id}): skipped {skipped} unreadable or unmapped file(s)");
+    }
 
     let snapshot = build_snapshot(
         workspace_id,
@@ -80,11 +86,18 @@ pub fn workspace_rebuild_index(
         started.elapsed().as_millis(),
         now_ms(),
     );
-    metadata.replace_search_index_records(
+    // Cache the in-memory snapshot FIRST — search reads this, not the SQLite
+    // mirror — so a mirror-write failure can't leave search disabled.
+    store.insert(snapshot.clone())?;
+    if let Err(error) = metadata.replace_search_index_records(
         &snapshot.workspace_id,
         metadata_records_for_snapshot(&snapshot),
-    )?;
-    store.insert(snapshot.clone())?;
+    ) {
+        eprintln!(
+            "workspace index ({}): search-metadata mirror write failed: {error}",
+            snapshot.workspace_id
+        );
+    }
     Ok(snapshot)
 }
 
