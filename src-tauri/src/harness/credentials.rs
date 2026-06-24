@@ -82,3 +82,15 @@ pub fn export_all() {
         Credential::of(harness.as_ref()).export_to_env();
     }
 }
+
+/// Delete every host-managed key from the keychain (the "Reset all data" flow).
+/// A `store("")` on a harness that owns its own auth (Claude/Codex/Ollama) is a
+/// no-op error, so iterating the same set as `export_all` is safe.
+pub fn forget_all() {
+    for harness in crate::harness::registry::extra_harnesses() {
+        let _ = Credential::of(harness.as_ref()).store("");
+    }
+    for harness in crate::harness::custom::custom_agent_store().build_harnesses() {
+        let _ = Credential::of(harness.as_ref()).store("");
+    }
+}

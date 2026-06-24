@@ -18,3 +18,19 @@ pub fn ollama_start() -> Result<(), String> {
         Err("Ollama doesn't seem to be installed — get it from ollama.com.".to_owned())
     }
 }
+
+/// Whether the Ollama app is installed — the menu-bar app `ollama_start` launches.
+/// A filesystem check (no process spawn), so the first-run resolver can tell
+/// "installed but stopped" (→ start it) from "not installed" (→ nudge to
+/// download). The HTTP readiness probe can't: a stopped server and a missing one
+/// both fail it identically.
+#[tauri::command(async)]
+pub fn ollama_installed() -> bool {
+    use std::path::Path;
+    if Path::new("/Applications/Ollama.app").exists() {
+        return true;
+    }
+    std::env::var_os("HOME")
+        .map(|home| Path::new(&home).join("Applications/Ollama.app").exists())
+        .unwrap_or(false)
+}

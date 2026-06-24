@@ -25,18 +25,19 @@ export function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-/** Next free `notes/untitled-N.md` path that collides with neither an existing
- * file nor an open (possibly unsaved) tab. */
+/** Next free `untitled-N.md` path — at the workspace root, alongside any other
+ * notes — that collides with neither an existing file nor an open (possibly
+ * unsaved) tab. */
 export function nextUntitledPath(workspace: Workspace): string {
   const existing = new Set([
     ...workspace.files.map((entry) => entry.relativePath),
     ...workspace.openFilePaths,
   ]);
   let index = 1;
-  while (existing.has(`notes/untitled-${index}.md`)) {
+  while (existing.has(`untitled-${index}.md`)) {
     index += 1;
   }
-  return `notes/untitled-${index}.md`;
+  return `untitled-${index}.md`;
 }
 
 /**

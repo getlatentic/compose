@@ -58,6 +58,22 @@ pub fn compose_harness_catalog() -> Vec<HarnessInfo> {
 }
 
 /// Readiness of every registered harness — "what's actually on this machine."
+///
+/// Probes every harness CONCURRENTLY: each `readiness()` may shell out to a CLI
+/// (~1s), so the registry's serial `discover()` makes the picker's "checking…"
+/// state drag for several seconds across the full set. Each thread rebuilds its
+/// own harness (cheap struct construction) so no `Box<dyn Harness>` crosses a
+/// thread boundary — only the id goes in and the readiness comes out.
 pub fn compose_discover() -> Vec<HarnessReadiness> {
-    compose_registry().discover()
+    let handles: Vec<_> = compose_harness_catalog()
+        .into_iter()
+        .map(|info| {
+            let id = info.id;
+            std::thread::spawn(move || compose_harness_by_id(&id).map(|harness| harness.readiness()))
+        })
+        .collect();
+    handles
+        .into_iter()
+        .filter_map(|handle| handle.join().ok().flatten())
+        .collect()
 }

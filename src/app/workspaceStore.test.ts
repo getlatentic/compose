@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   harnessCredentialStatus,
   harnessReadiness,
+  ollamaInstalled,
   runHarnessStream,
+  startOllama,
 } from "../lib/ipc/harnessClient";
 import { recordLlmThread } from "../lib/ipc/llmContextClient";
 import {
@@ -60,6 +62,8 @@ vi.mock("../lib/ipc/harnessClient", () => ({
   harnessReadiness: vi.fn(async () => null),
   harnessDiscover: vi.fn(async () => []),
   harnessCredentialStatus: vi.fn(async () => ({ configured: false })),
+  ollamaInstalled: vi.fn(async () => false),
+  startOllama: vi.fn(async () => undefined),
 }));
 
 describe("workspace store", () => {
@@ -666,14 +670,36 @@ describe("workspace store", () => {
       expect(useHarnessStore.getState().selectedHarnessId).toBe("claude");
     });
 
-    it("leaves the agent unset when none are ready (AI is optional)", async () => {
+    it("leaves the agent unset when none are ready and Ollama isn't installed", async () => {
       useHarnessStore.setState({
         selectedHarnessId: "",
         harnessCatalog: [agent("ollama"), agent("claude")],
       });
       vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, false));
+      vi.mocked(ollamaInstalled).mockResolvedValue(false);
       await useHarnessStore.getState().resolveDefaultHarness();
       expect(useHarnessStore.getState().selectedHarnessId).toBe("");
+      expect(startOllama).not.toHaveBeenCalled();
+    });
+
+    it("defaults to Ollama and starts it when nothing is ready but Ollama is installed", async () => {
+      vi.useFakeTimers();
+      try {
+        useHarnessStore.setState({
+          selectedHarnessId: "",
+          harnessCatalog: [agent("ollama"), agent("claude")],
+        });
+        // Nothing reachable, but the Ollama app is on disk (its server is stopped).
+        vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, false));
+        vi.mocked(ollamaInstalled).mockResolvedValue(true);
+        const done = useHarnessStore.getState().resolveDefaultHarness();
+        await vi.runAllTimersAsync(); // flush the post-launch boot wait
+        await done;
+        expect(useHarnessStore.getState().selectedHarnessId).toBe("ollama");
+        expect(startOllama).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("respects an explicit choice and never probes", async () => {
@@ -699,6 +725,31 @@ describe("workspace store", () => {
       });
       await useHarnessStore.getState().resolveDefaultHarness();
       expect(useHarnessStore.getState().selectedHarnessId).toBe("openrouter");
+    });
+
+    it("refreshHarnessStatuses probes uncached agents and caches each ready state", async () => {
+      useHarnessStore.setState({
+        harnessCatalog: [agent("ollama"), agent("claude")],
+        harnessStatusById: {},
+        harnessProbing: {},
+      });
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, id === "ollama"));
+      await useHarnessStore.getState().refreshHarnessStatuses();
+      const cache = useHarnessStore.getState().harnessStatusById;
+      expect(cache.ollama?.ready).toBe(true);
+      expect(cache.claude?.ready).toBe(false);
+      expect(useHarnessStore.getState().harnessProbing.ollama).toBe(false);
+    });
+
+    it("refreshHarnessStatuses skips a fresh cache entry instead of re-probing", async () => {
+      useHarnessStore.setState({
+        harnessCatalog: [agent("ollama")],
+        harnessStatusById: { ollama: { ready: true, at: Date.now() } },
+        harnessProbing: {},
+      });
+      vi.mocked(harnessReadiness).mockClear();
+      await useHarnessStore.getState().refreshHarnessStatuses();
+      expect(harnessReadiness).not.toHaveBeenCalled();
     });
   });
 });

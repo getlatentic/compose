@@ -256,6 +256,15 @@ export async function startOllama(): Promise<void> {
   await invoke<void>("ollama_start");
 }
 
+/** Whether the Ollama app is installed (a filesystem check), so first-run can
+ * tell a stopped server from an absent one. False in the browser preview. */
+export async function ollamaInstalled(): Promise<boolean> {
+  if (!isTauriRuntime()) {
+    return false;
+  }
+  return invoke<boolean>("ollama_installed");
+}
+
 /**
  * The model ids a harness offers, discovered live (Ollama `/api/tags`, OpenCode
  * `opencode models`, models.dev for cloud providers) or its static curated list.

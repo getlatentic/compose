@@ -23,6 +23,9 @@ import { useAutoGrowTextarea } from "./useAutoGrowTextarea";
 export interface AssistantReadiness {
   ready: boolean;
   message: string | null;
+  /** The first-run agent probe is still running — show a neutral "connecting"
+   * state, not the not-ready setup notice (the selection is briefly absent). */
+  resolving?: boolean;
 }
 
 /**
@@ -189,7 +192,11 @@ export function MessageComposer({
       {runError ? (
         <ChatErrorNotice raw={runError} harnessName={harnessName} onRetry={onRetry} />
       ) : null}
-      {!assistantReady.ready ? (
+      {assistantReady.resolving ? (
+        <div className="chat-setup-notice" role="status">
+          <span className="chat-setup-notice__text">Setting up your writing AI…</span>
+        </div>
+      ) : !assistantReady.ready ? (
         onStartOllama ? (
           <div className="chat-setup-notice" role="status">
             <span className="chat-setup-notice__text">
@@ -234,7 +241,7 @@ export function MessageComposer({
 
       <div className="chat-context-row">
         {contextItems.length === 0 ? (
-          <span className="chat-context-chip chat-context-chip--empty">No context</span>
+          <span className="chat-context-chip chat-context-chip--empty">No note selected</span>
         ) : (
           contextItems.map((item) => (
             <span className="chat-context-chip" key={item.id} title={item.label}>
@@ -265,7 +272,13 @@ export function MessageComposer({
           onChange={(event) => onPromptChange(event.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={assistantReady.ready ? "Ask your assistant…" : "Assistant unavailable"}
+          placeholder={
+            assistantReady.resolving
+              ? "Setting up your writing AI…"
+              : assistantReady.ready
+                ? "Ask your assistant…"
+                : "Assistant unavailable"
+          }
           rows={1}
           value={prompt}
         />

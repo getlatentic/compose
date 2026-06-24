@@ -41,11 +41,13 @@ function ChatPanelInner() {
   const openSettings = useUiStore((state) => state.openSettings);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
+  const defaultHarnessResolved = useHarnessStore((state) => state.defaultHarnessResolved);
   const rejectSuggestedEdit = useWorkspaceStore((state) => state.rejectSuggestedEdit);
   const regenerateLastTurn = useWorkspaceStore((state) => state.regenerateLastTurn);
   const sendChatPrompt = useWorkspaceStore((state) => state.sendChatPrompt);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const setChatPrompt = useWorkspaceStore((state) => state.setChatPrompt);
+  const dismissChatRunError = useWorkspaceStore((state) => state.dismissChatRunError);
   const addChatFileContext = useWorkspaceStore((state) => state.addChatFileContext);
   const removeChatContextItem = useWorkspaceStore((state) => state.removeChatContextItem);
   // Narrow selector: the chat panel only needs the active workspace's
@@ -142,24 +144,31 @@ function ChatPanelInner() {
     } finally {
       setStartingOllama(false);
       void reloadSelectedHarnessReadiness();
+      // Ollama is (re)starting → drop the stale "Ollama ran into a problem" banner.
+      dismissChatRunError();
     }
-  }, [reloadSelectedHarnessReadiness]);
+  }, [reloadSelectedHarnessReadiness, dismissChatRunError]);
   const needsOllamaStart =
     selectedHarnessId === "ollama" &&
     !!selectedHarnessReadiness &&
     !selectedHarnessReadiness.ready &&
     !needsInstall;
 
-  const assistantReady = !selectedHarnessId
-    ? { ready: false, message: "Set up an AI agent in Settings to start chatting." }
-    : selectedHarnessReadiness && !selectedHarnessReadiness.ready
-      ? {
-          ready: false,
-          message:
-            selectedHarnessReadiness.error ??
-            `${selectedHarnessName} needs setup before you can use it.`,
-        }
-      : { ready: true, message: null };
+  // While the first-run probe is still running, the selection is transiently
+  // null — show a neutral "connecting" state, not the "set up an agent" error.
+  const resolvingDefault = !selectedHarnessId && !defaultHarnessResolved;
+  const assistantReady = resolvingDefault
+    ? { ready: false, resolving: true, message: null }
+    : !selectedHarnessId
+      ? { ready: false, message: "Set up an AI agent in Settings to start chatting." }
+      : selectedHarnessReadiness && !selectedHarnessReadiness.ready
+        ? {
+            ready: false,
+            message:
+              selectedHarnessReadiness.error ??
+              `${selectedHarnessName} needs setup before you can use it.`,
+          }
+        : { ready: true, message: null };
   const canSend = Boolean(chatThread.prompt.trim()) && !running && assistantReady.ready;
 
   // The file currently attached as context (the open note) — named in the
@@ -340,7 +349,10 @@ function ChatPanelInner() {
         startOllamaError={startOllamaError}
         onPromptChange={setChatPrompt}
         onRemoveContextItem={removeChatContextItem}
-        onRetry={() => void reloadSelectedHarnessReadiness()}
+        onRetry={() => {
+          dismissChatRunError();
+          void reloadSelectedHarnessReadiness();
+        }}
         onSend={() => void sendChatPrompt()}
         onStop={() => void cancelActiveRun()}
         prompt={chatThread.prompt}

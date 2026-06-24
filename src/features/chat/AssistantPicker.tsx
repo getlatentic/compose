@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Checkmark, ChevronDown, WarningAltFilled } from "@carbon/react/icons";
 
@@ -14,6 +15,8 @@ import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 export interface AssistantOption {
   id: string;
   name: string;
+  /** Per-agent readiness dot shown in the picker. */
+  status?: "online" | "offline" | "connecting";
 }
 
 export interface ModelOption {
@@ -33,6 +36,8 @@ export interface AssistantPickerViewProps {
   onSelectModel: (value: string) => void;
   /** The selected assistant probed not-ready → a ⚠️ marker on the trigger. */
   unavailable?: boolean;
+  /** Called when the popup opens — the host lazily probes per-agent statuses. */
+  onOpen?: () => void;
   disabled?: boolean;
 }
 
@@ -45,6 +50,7 @@ export function AssistantPickerView({
   selectedModel,
   onSelectModel,
   unavailable = false,
+  onOpen,
   disabled = false,
 }: AssistantPickerViewProps) {
   const { open, setOpen, coords, triggerRef, popoverRef } = useAnchoredPopover<
@@ -59,6 +65,13 @@ export function AssistantPickerView({
       pop.querySelector<HTMLButtonElement>('.assistant-picker__item[aria-checked="true"]') ??
       pop.querySelector<HTMLButtonElement>(".assistant-picker__item"),
   });
+
+  // Probe per-agent statuses when the popup opens (cached + capped in the host).
+  useEffect(() => {
+    if (open) {
+      onOpen?.();
+    }
+  }, [open, onOpen]);
 
   return (
     <div className="assistant-picker">
@@ -102,6 +115,13 @@ export function AssistantPickerView({
                     // picked next; the Model section re-renders for it.
                     onClick={() => onSelectAssistant(assistant.id)}
                   >
+                    {assistant.status ? (
+                      <span
+                        className={`assistant-picker__status assistant-picker__status--${assistant.status}`}
+                        title={assistant.status}
+                        aria-label={assistant.status}
+                      />
+                    ) : null}
                     <span className="assistant-picker__item-label">{assistant.name}</span>
                     {assistant.id === selectedAssistantId ? <Checkmark size={16} aria-hidden /> : null}
                   </button>

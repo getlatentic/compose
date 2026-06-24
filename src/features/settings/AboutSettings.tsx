@@ -4,6 +4,7 @@ import { useHarnessStore } from "../../app/store/harnessStore";
 import { type HarnessReadiness } from "../../lib/ipc/harnessClient";
 import { revealErrorLog } from "../../lib/diagnostics/errorReporter";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
+import { ResetDataSection } from "./ResetDataSection";
 
 /** bob's `readiness().details` payload (a JSON object on the wire). Read for the
  * Node.js diagnostics the About pane surfaces ("Runtime: Node …"). */
@@ -36,16 +37,19 @@ export function AboutSettings() {
         ) : null}
       </div>
       {isTauriRuntime() ? (
-        <div className="settings-section">
-          <h3>Report a problem</h3>
-          <p className="settings-helper">
-            Compose keeps a local error log on your computer — it's never sent anywhere. If something
-            goes wrong, open it and attach it to your report.
-          </p>
-          <Button size="sm" kind="tertiary" onClick={() => void revealErrorLog()}>
-            Open error log
-          </Button>
-        </div>
+        <>
+          <div className="settings-section">
+            <h3>Report a problem</h3>
+            <p className="settings-helper">
+              Compose keeps a local error log on your computer — it's never sent anywhere. If
+              something goes wrong, open it and attach it to your report.
+            </p>
+            <Button size="sm" kind="tertiary" onClick={() => void revealErrorLog()}>
+              Open error log
+            </Button>
+          </div>
+          <ResetDataSection />
+        </>
       ) : null}
     </>
   );
