@@ -44,6 +44,8 @@ const FileRow = memo(function FileRow({
   onSelect,
   onRename,
   onDelete,
+  onCopyPath,
+  onReveal,
 }: {
   path: string;
   name: string;
@@ -52,6 +54,8 @@ const FileRow = memo(function FileRow({
   onSelect: (relativePath: string) => void;
   onRename: (relativePath: string) => void;
   onDelete: (relativePath: string) => void;
+  onCopyPath: (relativePath: string) => void;
+  onReveal: (relativePath: string) => void;
 }) {
   // Carbon's `OverflowMenu` mounts a whole Popover + floating-ui + Icon stack
   // even while closed. Mounting one per row meant a large vault paid that cost
@@ -76,7 +80,7 @@ const FileRow = memo(function FileRow({
         className={["file-row", active ? "file-row--active" : ""]
           .filter(Boolean)
           .join(" ")}
-        style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.875rem)` }}
+        style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
         title={path}
       >
         <Document size={16} />
@@ -86,6 +90,8 @@ const FileRow = memo(function FileRow({
       {menuMounted ? (
         <OverflowMenu aria-label={`Actions for ${path}`} size="sm" flipped align="bottom">
           <OverflowMenuItem itemText="Rename..." onClick={() => onRename(path)} />
+          <OverflowMenuItem itemText="Copy path" onClick={() => onCopyPath(path)} />
+          <OverflowMenuItem itemText="Reveal in Finder" onClick={() => onReveal(path)} />
           <OverflowMenuItem hasDivider isDelete itemText="Delete" onClick={() => onDelete(path)} />
         </OverflowMenu>
       ) : (
@@ -113,9 +119,10 @@ const FolderRow = memo(function FolderRow({
     <button
       type="button"
       className="file-row file-row--folder"
-      style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.875rem)` }}
+      style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
       onClick={() => onToggle(path)}
       aria-expanded={open}
+      title={name}
     >
       {open ? <CaretDown size={16} /> : <CaretRight size={16} />}
       <span className="truncate">{name}</span>
@@ -235,6 +242,10 @@ function FileTreeInner({
     const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
     return ws ? ws.scanState !== "ready" && ws.scanState !== "failed" : false;
   });
+  const workspaceRoot = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    return ws?.path ?? "";
+  });
 
   // Stable so the memoised FolderRow doesn't re-render on every keystroke /
   // file-select that re-renders FileTree.
@@ -249,6 +260,25 @@ function FileTreeInner({
       return next;
     });
   }, []);
+
+  // File-row actions needing the absolute path (workspace root + relative path).
+  const absPath = useCallback(
+    (relativePath: string) =>
+      workspaceRoot ? `${workspaceRoot.replace(/\/+$/, "")}/${relativePath}` : relativePath,
+    [workspaceRoot],
+  );
+  const copyPath = useCallback(
+    (relativePath: string) => void navigator.clipboard?.writeText(absPath(relativePath)),
+    [absPath],
+  );
+  const revealInFinder = useCallback(
+    (relativePath: string) => {
+      void import("@tauri-apps/plugin-opener")
+        .then(({ revealItemInDir }) => revealItemInDir(absPath(relativePath)))
+        .catch(() => {});
+    },
+    [absPath],
+  );
 
   // Window the (already collapse-flattened) rows: only ~a viewport-worth mount,
   // regardless of vault size. `rows` already excludes descendants of collapsed
@@ -270,8 +300,8 @@ function FileTreeInner({
           <p>Loading notes…</p>
         ) : (
           <>
-            <p>No Markdown files</p>
-            <p>Create a note from the toolbar.</p>
+            <p>No notes yet</p>
+            <p>Create a note or open a folder to get started.</p>
           </>
         )}
       </div>
@@ -306,6 +336,8 @@ function FileTreeInner({
                   onSelect={onSelectFile}
                   onRename={onRename}
                   onDelete={onDelete}
+                  onCopyPath={copyPath}
+                  onReveal={revealInFinder}
                 />
               )}
             </div>
