@@ -658,17 +658,19 @@ impl MetadataStore {
             .map_err(|error| format!("could not save LLM user message: {error}"))?;
 
         for item in request.context_items {
+            // The document may not be registered yet — the search index builds in
+            // the background (and may not have run when the first message is sent),
+            // or the file was only scanned, never edited in Compose. The context's
+            // value to the agent is the snapshot + path (carried in the prompt), not
+            // this version linkage — so store what resolves and leave doc_id /
+            // revision null rather than failing the whole send.
             let doc_id = document_id_for_path(&transaction, &item.file_path)
-                .map_err(|error| format!("could not resolve LLM context document: {error}"))?
-                .ok_or_else(|| {
-                    format!(
-                        "{} is not registered in document metadata; scan the workspace before sending context",
-                        item.file_path
-                    )
-                })?;
-            let revision_id = latest_revision_id_for_doc(&transaction, &doc_id)
-                .map_err(|error| format!("could not resolve document revision: {error}"))?
-                .ok_or_else(|| format!("{} has no recorded document revision", item.file_path))?;
+                .map_err(|error| format!("could not resolve LLM context document: {error}"))?;
+            let revision_id = match doc_id.as_deref() {
+                Some(id) => latest_revision_id_for_doc(&transaction, id)
+                    .map_err(|error| format!("could not resolve document revision: {error}"))?,
+                None => None,
+            };
             let source_range_json = optional_json(&item.source_range)?;
             let anchor_json = optional_json(&item.anchor)?;
 
@@ -2152,15 +2154,18 @@ mod tests {
     }
 
     #[test]
-    fn rejects_llm_context_for_unknown_document() {
+    fn stores_llm_context_for_unknown_document_without_failing() {
+        // An unregistered context file (the background index hasn't run yet, or a
+        // scanned-but-unedited file) must NOT fail the send — the snapshot is what
+        // the agent uses; the doc/revision linkage is best-effort, left null.
         let (_dir, store, vault_id) = synced_store();
-        let error = store
+        store
             .record_llm_thread(LlmThreadRecordRequest {
                 context_items: vec![LlmContextSnapshotRequest {
                     anchor: None,
                     file_path: "notes/missing.md".to_owned(),
                     kind: "file".to_owned(),
-                    selected_text_snapshot: None,
+                    selected_text_snapshot: Some("snippet".to_owned()),
                     source_comment_id: None,
                     source_range: None,
                     surrounding_context_snapshot: None,
@@ -2168,9 +2173,7 @@ mod tests {
                 prompt: "Summarize".to_owned(),
                 workspace_id: vault_id.to_owned(),
             })
-            .expect_err("missing document context must fail");
-
-        assert!(error.contains("is not registered in document metadata"));
+            .expect("an unregistered context document must not fail the send");
     }
 
     #[test]

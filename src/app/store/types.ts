@@ -106,7 +106,7 @@ export interface WorkspaceState {
    */
   regenerateLastTurn: () => Promise<void>;
   closeFileTab: (filePath: string) => void;
-  createNote: () => Promise<void>;
+  createNote: (seed?: { relativePath: string; content: string }) => Promise<void>;
   deleteActiveFile: () => Promise<void>;
   dismissConflict: (relativePath: string) => void;
   handleFsEvent: (workspaceId: string, event: WorkspaceFsEvent) => Promise<void>;
@@ -161,6 +161,8 @@ export interface WorkspaceState {
   sendCommentToChat: (commentId: string) => Promise<void>;
   sendCommentsToChat: (commentIds: string[]) => Promise<void>;
   setChatPrompt: (prompt: string) => void;
+  /** Clear a stale run-error banner after the agent recovers (Start Ollama / Retry). */
+  dismissChatRunError: () => void;
   /** Attach a file as chat context (a chip in the context row). Used by the
    * large-paste handler, which spills the text to a file and adds its path. */
   addChatFileContext: (input: { label: string; path: string }) => void;

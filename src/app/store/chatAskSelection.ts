@@ -246,9 +246,7 @@ export async function runAskAboutSelection(
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
     });
   } catch (error) {
-    const message = formatHarnessError(
-      error instanceof Error ? error.message : "The assistant could not start",
-    );
+    const message = formatHarnessError(error);
     const currentThread =
       get().workspaces.find((item) => item.id === workspaceId)?.chatThread ?? null;
     if (currentThread?.activeRunId === runId) {

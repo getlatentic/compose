@@ -35,7 +35,7 @@ import {
 export const createChatSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "appendUserChatMessage" | "acceptSuggestedEdit" | "rejectSuggestedEdit" | "askAboutSelectionStream" | "cancelActiveRun" | "regenerateLastTurn" | "sendChatPrompt" | "setChatPrompt" | "addChatFileContext" | "removeChatContextItem"> => ({
+): Pick<WorkspaceState, "appendUserChatMessage" | "acceptSuggestedEdit" | "rejectSuggestedEdit" | "askAboutSelectionStream" | "cancelActiveRun" | "regenerateLastTurn" | "sendChatPrompt" | "setChatPrompt" | "dismissChatRunError" | "addChatFileContext" | "removeChatContextItem"> => ({
   appendUserChatMessage: (userContent: string, preparedCommand: string | null) => {
     const workspace = get().activeWorkspace();
     if (!workspace) {
@@ -169,6 +169,25 @@ export const createChatSlice = (
           ...item.chatThread,
           preparedCommand: null,
           prompt,
+        },
+      })),
+    }));
+  },
+  // Clear a stale run-error banner once the user recovers the agent (starts
+  // Ollama, or hits Retry). Without this it lingers until the next send, even
+  // after the agent is back to ready.
+  dismissChatRunError: () => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
+        ...item,
+        chatThread: {
+          ...item.chatThread,
+          runError: null,
+          runState: item.chatThread.runState === "error" ? "idle" : item.chatThread.runState,
         },
       })),
     }));

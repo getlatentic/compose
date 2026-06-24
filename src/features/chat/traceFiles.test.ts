@@ -8,7 +8,7 @@ import { appliedChangeBasenames, fileOpsFromTrace, readFilesFromTrace } from "./
  * — the routing key these helpers read, independent of the tool's `name`. */
 function tool(
   kind: ToolKind,
-  opts: { id?: string; name?: string; input?: string } = {},
+  opts: { id?: string; name?: string; input?: string; status?: "running" | "done" | "error" } = {},
 ): TraceEntry {
   return {
     kind: "tool",
@@ -16,7 +16,7 @@ function tool(
       id: opts.id ?? kind,
       name: opts.name ?? kind,
       kind,
-      status: "done",
+      status: opts.status ?? "done",
       input: opts.input,
     },
   };
@@ -73,6 +73,33 @@ describe("fileOpsFromTrace", () => {
     const trace: TraceEntry[] = [
       tool("edit", { id: "e1", input: JSON.stringify({ path: "/a/x.md" }) }),
       tool("edit", { id: "e2", input: JSON.stringify({ path: "/a/x.md" }) }),
+    ];
+    expect(fileOpsFromTrace(trace).map((entry) => entry.id)).toEqual(["e1", "e2"]);
+  });
+
+  it("folds a failed edit into a later success on the same file (recovery)", () => {
+    // Claude's "File has not been read yet" retry: the first edit errors, the
+    // next one lands. The reader should see the outcome, not the scary fumble.
+    const trace: TraceEntry[] = [
+      tool("edit", { id: "e1", status: "error", input: JSON.stringify({ path: "/a/x.md" }) }),
+      tool("edit", { id: "e2", status: "done", input: JSON.stringify({ path: "/a/x.md" }) }),
+    ];
+    expect(fileOpsFromTrace(trace).map((entry) => entry.id)).toEqual(["e2"]);
+  });
+
+  it("keeps a failed op when nothing later succeeds on that file", () => {
+    const trace: TraceEntry[] = [
+      tool("edit", { id: "e1", status: "error", input: JSON.stringify({ path: "/a/x.md" }) }),
+      // a success on a DIFFERENT file must not rescue x.md's failure
+      tool("write", { id: "w1", status: "done", input: JSON.stringify({ path: "/a/y.md" }) }),
+    ];
+    expect(fileOpsFromTrace(trace).map((entry) => entry.id)).toEqual(["e1", "w1"]);
+  });
+
+  it("keeps a failure that comes AFTER a success on the same file (not a recovery)", () => {
+    const trace: TraceEntry[] = [
+      tool("edit", { id: "e1", status: "done", input: JSON.stringify({ path: "/a/x.md" }) }),
+      tool("edit", { id: "e2", status: "error", input: JSON.stringify({ path: "/a/x.md" }) }),
     ];
     expect(fileOpsFromTrace(trace).map((entry) => entry.id)).toEqual(["e1", "e2"]);
   });

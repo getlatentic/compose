@@ -7,6 +7,26 @@ describe("formatHarnessError", () => {
     expect(formatHarnessError("   ")).toBe("Something went wrong. Please try again.");
   });
 
+  it("surfaces a Tauri string rejection instead of a generic fallback", () => {
+    // run_harness_stream rejects with a bare string, not an Error — the real
+    // reason must survive rather than being swallowed by "could not start".
+    expect(formatHarnessError("spawn claude ENOENT")).toContain("wasn't found");
+  });
+
+  it("reads the message off an Error", () => {
+    expect(formatHarnessError(new Error("the model is offline"))).toBe("The model is offline");
+  });
+
+  it("reads the message off a plain object", () => {
+    expect(formatHarnessError({ message: "boom from backend" })).toBe("Boom from backend");
+  });
+
+  it("falls back for a messageless non-string throw", () => {
+    expect(formatHarnessError(null)).toBe("Something went wrong. Please try again.");
+    expect(formatHarnessError(undefined)).toBe("Something went wrong. Please try again.");
+    expect(formatHarnessError({})).toBe("Something went wrong. Please try again.");
+  });
+
   it("pulls the message out of a JSON error blob", () => {
     const raw = '{"type":"invalid_request_error","message":"Something specific went wrong","status":400}';
     expect(formatHarnessError(raw)).toBe("Something specific went wrong");

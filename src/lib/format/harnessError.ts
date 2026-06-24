@@ -7,8 +7,8 @@
  * plain guidance, and cap the length. The raw text is still logged for
  * diagnostics (the call sites pass it to `reportClientError`).
  */
-export function formatHarnessError(raw: string): string {
-  const text = (raw ?? "").trim();
+export function formatHarnessError(raw: unknown): string {
+  const text = coerceErrorText(raw);
   if (!text) {
     return "Something went wrong. Please try again.";
   }
@@ -108,6 +108,26 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/** Coerce an unknown thrown value to its human text. A Tauri IPC rejection is a
+ * bare string (the Rust `Err`), not an `Error`, so a naive `err.message` drops
+ * the real reason and leaves only a generic fallback — handle string, `Error`,
+ * and `{ message }` shapes. */
+function coerceErrorText(raw: unknown): string {
+  if (typeof raw === "string") {
+    return raw.trim();
+  }
+  if (raw instanceof Error) {
+    return (raw.message ?? "").trim();
+  }
+  if (raw && typeof raw === "object") {
+    const message = (raw as { message?: unknown }).message;
+    if (typeof message === "string") {
+      return message.trim();
+    }
+  }
+  return "";
 }
 
 function truncate(text: string, max: number): string {

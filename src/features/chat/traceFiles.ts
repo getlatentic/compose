@@ -42,7 +42,11 @@ export function readFilesFromTrace(trace: TraceEntry[] | undefined): string[] {
 /**
  * The create/edit tool calls of this turn, in arrival order, each rendered
  * as a file-op card. Multiple edits to the same file stay distinct (each is
- * a real operation with its own running → done/error lifecycle).
+ * a real operation with its own running → done/error lifecycle) — EXCEPT a
+ * *failed* op the agent then recovers from (a later success on the same file):
+ * that intermediate error is folded away, so the reader sees the outcome, not
+ * the agent's retry (e.g. Claude's "read the file first, then edit" dance,
+ * which surfaces a scary "Couldn't edit" card before the edit that lands).
  *
  * `coveredFiles` are the basenames a turn's applied-diff cards already own
  * (snapshot mode — see {@link appliedChangeBasenames}). The applied diff knows
@@ -72,7 +76,26 @@ export function fileOpsFromTrace(
     }
     ops.push(entry.tool);
   }
-  return ops;
+  // Fold away a failed op the agent recovered from: when a LATER op on the same
+  // file succeeded, the file ended up written, so the intermediate error is just
+  // noise that reads as a real failure. A failure with no later success on that
+  // file stays visible — that one genuinely didn't go through.
+  return ops.filter((op, index) => {
+    if (op.status !== "error") {
+      return true;
+    }
+    const file = toolFile(op.input);
+    if (!file) {
+      return true;
+    }
+    const recovered = ops
+      .slice(index + 1)
+      .some(
+        (later) =>
+          later.status === "done" && toolFile(later.input)?.toLowerCase() === file.toLowerCase(),
+      );
+    return !recovered;
+  });
 }
 
 /** Basenames of the files an applied-diff set covers, for {@link fileOpsFromTrace}
