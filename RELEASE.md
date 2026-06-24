@@ -115,6 +115,11 @@ these are product work; they're the ship vehicle.
       Drive `pnpm tauri build` once: save a real key → send a prompt → confirm a
       real edit lands and review/apply works. This is a verification gap, not
       code.
+- [ ] **Open tabs can vanish, replaced by Welcome.md** (#14). `applyScanResult`
+      prunes `openFilePaths` to whatever the latest scan lists, so a partial or
+      racing scan drops open tabs and the empty-tabs fallback opens `Welcome.md` —
+      reads as lost work. Fix: reconcile tab removal only on a confirmed `removed`
+      fs-event; don't let the Welcome fallback overwrite restored tabs.
 
 ## 2a. Onboarding: auto-discover installed harnesses — done
 
@@ -171,6 +176,9 @@ agent-skill export route are deferred (re-open below if wanted).
       multi-page PDF with images/tables. (This is the one unverified step.)
 - [ ] **Tune** if needed after first run: page size/margins (`@page` in
       `html.rs` `PRINT_CSS`), readiness timing (`pdf.rs` poll/timeout).
+- [ ] **Math/LaTeX renders as raw text** (#12) — `$…$` / `$$…$$` aren't typeset;
+      the export HTML has no KaTeX. Render math into the export so PDF/HTML match
+      the editor.
 
 ### 3b. HTML export — done; DOCX deferred
 
@@ -223,6 +231,12 @@ agent-skill export route are deferred (re-open below if wanted).
       (reconfigured on change). Minor; the chat side already dims broken ones.
 - [ ] Optional polish: a discoverable affordance for editor links (⌘-click is
       non-obvious for non-technical users — e.g. a hover hint).
+
+### 3d. Print — not yet built
+
+- [ ] **No Print anywhere** (#13) — no macOS menu item, no `⌘P` handler. Add a
+      Print action that reuses the export render → system print dialog (which also
+      offers "Save as PDF"). Depends on the shared export render (incl. #12).
 
 ---
 
