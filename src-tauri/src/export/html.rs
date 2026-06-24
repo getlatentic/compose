@@ -39,13 +39,77 @@ fn markdown_to_body(markdown: &str) -> String {
     options.extension.autolink = true;
     options.extension.footnotes = true;
     options.extension.superscript = true;
+    // Recognize `$…$` / `$$…$$`. comrak only *tags* the math (for a client-side
+    // renderer); `render_math_to_mathml` then typesets it to MathML below.
+    options.extension.math_dollars = true;
     // Recognize and skip a leading `---\n…\n---` YAML block.
     options.extension.front_matter_delimiter = Some("---".to_string());
     // `render.unsafe_` stays false: raw inline HTML is escaped rather than
     // passed through, so a document can never inject a runnable <script> into
     // the export webview.
     let prepared = convert_wikilinks_to_links(markdown);
-    comrak::markdown_to_html(&prepared, &options)
+    let html = comrak::markdown_to_html(&prepared, &options);
+    render_math_to_mathml(&html)
+}
+
+/// Typeset the math comrak tagged. comrak's math extension emits
+/// `<span data-math-style="inline|display">latex</span>` for `$…$` / `$$…$$`
+/// (it expects a client-side renderer). The export has none, so convert each
+/// span to MathML, which WebKit typesets natively in the PDF.
+fn render_math_to_mathml(html: &str) -> String {
+    const OPEN: &str = "<span data-math-style=\"";
+    const CLOSE: &str = "</span>";
+    let mut out = String::with_capacity(html.len() + 64);
+    let mut rest = html;
+    while let Some(at) = rest.find(OPEN) {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + OPEN.len()..];
+        match (after.find('"'), after.find('>'), after.find(CLOSE)) {
+            (Some(quote), Some(gt), Some(close)) if quote < gt && gt < close => {
+                let block = &after[..quote] == "display";
+                let escaped_latex = &after[gt + 1..close];
+                out.push_str(&latex_to_mathml(escaped_latex, block));
+                rest = &after[close + CLOSE.len()..];
+            }
+            // Not a well-formed math span — emit the tag verbatim, keep scanning.
+            _ => {
+                out.push_str(OPEN);
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Render one LaTeX equation (HTML-escaped, as comrak emits it) to MathML. On a
+/// parse error, fall back to the escaped source so no content is lost.
+fn latex_to_mathml(escaped_latex: &str, block: bool) -> String {
+    use pulldown_latex::config::DisplayMode;
+    use pulldown_latex::{push_mathml, Parser, RenderConfig, Storage};
+
+    let latex = html_unescape(escaped_latex);
+    let storage = Storage::new();
+    let parser = Parser::new(&latex, &storage);
+    let config = RenderConfig {
+        display_mode: if block { DisplayMode::Block } else { DisplayMode::Inline },
+        ..RenderConfig::default()
+    };
+    let mut mathml = String::new();
+    if push_mathml(&mut mathml, parser, config).is_ok() {
+        mathml
+    } else {
+        format!("<code class=\"math-error\">{escaped_latex}</code>")
+    }
+}
+
+/// Reverse comrak's HTML escaping so the raw LaTeX reaches the math parser.
+fn html_unescape(s: &str) -> String {
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&amp;", "&")
 }
 
 /// Convert `[[target]]` / `[[target|alias]]` into markdown links so the export
@@ -285,6 +349,9 @@ img { max-width: 100%; height: auto; }
 hr { border: none; border-top: 1px solid #e2e2e2; margin: 1.6em 0; }
 ul.contains-task-list { list-style: none; padding-left: 1em; }
 .task-list-item input { margin-right: 0.5em; }
+math { font-size: 1.05em; }
+math[display="block"] { display: block; margin: 0.9em 0; text-align: center; }
+.math-error { color: #b22222; }
 "#;
 
 #[cfg(test)]
@@ -318,6 +385,20 @@ mod tests {
     fn leaves_wikilinks_in_fenced_code_alone() {
         let html = render_markdown_to_html("```\n[[Literal]]\n```", "doc", &doc_dir());
         assert!(html.contains("[[Literal]]"), "code-fenced wikilink stays literal: {html}");
+    }
+
+    #[test]
+    fn typesets_dollar_math_as_mathml() {
+        let inline = render_markdown_to_html("mass-energy: $E = mc^2$.", "doc", &doc_dir());
+        assert!(inline.contains("<math"), "inline $…$ becomes MathML: {inline:.300}");
+        assert!(
+            !inline.contains("data-math-style"),
+            "the comrak math span is converted, not left raw: {inline:.300}"
+        );
+
+        let block = render_markdown_to_html("$$\\frac{a}{b}$$", "doc", &doc_dir());
+        assert!(block.contains("<math"), "block $$…$$ becomes MathML: {block:.300}");
+        assert!(block.contains("display=\"block\""), "display math uses block: {block:.300}");
     }
 
     #[test]
