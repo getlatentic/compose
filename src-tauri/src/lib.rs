@@ -39,6 +39,31 @@ pub fn run() {
         .manage(PendingOpenUrls::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // A native menu set at construction (so there's no default→custom menu-bar
+        // flash on launch): the platform defaults plus File → Print (⌘P). Print
+        // emits `menu://print` (routed in `setup`) → the editor's PDF export.
+        .menu(|handle| {
+            use tauri::menu::{Menu, MenuItem, Submenu};
+            let menu = Menu::default(handle)?;
+            let print =
+                MenuItem::with_id(handle, "print", "Print…", true, Some("CmdOrCtrl+P"))?;
+            // `Menu::default` already has a File submenu — add Print to it rather
+            // than inserting a second File.
+            let mut added = false;
+            for item in menu.items()? {
+                if let Some(file) = item.as_submenu() {
+                    if file.text().map(|text| text == "File").unwrap_or(false) {
+                        file.append(&print)?;
+                        added = true;
+                        break;
+                    }
+                }
+            }
+            if !added {
+                menu.insert(&Submenu::with_items(handle, "File", true, &[&print])?, 1)?;
+            }
+            Ok(menu)
+        })
         .setup(|app| {
             let app_handle = app.handle().clone();
             // Capture back-end panics into the local error log (best-effort),
@@ -58,24 +83,9 @@ pub fn run() {
                 }));
             }
 
-            // Native menu: keep the platform defaults and add File → Print (⌘P).
-            // Print emits `menu://print`; the editor runs the existing PDF export.
-            {
-                use tauri::menu::{Menu, MenuItem, Submenu};
-                let handle = app.handle();
-                let built = (|| -> tauri::Result<()> {
-                    let print =
-                        MenuItem::with_id(handle, "print", "Print…", true, Some("CmdOrCtrl+P"))?;
-                    let file = Submenu::with_items(handle, "File", true, &[&print])?;
-                    let menu = Menu::default(handle)?;
-                    menu.insert(&file, 1)?;
-                    app.set_menu(menu)?;
-                    Ok(())
-                })();
-                if let Err(error) = built {
-                    eprintln!("menu init failed: {error}");
-                }
-            }
+            // File → Print (⌘P) lives on the builder menu (set at construction so
+            // there's no menu-bar flash). Here we only route its event: Print emits
+            // `menu://print`, which the editor turns into the existing PDF export.
             app.on_menu_event(|app, event| {
                 if event.id() == "print" {
                     let _ = app.emit("menu://print", ());
