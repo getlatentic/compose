@@ -57,6 +57,31 @@ pub fn run() {
                     default_hook(info);
                 }));
             }
+
+            // Native menu: keep the platform defaults and add File → Print (⌘P).
+            // Print emits `menu://print`; the editor runs the existing PDF export.
+            {
+                use tauri::menu::{Menu, MenuItem, Submenu};
+                let handle = app.handle();
+                let built = (|| -> tauri::Result<()> {
+                    let print =
+                        MenuItem::with_id(handle, "print", "Print…", true, Some("CmdOrCtrl+P"))?;
+                    let file = Submenu::with_items(handle, "File", true, &[&print])?;
+                    let menu = Menu::default(handle)?;
+                    menu.insert(&file, 1)?;
+                    app.set_menu(menu)?;
+                    Ok(())
+                })();
+                if let Err(error) = built {
+                    eprintln!("menu init failed: {error}");
+                }
+            }
+            app.on_menu_event(|app, event| {
+                if event.id() == "print" {
+                    let _ = app.emit("menu://print", ());
+                }
+            });
+
             let registry = app_handle.state::<workspace::WorkspaceRegistry>();
             if let Err(error) = registry.init_from_app(&app_handle) {
                 eprintln!("workspace registry init failed: {error}");

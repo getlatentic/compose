@@ -17,6 +17,8 @@ import { exportDocumentToHtml } from "../../lib/export/htmlExport";
 import { resolveDisplaySrc } from "./imageDisplaySrc";
 import { writeBinaryFile } from "../../lib/ipc/filesClient";
 import { openExternalUrl } from "../../lib/links/openExternal";
+import { listen } from "@tauri-apps/api/event";
+import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { markTabSwitchEnd } from "../../lib/perf";
 import { registerActiveEditorFlush } from "../../lib/editor/editorFlush";
 import { showToast } from "../toast/toastStore";
@@ -190,6 +192,18 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
         : { kind: "error", title: "Export failed", message: result.message },
     );
   }, []);
+
+  // File → Print / ⌘P (a native menu item) emits `menu://print`; reuse the
+  // existing PDF export so "print" is print-to-PDF via the save dialog.
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    const unlisten = listen("menu://print", () => void handleExport("pdf"));
+    return () => {
+      void unlisten.then((off) => off());
+    };
+  }, [handleExport]);
 
   // The host owns its toolbar actions and hands them to the editor as one
   // stable slot — the editor itself stays agnostic about save / export /
