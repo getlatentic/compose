@@ -14,7 +14,7 @@ import { ArrowLeft } from "@carbon/react/icons";
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessRemoveCustom } from "../../lib/ipc/harnessClient";
-import { agentStatus, statusTagType } from "./agentStatus";
+import { agentStatus } from "./agentStatus";
 import { ExternalHarnessSetup, ManagedHarnessSetup } from "./agentConfigControls";
 import { OllamaModelManager } from "./OllamaModelManager";
 import { RuntimeDetailPanel } from "./RuntimeDetailPanel";
@@ -59,11 +59,6 @@ export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () =
 
         <div className="agent-detail__head">
           <h3>{name}</h3>
-          {status ? (
-            <Tag size="sm" type={statusTagType(status.tone)}>
-              {status.label}
-            </Tag>
-          ) : null}
           {isDefault ? (
             <Tag size="sm" type="blue">
               Default

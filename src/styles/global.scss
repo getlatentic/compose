@@ -4876,6 +4876,14 @@ select {
   color: var(--cds-text-primary, #161616);
 }
 
+// Carbon pads its TabPanel, and each tab's content already wraps in a
+// `.settings-section` (1rem) like the header above the tabs — together that
+// double-indents the content. Zero the panel padding so the inner section alone
+// sets the inset, lining the content up with the header and tab labels.
+.agent-detail .cds--tab-content {
+  padding: 0;
+}
+
 .agent-detail__head {
   display: flex;
   align-items: center;
