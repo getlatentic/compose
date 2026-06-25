@@ -14,6 +14,7 @@
  * A typical perf session uses both:
  *   COMPOSE_DEVTOOLS=1 COMPOSE_PERF=1 pnpm tauri build
  */
+import { reportClientError } from "../diagnostics/errorReporter";
 
 export function perfMark(label: string): void {
   if (!__COMPOSE_PERF__) return;
@@ -53,6 +54,9 @@ export function markBoot(phase: string): void {
   performance.mark(`boot:${phase}`);
   // eslint-disable-next-line no-console
   console.log(`[perf] boot:${phase} @ ${now.toFixed(0)}ms`);
+  // Persist to the local error log too, so a boot profile is readable from a
+  // COMPOSE_PERF build without attaching the Web Inspector.
+  void reportClientError("bootperf", `${phase} @ ${now.toFixed(0)}ms`);
 }
 
 /**

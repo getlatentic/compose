@@ -7,28 +7,18 @@
     <title>Compose</title>
     <style>
       /*
-       * Pre-React splash. Lives inside #root so React replaces it
-       * automatically when <AppShell /> mounts. No `display: none`
-       * dance — React's reconciliation discards every child when
-       * it renders into the root. The user sees the splash for
-       * the ~200-500ms it takes the JS bundle to parse + the
-       * initial render to complete; then the real UI appears.
+       * Pre-React skeleton of the three-pane shell (sidebar | editor | chat),
+       * empty but for the pane dividers — so the very first paint is the app's
+       * own structure and the real UI fills into it with no flash or swap. (A
+       * brand splash only blinked for ~100ms before the app on a fast boot and
+       * read as a flash.) Kept inline so it ships in the first HTML payload —
+       * no CSS round-trip, no flash of unstyled content — and mirrored in
+       * global.scss for the React <SplashScreen/>.
        *
-       * Kept inline (not in global.scss) so it ships in the
-       * first HTML payload. No round-trip to a CSS file, no
-       * flash of unstyled splash.
-       *
-       * Design intent: this is a *preview of the opening screen*.
-       * Everything here is lifted straight from the dashboard
-       * brand (`.bob-dashboard__brand*` in global.scss) — white
-       * surface (#ffffff, == `--cds-background`), the same square
-       * #161616 mark holding the Carbon `ChatBot` glyph, and the
-       * same two-line "Bob / for Everyone" wordmark. The handoff
-       * to React is then a continuation, not a jarring swap.
-       *
-       * NOTE: `html, body` is white too (not the old #f4f4f4) so
-       * there is never a grey frame around the splash before the
-       * WebView paints it.
+       * The column template + divider colour match
+       * `.workspace--editor-open.workspace--chat-open` in global.scss, so the
+       * dividers land exactly where the real panes' dividers will and content
+       * fills in without a shift.
        */
       html, body {
         margin: 0;
@@ -44,103 +34,45 @@
       #root {
         height: 100%;
       }
-      .app-splash {
+      .app-skeleton {
         position: fixed;
         inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        gap: 1.25rem;
+        display: grid;
+        grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
         background: #ffffff;
-        animation: app-splash-in 240ms ease-out;
       }
-      /* Square mark — matches `.bob-dashboard__brand-mark`, scaled
-       * up for the splash. Carbon's brand marks are hard squares,
-       * not rounded, so we keep sharp corners. */
-      .app-splash__mark {
-        inline-size: 64px;
-        block-size: 64px;
-        display: grid;
-        place-items: center;
-        background: #161616;
-        color: #ffffff;
+      .app-skeleton__pane {
+        min-inline-size: 0;
       }
-      .app-splash__mark svg {
-        width: 36px;
-        height: 36px;
-        fill: currentColor;
+      .app-skeleton__pane--sidebar {
+        border-inline-end: 1px solid #c6c6c6;
       }
-      /* Wordmark — mirrors `.bob-dashboard__brand-text`: bold
-       * product name over a helper-grey descriptor. Centered for
-       * the splash rather than left-aligned. */
-      .app-splash__wordmark {
-        display: grid;
-        justify-items: center;
-        line-height: 1.15;
-        gap: 0.125rem;
+      .app-skeleton__pane--chat {
+        border-inline-start: 1px solid #c6c6c6;
       }
-      .app-splash__name {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #161616;
-        letter-spacing: -0.01em;
-      }
-      .app-splash__descriptor {
-        font-size: 0.75rem;
-        font-weight: 400;
-        color: #6f6f6f;
-        letter-spacing: 0.01em;
-      }
-      /* Carbon-blue indeterminate sweep — the only motion, kept
-       * small and low so it reads as "loading", not decoration. */
-      .app-splash__pulse {
-        width: 32px;
-        height: 2px;
-        margin-block-start: 0.25rem;
-        background: linear-gradient(
-          90deg,
-          transparent 0%,
-          #0f62fe 50%,
-          transparent 100%
-        );
-        background-size: 200% 100%;
-        animation: app-splash-pulse 1.2s ease-in-out infinite;
-      }
-      @keyframes app-splash-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      @keyframes app-splash-pulse {
-        0% { background-position: 200% 0; }
-        100% { background-position: -200% 0; }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .app-splash { animation: none; }
-        .app-splash__pulse { animation-duration: 2.4s; }
+      /* Below the workspace's 48rem breakpoint the real layout collapses to a
+         single column — match it so the dividers aren't left mid-canvas. */
+      @media (max-width: 48rem) {
+        .app-skeleton {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .app-skeleton__pane--sidebar,
+        .app-skeleton__pane--chat {
+          display: none;
+        }
       }
     </style>
   </head>
 
   <body>
     <div id="root">
-      <!-- Splash. Replaced by React on mount. Lives inside #root so we
-        don't need an extra effect to remove it. Mirrors the dashboard
-        brand so the splash → app transition is seamless. -->
-      <div class="app-splash" aria-hidden="true">
-        <span class="app-splash__mark">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-hidden="true">
-            <path d="M16,19a6.9908,6.9908,0,0,1-5.833-3.1287l1.666-1.1074a5.0007,5.0007,0,0,0,8.334,0l1.666,1.1074A6.9908,6.9908,0,0,1,16,19Z"/>
-            <path d="M20,8a2,2,0,1,0,2,2A1.9806,1.9806,0,0,0,20,8Z"/>
-            <path d="M12,8a2,2,0,1,0,2,2A1.9806,1.9806,0,0,0,12,8Z"/>
-            <path d="M17.7358,30,16,29l4-7h6a1.9966,1.9966,0,0,0,2-2V6a1.9966,1.9966,0,0,0-2-2H6A1.9966,1.9966,0,0,0,4,6V20a1.9966,1.9966,0,0,0,2,2h9v2H6a3.9993,3.9993,0,0,1-4-4V6A3.9988,3.9988,0,0,1,6,2H26a3.9988,3.9988,0,0,1,4,4V20a3.9993,3.9993,0,0,1-4,4H21.1646Z"/>
-          </svg>
-        </span>
-        <div class="app-splash__wordmark">
-          <span class="app-splash__name">Compose</span>
-          <span class="app-splash__descriptor">AI for everyone</span>
-        </div>
-        <div class="app-splash__pulse"></div>
+      <!-- Three-pane skeleton. Replaced by React on mount; lives inside #root
+        so React discards it automatically. Mirrors the workspace shell so the
+        skeleton → app transition is a fill-in, not a swap. -->
+      <div class="app-skeleton" aria-hidden="true">
+        <div class="app-skeleton__pane app-skeleton__pane--sidebar"></div>
+        <div class="app-skeleton__pane app-skeleton__pane--editor"></div>
+        <div class="app-skeleton__pane app-skeleton__pane--chat"></div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

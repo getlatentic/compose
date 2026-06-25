@@ -6,6 +6,7 @@ import { SplashScreen } from "./SplashScreen";
 import { MainApp } from "./MainApp";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useHarnessStore } from "./store/harnessStore";
+import { markBoot } from "../lib/perf";
 
 /**
  * Top-level screen router. Owns boot hydration and picks exactly one screen:
@@ -56,6 +57,7 @@ export function AppRouter() {
         // Flip the boot gate LAST, after every store hydration above has
         // committed — React batches the setters into one commit, then this
         // final setter is the trigger that releases the splash.
+        markBoot("hydrated");
         setBootHydrated(true);
       } catch {
         if (!cancelled) {
