@@ -4,11 +4,9 @@ import { AgentsSettings } from "./AgentsSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { AboutSettings } from "./AboutSettings";
 import { SystemSetupPanel } from "./SystemSetupPanel";
-import { RuntimesPanel } from "./RuntimesPanel";
 
 const CATEGORIES = [
   { id: "agents", label: "AI agents" },
-  { id: "runtimes", label: "Runtimes" },
   { id: "getready", label: "Get ready" },
   { id: "general", label: "General" },
   { id: "about", label: "About" },
@@ -48,8 +46,6 @@ export function SettingsPanel() {
       <div className="settings-content">
         {category === "agents" ? (
           <AgentsSettings />
-        ) : category === "runtimes" ? (
-          <RuntimesPanel />
         ) : category === "getready" ? (
           <SystemSetupPanel />
         ) : category === "general" ? (

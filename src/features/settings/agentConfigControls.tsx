@@ -1,14 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import {
-  Button,
-  InlineNotification,
-  PasswordInput,
-  Tab,
-  TabList,
-  TabPanel,
-  TabPanels,
-  Tabs,
-} from "@carbon/react";
+import { Button, InlineNotification, PasswordInput } from "@carbon/react";
 
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
@@ -20,7 +11,6 @@ import {
 } from "../../lib/ipc/harnessClient";
 import { AdvancedRunOptions } from "./AdvancedRunOptions";
 import { ModelPicker } from "./ModelPicker";
-import { OllamaModelManager } from "./OllamaModelManager";
 
 /**
  * The per-agent configuration controls shared by the Settings detail screen.
@@ -47,17 +37,12 @@ export function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
 
 /** The per-agent model + run-tuning controls. The model picker leads (it's the
  *  setting most people touch) with the power-user knobs behind {@link
- *  AdvancedRunOptions}. An agent that manages local models (Ollama) splits the
- *  download/inventory off into a "Models" tab so a long list never buries the
- *  config; everything else renders the config flat. Capability-driven — a new
- *  agent needs zero edits here. */
+ *  AdvancedRunOptions}. Local-model management (Ollama) lives in the detail's
+ *  "Models" tab, not here, so this stays flat. Capability-driven — a new agent
+ *  needs zero edits here. */
 export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
-  const modelManagement = useHarnessStore((state) => state.harnessModelManagement[harnessId]);
-  const loadHarnessModelManagement = useHarnessStore(
-    (state) => state.loadHarnessModelManagement,
-  );
   const caps = harnessCapabilitiesOf(harnessCatalog, harnessId);
 
   // Discover models live for agents without a curated compile-time list
@@ -69,36 +54,11 @@ export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
     }
   }, [harnessId, caps.models.length, loadHarnessModels]);
 
-  // Probe whether this agent manages its own local models (Ollama). Drives the
-  // "Models" tab below; null for every other agent.
-  useEffect(() => {
-    void loadHarnessModelManagement(harnessId);
-  }, [harnessId, loadHarnessModelManagement]);
-
-  const config = (
+  return (
     <>
       <ModelPicker harnessId={harnessId} />
       <AdvancedRunOptions harnessId={harnessId} />
     </>
-  );
-
-  if (!modelManagement) {
-    return config;
-  }
-
-  return (
-    <Tabs>
-      <TabList aria-label="Agent settings">
-        <Tab>Settings</Tab>
-        <Tab>Models</Tab>
-      </TabList>
-      <TabPanels>
-        <TabPanel>{config}</TabPanel>
-        <TabPanel>
-          <OllamaModelManager harnessId={harnessId} />
-        </TabPanel>
-      </TabPanels>
-    </Tabs>
   );
 }
 

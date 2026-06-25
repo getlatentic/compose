@@ -1,5 +1,14 @@
-import { useState } from "react";
-import { Button, InlineNotification, Tag } from "@carbon/react";
+import { useEffect, useState } from "react";
+import {
+  Button,
+  InlineNotification,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
+  Tag,
+} from "@carbon/react";
 import { ArrowLeft } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
@@ -7,6 +16,8 @@ import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessRemoveCustom } from "../../lib/ipc/harnessClient";
 import { agentStatus, statusTagType } from "./agentStatus";
 import { ExternalHarnessSetup, ManagedHarnessSetup } from "./agentConfigControls";
+import { OllamaModelManager } from "./OllamaModelManager";
+import { RuntimeDetailPanel } from "./RuntimeDetailPanel";
 import { useHarnessSetup } from "./useHarnessSetup";
 
 /**
@@ -20,6 +31,8 @@ import { useHarnessSetup } from "./useHarnessSetup";
 export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () => void }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const modelManagement = useHarnessStore((state) => state.harnessModelManagement[agentId]);
+  const loadHarnessModelManagement = useHarnessStore((state) => state.loadHarnessModelManagement);
   const info = harnessCatalog.find((entry) => entry.id === agentId);
   const caps = harnessCapabilitiesOf(harnessCatalog, agentId);
   const name = info?.displayName ?? agentId;
@@ -29,6 +42,12 @@ export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () =
   const isDefault = agentId === selectedHarnessId;
   const usesManagedSetup = Boolean(info?.requiresInstall && caps.credentialRequired);
   const needsInstall = !setup.readiness?.installed;
+
+  // Probe whether this agent manages its own local models (Ollama). Drives the
+  // "Models" tab below; null for every other agent.
+  useEffect(() => {
+    void loadHarnessModelManagement(agentId);
+  }, [agentId, loadHarnessModelManagement]);
 
   return (
     <div className="agent-detail">
@@ -54,36 +73,55 @@ export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () =
         {info ? <p className="settings-helper">{info.description}</p> : null}
       </div>
 
-      {usesManagedSetup ? (
-        <ManagedHarnessSetup
-          name={name}
-          apiKey={setup.apiKey}
-          setApiKey={setup.setApiKey}
-          authConfigured={setup.managedKeyConfigured}
-          needsInstall={needsInstall}
-          installing={setup.installing}
-          installLog={setup.installLog}
-          installResult={setup.installResult}
-          logRef={setup.logRef}
-          errorMessage={setup.error}
-          saveSuccess={setup.saveSuccess}
-          saving={setup.saving}
-          checkingRuntime={setup.checkingRuntime}
-          runtimeCheck={setup.runtimeCheck}
-          onInstall={() => void setup.install()}
-          onSubmit={setup.saveManagedKey}
-          onRuntimeCheck={() => void setup.runRuntimeCheck()}
-        />
-      ) : (
-        <>
-          {status?.action === "install" ? <InstallBlock name={name} setup={setup} /> : null}
-          {status?.action === "signIn" ? <SignInBlock name={name} setup={setup} /> : null}
-          <ExternalHarnessSetup harnessId={agentId} />
-        </>
-      )}
-      {agentId.startsWith("custom:") ? (
-        <RemoveAgentSection agentId={agentId} name={name} onRemoved={onBack} />
-      ) : null}
+      <Tabs>
+        <TabList aria-label={`${name} settings`}>
+          <Tab>Settings</Tab>
+          <Tab>Runtime</Tab>
+          {modelManagement ? <Tab>Models</Tab> : null}
+        </TabList>
+        <TabPanels>
+          <TabPanel>
+            {usesManagedSetup ? (
+              <ManagedHarnessSetup
+                name={name}
+                apiKey={setup.apiKey}
+                setApiKey={setup.setApiKey}
+                authConfigured={setup.managedKeyConfigured}
+                needsInstall={needsInstall}
+                installing={setup.installing}
+                installLog={setup.installLog}
+                installResult={setup.installResult}
+                logRef={setup.logRef}
+                errorMessage={setup.error}
+                saveSuccess={setup.saveSuccess}
+                saving={setup.saving}
+                checkingRuntime={setup.checkingRuntime}
+                runtimeCheck={setup.runtimeCheck}
+                onInstall={() => void setup.install()}
+                onSubmit={setup.saveManagedKey}
+                onRuntimeCheck={() => void setup.runRuntimeCheck()}
+              />
+            ) : (
+              <>
+                {status?.action === "install" ? <InstallBlock name={name} setup={setup} /> : null}
+                {status?.action === "signIn" ? <SignInBlock name={name} setup={setup} /> : null}
+                <ExternalHarnessSetup harnessId={agentId} />
+              </>
+            )}
+            {agentId.startsWith("custom:") ? (
+              <RemoveAgentSection agentId={agentId} name={name} onRemoved={onBack} />
+            ) : null}
+          </TabPanel>
+          <TabPanel>
+            <RuntimeDetailPanel harnessId={agentId} />
+          </TabPanel>
+          {modelManagement ? (
+            <TabPanel>
+              <OllamaModelManager harnessId={agentId} />
+            </TabPanel>
+          ) : null}
+        </TabPanels>
+      </Tabs>
     </div>
   );
 }

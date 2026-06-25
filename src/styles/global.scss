@@ -4805,48 +4805,14 @@ select {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-// ----- Runtimes panel -------------------------------------------------------
-// A per-agent runtime row: name + version + status + install-kind badge, an
-// Update/Install action, and a "Details" disclosure (resolved path + override).
-.runtime-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.5rem;
-}
-
-.runtime-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: start;
-  gap: 0.5rem 0.75rem;
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 6px;
-  background: var(--cds-layer-01, #f4f4f4);
-}
-
-.runtime-row--skeleton {
-  display: block;
-}
-
-.runtime-row__main {
-  min-inline-size: 0;
-  display: grid;
-  gap: 0.25rem;
-}
-
-.runtime-row__head {
+// ----- Runtime detail tab ---------------------------------------------------
+// An agent's runtime tab: version + status + install-kind badge, an
+// Update/Install action, the resolved path, and an explicit-path override.
+.runtime-detail__status {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
-}
-
-.runtime-row__head strong {
-  font-size: 0.8125rem;
-  font-weight: 600;
 }
 
 .runtime-row__version {
@@ -4855,29 +4821,8 @@ select {
   color: var(--cds-text-secondary, #525252);
 }
 
-.runtime-row__note {
-  font-size: 0.6875rem;
-  color: var(--cds-text-helper, #6f6f6f);
-}
-
-.runtime-row__checking {
-  font-size: 0.6875rem;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-style: italic;
-}
-
-.runtime-row__action {
-  grid-column: 2;
-  justify-self: end;
-}
-
-// The "Details" accordion spans the row's full width, under the head + action.
-.runtime-row__details {
-  grid-column: 1 / -1;
-}
-
 .runtime-detail {
-  margin: 0 0 0.75rem;
+  margin: 0.75rem 0;
   display: grid;
   gap: 0.25rem;
 }
@@ -4900,8 +4845,17 @@ select {
   font-style: italic;
 }
 
-.runtime-detail__actions {
-  margin-block-start: 0.5rem;
+.runtime-detail__saved {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-block-start: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--cds-support-success, #24a148);
+
+  svg {
+    fill: currentColor;
+  }
 }
 
 .agent-detail__back {
