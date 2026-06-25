@@ -42,8 +42,14 @@ pub fn workspace_rebuild_index(
     let root = registry.workspace_root(&workspace_id)?;
     let entries = scan_markdown_files(&root).map_err(file_error_message)?;
     ensure_vault_metadata(&metadata, &workspace_id, &root).map_err(file_error_message)?;
-    let inventory = document_inventory_for_entries(&root, &entries).map_err(file_error_message)?;
-    metadata.sync_documents(&workspace_id, inventory)?;
+    let inventory = document_inventory_for_entries(&root, &entries);
+    if !inventory.skipped.is_empty() {
+        eprintln!(
+            "workspace index ({workspace_id}): inventory skipped {} unreadable file(s) (e.g. dataless iCloud notes)",
+            inventory.skipped.len()
+        );
+    }
+    metadata.sync_documents_retaining(&workspace_id, inventory.entries, &inventory.skipped)?;
     let doc_ids = metadata.document_ids_by_path(&workspace_id)?;
     let mut documents = Vec::with_capacity(entries.len());
     let mut skipped = 0usize;

@@ -314,13 +314,29 @@ impl MetadataStore {
         vault_id: &str,
         entries: Vec<DocumentInventoryEntry>,
     ) -> Result<(), String> {
+        self.sync_documents_retaining(vault_id, entries, &[])
+    }
+
+    /// Sync the scanned inventory, but treat `retained_paths` as still present
+    /// even though they carry no fresh inventory row this pass.
+    ///
+    /// These are files the scan saw on disk yet couldn't read (an iCloud note
+    /// that wouldn't materialize, a permission glitch). Their existing metadata
+    /// row is left exactly as it was — neither re-hashed nor marked deleted —
+    /// so a transient read failure never erases a real document's search data.
+    pub fn sync_documents_retaining(
+        &self,
+        vault_id: &str,
+        entries: Vec<DocumentInventoryEntry>,
+        retained_paths: &[String],
+    ) -> Result<(), String> {
         validate_storage_id(vault_id, "vault id")?;
         let now = now_ms();
         let mut connection = self.vault_connection(vault_id)?;
         let transaction = connection
             .transaction()
             .map_err(|error| format!("could not start document sync transaction: {error}"))?;
-        let mut seen_paths = Vec::with_capacity(entries.len());
+        let mut seen_paths = Vec::with_capacity(entries.len() + retained_paths.len());
 
         for entry in entries {
             validate_relative_metadata_path(&entry.relative_path)?;
@@ -328,6 +344,7 @@ impl MetadataStore {
             upsert_document(&transaction, &entry, None, None, now)
                 .map_err(|error| format!("could not upsert document metadata: {error}"))?;
         }
+        seen_paths.extend(retained_paths.iter().cloned());
 
         mark_missing_documents_deleted(&transaction, &seen_paths, now)
             .map_err(|error| format!("could not mark missing documents deleted: {error}"))?;
@@ -2033,6 +2050,46 @@ mod tests {
         assert_eq!(
             paths,
             vec!["notes/a.md".to_owned(), "notes/b.md".to_owned()]
+        );
+    }
+
+    #[test]
+    fn retained_path_is_not_deleted_when_its_content_was_unreadable() {
+        let (_dir, store, vault_id) = synced_store();
+        let before = doc_id_for_test(&store, vault_id, "notes/a.md");
+
+        // A rebuild whose scan still saw `notes/a.md` but couldn't read its
+        // bytes (dataless iCloud note): it carries no fresh inventory row, only
+        // a retained path. The document must survive untouched.
+        store
+            .sync_documents_retaining(vault_id, Vec::new(), &["notes/a.md".to_owned()])
+            .expect("retaining sync");
+
+        assert_eq!(
+            store
+                .document_ids_by_path(vault_id)
+                .expect("doc ids")
+                .get("notes/a.md")
+                .cloned(),
+            Some(before),
+            "a retained (unreadable) path must keep its live metadata row"
+        );
+    }
+
+    #[test]
+    fn plain_sync_deletes_a_path_the_scan_no_longer_sees() {
+        let (_dir, store, vault_id) = synced_store();
+
+        store
+            .sync_documents(vault_id, Vec::new())
+            .expect("empty sync");
+
+        assert!(
+            !store
+                .document_ids_by_path(vault_id)
+                .expect("doc ids")
+                .contains_key("notes/a.md"),
+            "a genuinely absent path must be marked deleted"
         );
     }
 

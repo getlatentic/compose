@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { subscribeToWorkspaceFs } from "../lib/ipc/fileWatcherClient";
 import { AppShell } from "./AppShell";
 import { useWorkspaceStore } from "./workspaceStore";
+import { useUiStore } from "./store/uiStore";
 
 /**
  * The main app screen (mounted by AppRouter once boot + onboarding are done).
@@ -15,6 +16,7 @@ export function MainApp() {
   const handleFsEvent = useWorkspaceStore((state) => state.handleFsEvent);
   const loadActiveWorkspaceFiles = useWorkspaceStore((state) => state.loadActiveWorkspaceFiles);
   const saveActiveFile = useWorkspaceStore((state) => state.saveActiveFile);
+  const openSearch = useUiStore((state) => state.openSearch);
 
   useEffect(() => {
     if (!activeWorkspaceId) {
@@ -54,17 +56,21 @@ export function MainApp() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const isSaveShortcut =
-        (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key === "s";
-      if (!isSaveShortcut) {
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && !event.shiftKey && !event.altKey && event.key === "s") {
+        event.preventDefault();
+        void saveActiveFile();
         return;
       }
-      event.preventDefault();
-      void saveActiveFile();
+      // ⌘⇧F (Ctrl+Shift+F) opens workspace file search — ⌘S is save, ⌘P is print.
+      if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        openSearch();
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [saveActiveFile]);
+  }, [saveActiveFile, openSearch]);
 
   useEffect(() => {
     function onBeforeUnload(event: BeforeUnloadEvent) {
