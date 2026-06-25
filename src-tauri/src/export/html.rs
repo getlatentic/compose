@@ -13,7 +13,8 @@
 //!   access (which sidesteps WKWebView's file-subresource sandboxing).
 //!
 //! The output is a complete `<!doctype html>` document with an embedded print
-//! stylesheet, ready to hand to `export::pdf`.
+//! stylesheet, ready to hand to the native paged-output paths (`export::pdf` and
+//! `export::print`, both of which paginate it via `export::paged`).
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
@@ -88,7 +89,7 @@ fn latex_to_mathml(escaped_latex: &str, block: bool) -> String {
     use pulldown_latex::config::DisplayMode;
     use pulldown_latex::{push_mathml, Parser, RenderConfig, Storage};
 
-    let latex = html_unescape(escaped_latex);
+    let latex = normalize_array_column_specs(&html_unescape(escaped_latex));
     let storage = Storage::new();
     let parser = Parser::new(&latex, &storage);
     let config = RenderConfig {
@@ -110,6 +111,81 @@ fn html_unescape(s: &str) -> String {
         .replace("&quot;", "\"")
         .replace("&#39;", "'")
         .replace("&amp;", "&")
+}
+
+/// Collapse insignificant whitespace inside every `\begin{array}{…}` column
+/// spec. pulldown-latex's array parser rejects spaces between column tokens
+/// (`{r | r}`, `{l r r}`) that KaTeX and LaTeX itself accept — so without this
+/// an otherwise-valid array renders as a parser error instead of a table. Spaces
+/// in a column spec carry no meaning, so stripping them is a faithful rewrite.
+/// Nested brace groups (`@{…}`, `p{…}`, `*{n}{…}`) keep their contents verbatim.
+fn normalize_array_column_specs(latex: &str) -> String {
+    const BEGIN: &str = "\\begin{array}";
+    let mut out = String::with_capacity(latex.len());
+    let mut rest = latex;
+    while let Some(at) = rest.find(BEGIN) {
+        out.push_str(&rest[..at]);
+        out.push_str(BEGIN);
+        let after = &rest[at + BEGIN.len()..];
+        // The column spec is the next `{…}` group, possibly after whitespace.
+        let spec_start = after.trim_start_matches([' ', '\t', '\n', '\r']);
+        match (spec_start.starts_with('{')).then(|| take_brace_group(spec_start)).flatten() {
+            Some((spec, tail)) => {
+                out.push('{');
+                out.push_str(&strip_spec_whitespace(spec));
+                out.push('}');
+                rest = tail;
+            }
+            // No `{…}` follows (malformed); leave the rest untouched.
+            None => rest = after,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Given a string starting with `{`, return the contents of that brace group
+/// (excluding the outer braces) and the remainder after the matching `}`.
+/// Returns `None` if the braces are unbalanced.
+fn take_brace_group(s: &str) -> Option<(&str, &str)> {
+    let bytes = s.as_bytes();
+    debug_assert_eq!(bytes.first(), Some(&b'{'));
+    let mut depth = 0usize;
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some((&s[1..i], &s[i + 1..]));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Remove top-level whitespace from a column spec, preserving the contents of
+/// any nested brace group (e.g. `@{ : }`) where spacing can be significant.
+fn strip_spec_whitespace(spec: &str) -> String {
+    let mut out = String::with_capacity(spec.len());
+    let mut depth = 0usize;
+    for ch in spec.chars() {
+        match ch {
+            '{' => {
+                depth += 1;
+                out.push(ch);
+            }
+            '}' => {
+                depth = depth.saturating_sub(1);
+                out.push(ch);
+            }
+            ' ' | '\t' | '\n' | '\r' if depth == 0 => {}
+            _ => out.push(ch),
+        }
+    }
+    out
 }
 
 /// Convert `[[target]]` / `[[target|alias]]` into markdown links so the export
@@ -273,13 +349,35 @@ fn percent_decode(input: &str) -> String {
 fn wrap_document(title: &str, body: &str) -> String {
     format!(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
-         <title>{title}</title>\n<style>{fonts}{css}</style>\n</head>\n\
+         <title>{title}</title>\n<style>{fonts}{body_css}{css}</style>\n</head>\n\
          <body class=\"compose-export\">\n{body}\n</body>\n</html>",
         title = escape_html(title),
         fonts = super::fonts::font_face_css(),
+        body_css = body_css(),
         css = PRINT_CSS,
         body = body,
     )
+}
+
+/// The body rule, built once. Split from the static `PRINT_CSS` only because the
+/// serif `font-family` is owned by `super::fonts` (the bundled face's name).
+fn body_css() -> &'static str {
+    use std::sync::OnceLock;
+    static CSS: OnceLock<String> = OnceLock::new();
+    CSS.get_or_init(|| {
+        format!(
+            "body.compose-export {{\n\
+            \x20 margin: 0;\n\
+            \x20 padding: 0;\n\
+            \x20 color: #1a1a1a;\n\
+            \x20 font-family: \"{family}\", Georgia, \"Times New Roman\", serif;\n\
+            \x20 font-size: 12pt;\n\
+            \x20 line-height: 1.5;\n\
+            \x20 text-rendering: optimizeLegibility;\n\
+            }}\n",
+            family = super::fonts::FAMILY,
+        )
+    })
 }
 
 /// HTML-escape a short plain string (the title). Body HTML is comrak output and
@@ -293,23 +391,17 @@ fn escape_html(text: &str) -> String {
 /// Print stylesheet for the exported PDF. Optimized for A4/Letter pages: roomy
 /// margins, readable system typography, page-break-aware blocks.
 const PRINT_CSS: &str = r#"
-/* `@page` margins are honoured when printing from a browser, but WebKit's
-   createPDF (the PDF-export path) ignores them — so the real page margin is the
-   body padding below. @page margin is zeroed to avoid doubling on browser
-   print. (Per-page top/bottom margins on long multi-page docs are a known
-   limitation of this approach.) */
-@page { margin: 0; }
+/* Page geometry. Both native paths (PDF export and Print) paginate through one
+   NSPrintOperation, whose NSPrintInfo margins (export::paged::PAGE_MARGIN) define
+   the per-page imageable area — so every page gets identical margins and there is
+   no empty trailing page. This `@page` margin is kept EQUAL to that value: WebKit
+   applies `@page { margin }` on the print path too, and a browser opening a
+   standalone HTML export honours it — equal values agree, so margins never
+   double. The body carries no padding, so a page margin is never applied
+   once-for-the-whole-flow (which is what produced the first-page-only top margin
+   and the empty trailing page). */
+@page { size: letter; margin: 2cm; }
 * { box-sizing: border-box; }
-body.compose-export {
-  margin: 0;
-  padding: 2.4cm 2.2cm;
-  color: #1a1a1a;
-  /* Bundled Computer Modern (see export::fonts) for the classic LaTeX look. */
-  font-family: "CMU Serif", Georgia, "Times New Roman", serif;
-  font-size: 12pt;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-}
 h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 1.6em 0 0.6em; font-weight: 600; page-break-after: avoid; }
 h1 { font-size: 1.9em; margin-top: 0; }
 h2 { font-size: 1.5em; border-bottom: 1px solid #e2e2e2; padding-bottom: 0.2em; }
@@ -365,11 +457,24 @@ mod tests {
     }
 
     #[test]
-    fn embeds_cmu_serif_font() {
+    fn embeds_bundled_serif_font() {
         let html = render_markdown_to_html("hello", "doc", &doc_dir());
         assert!(html.contains("@font-face"), "font faces embedded");
-        assert!(html.contains("font-family: \"CMU Serif\""), "body uses CMU Serif: {html:.400}");
+        assert!(
+            html.contains("font-family: \"Latin Modern Roman\""),
+            "body uses the bundled serif: {html:.400}"
+        );
         assert!(html.contains("data:font/woff2;base64,"), "font inlined as data URI");
+    }
+
+    #[test]
+    fn body_has_no_padding_so_page_margins_stay_consistent() {
+        // Page margins come from @page / NSPrintInfo, never body padding (which
+        // would apply once to the whole flow → first-page-only top margin + an
+        // empty trailing page). Guards against a regression to body padding.
+        let html = render_markdown_to_html("hi", "doc", &doc_dir());
+        assert!(html.contains("padding: 0;"), "body padding zeroed: {html:.500}");
+        assert!(html.contains("@page { size: letter; margin: 2cm; }"), "{html:.500}");
     }
 
     #[test]
@@ -399,6 +504,41 @@ mod tests {
         let block = render_markdown_to_html("$$\\frac{a}{b}$$", "doc", &doc_dir());
         assert!(block.contains("<math"), "block $$…$$ becomes MathML: {block:.300}");
         assert!(block.contains("display=\"block\""), "display math uses block: {block:.300}");
+    }
+
+    #[test]
+    fn renders_array_with_spaced_column_spec_as_a_table() {
+        // The textbook writes `{r | r}` with spaces around the pipe; pulldown-latex
+        // rejects spaces in a column spec, so this must be normalized to `{r|r}`.
+        let md = "$$\n\\begin{array}{r | r}\n2 & 180 \\\\\n\\hline\n& 45\n\\end{array}\n$$";
+        let html = render_markdown_to_html(md, "doc", &doc_dir());
+        assert!(html.contains("<mtable"), "valid array renders as a MathML table: {html:.400}");
+        assert!(!html.contains("merror"), "no parser error for a valid array: {html:.400}");
+        assert!(!html.contains("$$"), "the raw $$ delimiters are gone: {html:.400}");
+    }
+
+    #[test]
+    fn invalid_array_renders_a_graceful_error_not_raw_dollars() {
+        // `{2}` is not a valid column spec — a genuine source error. It must
+        // degrade to an inline (red) error, never the literal `$$…$$`.
+        let md = "$$\n\\begin{array}{2}\na & b \\\\\n\\end{array}\n$$";
+        let html = render_markdown_to_html(md, "doc", &doc_dir());
+        assert!(!html.contains("$$"), "no raw $$ for an invalid array: {html:.400}");
+        // pulldown-latex emits an in-band <merror>; that is the graceful marker.
+        assert!(html.contains("merror"), "invalid array shows a math error: {html:.400}");
+    }
+
+    #[test]
+    fn array_spec_normalization_preserves_nested_brace_content() {
+        // Top-level spaces go; spacing inside a nested `@{…}` stays.
+        assert_eq!(normalize_array_column_specs("\\begin{array}{r | r}"), "\\begin{array}{r|r}");
+        assert_eq!(normalize_array_column_specs("\\begin{array}{l r r}"), "\\begin{array}{lrr}");
+        assert_eq!(
+            normalize_array_column_specs("\\begin{array}{c @{ : } c}"),
+            "\\begin{array}{c@{ : }c}"
+        );
+        // Non-array braces are untouched.
+        assert_eq!(normalize_array_column_specs("\\frac{a b}{c}"), "\\frac{a b}{c}");
     }
 
     #[test]
@@ -457,4 +597,13 @@ mod tests {
         let html = render_markdown_to_html("![x](my%20images/p.png)", "doc", &dir);
         assert!(html.contains("data:image/png;base64,"), "{html}");
     }
+
+
+
+
+
+
+
+
+
 }

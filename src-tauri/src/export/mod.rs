@@ -13,7 +13,9 @@
 
 mod fonts;
 mod html;
+mod paged;
 mod pdf;
+mod print;
 
 use crate::workspace::WorkspaceRegistry;
 use serde::Serialize;
@@ -83,6 +85,24 @@ pub fn workspace_export_html(
         format: ExportFormat::Html,
         path: destination_path,
     })
+}
+
+/// Print a workspace document via the system print panel (a printer, or "Save as
+/// PDF" from the panel's PDF menu). Renders the same self-contained HTML as the
+/// PDF export, then hands it to macOS's print system — Compose writes no file.
+/// `content` is the document's current (possibly-unsaved) markdown, so what
+/// prints matches the editor. Resolves to whether the user printed (vs cancelled
+/// the panel).
+#[tauri::command(async)]
+pub fn workspace_print(
+    workspace_id: String,
+    relative_path: String,
+    content: String,
+    app: AppHandle,
+    registry: State<'_, WorkspaceRegistry>,
+) -> Result<bool, String> {
+    let document_html = render_document_html(&registry, &workspace_id, &relative_path, &content)?;
+    print::print_html(&app, &document_html)
 }
 
 fn check_destination<'a>(destination_path: &'a str, what: &str) -> Result<&'a Path, String> {
