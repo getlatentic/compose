@@ -232,11 +232,18 @@ agent-skill export route are deferred (re-open below if wanted).
 - [ ] Optional polish: a discoverable affordance for editor links (⌘-click is
       non-obvious for non-technical users — e.g. a hover hint).
 
-### 3d. Print — not yet built
+### 3d. Print — implemented (system print panel)
 
-- [ ] **No Print anywhere** (#13) — no macOS menu item, no `⌘P` handler. Add a
-      Print action that reuses the export render → system print dialog (which also
-      offers "Save as PDF"). Depends on the shared export render (incl. #12).
+- [x] **File → Print + ⌘P open the macOS print panel** (#13). A native menu item
+      (set at construction, so no menu-bar flash) emits `menu://print`; the editor
+      renders the active document to the same self-contained HTML as the PDF
+      export and runs `NSPrintOperation` on an offscreen `WKWebView`
+      ([`src-tauri/src/export/print.rs`](../src-tauri/src/export/print.rs) +
+      `workspace_print`). The panel offers a real printer **and** "Save as PDF" —
+      not a silent PDF-to-disk. `cargo check` + `tsc` + 547 vitest green.
+- [ ] **Drive it in the packaged `.app`** — confirm ⌘P opens the panel and a page
+      prints / saves as PDF correctly (the `NSPrintOperation` path needs a live
+      AppKit main thread, like the PDF export).
 
 ---
 
@@ -298,6 +305,22 @@ agent-skill export route are deferred (re-open below if wanted).
       `SetupScreen.tsx` and `DashboardScreen.tsx`; no machine-specific path in
       source. *(Earlier: archived the legacy `vellum-*`/`bob4everyone` branding,
       removed dead `vellum-*` CSS, deleted the stale `src-tauri/Cargo.lock`.)*
+- [~] **Launch latency diagnosed; loading screen reworked.** Instrumented the
+      boot end-to-end (native `run()`/`setup()` marks + JS `markBoot`, both
+      COMPOSE_PERF-gated). The slow *first* launch (~3s) is **native cold-start** —
+      loading the release binary off cold disk (dyld) — **not our code**: the React
+      shell paints in ~250ms, `setup()` is ~14ms, and a warm relaunch is ~770ms.
+      Two levers landed: (1) a size-optimized release profile (`lto = "thin"`,
+      `strip = true` in the root `Cargo.toml`; was a 25 MB **unstripped** binary)
+      so the cold dyld load + signature validation are faster — `workspace-index-wasm`
+      pins `wasm-opt = false` (its cached wasm-opt predates default bulk-memory
+      ops); (2) the brand splash — which only blinked ~130ms before the app and
+      read as a "flash" — is replaced by an empty **three-pane skeleton**
+      (sidebar | editor | chat with dividers, matching the real `.workspace` grid)
+      in `index.html` + `SplashScreen`, so content fills the same structure with no
+      swap. Remaining cold-launch lever: **staple the notarization ticket** (offline
+      Gatekeeper) in `build-release.sh`. Optional follow-up: split the shell bundle
+      (defer non-critical Carbon) to trim the ~250ms first paint.
 
 ---
 
