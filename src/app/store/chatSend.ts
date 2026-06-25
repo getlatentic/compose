@@ -312,6 +312,7 @@ export async function runSendChatPrompt(
       editGuard,
       extraArgs: harnessExtraArgs(harnessId, tuning),
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
+      binaryPath: tuning.binaryPath,
     });
   } catch (error) {
     const message = formatHarnessError(error);

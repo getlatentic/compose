@@ -14,12 +14,13 @@ import { EditorFileActions, type DocumentExportFormat } from "./EditorFileAction
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
 import { exportDocumentToPdf } from "../../lib/export/pdfExport";
 import { exportDocumentToHtml } from "../../lib/export/htmlExport";
+import { printDocument } from "../../lib/export/printDocument";
 import { resolveDisplaySrc } from "./imageDisplaySrc";
 import { writeBinaryFile } from "../../lib/ipc/filesClient";
 import { openExternalUrl } from "../../lib/links/openExternal";
 import { listen } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
-import { markTabSwitchEnd } from "../../lib/perf";
+import { markBoot, markTabSwitchEnd } from "../../lib/perf";
 import { registerActiveEditorFlush } from "../../lib/editor/editorFlush";
 import { showToast } from "../toast/toastStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
@@ -102,6 +103,12 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
       (comment) => comment.filePath === activeFilePath && comment.status === "open",
     );
   }, [activeFilePath, comments]);
+
+  // Boot profile: the active note's editor leaf is mounting — the note is on
+  // screen now (the last boot phase). No-op outside COMPOSE_PERF builds.
+  useEffect(() => {
+    markBoot("doc");
+  }, []);
 
   // Debounced autosave-to-disk. When the active file is dirty, write it ~1s
   // after the last change. `saveActiveFile` flushes the editor's live content
@@ -193,17 +200,34 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
     );
   }, []);
 
-  // File → Print / ⌘P (a native menu item) emits `menu://print`; reuse the
-  // existing PDF export so "print" is print-to-PDF via the save dialog.
+  // Print the active document through the system print panel. Reads live state
+  // from the store (not the per-keystroke buffer prop), so it stays referentially
+  // stable like handleExport.
+  const handlePrint = useCallback(async () => {
+    const workspace = useWorkspaceStore.getState().activeWorkspace();
+    const relativePath = workspace?.activeFilePath;
+    const buffer = relativePath ? workspace.fileContents[relativePath] : undefined;
+    if (!workspace || !relativePath || !buffer) {
+      return;
+    }
+    try {
+      await printDocument({ workspaceId: workspace.id, relativePath, content: buffer.content });
+    } catch (error) {
+      showToast({ kind: "error", title: "Print failed", message: String(error) });
+    }
+  }, []);
+
+  // File → Print / ⌘P (a native menu item) emits `menu://print`; open the system
+  // print panel (a printer, or Save as PDF from the panel) for the active note.
   useEffect(() => {
     if (!isTauriRuntime()) {
       return;
     }
-    const unlisten = listen("menu://print", () => void handleExport("pdf"));
+    const unlisten = listen("menu://print", () => void handlePrint());
     return () => {
       void unlisten.then((off) => off());
     };
-  }, [handleExport]);
+  }, [handlePrint]);
 
   // The host owns its toolbar actions and hands them to the editor as one
   // stable slot — the editor itself stays agnostic about save / export /

@@ -244,6 +244,7 @@ export async function runAskAboutSelection(
       editGuard,
       extraArgs: harnessExtraArgs(harnessId, tuning),
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
+      binaryPath: tuning.binaryPath,
     });
   } catch (error) {
     const message = formatHarnessError(error);

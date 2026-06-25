@@ -533,6 +533,47 @@ export function closeWorkspaceFileTab(workspace: Workspace, filePath: string): W
   };
 }
 
+/**
+ * The file entries to render as open tabs — one per `openFilePaths`, in order.
+ * An open path's real scan entry is used when present; when it's transiently
+ * absent from `files` (a partial / racing scan on a large vault) a minimal
+ * entry is synthesized from the path so the tab keeps rendering. A tab only
+ * closes on a confirmed `removed` fs-event (see applyFsEvent) — never because a
+ * scan momentarily omitted its file. The synthesized entry's size/mtime are
+ * placeholders; PaneTabs reads only `relativePath`, and the dirty dot reads the
+ * buffer, so they're never shown.
+ */
+export function resolveOpenTabs(workspace: Workspace): WorkspaceFileEntry[] {
+  return workspace.openFilePaths.map(
+    (filePath) =>
+      workspace.files.find((entry) => entry.relativePath === filePath) ?? {
+        relativePath: filePath,
+        lastModifiedMs: 0,
+        sizeBytes: 0,
+      },
+  );
+}
+
+/**
+ * Whether the active file should render its document (vs the empty/Welcome
+ * state). True when the active path is an open tab, has a loaded buffer, or is
+ * in the scanned list — so a transient scan miss can't blank an open document.
+ * The buffer/open-tab cases hold the document open while a (re)scan is missing
+ * the file; only closing the tab (a confirmed deletion or the user's ✕) flips
+ * this to false.
+ */
+export function isActiveFilePresent(workspace: Workspace): boolean {
+  const path = workspace.activeFilePath;
+  if (!path) {
+    return false;
+  }
+  return (
+    workspace.openFilePaths.includes(path) ||
+    Boolean(workspace.fileContents[path]) ||
+    workspace.files.some((entry) => entry.relativePath === path)
+  );
+}
+
 export function applyScanResult(
   workspace: Workspace,
   entries: WorkspaceFileEntry[],

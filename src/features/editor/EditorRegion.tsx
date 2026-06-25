@@ -10,6 +10,7 @@ import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
+import { isActiveFilePresent, resolveOpenTabs } from "../../app/workspaceModel";
 import { markBoot } from "../../lib/perf";
 
 /**
@@ -33,13 +34,13 @@ export function EditorRegion() {
   const activeFilePath = useWorkspaceStore(
     (state) => selectActiveWorkspace(state)?.activeFilePath ?? "",
   );
-  // Whether the active file is present in the scanned file list (vs still
-  // loading its buffer, vs no file open). A boolean — stable across a save's
-  // mtime/size churn on the entry.
+  // Whether the active file should render its document (vs still loading, vs no
+  // file open). True when it's an open tab / has a loaded buffer / is in the
+  // scan — so a transient scan miss on a large vault can't blank an open
+  // document. A boolean — stable across a save's mtime/size churn on the entry.
   const activeFileExists = useWorkspaceStore((state) => {
     const workspace = selectActiveWorkspace(state);
-    const path = workspace?.activeFilePath;
-    return Boolean(path && workspace!.files.some((entry) => entry.relativePath === path));
+    return workspace ? isActiveFilePresent(workspace) : false;
   });
   const fileCount = useWorkspaceStore((state) => selectActiveWorkspace(state)?.files.length ?? 0);
   // The first scan hasn't landed yet (idle/loading) — render blank, not the
@@ -72,13 +73,10 @@ export function EditorRegion() {
   const openTabs = useMemo<EditorTab[]>(() => {
     const ws = useWorkspaceStore.getState().activeWorkspace();
     if (!ws) return [];
-    const tabs: EditorTab[] = [];
-    for (const filePath of ws.openFilePaths) {
-      const entry = ws.files.find((file) => file.relativePath === filePath);
-      if (!entry) continue;
-      tabs.push({ entry });
-    }
-    return tabs;
+    // One tab per open path — a path whose file is transiently missing from the
+    // scan keeps a synthesized entry, so a partial/racing scan never drops a
+    // tab (resolveOpenTabs). Only closing the tab removes it.
+    return resolveOpenTabs(ws).map((entry) => ({ entry }));
     // openTabsKey captures the open paths; getState reads the live entries when
     // those change.
     // eslint-disable-next-line react-hooks/exhaustive-deps

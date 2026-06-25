@@ -280,7 +280,11 @@ select {
 // === Sidebar: workspace switcher (pinned top) ===
 .workspace-switcher {
   position: relative;
-  flex: 0 0 auto;
+  // Match the editor toolbar's *rendered* height: its controls bow the toolbar
+  // to 41px, past its 2.25rem basis, so the folder-name row takes that same
+  // height and the two header segments share one bottom-border line across the
+  // sidebar/editor divide.
+  flex: 0 0 2.5625rem;
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
@@ -289,7 +293,8 @@ select {
   align-items: center;
   gap: 0.5rem;
   inline-size: 100%;
-  padding: 0.5rem 0.5rem 0.5rem 0.625rem;
+  block-size: 100%;
+  padding: 0 0.5rem 0 0.625rem;
   border: 0;
   background: transparent;
   text-align: start;
@@ -608,7 +613,7 @@ select {
   block-size: 2.25rem;
   padding-inline: 0.5rem 0.25rem;
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  background: var(--cds-layer-01, #f4f4f4);
+  background: var(--cds-layer-02, #ffffff);
 }
 
 .sidebar-footer__count {
@@ -990,7 +995,29 @@ select {
   // flex container itself — the rows are absolutely placed inside the sizer.
   min-block-size: 0;
   flex: 1 1 auto;
-  overflow: auto;
+  // Vertical scroll only — long names truncate (`.truncate`), so a horizontal
+  // bar must never appear. A custom `::-webkit-scrollbar` forces a thin,
+  // always-classic bar instead of the macOS overlay one (which is wider,
+  // toggles size, and sat on top of each row's kebab ⋯ so a click scrolled
+  // instead of opening the menu). The classic bar takes its own 8px outside
+  // the content box, and the row reserves extra end padding (see `.file-row`),
+  // so the right-aligned kebab always stays clear of it.
+  overflow-x: hidden;
+  overflow-y: auto;
+  // `::-webkit-scrollbar` is a legacy pseudo-element that honours physical
+  // `width`/`height` only — the logical `inline-size`/`block-size` are ignored,
+  // which is why the bar stayed full-width before.
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--cds-border-strong-01, #8d8d8d);
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 // Spans the full virtual height so the scrollbar reflects ALL rows; the mounted
@@ -1127,7 +1154,10 @@ select {
   align-items: center;
   block-size: 1.75rem;
   gap: 0.5rem;
-  padding-inline: 0.5rem;
+  // The kebab is absolutely placed over the row's end (see `.file-row-wrapper`),
+  // so the name takes the full width — only a small end inset keeps it off the
+  // scrollbar gutter rather than reserving a whole column for the menu.
+  padding-inline: 0.5rem 0.5rem;
   color: var(--cds-text-secondary, #525252);
   font-size: 0.8125rem;
   line-height: 1.75rem;
@@ -1262,7 +1292,7 @@ select {
   justify-content: flex-end;
   gap: 0.5rem;
   padding-inline: 0.75rem;
-  background: var(--cds-layer-01, #f4f4f4);
+  background: var(--cds-layer-02, #ffffff);
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
@@ -4775,6 +4805,105 @@ select {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
+// ----- Runtimes panel -------------------------------------------------------
+// A per-agent runtime row: name + version + status + install-kind badge, an
+// Update/Install action, and a "Details" disclosure (resolved path + override).
+.runtime-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.runtime-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 0.5rem 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.runtime-row--skeleton {
+  display: block;
+}
+
+.runtime-row__main {
+  min-inline-size: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.runtime-row__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.runtime-row__head strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.runtime-row__version {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.runtime-row__note {
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.runtime-row__checking {
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-style: italic;
+}
+
+.runtime-row__action {
+  grid-column: 2;
+  justify-self: end;
+}
+
+// The "Details" accordion spans the row's full width, under the head + action.
+.runtime-row__details {
+  grid-column: 1 / -1;
+}
+
+.runtime-detail {
+  margin: 0 0 0.75rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.runtime-detail dt {
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.runtime-detail__path {
+  margin: 0;
+  font-family: var(--cds-code-01-font-family, "IBM Plex Mono", monospace);
+  font-size: 0.75rem;
+  color: var(--cds-text-primary, #161616);
+  overflow-wrap: anywhere;
+}
+
+.runtime-detail__muted {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-style: italic;
+}
+
+.runtime-detail__actions {
+  margin-block-start: 0.5rem;
+}
+
 .agent-detail__back {
   display: inline-flex;
   align-items: center;
@@ -5101,98 +5230,40 @@ select {
   background: #0f1419;
 }
 
-// Boot/scan splash — mirrors the pre-React splash in index.html so the HTML →
-// React handoff is one continuous screen (same mark, wordmark, and loading
-// pulse), not a brand-then-bare-icon flicker. The inline copy in index.html
-// ships in the first payload (no FOUC); this copy styles the React
-// <SplashScreen/>. Keep the two in sync.
-.app-splash {
+// Pre-React three-pane skeleton (sidebar | editor | chat), empty but for the
+// pane dividers. The inline copy in index.html ships in the first payload (no
+// FOUC) and covers native startup; this copy styles the React <SplashScreen/>
+// while the boot IPC settles. The column template + divider colour match
+// `.workspace--editor-open.workspace--chat-open` so the real panes' content
+// fills into the same structure with no shift. Keep the two in sync.
+.app-skeleton {
   position: fixed;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1.25rem;
+  display: grid;
+  grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
   background: var(--cds-background, #ffffff);
-  animation: app-splash-in 240ms ease-out;
 }
 
-// React renders after the HTML splash already faded in — skip the re-fade so
-// the swap is invisible.
-.app-splash--seamless {
-  animation: none;
+.app-skeleton__pane {
+  min-inline-size: 0;
 }
 
-.app-splash__mark {
-  display: grid;
-  place-items: center;
-  inline-size: 64px;
-  block-size: 64px;
-  background: #161616;
-  color: #ffffff;
+.app-skeleton__pane--sidebar {
+  border-inline-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
 }
 
-.app-splash__mark svg {
-  inline-size: 36px;
-  block-size: 36px;
-  fill: currentColor;
+.app-skeleton__pane--chat {
+  border-inline-start: 1px solid var(--cds-border-subtle-02, #c6c6c6);
 }
 
-.app-splash__wordmark {
-  display: grid;
-  justify-items: center;
-  gap: 0.125rem;
-  line-height: 1.15;
-}
-
-.app-splash__name {
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: #161616;
-}
-
-.app-splash__descriptor {
-  font-size: 0.75rem;
-  font-weight: 400;
-  letter-spacing: 0.01em;
-  color: #6f6f6f;
-}
-
-.app-splash__pulse {
-  inline-size: 32px;
-  block-size: 2px;
-  margin-block-start: 0.25rem;
-  background: linear-gradient(90deg, transparent 0%, #0f62fe 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation: app-splash-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes app-splash-in {
-  from {
-    opacity: 0;
+@media (max-width: 48rem) {
+  .app-skeleton {
+    grid-template-columns: minmax(0, 1fr);
   }
-  to {
-    opacity: 1;
-  }
-}
 
-@keyframes app-splash-pulse {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-splash {
-    animation: none;
-  }
-  .app-splash__pulse {
-    animation-duration: 2.4s;
+  .app-skeleton__pane--sidebar,
+  .app-skeleton__pane--chat {
+    display: none;
   }
 }
 
@@ -5526,9 +5597,10 @@ select {
 }
 
 .file-row-wrapper {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  // The row fills the width; the kebab (and its pre-mount spacer) are layered
+  // over the trailing end, so a long name only loses its tail on hover instead
+  // of always ceding a column to the menu.
+  position: relative;
 }
 
 .file-row-wrapper:hover {
@@ -5548,8 +5620,15 @@ select {
 }
 
 .file-row-wrapper .cds--overflow-menu {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0.25rem;
+  transform: translateY(-50%);
   block-size: 1.75rem;
   inline-size: 1.75rem;
+  // Opaque so it masks the name's tail it sits over on hover.
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  border-radius: 4px;
   opacity: 0;
   transition: opacity 80ms ease;
 }
@@ -5560,9 +5639,11 @@ select {
   opacity: 1;
 }
 
-// Holds the kebab's grid slot before the (lazily mounted) OverflowMenu exists,
-// so revealing it on hover causes no layout shift. Matches the menu's size.
+// Placeholder before the OverflowMenu lazily mounts. Layered like the menu (not
+// in flow) so the name keeps the full width either way.
 .file-row-kebab-spacer {
+  position: absolute;
+  inset-inline-end: 0.25rem;
   inline-size: 1.75rem;
   block-size: 1.75rem;
 }

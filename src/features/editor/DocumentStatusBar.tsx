@@ -3,6 +3,7 @@ import { useMarkdownPreview } from "./useMarkdownPreview";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
+import { isActiveFilePresent } from "../../app/workspaceModel";
 
 /**
  * The editor status bar — file path, the Rich/Raw mode toggle, and the
@@ -16,8 +17,7 @@ import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
 export function DocumentStatusBar() {
   const activeFileExists = useWorkspaceStore((state) => {
     const workspace = selectActiveWorkspace(state);
-    const path = workspace?.activeFilePath;
-    return Boolean(path && workspace!.files.some((entry) => entry.relativePath === path));
+    return workspace ? isActiveFilePresent(workspace) : false;
   });
   const content = useWorkspaceStore((state) => {
     const workspace = selectActiveWorkspace(state);

@@ -27,6 +27,8 @@ import {
   applyFsEvent,
   applyScanResult,
   closeWorkspaceFileTab,
+  isActiveFilePresent,
+  resolveOpenTabs,
   createLlmContextSnapshots,
   createWorkspaceFromPath,
   createWorkspaceFromRecord,
@@ -259,6 +261,55 @@ describe("workspace model", () => {
     expect(rescanned.openFilePaths).toEqual(["a.md", "b.md"]);
     expect(rescanned.activeFilePath).toBe("b.md");
     expect(rescanned.fileContents["a.md"].content).toBe("# A");
+
+    // The rendered tab strip + the active-document gate must ALSO survive: both
+    // key off the open paths / buffer, not `files` membership, so a tab whose
+    // file is transiently absent from the scan keeps rendering (bug #14).
+    expect(resolveOpenTabs(rescanned).map((entry) => entry.relativePath)).toEqual([
+      "a.md",
+      "b.md",
+    ]);
+    expect(isActiveFilePresent(rescanned)).toBe(true);
+  });
+
+  it("resolveOpenTabs renders a tab per open path even when its file is absent from the scan", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+    // b.md is open (e.g. restored) but not yet/again in `files` — a partial scan.
+    const opened = openWorkspaceFile(openWorkspaceFile(workspace, "a.md"), "b.md");
+
+    const tabs = resolveOpenTabs(opened);
+    // One tab per open path, in order — the missing file gets a synthesized
+    // entry rather than being dropped from the strip.
+    expect(tabs.map((entry) => entry.relativePath)).toEqual(["a.md", "b.md"]);
+    // The real entry is used where present; the synthesized one carries the path.
+    expect(tabs[0]).toEqual(makeEntry("a.md"));
+    expect(tabs[1].relativePath).toBe("b.md");
+  });
+
+  it("isActiveFilePresent holds an open document through a transient scan miss", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+    const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {
+      content: "# A",
+      lastModifiedMs: 1_000,
+    });
+
+    // The active file vanished from `files` (a racing/partial scan) but is still
+    // open with a loaded buffer — the document must stay, not fall to Welcome.
+    const afterMiss = applyScanResult(opened, [makeEntry("c.md")]);
+    expect(afterMiss.files.map((entry) => entry.relativePath)).toEqual(["c.md"]);
+    expect(isActiveFilePresent(afterMiss)).toBe(true);
+
+    // No active file → not present (the empty/Welcome state is correct).
+    expect(isActiveFilePresent(workspaceWithFiles("/tmp/beta", ["x.md"]))).toBe(false);
+
+    // A confirmed deletion closes the tab → then it's genuinely not present.
+    const { workspace: afterDelete } = applyFsEvent(afterMiss, {
+      kind: "removed",
+      lastModifiedMs: null,
+      relativePath: "a.md",
+    });
+    expect(afterDelete.openFilePaths).toEqual([]);
+    expect(isActiveFilePresent(afterDelete)).toBe(false);
   });
 
   it("applyFsEvent on a removed file closes that tab (a confirmed deletion)", () => {

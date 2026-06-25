@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Close, Document } from "@carbon/react/icons";
 import { PanelLeft } from "lucide-react";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
@@ -59,6 +59,17 @@ function PaneTabsInner({
   const hasInset = (leadingInsetPx ?? 0) > 0;
   const hasShow = Boolean(onShowSidebar);
   const onStripMouseDown = useWindowDrag();
+
+  // Keep the active tab in view when it changes or a tab is added — opening a
+  // file from search / the file tree appends a tab off-screen to the right, so
+  // the strip must scroll to reveal it. Keyed on the active path + tab count;
+  // the strip only re-renders on tab open/close/active-change (never per
+  // keystroke), so the effect stays off the editing hot path.
+  const activeTabRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [activeFilePath, files.length]);
+
   if (files.length === 0 && !hasInset && !hasShow) {
     return null;
   }
@@ -104,6 +115,7 @@ function PaneTabsInner({
         return (
           <div
             key={`file:${entry.relativePath}`}
+            ref={active ? activeTabRef : undefined}
             className={["editor-tab", active ? "editor-tab--active" : ""]
               .filter(Boolean)
               .join(" ")}
