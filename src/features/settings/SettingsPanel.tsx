@@ -8,7 +8,7 @@ import { SystemSetupPanel } from "./SystemSetupPanel";
 const CATEGORIES = [
   { id: "general", label: "General" },
   { id: "agents", label: "AI agents" },
-  { id: "getready", label: "Get ready" },
+  { id: "getready", label: "Requirements" },
   { id: "about", label: "About" },
 ] as const;
 type CategoryId = (typeof CATEGORIES)[number]["id"];
@@ -21,7 +21,7 @@ type CategoryId = (typeof CATEGORIES)[number]["id"];
  * bar) so it composes into either host.
  */
 export function SettingsPanel() {
-  const [category, setCategory] = useState<CategoryId>("general");
+  const [category, setCategory] = useState<CategoryId>("agents");
 
   return (
     <div className="settings-shell">

@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { resetAllData } from "../../lib/ipc/appClient";
 
-/** Destructive "start over" in Settings → About: a two-step armed confirm
+/** Destructive "start over" in Settings → General: a two-step armed confirm
  *  (window.confirm is blocked by the Tauri dialog ACL). On success the app
  *  restarts itself into onboarding, so there's no resolved state to render. */
 export function ResetDataSection() {

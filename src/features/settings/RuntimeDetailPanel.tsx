@@ -15,14 +15,21 @@ import { installKindBadge } from "./installKind";
 import { useRuntimeInstall } from "./useRuntimeInstall";
 
 /**
- * One agent's runtime tab: which binary its CLI resolves to, the version,
- * install kind, and whether it's current — with an Update / Reinstall action,
- * the resolved path, and an explicit-path override. The runtime-management
- * surface (what's installed, is it the self-updating native build, where it
- * lives) that keeps a stale npm copy from silently breaking a run, folded into
- * the agent's detail rather than a separate top-level panel.
+ * One agent's runtime detail: which binary its CLI resolves to, the version,
+ * install kind, and whether it's current — with an Update / switch-to-native
+ * action, the resolved path, and an explicit-path override. Rendered inside the
+ * detail's collapsible "Runtime" section, so it only mounts (and only probes the
+ * live runtime facts) when the user expands it — never on detail open, which is
+ * what caused the status to flash. It seeds from the readiness the list already
+ * loaded (`initialReadiness`) so it shows facts at once, then refreshes quietly.
  */
-export function RuntimeDetailPanel({ harnessId }: { harnessId: string }) {
+export function RuntimeDetailPanel({
+  harnessId,
+  initialReadiness,
+}: {
+  harnessId: string;
+  initialReadiness?: HarnessReadiness | null;
+}) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
   const binaryPath = useHarnessStore(
@@ -30,14 +37,15 @@ export function RuntimeDetailPanel({ harnessId }: { harnessId: string }) {
   );
   const info = harnessCatalog.find((entry) => entry.id === harnessId);
 
-  const [readiness, setReadiness] = useState<HarnessReadiness | null>(null);
-  const [checking, setChecking] = useState(true);
+  const [readiness, setReadiness] = useState<HarnessReadiness | null>(initialReadiness ?? null);
+  // Skeleton only when we have nothing to show yet; a seed lets us render facts
+  // immediately and refresh in the background, so expanding doesn't flash.
+  const [checking, setChecking] = useState(initialReadiness == null);
 
-  // Probe readiness on mount so the tab shows the live runtime facts (version,
-  // install kind, resolved path) without depending on a sibling panel.
+  // Refresh the live runtime facts (version, install kind, resolved path) once
+  // expanded — this is the deferred probe; it runs on first mount of the section.
   useEffect(() => {
     let active = true;
-    setChecking(true);
     void harnessReadiness(harnessId)
       .catch(() => null)
       .then((result) => {
@@ -71,17 +79,19 @@ export function RuntimeDetailPanel({ harnessId }: { harnessId: string }) {
   const actionLabel = !installed
     ? `Install ${info.displayName}`
     : installKind === "npm-global"
-      ? "Update to native"
+      ? "Switch to native build"
       : "Update";
 
-  // Only a CLI that Compose can install/update gets an action. A harness with no
-  // managed install path (e.g. a local server like Ollama) shows status only.
-  const canManage = info.requiresInstall;
+  // Only a CLI that Compose can install/update gets an action, and only when
+  // there's a real one: an Install when it's missing, or a switch-to-native when
+  // it's a stale npm copy. The native build updates itself, so it shows no
+  // button. A harness with no managed install path (Ollama) shows status only.
+  const canManage = info.requiresInstall && (!installed || installKind === "npm-global");
   const isOllama = harnessId === "ollama";
   const ollamaNotReady = isOllama && !checking && !(readiness?.ready ?? false);
 
   return (
-    <div className="settings-section">
+    <div className="runtime-detail-panel">
       <div className="runtime-detail__status">
         {checking ? (
           <SkeletonText width="40%" />

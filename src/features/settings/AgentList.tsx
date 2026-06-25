@@ -1,26 +1,24 @@
 import { useEffect, useState } from "react";
 import { SkeletonText, Tag } from "@carbon/react";
-import { Add, ChevronRight, RadioButton, RadioButtonChecked } from "@carbon/react/icons";
+import { Add, ChevronRight } from "@carbon/react/icons";
 
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessReadiness, type HarnessReadiness } from "../../lib/ipc/harnessClient";
-import { agentStatus, statusTagType } from "./agentStatus";
+import { agentStatus } from "./agentStatus";
 
 // Per-agent readiness, cached across mounts so returning from a detail screen
 // shows last-known statuses instantly while a background re-probe refreshes them.
 let cachedReadiness: Record<string, HarnessReadiness | null> = {};
 
 /**
- * The registry of AI agents. The catalog (names + descriptions) comes from the
- * store and renders immediately; each agent's readiness is then probed *in
- * parallel* (`harness_readiness` per id), so a row appears at once with a
- * "Checking…" status that resolves on its own — rather than blocking the whole
- * list on the serial `harness_discover` (one `<cli> --version` / Ollama ping per
- * agent, summed). Each row carries a radio that sets the default agent (a tinted
- * row marks the current one); the rest of the row opens the agent's setup/detail.
- * Readiness shows as a muted dot, kept visually distinct from that radio so a
- * ready agent never reads as "selected"; a state that needs action keeps a
- * labelled pill.
+ * The registry of AI agents — a list of uniform navigation rows (name + chevron)
+ * that open each agent's detail. The catalog (names) comes from the store and
+ * renders immediately; each agent's readiness is then probed *in parallel*
+ * (`harness_readiness` per id) so the list never blocks on the serial discover.
+ * A row carries only identity/attention pills: a "Default" tag for the current
+ * default agent, and "Add a key" when an agent still needs one — readiness
+ * otherwise stays out of the way until you open the agent. Setting the default
+ * happens in the agent's detail, so a row only ever navigates.
  */
 export function AgentList({
   onOpenAgent,
@@ -30,7 +28,6 @@ export function AgentList({
   onAddAgent: () => void;
 }) {
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
-  const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const loadHarnessCatalog = useHarnessStore((state) => state.loadHarnessCatalog);
   const [readiness, setReadiness] = useState<Record<string, HarnessReadiness | null>>(cachedReadiness);
@@ -70,60 +67,42 @@ export function AgentList({
   return (
     <div className="settings-section">
       <p className="settings-helper">
-        Your AI agents. Open one to set it up or configure it; pick which to use from the chat footer.
+        Your AI agents. Open one to set it up or change its model. The one marked Default runs new
+        chats unless you switch it from the chat footer.
       </p>
 
       {harnessCatalog.length === 0 ? (
         <ul className="agent-list" aria-hidden>
           {[0, 1, 2].map((i) => (
             <li key={i} className="agent-row agent-row--skeleton">
-              <SkeletonText heading width="35%" />
-              <SkeletonText width="80%" />
+              <SkeletonText width="35%" />
             </li>
           ))}
         </ul>
       ) : (
         <ul className="agent-list">
           {harnessCatalog.map((info) => {
-            const checking = !(info.id in readiness);
-            const status = checking ? null : agentStatus(info, readiness[info.id]);
+            const status = info.id in readiness ? agentStatus(info, readiness[info.id]) : null;
+            const needsKey = status?.action === "addKey";
             const isDefault = info.id === selectedHarnessId;
             return (
-              <li key={info.id} className={`agent-row${isDefault ? " agent-row--default" : ""}`}>
+              <li key={info.id}>
                 <button
                   type="button"
-                  className="agent-row__default"
-                  aria-pressed={isDefault}
-                  aria-label={
-                    isDefault
-                      ? `${info.displayName} is the default agent`
-                      : `Make ${info.displayName} the default agent`
-                  }
-                  title={isDefault ? "Default agent" : "Set as default"}
-                  onClick={() => setSelectedHarness(info.id)}
-                >
-                  {isDefault ? <RadioButtonChecked /> : <RadioButton />}
-                </button>
-                <button
-                  type="button"
-                  className="agent-row__open"
+                  className="agent-row agent-row--nav"
                   onClick={() => onOpenAgent(info.id)}
                 >
-                  <span className="agent-row__body">
-                    <span className="agent-row__head">
-                      <strong>{info.displayName}</strong>
-                      {checking ? (
-                        <span className="agent-row__checking">Checking…</span>
-                      ) : status?.kind === "ready" ? (
-                        <span className="agent-row__status agent-row__status--success">Ready</span>
-                      ) : status ? (
-                        <Tag size="sm" type={statusTagType(status.tone)}>
-                          {status.label}
-                        </Tag>
-                      ) : null}
-                    </span>
-                    <span className="agent-row__desc">{info.description}</span>
-                  </span>
+                  <span className="agent-row__name">{info.displayName}</span>
+                  {isDefault ? (
+                    <Tag size="sm" type="blue">
+                      Default
+                    </Tag>
+                  ) : null}
+                  {needsKey ? (
+                    <Tag size="sm" type="blue">
+                      Add a key
+                    </Tag>
+                  ) : null}
                   <ChevronRight className="agent-row__chevron" aria-hidden />
                 </button>
               </li>

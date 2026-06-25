@@ -1,15 +1,45 @@
-import { Toggle } from "@carbon/react";
+import { Button, TextArea, Toggle } from "@carbon/react";
+import { Launch } from "@carbon/react/icons";
 
+import { useHarnessStore } from "../../app/store/harnessStore";
 import { useUiStore } from "../../app/store/uiStore";
+import { revealErrorLog } from "../../lib/diagnostics/errorReporter";
+import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
+import { ResetDataSection } from "./ResetDataSection";
 
-/** The "General" settings pane: app-wide preferences not tied to any agent. */
+/** Cap on the global custom instructions (~500 tokens) so they can't crowd out
+ *  the workspace context in a small local model's window. */
+const MAX_CUSTOM_INSTRUCTIONS_CHARS = 2000;
+
+/**
+ * The "General" settings pane: app-wide preferences not tied to any one agent —
+ * notifications, the shared custom instructions added to every agent's prompt,
+ * and the local-only diagnostics (open the error log, reset all data). The
+ * custom instructions and the two diagnostics moved here so About stays pure
+ * identity and the agent list stays pure per-agent setup.
+ */
 export function GeneralSettings() {
+  return (
+    <>
+      <NotificationsSection />
+      <CustomInstructionsSection />
+      {isTauriRuntime() ? (
+        <>
+          <ReportProblemSection />
+          <ResetDataSection />
+        </>
+      ) : null}
+    </>
+  );
+}
+
+function NotificationsSection() {
   const soundOnComplete = useUiStore((state) => state.soundOnComplete);
   const setSoundOnComplete = useUiStore((state) => state.setSoundOnComplete);
 
   return (
     <div className="settings-section">
-      <h3>Preferences</h3>
+      <h3>Notifications</h3>
       <Toggle
         id="sound-on-complete"
         size="sm"
@@ -20,6 +50,48 @@ export function GeneralSettings() {
         onToggle={(checked) => setSoundOnComplete(checked)}
       />
       <p className="settings-helper">Play a subtle chime when an agent finishes a run.</p>
+    </div>
+  );
+}
+
+/** The shared custom instructions, appended to every agent's system prompt where
+ *  supported. One contained box (title + textarea + counter); the Carbon
+ *  TextArea owns its own label, so the section heading is visually hidden to
+ *  avoid a doubled label while still anchoring the section for screen readers. */
+function CustomInstructionsSection() {
+  const customInstructions = useHarnessStore((state) => state.customInstructions);
+  const setCustomInstructions = useHarnessStore((state) => state.setCustomInstructions);
+
+  return (
+    <div className="settings-section">
+      <TextArea
+        id="global-custom-instructions"
+        labelText="Custom instructions"
+        helperText="Added to every agent's system prompt, where supported."
+        placeholder="e.g. Answer in British English; keep summaries to 3 bullets."
+        rows={4}
+        enableCounter
+        maxCount={MAX_CUSTOM_INSTRUCTIONS_CHARS}
+        value={customInstructions}
+        onChange={(event) => setCustomInstructions(event.target.value)}
+      />
+    </div>
+  );
+}
+
+function ReportProblemSection() {
+  return (
+    <div className="settings-section">
+      <h3>Report a problem</h3>
+      <p className="settings-helper">
+        Compose keeps a local error log on your computer — it's never sent anywhere. If something
+        goes wrong, open it and attach it to your report.
+      </p>
+      <div className="settings-actions">
+        <Button size="sm" kind="tertiary" renderIcon={Launch} onClick={() => void revealErrorLog()}>
+          Open error log
+        </Button>
+      </div>
     </div>
   );
 }

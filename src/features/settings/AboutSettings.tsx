@@ -1,56 +1,24 @@
-import { Button } from "@carbon/react";
+import { Link } from "@carbon/react";
+import { Launch } from "@carbon/react/icons";
 
-import { useHarnessStore } from "../../app/store/harnessStore";
-import { type HarnessReadiness } from "../../lib/ipc/harnessClient";
-import { revealErrorLog } from "../../lib/diagnostics/errorReporter";
-import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
-import { ResetDataSection } from "./ResetDataSection";
+const APP_VERSION = "0.1.0";
 
-/** bob's `readiness().details` payload (a JSON object on the wire). Read for the
- * Node.js diagnostics the About pane surfaces ("Runtime: Node …"). */
-interface BobReadinessDetails {
-  node?: { version?: string | null };
-}
-
-/** Narrow a readiness's opaque `details` to bob's node diagnostics. */
-function bobNodeVersion(readiness: HarnessReadiness | null): string | null {
-  const details = readiness?.details as BobReadinessDetails | null | undefined;
-  return details?.node?.version ?? null;
-}
-
-/** The "About" settings pane: version, blurb, and the local error-log shortcut. */
+/** The "About" settings pane: identity only — name, version, tagline, and the
+ *  informational links. The local-only diagnostics (open error log, reset all
+ *  data) live in General now, so this stays a slim identity card. */
 export function AboutSettings() {
-  const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
-
   return (
-    <>
-      <div className="settings-section">
-        <h3>About Compose</h3>
-        <p className="settings-helper">Compose · version 0.1.0</p>
-        <p className="settings-helper">
-          A local-first AI writing workspace — your notes stay on your computer. AI for everyone.
-        </p>
-        {bobNodeVersion(selectedHarnessReadiness) ? (
-          <p className="settings-helper">
-            Runtime: Node.js {bobNodeVersion(selectedHarnessReadiness)}
-          </p>
-        ) : null}
+    <div className="settings-section">
+      <h3>Compose</h3>
+      <p className="settings-helper">Version {APP_VERSION}</p>
+      <p className="settings-helper">
+        A local-first AI writing workspace — your notes stay on your computer. AI for everyone.
+      </p>
+      <div className="about-links">
+        <Link renderIcon={Launch}>Release notes</Link>
+        <Link renderIcon={Launch}>Licenses</Link>
+        <Link renderIcon={Launch}>Privacy</Link>
       </div>
-      {isTauriRuntime() ? (
-        <>
-          <div className="settings-section">
-            <h3>Report a problem</h3>
-            <p className="settings-helper">
-              Compose keeps a local error log on your computer — it's never sent anywhere. If
-              something goes wrong, open it and attach it to your report.
-            </p>
-            <Button size="sm" kind="tertiary" onClick={() => void revealErrorLog()}>
-              Open error log
-            </Button>
-          </div>
-          <ResetDataSection />
-        </>
-      ) : null}
-    </>
+    </div>
   );
 }

@@ -4,17 +4,17 @@ import { useUiStore } from "../../app/store/uiStore";
 import { AgentList } from "./AgentList";
 import { AgentDetail } from "./AgentDetail";
 import { AddAgentForm } from "./AddAgentForm";
-import { CustomInstructionsSection, FileAccessSection } from "./globalAgentSettings";
+import { FileAccessSection } from "./globalAgentSettings";
 
 /** Which view the AI-agents pane shows: the registry list (with the global
  *  sections), one agent's setup/detail, or the add-a-custom-agent form. */
 type AgentView = { kind: "list" } | { kind: "detail"; id: string } | { kind: "add" };
 
 /**
- * The "AI agents" settings pane: the registry list plus the global File access +
- * Custom instructions sections, and the per-agent detail / add-agent screens it
- * navigates to. The globals live here (with the list) rather than in any one
- * agent's detail, since they apply to every agent.
+ * The "AI agents" settings pane: the registry list plus the global File access
+ * section (agent file permissions apply to every agent, so they live with the
+ * list, not in one agent's detail), and the per-agent detail / add-agent screens
+ * it navigates to. Custom instructions moved to General.
  */
 export function AgentsSettings() {
   const settingsAgentId = useUiStore((state) => state.settingsAgentId);
@@ -47,7 +47,6 @@ export function AgentsSettings() {
         onAddAgent={() => setView({ kind: "add" })}
       />
       <FileAccessSection />
-      <CustomInstructionsSection />
     </>
   );
 }

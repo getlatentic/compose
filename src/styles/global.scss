@@ -4499,13 +4499,13 @@ select {
 }
 
 .settings-dialog {
-  inline-size: min(100%, 40rem);
+  inline-size: min(100%, 60rem);
   // A flex column at a FIXED height (capped to the viewport): the header stays
   // pinned and the body (nav + content) fills the rest, with only the content
   // pane scrolling — so switching agents or tabs never resizes the dialog.
   display: flex;
   flex-direction: column;
-  block-size: min(36rem, calc(100vh - 4rem));
+  block-size: min(41.25rem, calc(100vh - 4rem));
   overflow: hidden;
   background: var(--cds-layer-02, #ffffff);
   box-shadow: 0 1rem 4rem rgb(0 0 0 / 22%);
@@ -4571,6 +4571,14 @@ select {
   font-size: 0.75rem;
   line-height: 1.125rem;
   color: var(--cds-text-secondary, #525252);
+}
+
+// The About pane's informational links — a small wrapped row.
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block-start: 0.5rem;
 }
 
 // A setting that only applies when its parent toggle is on — indented under it.
@@ -4665,15 +4673,15 @@ select {
   gap: 0.5rem;
 }
 
-// A normal row is an <li> wrapping two buttons (the default radio + the
-// open-detail button); the add row is itself a <button>. Both share this box.
+// A uniform navigation row: a full-width <button> with the agent name, any
+// identity/attention pills, and a trailing chevron. The add row shares the box.
 .agent-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   inline-size: 100%;
   text-align: start;
-  padding: 0.625rem 0.75rem;
+  padding: 0.75rem 0.875rem;
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   border-radius: 6px;
   background: var(--cds-layer-01, #f4f4f4);
@@ -4681,82 +4689,26 @@ select {
   font: inherit;
 }
 
-.agent-row:hover {
-  border-color: var(--cds-border-strong-01, #8d8d8d);
+// The navigable agent rows: a clear background change on hover, no selection
+// outline (the "Default" tag, not a border, marks the current default).
+.agent-row--nav {
+  cursor: pointer;
+}
+
+.agent-row--nav:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
-}
-
-// The current default agent: tinted row + accent border (the blue radio fill
-// carries the rest), so "default" is unmistakable and separate from readiness.
-.agent-row--default,
-.agent-row--default:hover {
-  border-color: var(--cds-border-interactive, #0f62fe);
-  background: var(--cds-layer-selected-01, #e0e0e0);
-}
-
-// Picks the default; left of the row, never navigates.
-.agent-row__default {
-  flex: none;
-  display: inline-flex;
-  padding: 0.125rem;
-  margin: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--cds-icon-secondary, #6f6f6f);
-  cursor: pointer;
-}
-
-.agent-row__default:hover {
-  color: var(--cds-icon-primary, #161616);
-}
-
-.agent-row--default .agent-row__default {
-  color: var(--cds-icon-interactive, #0f62fe);
-}
-
-// Opens the agent's detail; covers everything but the radio.
-.agent-row__open {
-  flex: 1;
-  min-inline-size: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  text-align: start;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
 }
 
 .agent-row--skeleton {
   display: block;
 }
 
-.agent-row__body {
+.agent-row__name {
   flex: 1;
   min-inline-size: 0;
-  display: grid;
-  gap: 0.25rem;
-}
-
-.agent-row__head {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.agent-row__head strong {
   font-size: 0.8125rem;
   font-weight: 600;
-}
-
-.agent-row__desc {
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary, #525252);
+  color: var(--cds-text-primary, #161616);
 }
 
 .agent-row__chevron {
@@ -4764,13 +4716,12 @@ select {
   color: var(--cds-icon-secondary, #525252);
 }
 
-// A ready agent reads as a muted dot + word, not a checkmark — so it can't be
-// mistaken for the default radio. Action states keep their coloured Tag.
+// A ready agent reads as a muted green dot + word (used in the detail header).
 .agent-row__status {
   display: inline-flex;
   align-items: center;
   gap: 0.3125rem;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--cds-text-secondary, #525252);
 }
 
@@ -4784,12 +4735,6 @@ select {
 
 .agent-row__status--success {
   --agent-status-dot: var(--cds-support-success, #24a148);
-}
-
-.agent-row__checking {
-  font-size: 0.6875rem;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-style: italic;
 }
 
 .agent-row--add {
@@ -4876,18 +4821,22 @@ select {
   color: var(--cds-text-primary, #161616);
 }
 
-// Carbon pads its TabPanel, and each tab's content already wraps in a
-// `.settings-section` (1rem) like the header above the tabs — together that
-// double-indents the content. Zero the panel padding so the inner section alone
-// sets the inset, lining the content up with the header and tab labels.
-.agent-detail .cds--tab-content {
-  padding: 0;
-}
-
+// The detail header: name + live status on the left, the set-default control on
+// the right. A separate title group keeps the name and its status pill together
+// while the default control sits opposite.
 .agent-detail__head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.agent-detail__title {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
+  min-inline-size: 0;
   flex-wrap: wrap;
 }
 
@@ -4896,6 +4845,70 @@ select {
   font-size: 1rem;
   font-weight: 600;
   color: var(--cds-text-primary, #161616);
+}
+
+// ----- Collapsible detail sections (Advanced / Runtime) ---------------------
+// A section separated by a single top border, with a full-width toggle row and a
+// rotating chevron. Collapsed by default; matches the surrounding section inset.
+.agent-section {
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+// A bordered `.settings-section` already draws the divider above the first
+// collapsible, so drop its top border to avoid a doubled line.
+.settings-section + .agent-section {
+  border-block-start: 0;
+}
+
+.agent-section__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  inline-size: 100%;
+  padding: 1rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.agent-section__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+}
+
+.agent-section__summary {
+  font-size: 0.75rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.agent-section__chevron {
+  flex: none;
+  color: var(--cds-icon-secondary, #525252);
+  transition: transform 110ms cubic-bezier(0.2, 0, 0.38, 0.9);
+}
+
+.agent-section__chevron--open {
+  transform: rotate(180deg);
+}
+
+.agent-section__body {
+  padding: 0 1rem 1rem;
+}
+
+// The runtime facts inside the Runtime section: a plain stack (the collapsible
+// body owns the inset), not a bordered `.settings-section`.
+.runtime-detail-panel {
+  display: grid;
+  gap: 0.5rem;
 }
 
 // ----- Ollama model manager -------------------------------------------------

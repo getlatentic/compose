@@ -1,36 +1,36 @@
 import { useEffect, useState } from "react";
-import {
-  Button,
-  InlineNotification,
-  Tab,
-  TabList,
-  TabPanel,
-  TabPanels,
-  Tabs,
-  Tag,
-} from "@carbon/react";
-import { ArrowLeft } from "@carbon/react/icons";
+import { Button, InlineNotification, Tag } from "@carbon/react";
+import { ArrowLeft, ChevronDown } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessRemoveCustom } from "../../lib/ipc/harnessClient";
 import { agentStatus } from "./agentStatus";
-import { ExternalHarnessSetup, ManagedHarnessSetup } from "./agentConfigControls";
+import { AdvancedRunOptions, hasAdvancedRunOptions } from "./AdvancedRunOptions";
+import {
+  HarnessCredentialForm,
+  ManagedHarnessSetup,
+  ModelSection,
+} from "./agentConfigControls";
 import { OllamaModelManager } from "./OllamaModelManager";
 import { RuntimeDetailPanel } from "./RuntimeDetailPanel";
 import { useHarnessSetup } from "./useHarnessSetup";
 
 /**
- * One agent's setup + configuration screen, reached from {@link AgentList}. The
- * setup is capability-driven: a Compose-managed agent (bob) gets the install +
- * key + test panel; everything else gets an install and/or OAuth sign-in step
- * where its status calls for one, then the key form + model/run options. The
- * default agent is chosen from the {@link AgentList} (its radio); here a "Default"
- * tag just confirms which one this is.
+ * One agent's setup + configuration screen, reached from {@link AgentList} — a
+ * single scrollable page (no tabs). The setup is capability-driven: a
+ * Compose-managed agent (bob) gets the install + key + test panel; everything
+ * else gets an install and/or OAuth sign-in step where its status calls for one,
+ * then the optional key form and the default-model picker. The agent-specific
+ * run knobs and the runtime facts each live behind a collapsed section, so the
+ * page stays short. Setting the default moves here: the header carries a "Set as
+ * default" button that becomes a "Default" tag once chosen. Runtime is probed
+ * only when its section is expanded, so the header never flashes on open.
  */
 export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () => void }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
   const modelManagement = useHarnessStore((state) => state.harnessModelManagement[agentId]);
   const loadHarnessModelManagement = useHarnessStore((state) => state.loadHarnessModelManagement);
   const info = harnessCatalog.find((entry) => entry.id === agentId);
@@ -42,82 +42,142 @@ export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () =
   const isDefault = agentId === selectedHarnessId;
   const usesManagedSetup = Boolean(info?.requiresInstall && caps.credentialRequired);
   const needsInstall = !setup.readiness?.installed;
+  const showAdvanced = hasAdvancedRunOptions(harnessCatalog, agentId);
 
   // Probe whether this agent manages its own local models (Ollama). Drives the
-  // "Models" tab below; null for every other agent.
+  // "Installed models" section below; null for every other agent.
   useEffect(() => {
     void loadHarnessModelManagement(agentId);
   }, [agentId, loadHarnessModelManagement]);
 
   return (
     <div className="agent-detail">
-      <div className="settings-section">
+      <div className="settings-section agent-detail__top">
         <button type="button" className="agent-detail__back" onClick={onBack}>
           <ArrowLeft aria-hidden />
-          Agents
+          All agents
         </button>
 
         <div className="agent-detail__head">
-          <h3>{name}</h3>
+          <div className="agent-detail__title">
+            <h3>{name}</h3>
+            {status?.kind === "ready" ? (
+              <span className="agent-row__status agent-row__status--success">Ready</span>
+            ) : status?.action === "addKey" ? (
+              <Tag size="sm" type="blue">
+                Add a key
+              </Tag>
+            ) : null}
+          </div>
           {isDefault ? (
             <Tag size="sm" type="blue">
               Default
             </Tag>
-          ) : null}
+          ) : (
+            <Button size="sm" kind="tertiary" onClick={() => setSelectedHarness(agentId)}>
+              Set as default
+            </Button>
+          )}
         </div>
-        {info ? <p className="settings-helper">{info.description}</p> : null}
       </div>
 
-      <Tabs>
-        <TabList aria-label={`${name} settings`}>
-          <Tab>Settings</Tab>
-          <Tab>Runtime</Tab>
-          {modelManagement ? <Tab>Models</Tab> : null}
-        </TabList>
-        <TabPanels>
-          <TabPanel>
-            {usesManagedSetup ? (
-              <ManagedHarnessSetup
-                name={name}
-                apiKey={setup.apiKey}
-                setApiKey={setup.setApiKey}
-                authConfigured={setup.managedKeyConfigured}
-                needsInstall={needsInstall}
-                installing={setup.installing}
-                installLog={setup.installLog}
-                installResult={setup.installResult}
-                logRef={setup.logRef}
-                errorMessage={setup.error}
-                saveSuccess={setup.saveSuccess}
-                saving={setup.saving}
-                checkingRuntime={setup.checkingRuntime}
-                runtimeCheck={setup.runtimeCheck}
-                onInstall={() => void setup.install()}
-                onSubmit={setup.saveManagedKey}
-                onRuntimeCheck={() => void setup.runRuntimeCheck()}
-              />
-            ) : (
-              <>
-                {status?.action === "install" ? <InstallBlock name={name} setup={setup} /> : null}
-                {status?.action === "signIn" ? <SignInBlock name={name} setup={setup} /> : null}
-                <ExternalHarnessSetup harnessId={agentId} />
-              </>
-            )}
-            {agentId.startsWith("custom:") ? (
-              <RemoveAgentSection agentId={agentId} name={name} onRemoved={onBack} />
-            ) : null}
-          </TabPanel>
-          <TabPanel>
-            <RuntimeDetailPanel harnessId={agentId} />
-          </TabPanel>
-          {modelManagement ? (
-            <TabPanel>
-              <OllamaModelManager harnessId={agentId} />
-            </TabPanel>
+      {usesManagedSetup ? (
+        <ManagedHarnessSetup
+          name={name}
+          apiKey={setup.apiKey}
+          setApiKey={setup.setApiKey}
+          authConfigured={setup.managedKeyConfigured}
+          needsInstall={needsInstall}
+          installing={setup.installing}
+          installLog={setup.installLog}
+          installResult={setup.installResult}
+          logRef={setup.logRef}
+          errorMessage={setup.error}
+          saveSuccess={setup.saveSuccess}
+          saving={setup.saving}
+          checkingRuntime={setup.checkingRuntime}
+          runtimeCheck={setup.runtimeCheck}
+          onInstall={() => void setup.install()}
+          onSubmit={setup.saveManagedKey}
+          onRuntimeCheck={() => void setup.runRuntimeCheck()}
+        />
+      ) : (
+        <>
+          {status?.action === "install" ? <InstallBlock name={name} setup={setup} /> : null}
+          {status?.action === "signIn" ? <SignInBlock name={name} setup={setup} /> : null}
+          {caps.credentialRequired ? (
+            <HarnessCredentialForm harnessId={agentId} name={name} />
           ) : null}
-        </TabPanels>
-      </Tabs>
+        </>
+      )}
+
+      <ModelSection harnessId={agentId} />
+
+      {modelManagement ? <OllamaModelManager harnessId={agentId} /> : null}
+
+      {showAdvanced ? (
+        <CollapsibleSection title="Advanced">
+          <AdvancedRunOptions harnessId={agentId} />
+        </CollapsibleSection>
+      ) : null}
+
+      <CollapsibleSection
+        title="Runtime"
+        summary={setup.readiness?.version ?? undefined}
+        mountWhenClosed={false}
+      >
+        <RuntimeDetailPanel harnessId={agentId} initialReadiness={setup.readiness} />
+      </CollapsibleSection>
+
+      {agentId.startsWith("custom:") ? (
+        <RemoveAgentSection agentId={agentId} name={name} onRemoved={onBack} />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * A collapsed section separated by a single top border (the design's look): a
+ * full-width toggle row with a rotating chevron over its children. Collapsed by
+ * default. `summary` shows a muted line beside the title while collapsed (the
+ * runtime version), and `mountWhenClosed: false` keeps the children unmounted
+ * until first expanded — so the Runtime section defers its readiness probe.
+ */
+function CollapsibleSection({
+  title,
+  summary,
+  mountWhenClosed = true,
+  children,
+}: {
+  title: string;
+  summary?: string;
+  mountWhenClosed?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="agent-section">
+      <button
+        type="button"
+        className="agent-section__toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="agent-section__label">
+          {title}
+          {!open && summary ? <span className="agent-section__summary">{summary}</span> : null}
+        </span>
+        <ChevronDown
+          className={`agent-section__chevron${open ? " agent-section__chevron--open" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open || mountWhenClosed ? (
+        <div className="agent-section__body" hidden={!open}>
+          {children}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

@@ -9,7 +9,6 @@ import {
   type HarnessInstallEvent,
   type HarnessRuntimeVerification,
 } from "../../lib/ipc/harnessClient";
-import { AdvancedRunOptions } from "./AdvancedRunOptions";
 import { ModelPicker } from "./ModelPicker";
 
 /**
@@ -18,48 +17,23 @@ import { ModelPicker } from "./ModelPicker";
  * agent's declared capabilities support, so a new agent needs no edits here.
  */
 
-/** Setup for an agent that manages its own login (Claude/Codex) or needs a key
- *  (OpenRouter): a key form where one is required, plus the model + run options.
- *  Which controls appear is driven by the agent's declared capabilities. */
-export function ExternalHarnessSetup({ harnessId }: { harnessId: string }) {
-  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
-  const info = harnessCatalog.find((entry) => entry.id === harnessId);
-  const caps = harnessCapabilitiesOf(harnessCatalog, harnessId);
-  const name = info?.displayName ?? harnessId;
-
-  return (
-    <>
-      {caps.credentialRequired ? <HarnessCredentialForm harnessId={harnessId} name={name} /> : null}
-      <ExternalHarnessOptions harnessId={harnessId} />
-    </>
-  );
-}
-
-/** The per-agent model + run-tuning controls. The model picker leads (it's the
- *  setting most people touch) with the power-user knobs behind {@link
- *  AdvancedRunOptions}. Local-model management (Ollama) lives in the detail's
- *  "Models" tab, not here, so this stays flat. Capability-driven — a new agent
- *  needs zero edits here. */
-export function ExternalHarnessOptions({ harnessId }: { harnessId: string }) {
+/** The "Default model" section: discovers an agent's models live where it has no
+ *  curated compile-time list (Ollama / OpenCode / OpenRouter / Codex) so the
+ *  picker has options, then renders the picker. Claude ships `caps.models`, so
+ *  the probe is skipped for it. The picker returns nothing for an agent with no
+ *  models and no custom ids, so this stays out of the way for those. */
+export function ModelSection({ harnessId }: { harnessId: string }) {
   const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
   const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
   const caps = harnessCapabilitiesOf(harnessCatalog, harnessId);
 
-  // Discover models live for agents without a curated compile-time list
-  // (Ollama / OpenCode / OpenRouter / Codex), so the picker has options. claude
-  // ships `caps.models`, so skip the probe for it.
   useEffect(() => {
     if (caps.models.length === 0) {
       void loadHarnessModels(harnessId);
     }
   }, [harnessId, caps.models.length, loadHarnessModels]);
 
-  return (
-    <>
-      <ModelPicker harnessId={harnessId} />
-      <AdvancedRunOptions harnessId={harnessId} />
-    </>
-  );
+  return <ModelPicker harnessId={harnessId} />;
 }
 
 /** Generic API-key form for a key-only agent (OpenRouter). Writes through the

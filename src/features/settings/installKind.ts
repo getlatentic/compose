@@ -15,12 +15,12 @@ const BADGES: Record<InstallKind, InstallKindBadge> = {
   native: {
     label: "Native",
     tone: "green",
-    note: "Official signed installer — updates itself.",
+    note: "Native build — installs its own updates automatically.",
   },
   "npm-global": {
     label: "npm",
     tone: "warm-gray",
-    note: "Installed via npm — can go stale; update to the native build.",
+    note: "Installed via npm. The native build starts faster and updates itself — switching replaces the npm binary.",
   },
   homebrew: {
     label: "Homebrew",

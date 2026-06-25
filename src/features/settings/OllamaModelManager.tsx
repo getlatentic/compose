@@ -158,6 +158,14 @@ export function OllamaModelManager({ harnessId }: { harnessId: string }) {
 
   return (
     <div className="settings-section">
+      <h3>Installed models</h3>
+      {!listError && !loading ? (
+        <p className="settings-helper">
+          {installed.length > 0
+            ? `${installed.length} on this Mac. Pull more below.`
+            : "Models live on this Mac. Pull one below."}
+        </p>
+      ) : null}
       {listError ? (
         // Ollama is unreachable: nothing here works until it's running, so guide
         // the user to start it. We poll in the background, so this recovers on
