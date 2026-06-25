@@ -46,6 +46,13 @@ export interface HarnessRunOptions {
    * the harness via `extraArgs`, so it's config, never hardcoded.
    */
   permissionMode?: string;
+  /**
+   * Absolute path to this agent's executable, pinning runs to a specific vetted
+   * binary instead of resolving the bare CLI name on PATH (the Runtimes panel's
+   * "Set explicit path", for managed/EDR fleets). Threaded to the harness via
+   * `RunTuning.binary_path`. Unset/empty → PATH resolution.
+   */
+  binaryPath?: string;
 }
 
 export interface WorkspaceState {

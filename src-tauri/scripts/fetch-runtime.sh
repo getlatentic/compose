@@ -29,7 +29,10 @@ sign_binary() {
 }
 
 # --- Node (latest LTS 22, darwin-arm64) ---
-if [ ! -x "$DEST/node/bin/node" ]; then
+# Re-fetch if the node binary is missing OR npm's cli got trimmed away while the
+# binary survived: the wrappers below require lib/node_modules/npm, so a
+# half-present runtime must be rebuilt from the tarball, not skipped.
+if [ ! -x "$DEST/node/bin/node" ] || [ ! -f "$DEST/node/lib/node_modules/npm/bin/npm-cli.js" ]; then
   NODE_VERSION="$(curl -fsSL https://nodejs.org/dist/index.json |
     python3 -c "import json,sys;print(next(x['version'] for x in json.load(sys.stdin) if x['version'].startswith('v22.')))")"
   echo "[runtime] Node $NODE_VERSION ($ARCH)…"

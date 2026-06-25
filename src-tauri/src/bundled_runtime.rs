@@ -56,7 +56,18 @@ pub fn append_user_tool_dirs() {
     };
     let home = Path::new(&home);
     let mut dirs: Vec<String> = Vec::new();
-    // nvm-managed node versions — where npm-global CLIs (bob/claude/codex) live.
+    // Official native installers (`~/.local/bin`) come FIRST. They auto-update
+    // and are the vendor-canonical path, so they must win over a package-manager
+    // copy of the same CLI. Concretely: Claude Code's npm package
+    // (`@anthropic-ai/claude-code`) is frozen at 1.0.x — the native installer
+    // superseded it — so an nvm-global `claude` is a stale trap (its 1.0.x maps
+    // the `sonnet` alias to a now-deleted model id → 404 → the agent exits 1).
+    // Preferring the native binary keeps a fresh, self-updating CLI in front.
+    let local = home.join(".local/bin");
+    if let (true, Some(dir)) = (local.is_dir(), local.to_str()) {
+        dirs.push(dir.to_owned());
+    }
+    // nvm-managed node versions — where npm-global CLIs (codex, bob) live.
     if let Ok(entries) = std::fs::read_dir(home.join(".nvm/versions/node")) {
         for entry in entries.flatten() {
             let bin = entry.path().join("bin");
@@ -69,10 +80,6 @@ pub fn append_user_tool_dirs() {
         if Path::new(system).is_dir() {
             dirs.push(system.to_owned());
         }
-    }
-    let local = home.join(".local/bin");
-    if let (true, Some(dir)) = (local.is_dir(), local.to_str()) {
-        dirs.push(dir.to_owned());
     }
     if dirs.is_empty() {
         return;

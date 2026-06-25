@@ -17,8 +17,23 @@ use tauri::{Emitter, Manager, RunEvent};
 
 use crate::open_with::PendingOpenUrls;
 
+/// Emit a native boot timestamp to stderr (COMPOSE_PERF builds only), so the
+/// pre-JS launch phases correlate with the front-end `markBoot` marks. Compiles
+/// out of a normal release build (`option_env!` is `None` → dead-code-eliminated).
+#[inline]
+fn boot_native_mark(label: &str) {
+    if option_env!("COMPOSE_PERF").is_some() {
+        let ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        eprintln!("[boot-native] {label} @ {ms}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    boot_native_mark("run-start");
     // A "Reset all data" requested last session is applied here — before the
     // migration below or the webview can repopulate anything — so the app comes
     // up as a clean first-run.
@@ -41,7 +56,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // A native menu set at construction (so there's no default→custom menu-bar
         // flash on launch): the platform defaults plus File → Print (⌘P). Print
-        // emits `menu://print` (routed in `setup`) → the editor's PDF export.
+        // emits `menu://print` (routed in `setup`) → the editor opens the system
+        // print panel (a printer, or Save as PDF from the panel).
         .menu(|handle| {
             use tauri::menu::{Menu, MenuItem, Submenu};
             let menu = Menu::default(handle)?;
@@ -65,6 +81,7 @@ pub fn run() {
             Ok(menu)
         })
         .setup(|app| {
+            boot_native_mark("setup-start");
             let app_handle = app.handle().clone();
             // Capture back-end panics into the local error log (best-effort),
             // then chain to the default hook. Resolve the path once here so the
@@ -85,7 +102,7 @@ pub fn run() {
 
             // File → Print (⌘P) lives on the builder menu (set at construction so
             // there's no menu-bar flash). Here we only route its event: Print emits
-            // `menu://print`, which the editor turns into the existing PDF export.
+            // `menu://print`, which the editor turns into a system print-panel run.
             app.on_menu_event(|app, event| {
                 if event.id() == "print" {
                     let _ = app.emit("menu://print", ());
@@ -178,11 +195,13 @@ pub fn run() {
                 // makes the view visible so the WebView starts; once running,
                 // `backgroundThrottling: disabled` keeps it alive if the window
                 // is later occluded mid-boot.
+                boot_native_mark("pre-focus");
                 let _ = window.set_focus();
                 if want_devtools {
                     window.open_devtools();
                 }
             }
+            boot_native_mark("setup-end");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -254,6 +273,7 @@ pub fn run() {
             index::workspace_search_index,
             export::workspace_export_pdf,
             export::workspace_export_html,
+            export::workspace_print,
             logging::report_client_error,
             logging::open_error_log,
             open_with::drain_pending_open_urls,
@@ -261,6 +281,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
+    boot_native_mark("pre-run-loop");
     app.run(|app_handle, event| {
         if let RunEvent::Opened { urls } = event {
             let pending = app_handle.state::<PendingOpenUrls>();

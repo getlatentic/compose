@@ -82,6 +82,13 @@ pub struct HarnessRunRequest {
     /// `openai-compatible` adapter (Ollama / OpenRouter); ignored by the rest.
     #[serde(default)]
     pub extra_instructions: Option<String>,
+    /// Absolute path to the agent's executable, pinning the run to a specific
+    /// vetted binary instead of resolving the bare CLI name on PATH (the
+    /// Runtimes panel's "Set explicit path"). Threaded to the adapter via
+    /// `RunTuning.binary_path`; the CLI adapters spawn it, the
+    /// `openai-compatible` adapter ignores it. Omitted/empty → PATH resolution.
+    #[serde(default)]
+    pub binary_path: Option<String>,
 }
 
 fn default_harness_id() -> String {
@@ -357,6 +364,13 @@ fn run_via_harness(
         // Per-harness custom instructions (openai-compatible adapter appends
         // them to the system prompt; trimmed-empty is treated as unset).
         extra_instructions: request.extra_instructions.filter(|s| !s.trim().is_empty()),
+        // Explicit binary override — the CLI adapters spawn this path instead of
+        // resolving the bare name on PATH (trimmed-empty is treated as unset).
+        binary_path: request
+            .binary_path
+            .map(|p| p.trim().to_owned())
+            .filter(|p| !p.is_empty())
+            .map(std::path::PathBuf::from),
     };
 
     let run_request = RunRequest {

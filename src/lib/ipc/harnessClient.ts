@@ -59,6 +59,14 @@ export interface HarnessRunRequest {
    * (Ollama / OpenRouter); ignored by the CLI harnesses. Omitted/empty → none.
    */
   extraInstructions?: string;
+  /**
+   * Absolute path to the agent's executable, pinning the run to a specific vetted
+   * binary instead of resolving the bare CLI name on PATH (the Runtimes panel's
+   * "Set explicit path"). Threaded to the adapter via `RunTuning.binary_path`;
+   * the CLI harnesses spawn it, the openai-compatible adapter ignores it.
+   * Omitted/empty → PATH resolution. See `compose_core::RunTuning`.
+   */
+  binaryPath?: string;
 }
 
 /** A model the harness can be pointed at (mirrors
@@ -114,6 +122,57 @@ export interface HarnessReadiness {
   authConfigured: boolean;
   error: string | null;
   details: unknown;
+}
+
+/**
+ * How a resolved agent binary was installed, surfaced by an adapter in its
+ * readiness `details` (the claude adapter today). Drives the Runtimes panel's
+ * install-kind badge. `"native"` is the self-updating vendor installer; `npm`
+ * copies can go stale.
+ */
+export type InstallKind = "native" | "npm-global" | "homebrew" | "bundled" | "unknown";
+
+/**
+ * The runtime facts an adapter may attach to `HarnessReadiness.details` — where
+ * its CLI resolves on PATH and how it was installed. Both optional: the field is
+ * a free-form `serde_json::Value`, and an adapter that doesn't report them (or a
+ * harness build predating the change) yields `{}`. The keys are snake_case
+ * because `details` is a raw JSON value the struct's camelCase rename doesn't
+ * reach.
+ */
+export interface HarnessRuntimeDetails {
+  resolvedPath: string | null;
+  installKind: InstallKind | null;
+}
+
+const INSTALL_KINDS: readonly InstallKind[] = [
+  "native",
+  "npm-global",
+  "homebrew",
+  "bundled",
+  "unknown",
+];
+
+/**
+ * Read the runtime facts (resolved path + install kind) from a readiness probe's
+ * free-form `details`, defensively — an absent field, a non-object `details`, or
+ * an unrecognized `install_kind` degrades to `null` so the panel renders
+ * version + status regardless. Keeps every `details`-shape assumption in the IPC
+ * layer, not the view.
+ */
+export function runtimeDetailsOf(readiness: HarnessReadiness | null): HarnessRuntimeDetails {
+  const details = readiness?.details;
+  if (!details || typeof details !== "object") {
+    return { resolvedPath: null, installKind: null };
+  }
+  const record = details as Record<string, unknown>;
+  const resolvedPath = typeof record.resolved_path === "string" ? record.resolved_path : null;
+  const rawKind = record.install_kind;
+  const installKind =
+    typeof rawKind === "string" && (INSTALL_KINDS as readonly string[]).includes(rawKind)
+      ? (rawKind as InstallKind)
+      : null;
+  return { resolvedPath, installKind };
 }
 
 /** Streamed install events (shared shape with the bob installer). */
