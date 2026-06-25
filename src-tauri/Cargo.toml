@@ -55,5 +55,14 @@ objc2-web-kit = { version = "0.3", features = [
   "WKWebViewConfiguration",
   "WKPDFConfiguration",
   "WKNavigation",
+  "objc2-app-kit",
   "block2",
+] }
+objc2-app-kit = { version = "0.3", features = [
+  "NSPrintInfo",
+  "NSPrintOperation",
+  "NSResponder",
+  "NSWindow",
+  "NSView",
+  "NSGraphics",
 ] }

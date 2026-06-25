@@ -5,3 +5,22 @@ members = [
   "crates/workspace-index-wasm",
   "src-tauri",
 ]
+
+# A smaller release binary loads faster off cold disk (dyld) and validates its
+# code signature faster on a freshly-installed build — which is where the slow
+# *first* launch goes (measured: ~600ms of the cold launch is just loading the
+# 25 MB unstripped binary; warm relaunch is ~20ms). Thin LTO + stripped symbols
+# roughly halve it. opt-level stays at the default 3 so Rust hot paths (search
+# index, markdown render) aren't slowed, and panics still unwind (Tauri command
+# isolation), so this trades only build time for size.
+[profile.release]
+lto = "thin"
+strip = true
+
+# TEMP: build against the local agent-harness checkout until 0.4.0-alpha.2 is
+# published to crates.io. The local crate carries the native-Claude installer,
+# the readiness resolved-path/install-kind, and the binary_path run seam — none
+# of which are in the published 0.4.0-alpha.1. The path is a machine-specific dev
+# override; delete this block and bump the version dep once the crate is published.
+[patch.crates-io]
+agent-harness = { path = "/Users/dev/workspace/agent-harness/crates/agent-harness" }
