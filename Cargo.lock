@@ -812,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "compose"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "agent-harness",
  "base64 0.22.1",

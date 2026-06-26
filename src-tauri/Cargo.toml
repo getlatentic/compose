@@ -1,6 +1,6 @@
 [package]
 name = "compose"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 description = "Compose — local-first AI writing workspace"
 authors = ["Compose contributors"]
 edition = "2021"
