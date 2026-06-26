@@ -16,6 +16,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# Build a single universal (arm64 + x86_64) app so one .dmg runs on both Apple
+# Silicon and Intel; Tauri nests the bundle under the target-triple dir.
+TARGET="universal-apple-darwin"
+BUNDLE="$ROOT/target/$TARGET/release/bundle"
 ENV_FILE="$ROOT/src-tauri/.env.release"
 if [ -f "$ENV_FILE" ]; then
   echo "[release] loading credentials from src-tauri/.env.release"
@@ -73,7 +77,7 @@ clean_dmg_state() {
   hdiutil info \
     | awk '/^image-path/{ours=($0 ~ /Compose.*\.dmg/)} ours && /\/dev\/disk[0-9]+/{print $1; ours=0}' \
     | while read -r dev; do hdiutil detach "$dev" -force >/dev/null 2>&1 || true; done
-  find "$ROOT/target/release/bundle" -name 'rw.*.dmg' -delete 2>/dev/null || true
+  find "$BUNDLE" -name 'rw.*.dmg' -delete 2>/dev/null || true
 }
 
 # `create-dmg` (bundle_dmg.sh) is intermittently racy here (hdiutil /
@@ -94,7 +98,7 @@ touch "$ROOT/src-tauri/src/lib.rs"
 built=0
 for attempt in 1 2 3; do
   clean_dmg_state
-  if ( cd "$ROOT" && pnpm tauri build ${UPDATER_CONFIG[@]+"${UPDATER_CONFIG[@]}"} ); then
+  if ( cd "$ROOT" && pnpm tauri build --target "$TARGET" ${UPDATER_CONFIG[@]+"${UPDATER_CONFIG[@]}"} ); then
     built=1
     break
   fi
@@ -102,10 +106,11 @@ for attempt in 1 2 3; do
 done
 [ "$built" = 1 ] || { echo "[release] build failed after 3 attempts" >&2; exit 1; }
 
-# Cargo workspace → target lives at the workspace root, not under src-tauri/.
-APP="$ROOT/target/release/bundle/macos/Compose.app"
+# Cargo workspace target is at the workspace root; the universal build nests the
+# bundle under the target-triple dir (see $BUNDLE).
+APP="$BUNDLE/macos/Compose.app"
 NODE="$APP/Contents/Resources/runtime/node/bin/node"
-DMG=$(ls "$ROOT"/target/release/bundle/dmg/*.dmg 2>/dev/null | head -1) || true
+DMG=$(ls "$BUNDLE"/dmg/*.dmg 2>/dev/null | head -1) || true
 
 # Tauri notarizes + staples the .app but only signs the .dmg wrapper. The DMG is
 # the downloaded artifact, so notarize + staple it too — a stapled ticket lets it

@@ -9,7 +9,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-MACOS="$ROOT/target/release/bundle/macos"
+# Universal build → the bundle lives under the target-triple dir.
+MACOS="$ROOT/target/universal-apple-darwin/release/bundle/macos"
 SIG="$MACOS/Compose.app.tar.gz.sig"
 REPO="getlatentic/compose" # matches the endpoint in tauri.conf.json
 
@@ -27,12 +28,19 @@ SIGNATURE=$(tr -d '\n' < "$SIG")
 URL="https://github.com/$REPO/releases/download/v$VERSION/Compose.app.tar.gz"
 OUT="$MACOS/latest.json"
 
+# One universal artifact serves both arches: the updater, running on either
+# Apple Silicon or Intel, looks up its own platform key and downloads the same
+# universal tarball (same signature).
 cat > "$OUT" <<JSON
 {
   "version": "$VERSION",
   "notes": "See the release notes.",
   "platforms": {
     "darwin-aarch64": {
+      "signature": "$SIGNATURE",
+      "url": "$URL"
+    },
+    "darwin-x86_64": {
       "signature": "$SIGNATURE",
       "url": "$URL"
     }
