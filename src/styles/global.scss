@@ -1148,6 +1148,9 @@ select {
   font-size: 0.8125rem;
   line-height: 1.75rem;
   text-align: start;
+  // Rows are navigation, not prose — don't let a click/right-click select the
+  // row label as text.
+  user-select: none;
 }
 
 .file-row--folder {
