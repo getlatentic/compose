@@ -41,12 +41,14 @@ export APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
 # release with no updater artifacts (the app still works; it just won't
 # self-update). The matching public key goes in tauri.conf.json `plugins.updater`.
 UPDATER_CONFIG=()
-if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-  export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || [ -n "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" ]; then
+  # Tauri reads the key from either the inline value or a path; the password is
+  # optional. Export whichever .env.release set so the build inherits them.
+  export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PATH TAURI_SIGNING_PRIVATE_KEY_PASSWORD
   UPDATER_CONFIG=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
   echo "[release] updater signing key set — emitting updater artifacts"
 else
-  echo "[release] TAURI_SIGNING_PRIVATE_KEY unset — building without updater artifacts"
+  echo "[release] no updater signing key (TAURI_SIGNING_PRIVATE_KEY[_PATH]) — building without updater artifacts"
 fi
 
 # Pre-flight: the identity must resolve to a real codesigning identity.

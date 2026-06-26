@@ -35,7 +35,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxRUE4NjE4QkU0MTIwRTEKUldUaElFRytHSWJxc1d0MHFLa0lKNi9oVUE5d0ozNFlsdFZycWljOVpqUk43Y2NUZ1krcUQ0T3UK",
       "endpoints": [
         "https://github.com/getlatentic/compose/releases/latest/download/latest.json"
       ]
