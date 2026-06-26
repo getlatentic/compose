@@ -15,7 +15,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["devtools", "protocol-asset"] }
-agent-harness = { version = "0.4.0-alpha.1", features = [
+agent-harness = { version = "0.4.0-alpha.2", features = [
   "acp",
   "openai-compatible",
 ] }

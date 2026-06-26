@@ -16,11 +16,3 @@ members = [
 [profile.release]
 lto = "thin"
 strip = true
-
-# TEMP: build against the local agent-harness checkout until 0.4.0-alpha.2 is
-# published to crates.io. The local crate carries the native-Claude installer,
-# the readiness resolved-path/install-kind, and the binary_path run seam — none
-# of which are in the published 0.4.0-alpha.1. The path is a machine-specific dev
-# override; delete this block and bump the version dep once the crate is published.
-[patch.crates-io]
-agent-harness = { path = "/Users/dev/workspace/agent-harness/crates/agent-harness" }
