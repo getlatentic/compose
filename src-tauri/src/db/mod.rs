@@ -1287,6 +1287,7 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
               content text not null,
               trace_json text,
               stats_json text,
+              run_status text,
               created_at integer not null
             );
             create index if not exists idx_conversation_messages_thread
@@ -1965,6 +1966,7 @@ mod tests {
                         content: format!("hello {i}"),
                         trace_json: None,
                         stats_json: None,
+                        run_status: None,
                         created_at: 0,
                     };
                     if let Err(e) = store.save_conversation(vault, &conv, vec![msg], Vec::new()) {

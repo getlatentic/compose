@@ -125,6 +125,24 @@ export function MessageRow({
         <WorkingIndicator trace={trace} />
       ) : null}
 
+      {isAssistant && message.interrupted ? (
+        // The run that produced this reply never finished (the app quit/crashed
+        // mid-stream). Say so plainly and offer a one-click re-run of the turn.
+        <div className="message-interrupted">
+          <span className="message-interrupted__text">Response interrupted</span>
+          {callbacks.onRegenerate ? (
+            <button
+              type="button"
+              className="message-interrupted__retry"
+              onClick={() => callbacks.onRegenerate?.()}
+            >
+              <RefreshCw size={13} aria-hidden />
+              Retry
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {message.suggestions?.length ? (
         <SuggestionList
           suggestions={message.suggestions}

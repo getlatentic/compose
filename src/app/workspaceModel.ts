@@ -109,6 +109,10 @@ export interface WorkspaceChatMessage {
   role: "assistant" | "user";
   runId?: string;
   streaming?: boolean;
+  /** This reply's run never finished — the app quit/crashed mid-stream, so it
+   * was loaded still marked streaming. Renders a "Response interrupted" note
+   * with a Retry. Set on load (see `hydrateChatThread`), never while live. */
+  interrupted?: boolean;
   suggestions?: WorkspaceDocumentSuggestion[];
   /** File changes a `snapshot`-mode run already applied to disk, shown as an
    * informational diff. Transient UI state — not persisted (see
@@ -1673,24 +1677,36 @@ export function finalizeRun(
 
 /**
  * Serialize a thread's messages for persistence — `<role, content, trace,
- * stats>` per message. `trace`/`stats` are JSON-stringified (the trace is
- * already the consolidated `TraceEntry[]` on the message; no transform).
- * Streaming / placeholder messages with no content are skipped — only
- * settled turns are persisted.
+ * stats, runStatus>` per message. `trace`/`stats` are JSON-stringified (the
+ * trace is already the consolidated `TraceEntry[]`; no transform).
+ *
+ * A *live* reply is persisted (with `runStatus: "streaming"`) even before any
+ * text lands, so an incremental save during the run leaves a marker a
+ * quit/crash can't clear — on next load that stale "streaming" reads as
+ * interrupted. A clean finish clears `streaming`, so a settled turn persists
+ * with no status. Empty, non-streaming placeholders are still skipped.
  */
 export function serializeChatMessages(
   thread: WorkspaceChatThread,
 ): ConversationMessageRecord[] {
   return thread.messages
-    .filter((message) => message.content.trim())
-    .map((message, index) => ({
-      messageId: message.id || newMessageId(),
-      role: message.role,
-      content: message.content,
-      ...(message.trace?.length ? { traceJson: JSON.stringify(message.trace) } : {}),
-      ...(message.stats ? { statsJson: JSON.stringify(message.stats) } : {}),
-      createdAt: index,
-    }));
+    .filter((message) => message.content.trim() || message.streaming || message.interrupted)
+    .map((message, index) => {
+      const runStatus = message.streaming
+        ? "streaming"
+        : message.interrupted
+          ? "interrupted"
+          : undefined;
+      return {
+        messageId: message.id || newMessageId(),
+        role: message.role,
+        content: message.content,
+        ...(message.trace?.length ? { traceJson: JSON.stringify(message.trace) } : {}),
+        ...(message.stats ? { statsJson: JSON.stringify(message.stats) } : {}),
+        ...(runStatus ? { runStatus } : {}),
+        createdAt: index,
+      };
+    });
 }
 
 /**
@@ -1724,6 +1740,12 @@ export function hydrateChatThread(
     role: record.role,
     ...(record.traceJson ? { trace: safeParseJson<TraceEntry[]>(record.traceJson) } : {}),
     ...(record.statsJson ? { stats: safeParseJson<WorkspaceRunStats>(record.statsJson) } : {}),
+    // A reply still marked streaming/interrupted on disk had its run cut short
+    // (the app quit/crashed mid-stream) — there's no live run on load, so
+    // surface it as interrupted with a Retry rather than a dead "thinking…".
+    ...(record.runStatus === "streaming" || record.runStatus === "interrupted"
+      ? { interrupted: true }
+      : {}),
   }));
   return {
     ...thread,

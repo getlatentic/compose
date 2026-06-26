@@ -2540,6 +2540,45 @@ select {
   color: var(--cds-text-helper, #525252);
 }
 
+// A reply whose run was cut short (the app quit/crashed mid-stream). Understated
+// — it's incomplete, not an error — with a one-click re-run of the turn.
+.message-interrupted {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-block-start: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cds-layer-01, #f4f4f4);
+  font-size: 0.75rem;
+}
+
+.message-interrupted__text {
+  color: var(--cds-text-secondary, #525252);
+}
+
+.message-interrupted__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+  border: 0;
+  padding: 0.125rem 0.25rem;
+  background: transparent;
+  color: var(--cds-link-primary, #0f62fe);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.message-interrupted__retry:hover,
+.message-interrupted__retry:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
 // The turn's prose. No border, no fill, no max-inline-size cap — it spans the
 // panel column and reads like a document, not a chat-app bubble.
 // `min-inline-size: 0` lets a wide child (a code block, a long URL) wrap
@@ -4223,6 +4262,96 @@ select {
   background: rgba(255, 255, 255, 0.12);
 }
 
+// --- Self-update prompt ----------------------------------------------------
+// A floating card shown only when an update is available or installing.
+// Bottom-center so it clears the bottom-right toasts.
+.update-banner {
+  position: fixed;
+  inset-block-end: 1rem;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  inline-size: min(92vw, 30rem);
+  padding: 0.75rem 1rem;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  font-size: 0.8125rem;
+}
+
+.update-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.update-banner__text strong {
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+}
+
+.update-banner__text span {
+  color: var(--cds-text-secondary, #525252);
+}
+
+.update-banner__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+  flex: none;
+}
+
+.update-banner__later {
+  border: 0;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.update-banner__later:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.update-banner__primary {
+  border: 0;
+  padding: 0.25rem 0.75rem;
+  background: var(--cds-button-primary, #0f62fe);
+  color: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.update-banner__primary:hover {
+  background: var(--cds-button-primary-hover, #0353e9);
+}
+
+.update-banner__progress {
+  flex: 1;
+  block-size: 4px;
+  max-inline-size: 8rem;
+  margin-inline-start: auto;
+  background: var(--cds-layer-accent-01, #dde1e6);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.update-banner__progress-fill {
+  block-size: 100%;
+  background: var(--cds-button-primary, #0f62fe);
+  transition: inline-size 0.2s ease;
+}
+
 .comments-panel {
   display: flex;
   min-block-size: 0;
@@ -4499,7 +4628,10 @@ select {
 }
 
 .settings-dialog {
-  inline-size: min(100%, 60rem);
+  // Track the viewport but cap at 960px (60rem): a settings pane wider than that
+  // just stretches line lengths, and below the cap the 92vw keeps a margin on a
+  // small window instead of going edge-to-edge.
+  inline-size: min(92vw, 60rem);
   // A flex column at a FIXED height (capped to the viewport): the header stays
   // pinned and the body (nav + content) fills the rest, with only the content
   // pane scrolling — so switching agents or tabs never resizes the dialog.

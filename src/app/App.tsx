@@ -3,6 +3,8 @@ import { useEffect } from "react";
 
 import { AppRouter } from "./AppRouter";
 import { ToastViewport } from "../features/toast/ToastViewport";
+import { UpdateBanner } from "../features/updater/UpdateBanner";
+import { useUpdaterStore } from "./store/updaterStore";
 import { TextPromptProvider, useTextPrompt } from "../features/dialogs/TextPromptProvider";
 import { LinkInsertProvider } from "../features/dialogs/LinkInsertProvider";
 import {
@@ -21,7 +23,9 @@ export function App() {
       <LinkInsertProvider>
         <ImageEditAltListener />
         <ExternalFileOpenListener />
+        <UpdateChecker />
         <ToastViewport />
+        <UpdateBanner />
         <AppRouter />
       </LinkInsertProvider>
     </TextPromptProvider>
@@ -30,6 +34,18 @@ export function App() {
 
 function ExternalFileOpenListener() {
   useExternalFileOpen();
+  return null;
+}
+
+/** Quietly check for an update shortly after launch — off the launch path so it
+ *  never delays first paint, and silent on failure (see `updaterStore.check`).
+ *  A found update surfaces through {@link UpdateBanner}. */
+function UpdateChecker() {
+  const check = useUpdaterStore((state) => state.check);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void check(), 4000);
+    return () => window.clearTimeout(timer);
+  }, [check]);
   return null;
 }
 

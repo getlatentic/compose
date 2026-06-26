@@ -25,10 +25,12 @@ use crate::harness::registry::compose_harness_by_id;
 use crate::harness::{ApprovalMode, ChatMode};
 use crate::review::{prepare_edit_guard, EditGuard, ReviewSessionStore};
 use crate::workspace::WorkspaceRegistry;
+use crate::harness::orphan_runs;
 use harness::{ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode, RunRequest, RunTuning};
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 
@@ -114,6 +116,30 @@ pub struct RunnerState {
 #[derive(Default)]
 struct RunnerInner {
     runs: HashMap<String, ActiveRun>,
+    /// App data dir, set once at boot. The live runs' pids are mirrored to a
+    /// file here so a child orphaned by a hard crash can be killed on the next
+    /// launch (see [`orphan_runs`]). `None` until set — pid bookkeeping is then
+    /// a no-op (cancellation still works).
+    data_dir: Option<PathBuf>,
+}
+
+impl RunnerInner {
+    /// Mirror the current live pids to the orphan-tracking file. Called after
+    /// any change to `runs` (a child attaches, or a run ends).
+    fn persist_pids(&self) {
+        let Some(dir) = self.data_dir.as_deref() else {
+            return;
+        };
+        let pids: BTreeMap<String, u32> = self
+            .runs
+            .iter()
+            .filter_map(|(id, run)| {
+                let pid = run.pid.load(Ordering::SeqCst);
+                (pid != 0).then(|| (id.clone(), pid))
+            })
+            .collect();
+        orphan_runs::write(dir, &pids);
+    }
 }
 
 /// Per-run state stored in the registry.
@@ -134,6 +160,10 @@ struct ActiveRun {
     // works for any harness: bob's `ProcessHandle` and the generic
     // harness `RunHandle` both implement `RunControl`.
     handle: Mutex<Option<Box<dyn RunControl>>>,
+    /// The child's OS pid once spawned (0 = none yet, or a process-less
+    /// direct-model run). Mirrored to the orphan-tracking file so a crash
+    /// orphan can be reaped next launch.
+    pid: AtomicU32,
 }
 
 impl ActiveRun {
@@ -141,6 +171,7 @@ impl ActiveRun {
         Self {
             cancelled: Arc::new(AtomicBool::new(false)),
             handle: Mutex::new(None),
+            pid: AtomicU32::new(0),
         }
     }
 }
@@ -165,6 +196,32 @@ impl RunnerState {
             }
         }
         Ok(())
+    }
+
+    /// Cancel every in-flight run — used on app exit so an agent child doesn't
+    /// orphan (and keep editing files) once the window is gone. Best-effort:
+    /// each child is signalled, and any that ignores it is reaped by the
+    /// orphan sweep on the next launch.
+    pub fn cancel_all(&self) {
+        let Ok(inner) = self.inner.lock() else {
+            return;
+        };
+        for run in inner.runs.values() {
+            run.cancelled.store(true, Ordering::SeqCst);
+            if let Ok(guard) = run.handle.lock() {
+                if let Some(handle) = guard.as_ref() {
+                    let _ = handle.cancel();
+                }
+            }
+        }
+    }
+
+    /// Point pid bookkeeping at the app data dir (once, at boot). Until set,
+    /// recording live pids is a no-op.
+    pub fn set_data_dir(&self, dir: PathBuf) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.data_dir = Some(dir);
+        }
     }
 
     /// Register a placeholder run before doing any blocking
@@ -203,15 +260,22 @@ impl RunnerState {
             let _ = handle.cancel();
             return Ok(());
         }
+        // Record the child's pid before the handle moves into the slot, then
+        // mirror the live set to disk so a crash orphan can be reaped on the
+        // next launch. A process-less run (direct-model adapter) reports None.
+        let pid = handle.pid().unwrap_or(0);
         if let Ok(mut guard) = run.handle.lock() {
             *guard = Some(handle);
         }
+        run.pid.store(pid, Ordering::SeqCst);
+        inner.persist_pids();
         Ok(())
     }
 
     fn unregister(&self, run_id: &str) {
         if let Ok(mut inner) = self.inner.lock() {
             inner.runs.remove(run_id);
+            inner.persist_pids();
         }
     }
 }
@@ -401,10 +465,11 @@ fn run_via_harness(
             return;
         }
         // On Exited, deregister so a later cancel doesn't act on a
-        // finished run.
+        // finished run, and drop its pid from the orphan-tracking file.
         if matches!(event, RunEvent::Exited { .. }) {
             if let Ok(mut inner) = runner_inner.lock() {
                 inner.runs.remove(&run_id_cleanup);
+                inner.persist_pids();
             }
         }
         // Map the neutral event into Compose's `ChatEvent`. claude/codex

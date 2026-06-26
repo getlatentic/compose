@@ -54,6 +54,11 @@ pub fn run() {
         .manage(PendingOpenUrls::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // Self-update: check a signed manifest, download + swap the bundle, and
+        // relaunch (`tauri_plugin_process`). Inert until armed — see
+        // `plugins.updater` in tauri.conf.json (pubkey + endpoint).
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         // A native menu set at construction (so there's no default→custom menu-bar
         // flash on launch): the platform defaults plus File → Print (⌘P). Print
         // emits `menu://print` (routed in `setup`) → the editor opens the system
@@ -158,6 +163,16 @@ pub fn run() {
             let metadata = app_handle.state::<db::MetadataStore>();
             if let Err(error) = metadata.init_from_app(&app_handle) {
                 eprintln!("metadata store init failed: {error}");
+            }
+            // Reap any agent child a prior hard crash orphaned, and point the
+            // runner at the data dir so this session records its own live runs
+            // for the same safety net. set_data_dir is instant (before any run);
+            // the sweep shells `ps`/kill, so it goes off the launch path.
+            if let Ok(data_dir) = app_handle.path().app_data_dir() {
+                app_handle
+                    .state::<harness::runner::RunnerState>()
+                    .set_data_dir(data_dir.clone());
+                std::thread::spawn(move || harness::orphan_runs::sweep(&data_dir));
             }
             let watchers = app_handle.state::<files::watcher::WatcherManager>();
             if let Err(error) = watchers.init(app_handle.clone()) {
@@ -282,8 +297,8 @@ pub fn run() {
         .expect("error while building tauri application");
 
     boot_native_mark("pre-run-loop");
-    app.run(|app_handle, event| {
-        if let RunEvent::Opened { urls } = event {
+    app.run(|app_handle, event| match event {
+        RunEvent::Opened { urls } => {
             let pending = app_handle.state::<PendingOpenUrls>();
             for url in urls {
                 let Some(path) = url
@@ -299,5 +314,13 @@ pub fn run() {
                 let _ = app_handle.emit("compose:open-external-file", path);
             }
         }
+        // Quitting — signal every in-flight agent child so it doesn't orphan
+        // and keep editing files after the app is gone.
+        RunEvent::ExitRequested { .. } => {
+            app_handle
+                .state::<harness::runner::RunnerState>()
+                .cancel_all();
+        }
+        _ => {}
     });
 }

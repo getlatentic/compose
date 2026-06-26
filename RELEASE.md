@@ -76,15 +76,22 @@ these are product work; they're the ship vehicle.
   - [x] Notarization + stapling of **both** the `.app` (Tauri, automatic) and the
         `.dmg` (a `build-release.sh` post-step — Tauri only *signs* the DMG wrapper).
   - [ ] Verify the downloaded `.dmg` opens clean on a machine that never built it.
-- [ ] **[Apple] Auto-updater.** No `tauri-plugin-updater`, no `updater` config.
-      How it works: the app checks a static manifest you host (GitHub Releases /
-      S3 — no backend), and if there's a newer version downloads + verifies +
-      swaps the bundle and relaunches. Update artifacts are signed with Tauri's
-      own keypair (`tauri signer generate`) — separate from Apple signing — but
-      the installed bundle still must be Apple-notarized to launch, so this is
-      gated on the item above.
-  - [ ] Add `tauri-plugin-updater` + signing keypair; host an update manifest.
-  - [ ] Add an in-app "update available / restart to update" surface.
+- [~] **Auto-updater — wired; arming left.** Plugin, config, capabilities, and
+      the in-app surface are in place: a silent launch check + a manual "Check for
+      updates" in About, a download-progress banner, and relaunch. It reads a
+      static `latest.json` on GitHub Releases (no backend), verifies the signed
+      artifact, swaps the bundle, and relaunches. Notarization (above) is done, so
+      it's unblocked. Files: `tauri-plugin-updater`/`-process`, `plugins.updater`
+      in tauri.conf.json (endpoint set; **pubkey blank until armed**),
+      `capabilities/default.json`, `src/lib/ipc/updater.ts`, `app/store/updaterStore.ts`,
+      `features/updater/UpdateBanner.tsx`. `build-release.sh` emits the signed
+      updater artifacts when `TAURI_SIGNING_PRIVATE_KEY` is set;
+      `make-update-manifest.sh` writes `latest.json`.
+  - [ ] **Arm once:** `pnpm tauri signer generate -w ~/.tauri/compose.key` → paste
+        the PUBLIC key into tauri.conf.json `plugins.updater.pubkey`; put the
+        private key + password in `src-tauri/.env.release` (see the example).
+  - [ ] **Each release:** run `build-release.sh` (key set) → `make-update-manifest.sh`
+        → create GitHub Release `v<version>`, upload `Compose.app.tar.gz` + `latest.json`.
 - [x] **Real README** — replaced the Tauri boilerplate with a proper
       Compose README (what it is, features, dev setup, layout, docs, license).
 - [x] **LICENSE file** — MIT (`LICENSE`), `license: "MIT"` added to
@@ -120,6 +127,19 @@ these are product work; they're the ship vehicle.
       racing scan drops open tabs and the empty-tabs fallback opens `Welcome.md` —
       reads as lost work. Fix: reconcile tab removal only on a confirmed `removed`
       fs-event; don't let the Welcome fallback overwrite restored tabs.
+- [x] **Chat survives quit / sleep / app-switch.** A reply was only persisted on
+      completion, so a logout/crash mid-stream left a one-sided conversation with
+      no explanation, and the agent child orphaned (could keep editing files).
+      Now: a `run_status` column + throttled incremental saves keep the partial
+      reply and mark it **interrupted** on next load (a Retry, not a dead
+      "thinking…"); and agent children are cancelled on app exit
+      (`RunnerState::cancel_all` on `ExitRequested`) plus reaped on the next launch
+      via a PID file (`harness::orphan_runs`). App-switch was already safe
+      (`backgroundThrottling: disabled`). (A silence-based stall banner was
+      considered and dropped — it can't tell a long tool call / thinking from a
+      hang, and Stop is always available.) Needs `RunControl::pid()` in
+      agent-harness (rides the `0.4.0-alpha.2` bump). Unit-tested; in-app verify
+      pending.
 
 ## 2a. Onboarding: auto-discover installed harnesses — done
 

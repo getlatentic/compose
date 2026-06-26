@@ -998,6 +998,68 @@ describe("workspace model", () => {
     expect(answer.stats).toEqual({ totalTokens: 21956, coins: 0.05 });
   });
 
+  it("persists a live reply as streaming; loads a stale one as interrupted", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-2";
+    // A reply that streamed partial text but never finalized — the app quit or
+    // crashed mid-stream.
+    let thread = markRunStreaming(
+      startRun(appendUserChatMessage(workspace.chatThread, "summarize", null), runId),
+      runId,
+    );
+    thread = appendAssistantText(thread, runId, "Here is the par");
+    thread = { ...thread, conversationId: "conv-2" };
+
+    const records = serializeChatMessages(thread);
+    // The in-flight reply is persisted (not skipped) and tagged streaming, so a
+    // crash leaves a marker on disk instead of losing the turn.
+    const answer = records.find((record) => record.role === "assistant");
+    expect(answer?.runStatus).toBe("streaming");
+
+    // Loading it in a fresh session (no live run) reads the stale streaming
+    // marker as an interrupted reply — surfaced with a Retry, not a dead spinner.
+    const snapshot = {
+      conversationId: "conv-2",
+      title: null,
+      harnessId: "bob",
+      contextFiles: [],
+      messages: records,
+      createdAt: 0,
+      updatedAt: 1,
+    };
+    const restored = hydrateChatThread(createWorkspaceFromPath("/tmp/alpha").chatThread, snapshot);
+    const restoredAnswer = restored.messages[1];
+    expect(restoredAnswer.interrupted).toBe(true);
+    expect(restoredAnswer.streaming).toBeUndefined();
+    expect(restoredAnswer.content).toBe("Here is the par");
+  });
+
+  it("leaves a settled reply unmarked, so it never reads as interrupted", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-3";
+    let thread = markRunStreaming(
+      startRun(appendUserChatMessage(workspace.chatThread, "q", null), runId),
+      runId,
+    );
+    thread = appendAssistantText(thread, runId, "done");
+    thread = finalizeRun(thread, runId, { exitCode: 0 });
+    thread = { ...thread, conversationId: "conv-3" };
+
+    const records = serializeChatMessages(thread);
+    expect(records.every((record) => record.runStatus == null)).toBe(true);
+
+    const restored = hydrateChatThread(createWorkspaceFromPath("/tmp/alpha").chatThread, {
+      conversationId: "conv-3",
+      title: null,
+      harnessId: null,
+      contextFiles: [],
+      messages: records,
+      createdAt: 0,
+      updatedAt: 1,
+    });
+    expect(restored.messages.some((message) => message.interrupted)).toBe(false);
+  });
+
   it("resetChatThread clears messages + run state, keeps context", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
     const withContext = setCurrentTabContext(workspace.chatThread, workspace.id, "a.md");

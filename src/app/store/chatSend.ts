@@ -44,6 +44,9 @@ import {
   persistConversation,
 } from "./persistence";
 import {
+  createRunPersister,
+} from "./runPersist";
+import {
   playCompletionChime,
 } from "../../lib/audio/completionChime";
 import {
@@ -194,6 +197,11 @@ export async function runSendChatPrompt(
   const updateThread = batched.updateThread;
   const updateWorkspaceForRun = batched.updateWorkspaceForRun;
 
+  // Throttled incremental saves so a crash mid-stream keeps the partial reply
+  // (and the interrupted marker). Pinged on every event; disposed on the
+  // terminal event.
+  const persister = createRunPersister(get, workspaceId);
+
   let releaseSubscription: (() => void) | null = null;
   let llmThreadId: string | null = null;
   let completionPersisted = false;
@@ -227,7 +235,10 @@ export async function runSendChatPrompt(
     updateThread((current) => finalizeRun(current, runId, options));
     batched.flushNow();
     batched.dispose();
-    // Turn settled — persist the final answer (+ its trace + stats).
+    persister.dispose();
+    // Turn settled — persist the final answer (+ its trace + stats), now with
+    // `streaming` cleared so the interrupted marker is gone and the history
+    // list refreshes.
     void persistConversation(get, workspaceId);
     if (releaseSubscription) {
       releaseSubscription();
@@ -281,6 +292,7 @@ export async function runSendChatPrompt(
     }
 
     releaseSubscription = await subscribeHarnessRun(runId, (event) => {
+      persister.noteEvent();
       handleHarnessRunEvent(event, runId, updateWorkspaceForRun, finalize, ({ cancelled }) => {
         if (!cancelled && useUiStore.getState().soundOnComplete) {
           void playCompletionChime();
@@ -331,6 +343,7 @@ export async function runSendChatPrompt(
       updateThread((current) => ({ ...current, runError: message, runState: "error" }));
       batched.flushNow();
       batched.dispose();
+      persister.dispose();
       if (releaseSubscription) {
         releaseSubscription();
         activeRunSubscriptions.delete(runId);
