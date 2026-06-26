@@ -43,7 +43,7 @@ pub fn run() {
     // forward so a rename doesn't reset the user's workspaces or settings.
     profile_migration::migrate_legacy_profile();
 
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .manage(workspace::WorkspaceRegistry::default())
         .manage(db::MetadataStore::default())
         .manage(files::watcher::WatcherManager::default())
@@ -58,7 +58,19 @@ pub fn run() {
         // relaunch (`tauri_plugin_process`). Inert until armed — see
         // `plugins.updater` in tauri.conf.json (pubkey + endpoint).
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+
+    // Anonymous active-user analytics — registered only when the build carries an
+    // Aptabase app key (COMPOSE_APTABASE_KEY, evaluated at compile time → no-op
+    // when unset). The frontend fires one `app_launched` event per launch, gated
+    // on the user's opt-out toggle; this plugin performs the (Rust-side) send.
+    if let Some(key) = option_env!("COMPOSE_APTABASE_KEY") {
+        if !key.is_empty() {
+            builder = builder.plugin(tauri_plugin_aptabase::Builder::new(key).build());
+        }
+    }
+
+    let app = builder
         // A native menu set at construction (so there's no default→custom menu-bar
         // flash on launch): the platform defaults plus File → Print (⌘P). Print
         // emits `menu://print` (routed in `setup`) → the editor opens the system

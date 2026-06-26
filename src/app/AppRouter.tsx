@@ -6,6 +6,8 @@ import { SplashScreen } from "./SplashScreen";
 import { MainApp } from "./MainApp";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useHarnessStore } from "./store/harnessStore";
+import { useUiStore } from "./store/uiStore";
+import { trackAppLaunch } from "../lib/analytics/track";
 import { markBoot } from "../lib/perf";
 
 /**
@@ -98,6 +100,23 @@ export function AppRouter() {
       .then(setSelectedHarnessReadiness)
       .catch(() => setSelectedHarnessReadiness(null));
   }, [selectedHarnessId, setSelectedHarnessReadiness]);
+
+  // Once the boot gate releases, fire a single anonymous active-user signal —
+  // a no-op unless the user left the analytics toggle on AND the build carries
+  // GA4 credentials. Deferred to an idle moment so it never competes with
+  // boot-critical work (sendBeacon then hands the POST off the JS thread); the
+  // getState() read (not a selector) keeps it a one-shot.
+  useEffect(() => {
+    if (!bootHydrated) {
+      return;
+    }
+    const enabled = useUiStore.getState().analyticsEnabled;
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(() => trackAppLaunch(enabled), { timeout: 2000 });
+    } else {
+      window.setTimeout(() => trackAppLaunch(enabled), 0);
+    }
+  }, [bootHydrated]);
 
   if (!bootHydrated) {
     return <SplashScreen />;

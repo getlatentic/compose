@@ -46,6 +46,8 @@ export interface UiState {
   closeSettings: () => void;
   soundOnComplete: boolean;
   setSoundOnComplete: (enabled: boolean) => void;
+  analyticsEnabled: boolean;
+  setAnalyticsEnabled: (enabled: boolean) => void;
   composerFocusNonce: number;
   requestComposerFocus: () => void;
   /** Monotonic nonce; the chat pane replays a border-pulse on each change. */
@@ -128,7 +130,12 @@ export const useUiStore = create<UiState>((set, get) => ({
   soundOnComplete: INITIAL_UI_PREFS.soundOnComplete,
   setSoundOnComplete: (enabled) => {
     set({ soundOnComplete: enabled });
-    persistUiPrefs({ soundOnComplete: enabled });
+    persistUiPrefs({ soundOnComplete: enabled, analyticsEnabled: get().analyticsEnabled });
+  },
+  analyticsEnabled: INITIAL_UI_PREFS.analyticsEnabled,
+  setAnalyticsEnabled: (enabled) => {
+    set({ analyticsEnabled: enabled });
+    persistUiPrefs({ soundOnComplete: get().soundOnComplete, analyticsEnabled: enabled });
   },
   composerFocusNonce: 0,
   requestComposerFocus: () => {

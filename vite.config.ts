@@ -65,8 +65,13 @@ export default defineConfig(async () => ({
   //
   //   COMPOSE_PERF=1  → `[perf]` console lines + User Timing marks
   //   (react-scan uses the inject plugin above, not a define constant.)
+  // Whether this build carries an Aptabase app key (COMPOSE_APTABASE_KEY, used by
+  // the Rust tauri-plugin-aptabase). The frontend gates its one anonymous
+  // `app_launched` event on this, so dev / unconfigured builds make no IPC. The
+  // key itself stays in Rust — only this boolean reaches the frontend bundle.
   define: {
     __COMPOSE_PERF__: JSON.stringify(process.env.COMPOSE_PERF === "1"),
+    __APTABASE_CONFIGURED__: JSON.stringify(Boolean(process.env.COMPOSE_APTABASE_KEY)),
   },
   build: {
     // Don't even prefetch the lazy editor's heavy vendors (CodeMirror, KaTeX) at

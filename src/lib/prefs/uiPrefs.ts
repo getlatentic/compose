@@ -10,9 +10,12 @@ const UI_PREFS_KEY = "compose.uiPrefs.v1";
 export interface UiPrefs {
   /** Play a subtle chime when an assistant run finishes. */
   soundOnComplete: boolean;
+  /** Send an anonymous app-open signal so active users can be counted. Opt-out
+   *  (defaults on); honoured only when a build also carries GA4 credentials. */
+  analyticsEnabled: boolean;
 }
 
-const FALLBACK: UiPrefs = { soundOnComplete: true };
+const FALLBACK: UiPrefs = { soundOnComplete: true, analyticsEnabled: true };
 
 export function loadUiPrefs(): UiPrefs {
   if (typeof localStorage === "undefined") {
@@ -29,6 +32,10 @@ export function loadUiPrefs(): UiPrefs {
         typeof parsed.soundOnComplete === "boolean"
           ? parsed.soundOnComplete
           : FALLBACK.soundOnComplete,
+      analyticsEnabled:
+        typeof parsed.analyticsEnabled === "boolean"
+          ? parsed.analyticsEnabled
+          : FALLBACK.analyticsEnabled,
     };
   } catch {
     return FALLBACK;
