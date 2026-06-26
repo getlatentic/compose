@@ -37,6 +37,8 @@ tempfile = "3"
 comrak = "0.52"
 base64 = "0.22"
 pulldown-latex = "0.7.1"
+tauri-plugin-aptabase = "1.0.0"
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "time", "net"] }
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

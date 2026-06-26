@@ -25,6 +25,7 @@ export function GeneralSettings() {
       <CustomInstructionsSection />
       {isTauriRuntime() ? (
         <>
+          <PrivacySection />
           <ReportProblemSection />
           <ResetDataSection />
         </>
@@ -75,6 +76,31 @@ function CustomInstructionsSection() {
         value={customInstructions}
         onChange={(event) => setCustomInstructions(event.target.value)}
       />
+    </div>
+  );
+}
+
+function PrivacySection() {
+  const analyticsEnabled = useUiStore((state) => state.analyticsEnabled);
+  const setAnalyticsEnabled = useUiStore((state) => state.setAnalyticsEnabled);
+
+  return (
+    <div className="settings-section">
+      <h3>Privacy</h3>
+      <Toggle
+        id="analytics-enabled"
+        size="sm"
+        labelText="Share anonymous usage statistics"
+        labelA="Off"
+        labelB="On"
+        toggled={analyticsEnabled}
+        onToggle={(checked) => setAnalyticsEnabled(checked)}
+      />
+      <p className="settings-helper">
+        Sends an anonymous signal when Compose opens, so we can count active users and which version
+        they're on. No note content, file names, or personal data — ever. Powered by Aptabase, a
+        privacy-first analytics service.
+      </p>
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { SplashScreen } from "./SplashScreen";
 import { MainApp } from "./MainApp";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useHarnessStore } from "./store/harnessStore";
+import { useUiStore } from "./store/uiStore";
+import { trackAppLaunch } from "../lib/analytics/track";
 import { markBoot } from "../lib/perf";
 
 /**
@@ -98,6 +100,19 @@ export function AppRouter() {
       .then(setSelectedHarnessReadiness)
       .catch(() => setSelectedHarnessReadiness(null));
   }, [selectedHarnessId, setSelectedHarnessReadiness]);
+
+  // Once the boot gate releases, fire a single anonymous active-user signal — a
+  // no-op unless the user left the analytics toggle on. Called directly from this
+  // post-paint effect: requestIdleCallback proved unreliable in the macOS
+  // WKWebView when the window isn't frontmost (it never fired, suppressing the
+  // event). The work here is microseconds; the Rust plugin does the actual send.
+  // getState() (not a selector) keeps it a one-shot read.
+  useEffect(() => {
+    if (!bootHydrated) {
+      return;
+    }
+    trackAppLaunch(useUiStore.getState().analyticsEnabled);
+  }, [bootHydrated]);
 
   if (!bootHydrated) {
     return <SplashScreen />;
