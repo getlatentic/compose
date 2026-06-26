@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { useUiStore } from "../../app/store/uiStore";
+import { useWorkspaceIndex } from "../../app/store/indexStore";
 import {
   searchWorkspaceIndex,
   type WorkspaceSearchHit,
@@ -14,16 +16,14 @@ import {
  * result.
  */
 export function WorkspaceSearchPopover() {
-  const open = useWorkspaceStore((state) => state.searchOpen);
-  const close = useWorkspaceStore((state) => state.closeSearch);
+  const open = useUiStore((state) => state.searchOpen);
+  const close = useUiStore((state) => state.closeSearch);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
-  const workspaces = useWorkspaceStore((state) => state.workspaces);
-  const activeWorkspace = useMemo(
-    () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
-    [activeWorkspaceId, workspaces],
-  );
+  const rebuildIndex = useWorkspaceStore((state) => state.rebuildWorkspaceIndex);
+  const index = useWorkspaceIndex(activeWorkspaceId);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const triggeredRef = useRef(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<WorkspaceSearchHit[]>([]);
   const [status, setStatus] = useState<"idle" | "searching">("idle");
@@ -33,13 +33,25 @@ export function WorkspaceSearchPopover() {
   useEffect(() => {
     if (open) {
       inputRef.current?.focus();
+      // Opening search is a natural retry point: kick a rebuild (once per open)
+      // when the index never built or previously failed, so a stuck index
+      // recovers on its own rather than leaving a dead search box.
+      if (
+        !triggeredRef.current &&
+        activeWorkspaceId &&
+        (index.state === "idle" || index.state === "failed")
+      ) {
+        triggeredRef.current = true;
+        void rebuildIndex(activeWorkspaceId);
+      }
       return;
     }
+    triggeredRef.current = false;
     setQuery("");
     setResults([]);
     setError(null);
     setStatus("idle");
-  }, [open]);
+  }, [open, activeWorkspaceId, index.state, rebuildIndex]);
 
   useEffect(() => {
     if (!open) {
@@ -56,7 +68,7 @@ export function WorkspaceSearchPopover() {
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!activeWorkspace || activeWorkspace.indexState !== "ready" || !trimmed) {
+    if (!activeWorkspaceId || index.state !== "ready" || !trimmed) {
       setError(null);
       setResults([]);
       setStatus("idle");
@@ -65,7 +77,7 @@ export function WorkspaceSearchPopover() {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setStatus("searching");
-      searchWorkspaceIndex(activeWorkspace.id, trimmed, 12)
+      searchWorkspaceIndex(activeWorkspaceId, trimmed, 12)
         .then((hits) => {
           if (!cancelled) {
             setError(null);
@@ -86,9 +98,9 @@ export function WorkspaceSearchPopover() {
       window.clearTimeout(timer);
     };
   }, [
-    activeWorkspace?.id,
-    activeWorkspace?.indexState,
-    activeWorkspace?.indexSnapshot?.indexedAtMs,
+    activeWorkspaceId,
+    index.state,
+    index.snapshot?.indexedAtMs,
     query,
   ]);
 
@@ -100,53 +112,71 @@ export function WorkspaceSearchPopover() {
 
   return (
     <div
-      className="bob-search-popover-backdrop"
+      className="search-popover-backdrop"
       role="presentation"
       onClick={() => close()}
     >
       <div
-        className="bob-search-popover"
+        className="search-popover"
         role="dialog"
         aria-label="Search workspace"
         onClick={(event) => event.stopPropagation()}
       >
-        <label className="bob-search-popover__field">
+        <label className="search-popover__field">
           <Search size={16} aria-hidden />
           <input
             ref={inputRef}
             type="text"
             placeholder={
-              activeWorkspace ? "Search files in this workspace…" : "Open a folder to search"
+              activeWorkspaceId ? "Search files in this workspace…" : "Open a folder to search"
             }
             value={query}
-            disabled={!activeWorkspace || activeWorkspace.indexState !== "ready"}
+            disabled={!activeWorkspaceId || index.state !== "ready"}
             onChange={(event) => setQuery(event.target.value)}
             aria-label="Search workspace"
           />
         </label>
-        <div className="bob-search-popover__results">
-          {error ? (
-            <p className="bob-search-popover__message">{error}</p>
+        <div className="search-popover__results">
+          {index.state === "failed" ? (
+            <div className="search-popover__message">
+              <p>Couldn't build the search index.</p>
+              {index.error ? <p className="search-popover__detail">{index.error}</p> : null}
+              <button
+                type="button"
+                className="search-popover__retry"
+                onClick={() => {
+                  if (activeWorkspaceId) {
+                    void rebuildIndex(activeWorkspaceId);
+                  }
+                }}
+              >
+                Try again
+              </button>
+            </div>
+          ) : activeWorkspaceId && index.state !== "ready" ? (
+            <p className="search-popover__message">Indexing your notes…</p>
+          ) : error ? (
+            <p className="search-popover__message">{error}</p>
           ) : status === "searching" ? (
-            <p className="bob-search-popover__message">Searching…</p>
+            <p className="search-popover__message">Searching…</p>
           ) : !trimmed ? (
-            <p className="bob-search-popover__message">Start typing to search this workspace.</p>
+            <p className="search-popover__message">Start typing to search this workspace.</p>
           ) : results.length === 0 ? (
-            <p className="bob-search-popover__message">No matches</p>
+            <p className="search-popover__message">No matches</p>
           ) : (
             results.map((result) => (
               <button
                 type="button"
                 key={`${result.docId}:${result.ranges[0]?.start ?? 0}`}
-                className="bob-search-popover__result"
+                className="search-popover__result"
                 onClick={() => {
                   void selectFile(result.path);
                   close();
                 }}
               >
-                <span className="bob-search-popover__result-title">{result.title}</span>
-                <span className="bob-search-popover__result-path">{result.path}</span>
-                <span className="bob-search-popover__result-snippet">{result.snippet}</span>
+                <span className="search-popover__result-title">{result.title}</span>
+                <span className="search-popover__result-path">{result.path}</span>
+                <span className="search-popover__result-snippet">{result.snippet}</span>
               </button>
             ))
           )}

@@ -29,10 +29,10 @@ interface MenuItem {
 
 /**
  * The per-conversation overflow (⋮) menu: Rename, Duplicate, Export to
- * Markdown, Archive / Unarchive, Delete. A lightweight inline popover in the
- * spirit of [FooterMenu](FooterMenu.tsx) — no Carbon `OverflowMenu` chrome —
- * opening downward from the chat header. Delete is styled as a destructive
- * item; archive's label flips with the conversation's current state.
+ * Markdown, Archive / Unarchive, Delete. A lightweight inline popover — no
+ * Carbon `OverflowMenu` chrome — opening downward from the chat header. Delete
+ * is styled as a destructive item; archive's label flips with the
+ * conversation's current state.
  */
 export function ConversationActionsMenu({
   archived,
@@ -63,10 +63,10 @@ export function ConversationActionsMenu({
   ];
 
   return (
-    <div className="bob-conv-menu" ref={rootRef}>
+    <div className="conv-menu" ref={rootRef}>
       <button
         type="button"
-        className="bob-icon-button bob-conv-menu__trigger"
+        className="icon-button conv-menu__trigger"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Conversation actions"
@@ -77,7 +77,7 @@ export function ConversationActionsMenu({
       </button>
       {open ? (
         <ul
-          className={`bob-conv-menu__list bob-conv-menu__list--${align}`}
+          className={`conv-menu__list conv-menu__list--${align}`}
           role="menu"
           aria-label="Conversation actions"
         >
@@ -89,8 +89,8 @@ export function ConversationActionsMenu({
                   type="button"
                   role="menuitem"
                   className={[
-                    "bob-conv-menu__item",
-                    item.danger ? "bob-conv-menu__item--danger" : "",
+                    "conv-menu__item",
+                    item.danger ? "conv-menu__item--danger" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}

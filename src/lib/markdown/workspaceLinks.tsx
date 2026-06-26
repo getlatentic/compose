@@ -2,8 +2,8 @@ import { createContext, useContext, type MouseEvent, type ReactNode } from "reac
 import type { Components } from "hast-util-to-jsx-runtime";
 
 import { openExternalUrl } from "../links/openExternal";
-import { resolveWorkspaceLink } from "../links/workspaceLink";
-import { resolveWikilinkTarget } from "../links/wikilink";
+import { resolveWorkspaceLink } from "ai-editor";
+import { resolveWikilinkTarget } from "ai-editor";
 
 /** Href prefix the wikilink remark plugin emits (`#wikilink:<encoded-target>`);
  * a fragment URL, so it survives `rehype-sanitize`. */
@@ -64,9 +64,9 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
   };
 
   const className = internalPath
-    ? "bob-internal-link"
+    ? "internal-link"
     : isWikilink
-      ? "bob-wikilink bob-wikilink--broken"
+      ? "wikilink wikilink--broken"
       : undefined;
 
   return (

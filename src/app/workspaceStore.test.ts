@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runHarnessStream } from "../lib/ipc/bobClient";
+import {
+  harnessCredentialStatus,
+  harnessReadiness,
+  ollamaInstalled,
+  runHarnessStream,
+  startOllama,
+} from "../lib/ipc/harnessClient";
 import { recordLlmThread } from "../lib/ipc/llmContextClient";
-import { checkBobInstall, getBobAuthStatus } from "../lib/ipc/settingsClient";
 import {
   newConversation,
   saveConversation,
@@ -9,8 +14,12 @@ import {
   type ConversationMessageRecord,
 } from "../lib/ipc/conversationsClient";
 import { editGuardFor, reviewChangeToDraft, useWorkspaceStore } from "./workspaceStore";
-import type { HarnessCapabilities } from "../lib/ipc/bobClient";
+import { useHarnessStore } from "./store/harnessStore";
+import { useUiStore } from "./store/uiStore";
+import { useToastStore } from "../features/toast/toastStore";
+import type { HarnessCapabilities, HarnessInfo, HarnessReadiness } from "../lib/ipc/harnessClient";
 import { FileConflictError, readFile, writeFile } from "../lib/ipc/filesClient";
+import { switchWorkspace as switchWorkspaceIpc } from "../lib/ipc/workspaceClient";
 
 vi.mock("../lib/ipc/filesClient", () => ({
   createFile: vi.fn(),
@@ -36,24 +45,25 @@ vi.mock("../lib/ipc/llmContextClient", () => ({
   recordLlmThread: vi.fn(),
 }));
 
-vi.mock("../lib/ipc/settingsClient", () => ({
-  checkBobInstall: vi.fn(),
-  getBobAuthStatus: vi.fn(),
-}));
-
 vi.mock("../lib/ipc/workspaceClient", () => ({
-  // Both return Promise<void> in real life; `persistTabs` chains `.catch` on
-  // the result, so the mocks must resolve rather than return undefined.
-  markWorkspaceOpened: vi.fn(() => Promise.resolve()),
+  // `switchWorkspace` persists the active workspace on the backend (fired and
+  // caught in the store); `persistTabs` chains `.catch` on `saveWorkspaceTabs`.
+  // Both must resolve rather than return undefined.
+  switchWorkspace: vi.fn(() => Promise.resolve()),
   saveWorkspaceTabs: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock("../lib/ipc/bobClient", () => ({
+vi.mock("../lib/ipc/harnessClient", () => ({
   cancelHarnessRun: vi.fn(),
   runHarnessStream: vi.fn(),
   subscribeHarnessRun: vi.fn(),
   harnessList: vi.fn(async () => []),
-  DEFAULT_HARNESS_ID: "bob",
+  harnessListModels: vi.fn(async () => []),
+  harnessReadiness: vi.fn(async () => null),
+  harnessDiscover: vi.fn(async () => []),
+  harnessCredentialStatus: vi.fn(async () => ({ configured: false })),
+  ollamaInstalled: vi.fn(async () => false),
+  startOllama: vi.fn(async () => undefined),
 }));
 
 describe("workspace store", () => {
@@ -62,18 +72,20 @@ describe("workspace store", () => {
     _resetFallbackConversationsForTests();
     useWorkspaceStore.setState({
       activeWorkspaceId: null,
-      bobAuthStatus: { configured: false },
-      bobInstallStatus: null,
-      chatOpen: true,
       conversations: {},
       conversationDeleteNotice: null,
-      harnessCatalog: [],
-      harnessOptions: {},
       onboarding: {},
-      saveError: null,
-      selectedHarnessId: "bob",
-      settingsOpen: false,
       workspaces: [],
+    });
+    useUiStore.setState({ chatOpen: true, settingsOpen: false });
+    useToastStore.setState({ toasts: [] });
+    useHarnessStore.setState({
+      selectedHarnessReadiness: null,
+      harnessCatalog: [],
+      harnessModels: {},
+      harnessOptions: {},
+      allowEdits: true,
+      selectedHarnessId: "bob",
     });
   });
 
@@ -81,12 +93,31 @@ describe("workspace store", () => {
     vi.useRealTimers();
   });
 
-  it("does not persist or spawn a Bob run before desktop runtime readiness passes", async () => {
-    vi.mocked(getBobAuthStatus).mockResolvedValue({ configured: true });
-    vi.mocked(checkBobInstall).mockResolvedValue({
-      errorMessage: "Bob credentials and CLI checks require the Tauri desktop runtime.",
-      installed: false,
-      requiresDesktopRuntime: true,
+  it("does not spawn a Bob run before its key is configured", async () => {
+    // bob's key is the host's concern (the Compose keychain), checked via the
+    // generic credential-status command — like any credentialed harness. A
+    // missing key blocks the run with a Settings nudge: no LLM thread, no spawn.
+    // The loaded catalog is the source of truth for `credentialRequired`.
+    vi.mocked(harnessCredentialStatus).mockResolvedValue({ configured: false });
+    useHarnessStore.setState({
+      harnessCatalog: [
+        {
+          id: "bob",
+          displayName: "Bob",
+          description: "",
+          requiresInstall: true,
+          capabilities: {
+            credentialRequired: true,
+            previewsEdits: true,
+            models: [],
+            allowsCustomModel: false,
+            supportsEffort: false,
+            supportsMaxTurns: false,
+            supportsLogin: false,
+            supportsCustomInstructions: false,
+          },
+        },
+      ],
     });
 
     useWorkspaceStore.getState().addWorkspace("/tmp/bob-vault");
@@ -96,10 +127,11 @@ describe("workspace store", () => {
 
     const workspace = useWorkspaceStore.getState().activeWorkspace();
 
+    expect(harnessCredentialStatus).toHaveBeenCalledWith("bob");
     expect(recordLlmThread).not.toHaveBeenCalled();
     expect(runHarnessStream).not.toHaveBeenCalled();
     expect(workspace?.chatThread.runState).toBe("error");
-    expect(workspace?.chatThread.runError).toBe("Open the desktop app to run Bob.");
+    expect(workspace?.chatThread.runError).toContain("API key in Settings");
   });
 
   it("routes a non-bob harness to runHarnessStream without the bob credential preflight", async () => {
@@ -110,30 +142,25 @@ describe("workspace store", () => {
     // run error, not a bob-flavoured one.
     vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
 
-    useWorkspaceStore.setState({ selectedHarnessId: "codex" });
+    useHarnessStore.setState({ selectedHarnessId: "codex" });
     useWorkspaceStore.getState().addWorkspace("/tmp/codex-vault");
     useWorkspaceStore.getState().setChatPrompt("Summarize this note");
 
     await useWorkspaceStore.getState().sendChatPrompt();
 
-    expect(getBobAuthStatus).not.toHaveBeenCalled();
-    expect(checkBobInstall).not.toHaveBeenCalled();
+    expect(harnessReadiness).not.toHaveBeenCalled();
     expect(runHarnessStream).toHaveBeenCalledWith(
       expect.objectContaining({ harnessId: "codex" }),
     );
   });
 
-  it("gates the credential preflight on capability, not the harness id", async () => {
-    // A non-bob harness whose catalog entry declares credentialRequired
-    // must trigger the SAME preflight as bob — proving the gate reads
-    // capabilities, not `id === "bob"`.
-    vi.mocked(getBobAuthStatus).mockResolvedValue({ configured: true });
-    vi.mocked(checkBobInstall).mockResolvedValue({
-      errorMessage: "requires the Tauri desktop runtime.",
-      installed: false,
-      requiresDesktopRuntime: true,
-    });
-    useWorkspaceStore.setState({
+  it("gates a non-bob credentialed harness on its own key, not bob's", async () => {
+    // A non-bob harness that declares credentialRequired (e.g. OpenRouter) is
+    // gated on ITS OWN stored key via the generic keychain check — never bob's
+    // API key / install (the bug that told Codex users to "connect bob"). A
+    // missing key blocks the run; bob's checks must not fire.
+    vi.mocked(harnessCredentialStatus).mockResolvedValue({ configured: false });
+    useHarnessStore.setState({
       selectedHarnessId: "acme",
       harnessCatalog: [
         {
@@ -149,6 +176,7 @@ describe("workspace store", () => {
             supportsEffort: false,
             supportsMaxTurns: false,
             supportsLogin: false,
+            supportsCustomInstructions: false,
           },
         },
       ],
@@ -158,9 +186,46 @@ describe("workspace store", () => {
 
     await useWorkspaceStore.getState().sendChatPrompt();
 
-    expect(getBobAuthStatus).toHaveBeenCalled();
+    expect(harnessCredentialStatus).toHaveBeenCalledWith("acme");
+    expect(harnessReadiness).not.toHaveBeenCalled();
     expect(runHarnessStream).not.toHaveBeenCalled();
     expect(useWorkspaceStore.getState().activeWorkspace()?.chatThread.runState).toBe("error");
+  });
+
+  it("runs a non-bob credentialed harness once its key is stored", async () => {
+    // With the key present, the generic gate passes and the run proceeds —
+    // through the same path as a login-managed CLI, never bob's checks.
+    vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
+    vi.mocked(harnessCredentialStatus).mockResolvedValue({ configured: true });
+    useHarnessStore.setState({
+      selectedHarnessId: "acme",
+      harnessCatalog: [
+        {
+          id: "acme",
+          displayName: "Acme",
+          description: "",
+          requiresInstall: false,
+          capabilities: {
+            credentialRequired: true,
+            previewsEdits: false,
+            models: [],
+            allowsCustomModel: false,
+            supportsEffort: false,
+            supportsMaxTurns: false,
+            supportsLogin: false,
+            supportsCustomInstructions: false,
+          },
+        },
+      ],
+    });
+    useWorkspaceStore.getState().addWorkspace("/tmp/acme-vault");
+    useWorkspaceStore.getState().setChatPrompt("hello");
+
+    await useWorkspaceStore.getState().sendChatPrompt();
+
+    expect(harnessCredentialStatus).toHaveBeenCalledWith("acme");
+    expect(harnessReadiness).not.toHaveBeenCalled();
+    expect(runHarnessStream).toHaveBeenCalledWith(expect.objectContaining({ harnessId: "acme" }));
   });
 
   it("forwards the selected harness's persisted model + tuning on a run", async () => {
@@ -169,7 +234,7 @@ describe("workspace store", () => {
     // runHarnessStream so the adapter can map them onto CLI flags.
     vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
 
-    useWorkspaceStore.setState({
+    useHarnessStore.setState({
       selectedHarnessId: "codex",
       harnessOptions: { codex: { model: "gpt-5-codex", effort: "high" } },
     });
@@ -190,16 +255,16 @@ describe("workspace store", () => {
     // with "Connect your Bob API key" and never ran the chosen harness.
     // Now it mirrors sendChatPrompt — the bob preflight is bob-only, so
     // the run routes straight to runHarnessStream as a read-only "ask".
-    useWorkspaceStore.setState({ selectedHarnessId: "codex" });
+    useHarnessStore.setState({ selectedHarnessId: "codex" });
     useWorkspaceStore.getState().addWorkspace("/tmp/codex-vault");
 
-    await useWorkspaceStore.getState().askBobAboutSelectionStream("What does this do?", {
+    await useWorkspaceStore.getState().askAboutSelectionStream("What does this do?", {
       range: { start: 0, end: 4 },
       text: "todo",
     });
 
-    expect(getBobAuthStatus).not.toHaveBeenCalled();
-    expect(checkBobInstall).not.toHaveBeenCalled();
+    expect(harnessCredentialStatus).not.toHaveBeenCalled();
+    expect(harnessReadiness).not.toHaveBeenCalled();
     // Ask-about-selection is edit-capable (the assistant can answer *or*
     // edit from the comment), so a write-capable CLI harness runs in "code".
     expect(runHarnessStream).toHaveBeenCalledWith(
@@ -209,7 +274,7 @@ describe("workspace store", () => {
     const workspace = useWorkspaceStore.getState().activeWorkspace();
     expect(workspace?.chatThread.runState).not.toBe("error");
     expect(workspace?.chatThread.runError).toBeNull();
-    expect(useWorkspaceStore.getState().settingsOpen).toBe(false);
+    expect(useUiStore.getState().settingsOpen).toBe(false);
   });
 
   it("forwards the selected harness's persisted model + tuning on an ask-about-selection run", () => {
@@ -219,7 +284,7 @@ describe("workspace store", () => {
     // so the adapter maps them onto the same CLI flags a chat run would.
     vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
 
-    useWorkspaceStore.setState({
+    useHarnessStore.setState({
       selectedHarnessId: "codex",
       harnessOptions: { codex: { model: "gpt-5-codex", effort: "high" } },
     });
@@ -227,7 +292,7 @@ describe("workspace store", () => {
 
     return useWorkspaceStore
       .getState()
-      .askBobAboutSelectionStream("question", { range: { start: 0, end: 4 }, text: "todo" })
+      .askAboutSelectionStream("question", { range: { start: 0, end: 4 }, text: "todo" })
       .then(() => {
         expect(runHarnessStream).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -278,7 +343,7 @@ describe("workspace store", () => {
     it("creates a conversation on first send and lists it with a derived title", async () => {
       vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
       const ws = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
-      useWorkspaceStore.setState({ selectedHarnessId: "codex" });
+      useHarnessStore.setState({ selectedHarnessId: "codex" });
       useWorkspaceStore.getState().setChatPrompt("Plan the Q3 relocation");
 
       await useWorkspaceStore.getState().sendChatPrompt();
@@ -415,7 +480,7 @@ describe("workspace store", () => {
 
       await useWorkspaceStore.getState().selectFile("missing.md");
 
-      expect(useWorkspaceStore.getState().saveError).toBe("disk gone");
+      expect(useToastStore.getState().toasts.slice(-1)[0]?.message).toBe("disk gone");
     });
 
     it("saveActiveFile guards on the buffer's mtime and marks it saved on success", async () => {
@@ -438,7 +503,39 @@ describe("workspace store", () => {
       const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
       expect(buffer?.dirty).toBe(false);
       expect(buffer?.lastModifiedMs).toBe(200);
-      expect(useWorkspaceStore.getState().saveError).toBeNull();
+      expect(useToastStore.getState().toasts).toHaveLength(0);
+    });
+
+    it("handleFsEvent ignores its own autosave echo (disk byte-identical to the buffer)", async () => {
+      vi.mocked(readFile).mockResolvedValueOnce({ content: "# Hello", lastModifiedMs: 100 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      // Watcher fires with a newer mtime (our own save, before the buffer mtime
+      // caught up) but the disk content is unchanged → no reload.
+      vi.mocked(readFile).mockResolvedValueOnce({ content: "# Hello", lastModifiedMs: 200 });
+      await useWorkspaceStore.getState().handleFsEvent(workspaceId, {
+        kind: "modified",
+        relativePath: "a.md",
+        lastModifiedMs: 200,
+      });
+      const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
+      expect(buffer?.content).toBe("# Hello");
+      expect(buffer?.lastModifiedMs).toBe(100); // unchanged ⇒ reload skipped
+    });
+
+    it("handleFsEvent reloads when the disk content genuinely differs", async () => {
+      vi.mocked(readFile).mockResolvedValueOnce({ content: "# Hello", lastModifiedMs: 100 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      vi.mocked(readFile).mockResolvedValueOnce({ content: "# External", lastModifiedMs: 200 });
+      await useWorkspaceStore.getState().handleFsEvent(workspaceId, {
+        kind: "modified",
+        relativePath: "a.md",
+        lastModifiedMs: 200,
+      });
+      const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
+      expect(buffer?.content).toBe("# External");
+      expect(buffer?.lastModifiedMs).toBe(200);
     });
 
     it("saveActiveFile refuses to clobber a file changed on disk, keeping local edits", async () => {
@@ -453,7 +550,34 @@ describe("workspace store", () => {
       const buffer = useWorkspaceStore.getState().activeWorkspace()?.fileContents["a.md"];
       expect(buffer?.conflict).toBe(true);
       expect(buffer?.content).toBe("local edits");
-      expect(useWorkspaceStore.getState().saveError).toContain("changed on disk");
+      expect(useToastStore.getState().toasts.slice(-1)[0]?.message).toContain("changed on disk");
+    });
+  });
+
+  describe("workspace switch persistence", () => {
+    it("persists the active workspace on the backend so the next launch restores it", () => {
+      const first = useWorkspaceStore.getState().addWorkspace("/tmp/first");
+      const second = useWorkspaceStore.getState().addWorkspace("/tmp/second");
+      // addWorkspace activates the most-recently-added one.
+      expect(useWorkspaceStore.getState().activeWorkspaceId).toBe(second);
+
+      useWorkspaceStore.getState().switchWorkspace(first);
+
+      expect(useWorkspaceStore.getState().activeWorkspaceId).toBe(first);
+      // workspace_switch is the only backend command that writes
+      // active_workspace_id; mark_opened would only bump last_opened_at and the
+      // wrong workspace would be restored on the next boot.
+      expect(switchWorkspaceIpc).toHaveBeenCalledWith(first);
+    });
+
+    it("ignores a switch to an unknown workspace", () => {
+      const only = useWorkspaceStore.getState().addWorkspace("/tmp/only");
+      vi.mocked(switchWorkspaceIpc).mockClear();
+
+      useWorkspaceStore.getState().switchWorkspace("does-not-exist");
+
+      expect(useWorkspaceStore.getState().activeWorkspaceId).toBe(only);
+      expect(switchWorkspaceIpc).not.toHaveBeenCalled();
     });
   });
 
@@ -466,28 +590,28 @@ describe("workspace store", () => {
       supportsEffort: false,
       supportsMaxTurns: false,
       supportsLogin: false,
+      supportsCustomInstructions: false,
       ...overrides,
     });
 
     it("never gates a harness that previews its own edits (bob)", () => {
-      expect(editGuardFor(caps({ previewsEdits: true }), true, {})).toBe("none");
-      expect(editGuardFor(caps({ previewsEdits: true }), false, { reviewEdits: true })).toBe("none");
+      expect(editGuardFor(caps({ previewsEdits: true }), true, false)).toBe("none");
+      expect(editGuardFor(caps({ previewsEdits: true }), false, true)).toBe("none");
     });
 
     it("does not gate a read-only (plan/ask) run", () => {
-      expect(editGuardFor(caps(), false, {})).toBe("none");
+      expect(editGuardFor(caps(), false, false)).toBe("none");
     });
 
     it("runs in the real folder by default for a write-capable harness", () => {
       // Decision: CLI harnesses run in your real folder by default so paths /
-      // skills / memory line up — undefined reviewEdits → snapshot (undo via a
+      // skills / memory line up — reviewEdits off → snapshot (undo via a
       // pre-run baseline). See editGuardFor + review-guide.
-      expect(editGuardFor(caps(), true, {})).toBe("snapshot");
-      expect(editGuardFor(caps(), true, { reviewEdits: false })).toBe("snapshot");
+      expect(editGuardFor(caps(), true, false)).toBe("snapshot");
     });
 
     it("uses the clone sandbox only when the user opts into pre-approval", () => {
-      expect(editGuardFor(caps(), true, { reviewEdits: true })).toBe("clone");
+      expect(editGuardFor(caps(), true, true)).toBe("clone");
     });
   });
 
@@ -505,6 +629,127 @@ describe("workspace store", () => {
       expect(reviewChangeToDraft({ ...base, kind: "created" }).kind).toBe("create");
       expect(reviewChangeToDraft({ ...base, kind: "modified" }).kind).toBe("rewrite");
       expect(reviewChangeToDraft({ ...base, kind: "deleted" }).kind).toBe("delete");
+    });
+  });
+
+  describe("resolveDefaultHarness (first-run default)", () => {
+    const agent = (id: string): HarnessInfo => ({
+      id,
+      displayName: id,
+      description: "",
+      requiresInstall: false,
+      capabilities: {
+        credentialRequired: false,
+        previewsEdits: false,
+        models: [],
+        allowsCustomModel: false,
+        supportsEffort: false,
+        supportsMaxTurns: false,
+        supportsLogin: false,
+        supportsCustomInstructions: false,
+      },
+    });
+    const readiness = (harnessId: string, ready: boolean): HarnessReadiness => ({
+      harnessId,
+      ready,
+      installed: ready,
+      version: null,
+      authConfigured: ready,
+      error: null,
+      details: null,
+    });
+
+    it("picks the first ready agent in catalog (Ollama-first) order", async () => {
+      useHarnessStore.setState({
+        selectedHarnessId: "",
+        harnessCatalog: [agent("ollama"), agent("claude"), agent("codex")],
+      });
+      // Ollama not running; Claude signed in — Claude wins as the first ready.
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, id === "claude"));
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("claude");
+    });
+
+    it("leaves the agent unset when none are ready and Ollama isn't installed", async () => {
+      useHarnessStore.setState({
+        selectedHarnessId: "",
+        harnessCatalog: [agent("ollama"), agent("claude")],
+      });
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, false));
+      vi.mocked(ollamaInstalled).mockResolvedValue(false);
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("");
+      expect(startOllama).not.toHaveBeenCalled();
+    });
+
+    it("defaults to Ollama and starts it when nothing is ready but Ollama is installed", async () => {
+      vi.useFakeTimers();
+      try {
+        useHarnessStore.setState({
+          selectedHarnessId: "",
+          harnessCatalog: [agent("ollama"), agent("claude")],
+        });
+        // Nothing reachable, but the Ollama app is on disk (its server is stopped).
+        vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, false));
+        vi.mocked(ollamaInstalled).mockResolvedValue(true);
+        const done = useHarnessStore.getState().resolveDefaultHarness();
+        await vi.runAllTimersAsync(); // flush the post-launch boot wait
+        await done;
+        expect(useHarnessStore.getState().selectedHarnessId).toBe("ollama");
+        expect(startOllama).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("respects an explicit choice and never probes", async () => {
+      useHarnessStore.setState({
+        selectedHarnessId: "codex",
+        harnessCatalog: [agent("ollama"), agent("claude"), agent("codex")],
+      });
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("codex");
+      expect(harnessReadiness).not.toHaveBeenCalled();
+    });
+
+    it("skips an agent whose probe fails (offline) and keeps going", async () => {
+      useHarnessStore.setState({
+        selectedHarnessId: "",
+        harnessCatalog: [agent("ollama"), agent("openrouter")],
+      });
+      // Ollama unreachable (offline / not running) throws; OpenRouter's keychain
+      // probe is ready. A thrown probe must not abort the cascade.
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => {
+        if (id === "ollama") throw new Error("connection refused");
+        return readiness(id, true);
+      });
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("openrouter");
+    });
+
+    it("refreshHarnessStatuses probes uncached agents and caches each ready state", async () => {
+      useHarnessStore.setState({
+        harnessCatalog: [agent("ollama"), agent("claude")],
+        harnessStatusById: {},
+        harnessProbing: {},
+      });
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, id === "ollama"));
+      await useHarnessStore.getState().refreshHarnessStatuses();
+      const cache = useHarnessStore.getState().harnessStatusById;
+      expect(cache.ollama?.ready).toBe(true);
+      expect(cache.claude?.ready).toBe(false);
+      expect(useHarnessStore.getState().harnessProbing.ollama).toBe(false);
+    });
+
+    it("refreshHarnessStatuses skips a fresh cache entry instead of re-probing", async () => {
+      useHarnessStore.setState({
+        harnessCatalog: [agent("ollama")],
+        harnessStatusById: { ollama: { ready: true, at: Date.now() } },
+        harnessProbing: {},
+      });
+      vi.mocked(harnessReadiness).mockClear();
+      await useHarnessStore.getState().refreshHarnessStatuses();
+      expect(harnessReadiness).not.toHaveBeenCalled();
     });
   });
 });

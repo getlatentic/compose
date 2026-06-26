@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Compose opens the notes folder you choose so it can read and edit your Markdown files. Your notes stay on your Mac — nothing is uploaded.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Compose needs access to open a notes folder you keep on your Desktop. Your notes stay on your Mac — nothing is uploaded.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Compose needs access to open a notes folder you keep in Downloads. Your notes stay on your Mac — nothing is uploaded.</string>
+</dict>
+</plist>

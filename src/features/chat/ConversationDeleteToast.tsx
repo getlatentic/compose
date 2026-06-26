@@ -14,11 +14,11 @@ export function ConversationDeleteToast({
   onUndo: () => void;
 }) {
   return (
-    <div className="bob-conv-toast" role="status" aria-live="polite">
-      <span className="bob-conv-toast__text">
+    <div className="conv-toast" role="status" aria-live="polite">
+      <span className="conv-toast__text">
         Deleted <strong>{title}</strong>
       </span>
-      <button type="button" className="bob-conv-toast__undo" onClick={onUndo}>
+      <button type="button" className="conv-toast__undo" onClick={onUndo}>
         <Undo size={14} aria-hidden />
         <span>Undo</span>
       </button>

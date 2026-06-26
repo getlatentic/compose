@@ -29,7 +29,7 @@ KEYCHAIN="${HOME}/Library/Keychains/login.keychain-db"
 if security find-certificate -c "$CERT_NAME" "$KEYCHAIN" >/dev/null 2>&1; then
   echo "✓ Cert '$CERT_NAME' already exists in your login keychain."
   echo "  No action needed. Tauri will pick it up automatically"
-  echo "  if TAURI_SIGNING_IDENTITY is set or"
+  echo "  if APPLE_SIGNING_IDENTITY is set or"
   echo "  tauri.conf.json::bundle.macOS.signingIdentity matches."
   exit 0
 fi
@@ -131,7 +131,7 @@ echo "✓ Cert '$CERT_NAME' installed in your login keychain."
 echo
 echo "Next steps:"
 echo "  1. Export the identity name to your shell:"
-echo "       export TAURI_SIGNING_IDENTITY=\"$CERT_NAME\""
+echo "       export APPLE_SIGNING_IDENTITY=\"$CERT_NAME\""
 echo "     (Add to ~/.zshrc or ~/.bashrc to persist.)"
 echo
 echo "  2. Rebuild:"

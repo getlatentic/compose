@@ -1,14 +1,15 @@
-import { useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { InlineNotification } from "@carbon/react";
 import { AddAlt } from "@carbon/react/icons";
 import { PanelLeft, Search, Settings } from "lucide-react";
-import type { BobWorkspace } from "../../app/workspaceModel";
 import { useWorkspaceStore } from "../../app/workspaceStore";
-import type { WorkspaceBacklinkRecord } from "../../lib/ipc/indexClient";
+import { useUiStore } from "../../app/store/uiStore";
+import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { FileTree } from "../file-tree/FileTree";
+import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { SidebarChatList } from "../chat/SidebarChatList";
-import { PropertiesPanel } from "./PropertiesPanel";
+import { ActiveFileBacklinks, ActiveFileProperties } from "./ActiveFilePanels";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
 /**
@@ -41,38 +42,30 @@ export const MAC_TRAFFIC_LIGHTS_INSET = 78;
  * symmetrically.
  */
 export function WorkspaceSidebar() {
-  const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const createNote = useWorkspaceStore((state) => state.createNote);
   const newChat = useWorkspaceStore((state) => state.newChat);
   const deleteActiveFile = useWorkspaceStore((state) => state.deleteActiveFile);
   const renameActiveFile = useWorkspaceStore((state) => state.renameActiveFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
-  const updateActiveContent = useWorkspaceStore((state) => state.updateActiveContent);
-  const workspaces = useWorkspaceStore((state) => state.workspaces);
-  const sidebarTab = useWorkspaceStore((state) => state.sidebarTab);
-  const setSidebarTab = useWorkspaceStore((state) => state.setSidebarTab);
-  const sidebarCollapsed = useWorkspaceStore((state) => state.sidebarCollapsed);
-  const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar);
-  const openSettings = useWorkspaceStore((state) => state.openSettings);
-  const openSearch = useWorkspaceStore((state) => state.openSearch);
+  const sidebarTab = useUiStore((state) => state.sidebarTab);
+  const setSidebarTab = useUiStore((state) => state.setSidebarTab);
+  const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
+  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const openSettings = useUiStore((state) => state.openSettings);
+  const openSearch = useUiStore((state) => state.openSearch);
+  const onTitlebarMouseDown = useWindowDrag();
   const promptText = useTextPrompt();
-  const activeWorkspace = useMemo(
-    () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
-    [activeWorkspaceId, workspaces],
+  // Narrow, churn-free reads: a boolean for "is a workspace open" + the footer
+  // note count. Both are primitives, so editing/saving (which churns the
+  // workspace object on every flush) never re-renders the sidebar shell. The
+  // file list + dirty state are subscribed INSIDE FilesTab (self-subscribing).
+  const hasWorkspace = useWorkspaceStore((state) =>
+    state.workspaces.some((workspace) => workspace.id === state.activeWorkspaceId),
   );
-  const activeBacklinks = useMemo(() => activeFileBacklinks(activeWorkspace), [activeWorkspace]);
-  // The active file's current content. Drives the Properties
-  // panel below — we parse frontmatter out of this on every
-  // render. Cheap (regex + small YAML), so no memoization needed.
-  const activeFileContent = activeWorkspace?.activeFilePath
-    ? activeWorkspace.fileContents[activeWorkspace.activeFilePath]?.content ?? null
-    : null;
-
-  // "X notes" counter for the footer — markdown files in the active workspace.
-  // Cheap (the file list is already in memory), no memoization needed.
-  const noteCount = activeWorkspace?.files.filter((entry) =>
-    entry.relativePath.toLowerCase().endsWith(".md"),
-  ).length ?? 0;
+  const noteCount = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
+    return ws ? ws.files.filter((entry) => entry.relativePath.toLowerCase().endsWith(".md")).length : 0;
+  });
 
   // Stable callbacks so FileTree's memo can short-circuit on
   // workspace store ticks that don't actually shift the file list
@@ -105,16 +98,12 @@ export function WorkspaceSidebar() {
     [selectFile, deleteActiveFile],
   );
 
-  // FileTree's onSelectFile and PropertiesPanel's onChange both pass
-  // through to store actions. The wrapping arrows would be new
-  // references every render — useCallback keeps memo stable.
+  // FileTree's callbacks pass through to store actions. The wrapping arrows
+  // would be new references every render — useCallback keeps FilesTab's (and
+  // FileTree's) memo stable so the file list doesn't re-render on store ticks.
   const handleSelectFile = useCallback(
     (relativePath: string) => void selectFile(relativePath),
     [selectFile],
-  );
-  const handleUpdateContent = useCallback(
-    (next: string) => updateActiveContent(next, []),
-    [updateActiveContent],
   );
   const handleDeleteAdapter = useCallback(
     (relativePath: string) => void handleDelete(relativePath),
@@ -135,18 +124,21 @@ export function WorkspaceSidebar() {
   }
 
   return (
-    <aside className="bob-sidebar">
+    <aside className="sidebar">
       <div
-        className="bob-sidebar-titlebar"
+        className="sidebar-titlebar"
+        // The row is the macOS title-bar drag zone. We wire `mousedown` to
+        // Tauri's `window.startDragging()` rather than relying solely on
+        // `data-tauri-drag-region`, which is flaky in WKWebView + Overlay
+        // title-bar style. The button below is interactive — `useWindowDrag`
+        // ignores clicks on `<button>` so it won't be hijacked.
         data-tauri-drag-region
-        // The whole row is a drag region (Tauri honors `data-tauri-drag-region`
-        // exactly like the older `-webkit-app-region: drag`). The PanelLeft
-        // button below opts OUT via `no-drag` on itself.
-        style={{ ["--bob-traffic-lights-inset" as never]: `${MAC_TRAFFIC_LIGHTS_INSET}px` }}
+        onMouseDown={onTitlebarMouseDown}
+        style={{ ["--traffic-lights-inset" as never]: `${MAC_TRAFFIC_LIGHTS_INSET}px` }}
       >
         <button
           type="button"
-          className="bob-sidebar-titlebar__btn"
+          className="sidebar-titlebar__btn"
           data-tauri-drag-region="false"
           onClick={() => toggleSidebar()}
           aria-label="Collapse sidebar"
@@ -158,14 +150,14 @@ export function WorkspaceSidebar() {
 
       <WorkspaceMenu />
 
-      <div className="bob-sidebar-tabs" role="tablist" aria-label="Sidebar">
+      <div className="sidebar-tabs" role="tablist" aria-label="Sidebar">
         <button
           type="button"
           role="tab"
           aria-selected={sidebarTab === "files"}
           className={[
-            "bob-sidebar-tab",
-            sidebarTab === "files" ? "bob-sidebar-tab--active" : "",
+            "sidebar-tab",
+            sidebarTab === "files" ? "sidebar-tab--active" : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -178,8 +170,8 @@ export function WorkspaceSidebar() {
           role="tab"
           aria-selected={sidebarTab === "chat"}
           className={[
-            "bob-sidebar-tab",
-            sidebarTab === "chat" ? "bob-sidebar-tab--active" : "",
+            "sidebar-tab",
+            sidebarTab === "chat" ? "sidebar-tab--active" : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -189,9 +181,9 @@ export function WorkspaceSidebar() {
         </button>
         <button
           type="button"
-          className="bob-sidebar-new"
+          className="sidebar-new"
           onClick={() => void onNew()}
-          disabled={!activeWorkspace}
+          disabled={!hasWorkspace}
           aria-label={newLabel}
           title={newLabel}
         >
@@ -200,38 +192,38 @@ export function WorkspaceSidebar() {
         </button>
       </div>
 
-      {sidebarTab === "files" ? (
+      {/* Both panes stay mounted; visibility flips via the `hidden` attribute.
+          Switching tabs becomes a paint-only toggle — no `parseFrontmatter`
+          on a large note, no FileTree rebuild, no SidebarChatList remount. */}
+      <div hidden={sidebarTab !== "files"} className="sidebar-pane-wrap">
         <FilesTab
-          activeWorkspace={activeWorkspace}
           onSelectFile={handleSelectFile}
           onRenameFile={handleRenameAdapter}
           onDeleteFile={handleDeleteAdapter}
-          activeFileContent={activeFileContent}
-          onUpdateContent={handleUpdateContent}
-          backlinks={activeBacklinks}
         />
-      ) : (
-        <div className="bob-sidebar-pane bob-sidebar-pane--chat">
-          {activeWorkspace ? (
+      </div>
+      <div hidden={sidebarTab !== "chat"} className="sidebar-pane-wrap">
+        <div className="sidebar-pane sidebar-pane--chat">
+          {hasWorkspace ? (
             <SidebarChatList />
           ) : (
-            <div className="bob-sidebar-chat__empty">
+            <div className="sidebar-chat__empty">
               <p>Open a folder to see its conversations.</p>
             </div>
           )}
         </div>
-      )}
+      </div>
 
-      <div className="bob-sidebar-footer">
-        <span className="bob-sidebar-footer__count">
-          {activeWorkspace ? `${noteCount} note${noteCount === 1 ? "" : "s"}` : "No folder"}
+      <div className="sidebar-footer">
+        <span className="sidebar-footer__count">
+          {hasWorkspace ? `${noteCount} note${noteCount === 1 ? "" : "s"}` : "No folder"}
         </span>
-        <div className="bob-sidebar-footer__actions">
+        <div className="sidebar-footer__actions">
           <button
             type="button"
-            className="bob-sidebar-footer__btn"
+            className="sidebar-footer__btn"
             onClick={() => openSearch()}
-            disabled={!activeWorkspace}
+            disabled={!hasWorkspace}
             aria-label="Search workspace"
             title="Search"
           >
@@ -239,7 +231,7 @@ export function WorkspaceSidebar() {
           </button>
           <button
             type="button"
-            className="bob-sidebar-footer__btn"
+            className="sidebar-footer__btn"
             onClick={() => openSettings()}
             aria-label="Open settings"
             title="Settings"
@@ -257,26 +249,36 @@ export function WorkspaceSidebar() {
  * editor, and the backlinks list. Search moved to the footer popover — the
  * INDEX section is gone from here.
  */
-function FilesTab({
-  activeWorkspace,
+/**
+ * Memoised on FILE-ONLY props (`files`, `activeFilePath`, callbacks) — all
+ * stable across content edits and the autosave index rebuild. So a keystroke no
+ * longer re-renders the files pane. The unsaved-dot is NOT read here — each row
+ * self-subscribes via `FileRowDirtyDot`, so a dirty flip re-renders only that
+ * one dot, not this pane or the file tree. The active file's frontmatter and
+ * backlinks render via their own self-subscribing components
+ * (ActiveFileProperties / ActiveFileBacklinks), isolated from the file list.
+ */
+const FilesTab = memo(function FilesTab({
   onSelectFile,
   onRenameFile,
   onDeleteFile,
-  activeFileContent,
-  onUpdateContent,
-  backlinks,
 }: {
-  activeWorkspace: BobWorkspace | null;
   onSelectFile: (path: string) => void;
   onRenameFile: (path: string) => void;
   onDeleteFile: (path: string) => void;
-  activeFileContent: string | null;
-  onUpdateContent: (next: string) => void;
-  backlinks: WorkspaceBacklinkRecord[];
 }) {
-  if (!activeWorkspace) {
+  // Self-subscribing leaf: the file list and active path are read here via
+  // NARROW selectors, so a structural change re-renders this pane WITHOUT
+  // re-rendering the sidebar shell. The dirty set is deliberately NOT read here
+  // (it flipped this pane on every edit/save) — each row owns its own dot.
+  const files = useStableFileList();
+  const activeFilePath = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
+    return ws?.activeFilePath ?? "";
+  });
+  if (!files) {
     return (
-      <div className="bob-sidebar-pane bob-sidebar-pane--files">
+      <div className="sidebar-pane sidebar-pane--files">
         <InlineNotification
           hideCloseButton
           kind="info"
@@ -289,66 +291,43 @@ function FilesTab({
   }
 
   return (
-    <div className="bob-sidebar-pane bob-sidebar-pane--files">
-      <div className="bob-sidebar-files">
+    <div className="sidebar-pane sidebar-pane--files">
+      <div className="sidebar-files">
         <FileTree
-          activePath={activeWorkspace.activeFilePath}
-          fileContents={activeWorkspace.fileContents}
-          files={activeWorkspace.files}
+          activePath={activeFilePath}
+          files={files}
           onDelete={onDeleteFile}
           onRename={onRenameFile}
           onSelectFile={onSelectFile}
         />
       </div>
 
-      {activeFileContent !== null ? (
-        <PropertiesPanel markdown={activeFileContent} onChange={onUpdateContent} />
-      ) : null}
-
-      {backlinks.length > 0 ? <BacklinksList backlinks={backlinks} onSelectFile={onSelectFile} /> : null}
+      <ActiveFileProperties />
+      <ActiveFileBacklinks />
     </div>
   );
-}
+});
 
-function BacklinksList({
-  backlinks,
-  onSelectFile,
-}: {
-  backlinks: WorkspaceBacklinkRecord[];
-  onSelectFile: (path: string) => void;
-}) {
-  return (
-    <div className="bob-backlinks" aria-label="Backlinks">
-      <div className="bob-section-label bob-section-label--compact">
-        <span>Backlinks</span>
-        <span className="bob-section-meta">{backlinks.length}</span>
-      </div>
-      {backlinks.slice(0, 6).map((backlink) => (
-        <button
-          type="button"
-          key={`${backlink.sourceDocId}:${backlink.sourceRange.start}`}
-          className="bob-backlink"
-          onClick={() => onSelectFile(backlink.sourcePath)}
-        >
-          <span className="bob-backlink__path">{backlink.sourcePath}</span>
-          <span className="bob-backlink__label">{backlink.label}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function activeFileBacklinks(workspace: BobWorkspace | null) {
-  if (!workspace?.activeFilePath || !workspace.indexSnapshot) {
-    return [];
-  }
-  const activeDocument = workspace.indexSnapshot.documents.find(
-    (document) => document.path === workspace.activeFilePath,
-  );
-  return workspace.indexSnapshot.backlinks.filter((backlink) => {
-    if (activeDocument && backlink.targetDocId === activeDocument.docId) {
-      return true;
-    }
-    return backlink.targetPath === workspace.activeFilePath;
+/**
+ * The file list with a STABLE reference when the DISPLAYED structure (relative
+ * paths, in order) is unchanged. The tree shows only names, so a save's
+ * `lastModifiedMs`/`sizeBytes` update on an entry — which creates a fresh
+ * `files` array every save — must NOT re-render it. We compare the paths and
+ * reuse the previous array reference when they match. Returns null for "no
+ * workspace" so FilesTab can show its empty state.
+ */
+function useStableFileList(): WorkspaceFileEntry[] | null {
+  // Subscribe to a paths KEY (a string) so a save's mtime/size churn on an entry
+  // — which makes a fresh `files` array every save — doesn't re-render the tree.
+  const key = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
+    return ws ? ws.files.map((entry) => entry.relativePath).join("\n") : null;
   });
+  return useMemo(() => {
+    if (key === null) return null;
+    const state = useWorkspaceStore.getState();
+    const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
+    return ws?.files ?? null;
+  }, [key]);
 }
+

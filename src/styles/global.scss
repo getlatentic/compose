@@ -1,6 +1,43 @@
-@use "@carbon/react" with (
+// Carbon CSS — selective component imports
+//
+// The catch-all `@use "@carbon/react"` pulls every Carbon component's CSS
+// into the bundle (50+ components: accordion, breadcrumb, calendar, data-
+// table, page-header, popover, progress-indicator, tile, …). Compose uses
+// 14 React components from @carbon/react; the rest of the bundle is dead
+// weight. The cool-gray palette override below and every `.*` rule in
+// this stylesheet already supply our own visual system, so the slim set
+// below is all the Carbon CSS we actually need.
+//
+// Config goes through `@carbon/styles/scss/config` so the `$css--font-face`
+// flag still cascades to the components below (kept false because we don't
+// bundle the IBM Plex webfont — see the note on the $ui-font stack).
+//
+// Adding a new Carbon component? Add its `scss/components/<name>` import
+// here; otherwise it'll render unstyled.
+// Routed through @carbon/react's proxy modules (which `@forward` to
+// @carbon/styles) because only @carbon/react is hoisted by pnpm — sass's
+// bare-import resolver looks in *our* node_modules, not the deps of a
+// transitive package.
+@use "@carbon/react/scss/config" with (
   $css--font-face: false
 );
+@use "@carbon/react/scss/reset";
+@use "@carbon/react/scss/components/accordion";
+@use "@carbon/react/scss/components/button";
+@use "@carbon/react/scss/components/combo-box";
+@use "@carbon/react/scss/components/inline-loading";
+@use "@carbon/react/scss/components/list-box";
+@use "@carbon/react/scss/components/modal";
+@use "@carbon/react/scss/components/notification";
+@use "@carbon/react/scss/components/overflow-menu";
+@use "@carbon/react/scss/components/radio-button";
+@use "@carbon/react/scss/components/select";
+@use "@carbon/react/scss/components/skeleton-styles";
+@use "@carbon/react/scss/components/tabs";
+@use "@carbon/react/scss/components/tag";
+@use "@carbon/react/scss/components/text-area";
+@use "@carbon/react/scss/components/text-input";
+@use "@carbon/react/scss/components/toggle";
 
 // One UI typeface for the whole app. Carbon is loaded with
 // `$css--font-face: false`, IBM Plex is not bundled (no `@ibm/plex` dep, no
@@ -92,6 +129,23 @@ $ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  // Single source of truth for the macOS title-bar zone.
+  //
+  // We pick the **HIG regular toolbar height** (38pt) so tabs and buttons
+  // breathe — same height Obsidian, Notes, and Pages use. macOS draws the
+  // traffic lights at a fixed Y from the window top (~8pt by default),
+  // which is *top-aligned* in a 38pt row. To put them at the row's
+  // vertical center we use `trafficLightPosition` in tauri.conf.json
+  // (Tauri 2.4+ official API). With ~14pt lights and a 38pt row,
+  // y=14 lands the lights at the row's center. This is the standard
+  // pattern for any non-native-toolbar macOS app — Obsidian does the
+  // same thing.
+  //
+  // Both the sidebar title row and the editor tab strip read these so
+  // the whole top strip stays one visual line.
+  --titlebar-height: 2.375rem;
+  --titlebar-btn-size: 1.5rem;
 }
 
 html,
@@ -132,7 +186,7 @@ select {
   white-space: nowrap;
 }
 
-.bob-app-shell {
+.app-shell {
   display: flex;
   block-size: 100%;
   flex-direction: column;
@@ -140,7 +194,7 @@ select {
   background: var(--cds-background, #ffffff);
 }
 
-.bob-app-shell > .cds--header {
+.app-shell > .cds--header {
   position: relative;
   z-index: 20;
   flex: 0 0 3rem;
@@ -150,8 +204,8 @@ select {
     0 2px 4px rgba(0, 0, 0, 0.18);
 }
 
-.bob-app-shell .cds--header__name,
-.bob-app-shell .cds--header__action {
+.app-shell .cds--header__name,
+.app-shell .cds--header__action {
   color: var(--cds-text-inverse, #ffffff);
 }
 
@@ -162,31 +216,31 @@ select {
 // states with `!important` (cleaner than out-specifying Carbon's vendor
 // selectors). A light gray (gray-30) reads clearly on the dark bar without
 // the harshness of pure white; disabled stays dimmer.
-.bob-app-shell .cds--header__action svg {
+.app-shell .cds--header__action svg {
   fill: #c6c6c6 !important;
 }
 
-.bob-app-shell .bob-header-action--disabled svg {
+.app-shell .header-action--disabled svg {
   fill: var(--cds-icon-disabled, #8d8d8d) !important;
 }
 
-.bob-app-shell .cds--header__name:hover,
-.bob-app-shell .cds--header__action:hover,
-.bob-app-shell .cds--header__action:focus,
-.bob-header-action--open {
+.app-shell .cds--header__name:hover,
+.app-shell .cds--header__action:hover,
+.app-shell .cds--header__action:focus,
+.header-action--open {
   background: var(--cds-background-inverse-hover, #4c4c4c);
 }
 
-.bob-app-shell .cds--header__action:focus {
+.app-shell .cds--header__action:focus {
   outline-color: var(--cds-focus-inset, #ffffff);
 }
 
-.bob-app-shell .cds--header__action--active::after,
-.bob-app-shell .cds--header__action[aria-expanded="true"]::after {
+.app-shell .cds--header__action--active::after,
+.app-shell .cds--header__action[aria-expanded="true"]::after {
   display: none;
 }
 
-.bob-header-action--disabled {
+.header-action--disabled {
   color: var(--cds-icon-disabled, #8d8d8d);
   cursor: not-allowed;
   // Inert: the only-open pane's toggle (and every action with no workspace)
@@ -195,11 +249,11 @@ select {
   pointer-events: none;
 }
 
-.bob-header-action--disabled:hover {
+.header-action--disabled:hover {
   background: transparent;
 }
 
-.bob-workspace {
+.workspace {
   display: grid;
   min-block-size: 0;
   flex: 1 1 auto;
@@ -209,7 +263,7 @@ select {
   background: var(--cds-layer-01, #f4f4f4);
 }
 
-.bob-sidebar {
+.sidebar {
   display: flex;
   min-block-size: 0;
   max-block-size: 36vh;
@@ -224,77 +278,213 @@ select {
 }
 
 // === Sidebar: workspace switcher (pinned top) ===
-.bob-workspace-switcher {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+.workspace-switcher {
+  position: relative;
+  // Match the editor toolbar's *rendered* height: its controls bow the toolbar
+  // to 41px, past its 2.25rem basis, so the folder-name row takes that same
+  // height and the two header segments share one bottom-border line across the
+  // sidebar/editor divide.
+  flex: 0 0 2.5625rem;
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-workspace-switcher__name {
+.workspace-switcher__trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 0 0.5rem 0 0.625rem;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  color: var(--cds-text-primary, #161616);
+  cursor: pointer;
+}
+
+.workspace-switcher__trigger:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.workspace-switcher__trigger-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 4px;
+
+  svg {
+    fill: var(--cds-icon-secondary, #525252);
+  }
+}
+
+.workspace-switcher__name {
   flex: 1 1 auto;
   min-inline-size: 0;
-  color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
   font-weight: 600;
 }
 
-.bob-workspace-switcher__menu.cds--overflow-menu {
+.workspace-switcher__chevron {
   flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  background: transparent;
-  border-radius: 2px;
-}
-
-.bob-workspace-switcher__menu.cds--overflow-menu:hover,
-.bob-workspace-switcher__menu.cds--overflow-menu[aria-expanded="true"] {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-}
-
-.bob-workspace-switcher__menu.cds--overflow-menu svg {
   fill: var(--cds-icon-secondary, #525252);
 }
 
-.bob-workspace-switcher__forget .cds--overflow-menu-options__option-content {
-  font-size: 0.75rem;
+// The dropdown is portaled to <body> and fixed-positioned in JS (the sidebar
+// clips overflow and is short), so these rules can't assume any parent.
+.workspace-switcher__popover {
+  position: fixed;
+  z-index: 9000;
+  max-block-size: min(28rem, 70vh);
+  overflow-y: auto;
+  padding-block: 0.25rem;
+  background: var(--cds-background, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
 }
 
-// === Sidebar titlebar row (40px, overlays the macOS traffic lights) ===
-// `data-tauri-drag-region` on the row + nested elements with
-// `data-tauri-drag-region="false"` makes the row draggable except where the
-// user clicks an actual button. The first 78px (`--bob-traffic-lights-inset`)
-// is a no-op spacer for the OS traffic lights to sit over.
-// macOS pins the traffic lights at the window top with their own overlay
-// container; trying to pixel-align our PanelLeft glyph with their visual
-// center fights the OS for control of a layer that isn't ours. Earlier
-// attempts (trafficLightPosition + heroic flex math) made it WORSE — the
-// 16px button anchored to the row top got clipped by the overlay.
-//
-// Pragmatic fix: a normal-height row, vertically centered button, no OS
-// overrides. The button sits in the row at the icon's natural position;
-// it's a hair below the traffic lights baseline but visible, clickable,
-// and predictable across macOS versions.
-.bob-sidebar-titlebar {
+.workspace-switcher__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-item {
+  position: relative;
+}
+
+.ws-item__open {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  // Right padding reserves room for the trailing check / hover-✕.
+  padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  color: var(--cds-text-primary, #161616);
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--cds-layer-hover-01, #e8e8e8);
+    outline: none;
+  }
+}
+
+.ws-item__icon {
+  flex: 0 0 auto;
+  fill: var(--cds-icon-secondary, #525252);
+}
+
+.ws-item__name {
+  // Don't shrink: keep the name whole and let the path truncate instead.
+  flex: 0 0 auto;
+  max-inline-size: 12rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.ws-item__path {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 0.6875rem;
+}
+
+.ws-item__check {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0.625rem;
+  transform: translateY(-50%);
+  fill: var(--cds-icon-primary, #161616);
+  pointer-events: none;
+}
+
+.ws-item__remove {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0.375rem;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+
+  svg {
+    fill: var(--cds-icon-secondary, #525252);
+  }
+
+  &:hover {
+    background: var(--cds-layer-selected-01, #e0e0e0);
+
+    svg {
+      fill: var(--cds-icon-primary, #161616);
+    }
+  }
+}
+
+.ws-item:hover .ws-item__remove,
+.ws-item__remove:focus-visible {
+  opacity: 1;
+}
+
+.ws-item--active {
+  // Accent bar + tint live on the button: an inset shadow on the <li> would be
+  // painted over by the button's own background.
+  .ws-item__open {
+    background: var(--cds-layer-selected-01, #e0e0e0);
+    box-shadow: inset 3px 0 0 var(--cds-border-interactive, #0f62fe);
+
+    &:hover {
+      background: var(--cds-layer-selected-hover-01, #d1d1d1);
+    }
+  }
+
+  .ws-item__name {
+    font-weight: 600;
+  }
+}
+
+.workspace-switcher__footer {
+  margin-block-start: 0.25rem;
+  padding-block-start: 0.25rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+// === Sidebar title-bar row — owned by the OS, sized by --titlebar-height ===
+// macOS owns the visual: traffic-light position, baseline, native size.
+// We don't shift or restyle the lights. The row height is tuned so the
+// OS-fixed light position *is* the row's vertical center. The 78px spacer
+// reserves the lights' left-edge home; `justify-content: flex-end` parks
+// the sidebar toggle at the right edge of the pane (Obsidian convention)
+// so it's not crowding the lights.
+.sidebar-titlebar {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  block-size: 2.5rem;
-  padding-inline: var(--bob-traffic-lights-inset, 78px) 0.5rem;
+  justify-content: flex-end;
+  block-size: var(--titlebar-height);
+  padding-inline: var(--traffic-lights-inset, 78px) 0.5rem;
   background: var(--cds-layer-01, #f4f4f4);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-sidebar-titlebar__btn {
+.sidebar-titlebar__btn {
   display: inline-grid;
   place-items: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
+  inline-size: var(--titlebar-btn-size);
+  block-size: var(--titlebar-btn-size);
   border: 0;
   background: transparent;
   color: var(--cds-icon-secondary, #525252);
@@ -302,21 +492,21 @@ select {
   cursor: pointer;
 }
 
-.bob-sidebar-titlebar__btn:hover:not(:disabled),
-.bob-sidebar-titlebar__btn:focus-visible {
+.sidebar-titlebar__btn:hover:not(:disabled),
+.sidebar-titlebar__btn:focus-visible {
   background: var(--cds-layer-hover-01, #e8e8e8);
   color: var(--cds-text-primary, #161616);
   outline: none;
 }
 
-.bob-sidebar-titlebar__btn:disabled {
+.sidebar-titlebar__btn:disabled {
   color: var(--cds-icon-disabled, #c6c6c6);
   cursor: not-allowed;
 }
 
 
 // === Sidebar: Files | Chat tabs + the context-aware New button ===
-.bob-sidebar-tabs {
+.sidebar-tabs {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -325,7 +515,7 @@ select {
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-sidebar-tab {
+.sidebar-tab {
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -337,17 +527,17 @@ select {
   border-radius: 2px;
 }
 
-.bob-sidebar-tab:hover {
+.sidebar-tab:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-sidebar-tab--active {
+.sidebar-tab--active {
   color: var(--cds-text-primary, #161616);
   background: var(--cds-layer-selected-01, #e0e0e0);
   font-weight: 600;
 }
 
-.bob-sidebar-new {
+.sidebar-new {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -363,18 +553,32 @@ select {
   border-radius: 2px;
 }
 
-.bob-sidebar-new:hover:not(:disabled) {
+.sidebar-new:hover:not(:disabled) {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-sidebar-new:disabled {
+.sidebar-new:disabled {
   color: var(--cds-text-disabled, #c6c6c6);
   cursor: not-allowed;
 }
 
+// Both panes (Files / Chat) stay mounted to make Notes <-> Chat switching
+// a paint-only operation. The wrap collapses out of the flex flow when
+// `hidden`; the visible one fills available height and scrolls.
+.sidebar-pane-wrap {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.sidebar-pane-wrap[hidden] {
+  display: none;
+}
+
 // The active tab body fills the remaining height and scrolls; each tab owns
 // its own layout below.
-.bob-sidebar-pane {
+.sidebar-pane {
   display: flex;
   min-block-size: 0;
   flex: 1 1 auto;
@@ -382,11 +586,11 @@ select {
   overflow: auto;
 }
 
-.bob-sidebar-pane--chat {
+.sidebar-pane--chat {
   padding: 0.25rem 0.25rem 0.5rem;
 }
 
-.bob-sidebar-files {
+.sidebar-files {
   display: flex;
   min-block-size: 0;
   flex: 1 1 auto;
@@ -400,7 +604,7 @@ select {
 // the older "Settings" labeled row — Compose is deliberately local-first, so
 // the footer carries NO account avatar and NO "Synced" string (saying
 // "Synced" would lie about a folder that lives only on this Mac).
-.bob-sidebar-footer {
+.sidebar-footer {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -409,10 +613,10 @@ select {
   block-size: 2.25rem;
   padding-inline: 0.5rem 0.25rem;
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  background: var(--cds-layer-01, #f4f4f4);
+  background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-sidebar-footer__count {
+.sidebar-footer__count {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
@@ -421,13 +625,13 @@ select {
   white-space: nowrap;
 }
 
-.bob-sidebar-footer__actions {
+.sidebar-footer__actions {
   display: inline-flex;
   align-items: center;
   gap: 0.125rem;
 }
 
-.bob-sidebar-footer__btn {
+.sidebar-footer__btn {
   display: inline-grid;
   place-items: center;
   inline-size: 1.75rem;
@@ -439,20 +643,20 @@ select {
   cursor: pointer;
 }
 
-.bob-sidebar-footer__btn:hover:not(:disabled),
-.bob-sidebar-footer__btn:focus-visible {
+.sidebar-footer__btn:hover:not(:disabled),
+.sidebar-footer__btn:focus-visible {
   background: var(--cds-layer-hover-01, #e8e8e8);
   color: var(--cds-text-primary, #161616);
   outline: none;
 }
 
-.bob-sidebar-footer__btn:disabled {
+.sidebar-footer__btn:disabled {
   color: var(--cds-icon-disabled, #c6c6c6);
   cursor: not-allowed;
 }
 
 // === Search popover (sidebar footer trigger → centered modal) ===
-.bob-search-popover-backdrop {
+.search-popover-backdrop {
   position: fixed;
   inset: 0;
   z-index: 9100;
@@ -462,7 +666,7 @@ select {
   padding-block-start: 6rem;
 }
 
-.bob-search-popover {
+.search-popover {
   inline-size: min(36rem, calc(100vw - 2rem));
   background: var(--cds-background, #ffffff);
   border-radius: 10px;
@@ -472,7 +676,7 @@ select {
   overflow: hidden;
 }
 
-.bob-search-popover__field {
+.search-popover__field {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -481,7 +685,7 @@ select {
   color: var(--cds-icon-secondary, #525252);
 }
 
-.bob-search-popover__field input {
+.search-popover__field input {
   flex: 1 1 auto;
   border: 0;
   outline: 0;
@@ -490,7 +694,7 @@ select {
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-search-popover__results {
+.search-popover__results {
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -499,14 +703,42 @@ select {
   padding: 0.25rem 0;
 }
 
-.bob-search-popover__message {
+.search-popover__message {
   margin: 0;
   padding: 0.75rem 1rem;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.8125rem;
 }
 
-.bob-search-popover__result {
+.search-popover__message p {
+  margin: 0;
+}
+
+.search-popover__detail {
+  margin-block-start: 0.25rem;
+  color: var(--cds-text-error, #da1e28);
+  font-size: 0.75rem;
+  word-break: break-word;
+}
+
+.search-popover__retry {
+  margin-block-start: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--cds-border-strong-01, #8d8d8d);
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.search-popover__retry:hover,
+.search-popover__retry:focus-visible {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  outline: none;
+}
+
+.search-popover__result {
   display: grid;
   text-align: start;
   gap: 0.125rem;
@@ -516,24 +748,24 @@ select {
   cursor: pointer;
 }
 
-.bob-search-popover__result:hover,
-.bob-search-popover__result:focus-visible {
+.search-popover__result:hover,
+.search-popover__result:focus-visible {
   background: var(--cds-layer-hover-01, #e8e8e8);
   outline: none;
 }
 
-.bob-search-popover__result-title {
+.search-popover__result-title {
   color: var(--cds-text-primary, #161616);
   font-size: 0.875rem;
   font-weight: 600;
 }
 
-.bob-search-popover__result-path {
+.search-popover__result-path {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
 }
 
-.bob-search-popover__result-snippet {
+.search-popover__result-snippet {
   color: var(--cds-text-secondary, #525252);
   font-size: 0.75rem;
   overflow: hidden;
@@ -545,16 +777,16 @@ select {
 // When the sidebar is collapsed, the tab strip hosts both — the spacer
 // reserves room for the macOS traffic lights (their new home), and the
 // toggle gets the sidebar back.
-.bob-tab-strip__traffic-spacer {
+.tab-strip__traffic-spacer {
   flex: 0 0 auto;
   block-size: 100%;
 }
 
-.bob-tab-strip__sidebar-toggle {
+.tab-strip__sidebar-toggle {
   display: inline-grid;
   place-items: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
+  inline-size: var(--titlebar-btn-size);
+  block-size: var(--titlebar-btn-size);
   margin-inline: 0.25rem;
   border: 0;
   background: transparent;
@@ -563,19 +795,19 @@ select {
   cursor: pointer;
 }
 
-.bob-tab-strip__sidebar-toggle:hover,
-.bob-tab-strip__sidebar-toggle:focus-visible {
+.tab-strip__sidebar-toggle:hover,
+.tab-strip__sidebar-toggle:focus-visible {
   background: var(--cds-layer-hover-01, #e8e8e8);
   color: var(--cds-text-primary, #161616);
   outline: none;
 }
 
-.bob-chat-context {
+.chat-context {
   padding: var(--cds-spacing-05, 1rem);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-section-label {
+.section-label {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -590,12 +822,12 @@ select {
   text-transform: uppercase;
 }
 
-.bob-section-label--compact {
+.section-label--compact {
   block-size: 1.25rem;
   padding-inline: 0;
 }
 
-.bob-section-meta {
+.section-meta {
   color: var(--cds-text-helper, #6f6f6f);
   font-weight: 400;
   text-transform: none;
@@ -605,7 +837,7 @@ select {
 // left sidebar. Shows up below the file tree when a markdown
 // file is active. Edits push back through `updateActiveContent`
 // → store → editor's value sync.
-.bob-sidebar-properties {
+.sidebar-properties {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -613,7 +845,7 @@ select {
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-properties-list {
+.properties-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -622,7 +854,7 @@ select {
   gap: 0.25rem;
 }
 
-.bob-property-row {
+.property-row {
   display: grid;
   grid-template-columns: minmax(0, 6rem) minmax(0, 1fr) auto;
   align-items: center;
@@ -635,7 +867,7 @@ select {
   }
 }
 
-.bob-property-row__key {
+.property-row__key {
   color: var(--cds-text-secondary, #525252);
   font-size: 0.75rem;
   font-weight: 500;
@@ -644,7 +876,7 @@ select {
   white-space: nowrap;
 }
 
-.bob-property-row__input {
+.property-row__input {
   border: 0;
   background: transparent;
   font-family: inherit;
@@ -661,12 +893,12 @@ select {
   }
 }
 
-.bob-property-row__checkbox {
+.property-row__checkbox {
   cursor: pointer;
   justify-self: start;
 }
 
-.bob-property-row__remove {
+.property-row__remove {
   background: transparent;
   border: 0;
   color: var(--cds-text-helper, #6f6f6f);
@@ -681,11 +913,11 @@ select {
   }
 }
 
-.bob-property-row:hover .bob-property-row__remove {
+.property-row:hover .property-row__remove {
   opacity: 1;
 }
 
-.bob-properties-empty {
+.properties-empty {
   margin: 0;
   padding: 0.5rem 0.25rem;
   font-size: 0.6875rem;
@@ -693,7 +925,7 @@ select {
   line-height: 1.3;
 }
 
-.bob-properties-add {
+.properties-add {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -701,7 +933,7 @@ select {
   padding: 0.25rem;
 }
 
-.bob-properties-add__key {
+.properties-add__key {
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   background: var(--cds-field-01, #f4f4f4);
   font-family: inherit;
@@ -717,20 +949,20 @@ select {
   }
 }
 
-.bob-icon-button,
-.bob-file-row {
+.icon-button,
+.file-row {
   border: 0;
   color: inherit;
   background: transparent;
   cursor: pointer;
 }
 
-.bob-icon-button:hover,
-.bob-file-row:hover {
+.icon-button:hover,
+.file-row:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-icon-button {
+.icon-button {
   display: grid;
   inline-size: 1.75rem;
   block-size: 1.75rem;
@@ -739,42 +971,81 @@ select {
   border-radius: 2px;
 }
 
-.bob-icon-button:disabled {
+.icon-button:disabled {
   color: var(--cds-icon-disabled, #c6c6c6);
   cursor: not-allowed;
   background: transparent;
 }
 
-.bob-setup-step__form .cds--btn,
-.bob-settings-form .cds--btn {
+.setup-step__form .cds--btn,
+.settings-form .cds--btn {
   max-inline-size: none;
 }
 
-.bob-sidebar .cds--inline-notification,
-.bob-chat-panel .cds--inline-notification,
-.bob-setup-step .cds--inline-notification {
+.sidebar .cds--inline-notification,
+.chat-panel .cds--inline-notification,
+.setup-step .cds--inline-notification {
   min-inline-size: 0;
   max-inline-size: none;
   margin-block: 0.25rem 0;
 }
 
-.bob-file-tree {
-  display: flex;
-  align-content: start;
+.file-tree {
+  // Scroll container for the virtualized row list (see FileTree.tsx). Not a
+  // flex container itself — the rows are absolutely placed inside the sizer.
   min-block-size: 0;
   flex: 1 1 auto;
-  flex-direction: column;
-  overflow: auto;
+  // Vertical scroll only — long names truncate (`.truncate`), so a horizontal
+  // bar must never appear. A custom `::-webkit-scrollbar` forces a thin,
+  // always-classic bar instead of the macOS overlay one (which is wider,
+  // toggles size, and sat on top of each row's kebab ⋯ so a click scrolled
+  // instead of opening the menu). The classic bar takes its own 8px outside
+  // the content box, and the row reserves extra end padding (see `.file-row`),
+  // so the right-aligned kebab always stays clear of it.
+  overflow-x: hidden;
+  overflow-y: auto;
+  // `::-webkit-scrollbar` is a legacy pseudo-element that honours physical
+  // `width`/`height` only — the logical `inline-size`/`block-size` are ignored,
+  // which is why the bar stayed full-width before.
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--cds-border-strong-01, #8d8d8d);
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
-.bob-sidebar-index {
+// Spans the full virtual height so the scrollbar reflects ALL rows; the mounted
+// rows are absolutely positioned within it at their computed offsets.
+.file-tree__sizer {
+  position: relative;
+  inline-size: 100%;
+}
+
+.file-tree__row {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+}
+
+.file-tree__row > .file-row,
+.file-tree__row > .file-row-wrapper {
+  inline-size: 100%;
+}
+
+.sidebar-index {
   display: grid;
   gap: 0.5rem;
   padding: 0.75rem 0.5rem;
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-search-field {
+.search-field {
   display: grid;
   grid-template-columns: 1rem minmax(0, 1fr);
   align-items: center;
@@ -786,12 +1057,12 @@ select {
   color: var(--cds-icon-secondary, #525252);
 }
 
-.bob-search-field:focus-within {
+.search-field:focus-within {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: -2px;
 }
 
-.bob-search-field input {
+.search-field input {
   min-inline-size: 0;
   border: 0;
   outline: none;
@@ -800,12 +1071,12 @@ select {
   font-size: 0.8125rem;
 }
 
-.bob-search-field input:disabled {
+.search-field input:disabled {
   color: var(--cds-text-disabled, #a8a8a8);
   cursor: not-allowed;
 }
 
-.bob-index-message {
+.index-message {
   margin: 0;
   padding-inline: 0.5rem;
   color: var(--cds-text-helper, #6f6f6f);
@@ -813,20 +1084,20 @@ select {
   line-height: 1rem;
 }
 
-.bob-search-results,
-.bob-backlinks {
+.search-results,
+.backlinks {
   display: grid;
   gap: 1px;
   min-block-size: 0;
 }
 
-.bob-search-results {
+.search-results {
   max-block-size: 12rem;
   overflow: auto;
 }
 
-.bob-search-result,
-.bob-backlink {
+.search-result,
+.backlink {
   display: grid;
   gap: 0.125rem;
   min-inline-size: 0;
@@ -838,16 +1109,16 @@ select {
   cursor: pointer;
 }
 
-.bob-search-result:hover,
-.bob-search-result:focus-visible,
-.bob-backlink:hover,
-.bob-backlink:focus-visible {
+.search-result:hover,
+.search-result:focus-visible,
+.backlink:hover,
+.backlink:focus-visible {
   background: var(--cds-layer-hover-01, #e8e8e8);
   outline: none;
 }
 
-.bob-search-result__title,
-.bob-backlink__path {
+.search-result__title,
+.backlink__path {
   overflow: hidden;
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
@@ -857,8 +1128,8 @@ select {
   white-space: nowrap;
 }
 
-.bob-search-result__path,
-.bob-backlink__label {
+.search-result__path,
+.backlink__label {
   overflow: hidden;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
@@ -867,7 +1138,7 @@ select {
   white-space: nowrap;
 }
 
-.bob-search-result__snippet {
+.search-result__snippet {
   display: -webkit-box;
   overflow: hidden;
   color: var(--cds-text-secondary, #525252);
@@ -877,39 +1148,42 @@ select {
   -webkit-line-clamp: 2;
 }
 
-.bob-file-row {
+.file-row {
   display: grid;
   grid-template-columns: 1rem minmax(0, 1fr) auto;
   align-items: center;
   block-size: 1.75rem;
   gap: 0.5rem;
-  padding-inline: 0.5rem;
+  // The kebab is absolutely placed over the row's end (see `.file-row-wrapper`),
+  // so the name takes the full width — only a small end inset keeps it off the
+  // scrollbar gutter rather than reserving a whole column for the menu.
+  padding-inline: 0.5rem 0.5rem;
   color: var(--cds-text-secondary, #525252);
   font-size: 0.8125rem;
   line-height: 1.75rem;
   text-align: start;
 }
 
-.bob-file-row--folder {
+.file-row--folder {
   color: var(--cds-text-primary, #161616);
   font-weight: 500;
 }
 
-.bob-file-row svg {
+.file-row svg {
   color: var(--cds-icon-secondary, #6f6f6f);
 }
 
-.bob-file-row--active {
+.file-row--active {
   color: var(--cds-text-primary, #161616);
   background: var(--cds-layer-selected-01, #e0e0e0);
   font-weight: 600;
 }
 
-.bob-file-row--active svg {
+.file-row--active svg {
   color: var(--cds-icon-primary, #161616);
 }
 
-.bob-dirty-dot {
+.dirty-dot {
   inline-size: 0.375rem;
   block-size: 0.375rem;
   margin-inline-start: 0.25rem;
@@ -917,8 +1191,8 @@ select {
   background: var(--cds-button-primary, #0f62fe);
 }
 
-.bob-editor-region,
-.bob-chat-region {
+.editor-region,
+.chat-region {
   display: flex;
   min-inline-size: 0;
   min-block-size: 0;
@@ -927,7 +1201,7 @@ select {
   background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-chat-region {
+.chat-region {
   background: var(--cds-layer-02, #ffffff);
   position: relative;
 }
@@ -936,17 +1210,17 @@ select {
 // is opened from the sidebar Chat tab (AppShell toggles `--pulse` for the
 // keyframe's duration, then removes it so the next open can replay it). A
 // pseudo-element keeps the animation off the panel's own box (no layout shift).
-.bob-chat-region--pulse::after {
+.chat-region--pulse::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 5;
   border-radius: 2px;
-  animation: bob-chat-pulse 600ms ease-out 1;
+  animation: chat-pulse 600ms ease-out 1;
 }
 
-@keyframes bob-chat-pulse {
+@keyframes chat-pulse {
   0% {
     box-shadow: inset 0 0 0 2px var(--cds-focus, #0f62fe);
     opacity: 1;
@@ -958,12 +1232,12 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bob-chat-region--pulse::after {
+  .chat-region--pulse::after {
     animation: none;
   }
 }
 
-.bob-pane-header {
+.pane-header {
   display: flex;
   flex: 0 0 2.25rem;
   align-items: center;
@@ -975,7 +1249,7 @@ select {
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-pane-title {
+.pane-title {
   display: flex;
   align-items: center;
   min-inline-size: 0;
@@ -987,21 +1261,21 @@ select {
   text-transform: uppercase;
 }
 
-.bob-pane-title span {
+.pane-title span {
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.bob-pane-actions {
+.pane-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 0.5rem;
 }
 
-.bob-pane-meta {
+.pane-meta {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
   letter-spacing: 0.03125rem;
@@ -1009,35 +1283,37 @@ select {
   white-space: nowrap;
 }
 
-.bob-status-bar {
+.status-bar {
   display: flex;
-  flex: 0 0 1.5rem;
+  // Match the sidebar footer's block-size so the two bottom bars line up.
+  flex: 0 0 2.25rem;
   align-items: center;
-  justify-content: space-between;
+  // Only the Rich/Raw + word-count meta remains (no path), kept to the right.
+  justify-content: flex-end;
   gap: 0.5rem;
   padding-inline: 0.75rem;
-  background: var(--cds-layer-01, #f4f4f4);
+  background: var(--cds-layer-02, #ffffff);
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
   letter-spacing: 0.015625rem;
 }
 
-.bob-status-bar__path {
+.status-bar__path {
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.bob-status-bar__meta {
+.status-bar__meta {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   white-space: nowrap;
 }
 
-.bob-status-bar__dot {
+.status-bar__dot {
   display: inline-block;
   inline-size: 0.3125rem;
   block-size: 0.3125rem;
@@ -1045,11 +1321,11 @@ select {
   background: var(--cds-border-strong-01, #8d8d8d);
 }
 
-.bob-status-bar__dot--dirty {
+.status-bar__dot--dirty {
   background: var(--cds-button-primary, #0f62fe);
 }
 
-.bob-mode-toggle {
+.mode-toggle {
   display: inline-flex;
   align-items: center;
   padding: 1px;
@@ -1061,7 +1337,7 @@ select {
   block-size: 1.125rem;
 }
 
-.bob-mode-toggle__option {
+.mode-toggle__option {
   display: inline-flex;
   align-items: center;
   padding: 0 0.5rem;
@@ -1078,23 +1354,23 @@ select {
   transition: background 80ms ease, color 80ms ease;
 }
 
-.bob-mode-toggle__option:hover {
+.mode-toggle__option:hover {
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-mode-toggle__option--active {
+.mode-toggle__option--active {
   background: var(--cds-layer-selected-01, #e0e0e0);
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-mode-toggle__option:focus-visible {
+.mode-toggle__option:focus-visible {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: -2px;
 }
 
-.bob-tab-strip {
+.tab-strip {
   display: flex;
-  flex: 0 0 2.125rem;
+  flex: 0 0 var(--titlebar-height);
   min-inline-size: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -1102,11 +1378,11 @@ select {
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-tab-strip::-webkit-scrollbar {
+.tab-strip::-webkit-scrollbar {
   block-size: 0.1875rem;
 }
 
-.bob-editor-tab {
+.editor-tab {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 1.5rem;
   align-items: center;
@@ -1119,29 +1395,29 @@ select {
   color: var(--cds-text-helper, #6f6f6f);
 }
 
-.bob-editor-tab:hover {
+.editor-tab:hover {
   background: var(--cds-layer-hover-02, #e8e8e8);
 }
 
-.bob-editor-tab--active {
+.editor-tab--active {
   background: var(--cds-layer-01, #f4f4f4);
   color: var(--cds-text-primary, #161616);
   box-shadow: inset 0 2px 0 var(--cds-focus, #0f62fe);
 }
 
-.bob-editor-tab--active:hover {
+.editor-tab--active:hover {
   background: var(--cds-layer-01, #f4f4f4);
 }
 
-.bob-tab-button,
-.bob-tab-close {
+.tab-button,
+.tab-close {
   border: 0;
   color: inherit;
   background: transparent;
   cursor: pointer;
 }
 
-.bob-tab-button {
+.tab-button {
   display: grid;
   grid-template-columns: 0.875rem minmax(0, 1fr) auto;
   align-items: center;
@@ -1153,11 +1429,11 @@ select {
   text-align: start;
 }
 
-.bob-editor-tab--active .bob-tab-button {
+.editor-tab--active .tab-button {
   font-weight: 500;
 }
 
-.bob-tab-close {
+.tab-close {
   display: grid;
   inline-size: 1.5rem;
   block-size: 1.5rem;
@@ -1167,17 +1443,17 @@ select {
   color: var(--cds-icon-secondary, #525252);
 }
 
-.bob-tab-close:hover {
+.tab-close:hover {
   background: var(--cds-layer-hover-01, #d0d0d0);
 }
 
-.bob-tab-button:focus-visible,
-.bob-tab-close:focus-visible {
+.tab-button:focus-visible,
+.tab-close:focus-visible {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: -2px;
 }
 
-.bob-editor-body {
+.editor-body {
   display: flex;
   min-block-size: 0;
   flex: 1 1 auto;
@@ -1185,7 +1461,7 @@ select {
   overflow: hidden;
 }
 
-.bob-document-workspace {
+.document-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-block-size: 0;
@@ -1194,12 +1470,44 @@ select {
   background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-editor-host {
+.editor-host {
   min-block-size: 0;
   flex: 1 1 auto;
 }
 
-.bob-tiptap-editor {
+// CodeMirror 6 editor — the v1.2 engine, behind
+// `localStorage["compose.editorEngine.v1"] = "codemirror"`. Lives
+// inside the existing `.tiptap-editor` flex shell so the rest of
+// the document workspace layout (status bar, comments panel sibling)
+// stays unchanged through the cut-over.
+
+.cm-toolbar__engine-label {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding-inline: 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-weight: 600;
+}
+
+// Sizes the editor's mount slot. CM6 owns everything *inside*
+// .cm-editor (font, line-height, heading sizes, colors, focus
+// outline) via `editorBaseTheme` — co-locating those rules with the
+// extension that ships them lets CM6's line-metric measurement see
+// them at the right moment. Don't add `.cm-editor .cm-*` rules
+// here: that's where the click-drift bug came from.
+.cm-editor-host__scroll {
+  padding: 0;
+}
+
+.cm-editor-host .cm-editor {
+  height: 100%;
+}
+
+.tiptap-editor {
   display: flex;
   flex-direction: column;
   min-block-size: 0;
@@ -1208,13 +1516,13 @@ select {
   background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-tiptap-editor__scroll {
+.tiptap-editor__scroll {
   flex: 1 1 auto;
   min-block-size: 0;
   overflow: auto;
 }
 
-.bob-tiptap-toolbar {
+.tiptap-toolbar {
   display: flex;
   align-items: center;
   flex: 0 0 2.25rem;
@@ -1225,11 +1533,11 @@ select {
 }
 
 // Pushes the current-file group to the right edge of the (shared) toolbar.
-.bob-tiptap-toolbar__spacer {
+.tiptap-toolbar__spacer {
   flex: 1 1 auto;
 }
 
-.bob-tiptap-toolbar__file-actions {
+.tiptap-toolbar__file-actions {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -1239,7 +1547,7 @@ select {
 // buttons this one carries a text label + caret, so it auto-sizes to its
 // content (height pinned to the toolbar's 1.75rem rhythm) instead of being a
 // fixed square. Tinted to match the icon buttons' resting colour.
-.bob-tiptap-toolbar__export.cds--overflow-menu {
+.tiptap-toolbar__export.cds--overflow-menu {
   inline-size: auto;
   block-size: 1.75rem;
   color: var(--cds-icon-secondary, #525252);
@@ -1257,7 +1565,7 @@ select {
   }
 }
 
-.bob-tiptap-toolbar__export-label {
+.tiptap-toolbar__export-label {
   display: inline-flex;
   align-items: center;
   gap: 0.125rem;
@@ -1269,7 +1577,7 @@ select {
   color: inherit;
 }
 
-.bob-tiptap-toolbar__button {
+.tiptap-toolbar__button {
   display: inline-grid;
   place-items: center;
   inline-size: 1.75rem;
@@ -1283,23 +1591,23 @@ select {
   transition: background 80ms ease, color 80ms ease;
 }
 
-.bob-tiptap-toolbar__button:hover {
+.tiptap-toolbar__button:hover {
   background: var(--cds-layer-hover-02, #e8e8e8);
   color: var(--cds-icon-primary, #161616);
 }
 
-.bob-tiptap-toolbar__button--active {
+.tiptap-toolbar__button--active {
   background: var(--cds-layer-selected-01, #e0e0e0);
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-tiptap-toolbar__button:focus-visible,
-.bob-tiptap-toolbar__heading:focus-visible {
+.tiptap-toolbar__button:focus-visible,
+.tiptap-toolbar__heading:focus-visible {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: -2px;
 }
 
-.bob-tiptap-toolbar__divider {
+.tiptap-toolbar__divider {
   display: inline-block;
   inline-size: 1px;
   block-size: 1.125rem;
@@ -1307,13 +1615,62 @@ select {
   background: var(--cds-border-subtle-02, #c6c6c6);
 }
 
-.bob-tiptap-toolbar__heading-group {
+.file-picker {
+  display: flex;
+  flex-direction: column;
+  max-block-size: 22rem;
+  overflow-y: auto;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.file-picker__item {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-block-end: 1px solid var(--cds-border-subtle-00, #e0e0e0);
+  text-align: start;
+  padding: 0.625rem 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  color: var(--cds-text-primary, #161616);
+  font: inherit;
+
+  &:last-child { border-block-end: none; }
+  &:hover { background: var(--cds-layer-hover-01, #e8e8e8); }
+  &:focus-visible {
+    outline: 2px solid var(--cds-focus, #0f62fe);
+    outline-offset: -2px;
+  }
+}
+
+.file-picker__item--active {
+  background: var(--cds-layer-selected-01, #d0e2ff);
+  &:hover { background: var(--cds-layer-selected-hover-01, #b8d3ff); }
+}
+
+.file-picker__name { font-weight: 600; }
+.file-picker__dir {
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+}
+
+.file-picker__empty {
+  margin: 0;
+  padding: 1rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.875rem;
+}
+
+.tiptap-toolbar__heading-group {
   display: inline-flex;
   align-items: center;
   gap: 0;
 }
 
-.bob-tiptap-toolbar__heading {
+.tiptap-toolbar__heading {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1332,17 +1689,17 @@ select {
   transition: background 80ms ease, color 80ms ease;
 }
 
-.bob-tiptap-toolbar__heading:hover {
+.tiptap-toolbar__heading:hover {
   background: var(--cds-layer-hover-02, #e8e8e8);
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-tiptap-toolbar__heading--active {
+.tiptap-toolbar__heading--active {
   background: var(--cds-layer-selected-01, #e0e0e0);
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-tiptap-editor__content {
+.tiptap-editor__content {
   flex: 1 1 auto;
   min-block-size: 0;
   padding: 2rem 3rem;
@@ -1474,14 +1831,14 @@ select {
   }
 }
 
-.bob-tiptap-source {
+.tiptap-source {
   display: flex;
   flex: 1 1 auto;
   min-block-size: 0;
   background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-tiptap-source__textarea {
+.tiptap-source__textarea {
   flex: 1 1 auto;
   min-inline-size: 0;
   padding: 2rem 3rem;
@@ -1496,7 +1853,7 @@ select {
   white-space: pre-wrap;
 }
 
-.bob-tiptap-bubble {
+.tiptap-bubble {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -1507,7 +1864,7 @@ select {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
 }
 
-.bob-tiptap-bubble__button {
+.tiptap-bubble__button {
   display: inline-grid;
   place-items: center;
   min-inline-size: 28px;
@@ -1524,12 +1881,12 @@ select {
   transition: background 80ms ease;
 }
 
-.bob-tiptap-bubble__button:hover {
+.tiptap-bubble__button:hover {
   background: var(--cds-layer-hover-02, #e8e8e8);
   color: var(--cds-icon-primary, #161616);
 }
 
-.bob-selection-actions {
+.selection-actions {
   position: fixed;
   z-index: 90;
   display: inline-flex;
@@ -1539,10 +1896,10 @@ select {
   border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
   border-radius: 999px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  animation: bob-selection-actions-in 100ms ease-out;
+  animation: selection-actions-in 100ms ease-out;
 }
 
-.bob-selection-actions__button {
+.selection-actions__button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1558,24 +1915,24 @@ select {
   transition: background 80ms ease, color 80ms ease;
 }
 
-.bob-selection-actions__button:hover {
+.selection-actions__button:hover {
   background: var(--cds-layer-hover-02, #f4f4f4);
 }
 
-.bob-selection-actions__button--edit:hover {
+.selection-actions__button--edit:hover {
   color: var(--cds-link-primary, #0f62fe);
 }
 
-.bob-selection-actions__button--ask:hover {
+.selection-actions__button--ask:hover {
   color: var(--cds-link-primary, #0f62fe);
 }
 
-.bob-selection-actions__button:focus-visible {
+.selection-actions__button:focus-visible {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: -2px;
 }
 
-.bob-selection-actions__divider {
+.selection-actions__divider {
   display: inline-block;
   inline-size: 1px;
   block-size: 1rem;
@@ -1584,7 +1941,7 @@ select {
   margin: 0 2px;
 }
 
-@keyframes bob-selection-actions-in {
+@keyframes selection-actions-in {
   from {
     opacity: 0;
     transform: translateY(2px);
@@ -1595,7 +1952,7 @@ select {
   }
 }
 
-.bob-selection-composer {
+.selection-composer {
   position: fixed;
   z-index: 100;
   display: flex;
@@ -1609,13 +1966,13 @@ select {
   font-family: $ui-font;
 }
 
-.bob-selection-composer__header {
+.selection-composer__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.bob-selection-composer__title {
+.selection-composer__title {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -1626,7 +1983,7 @@ select {
   text-transform: uppercase;
 }
 
-.bob-selection-composer__close {
+.selection-composer__close {
   display: inline-grid;
   place-items: center;
   inline-size: 1.5rem;
@@ -1639,12 +1996,12 @@ select {
   cursor: pointer;
 }
 
-.bob-selection-composer__close:hover {
+.selection-composer__close:hover {
   background: var(--cds-layer-hover-02, #e8e8e8);
   color: var(--cds-icon-primary, #161616);
 }
 
-.bob-selection-composer__selection {
+.selection-composer__selection {
   margin: 0;
   padding: 0.375rem 0.5rem;
   border-inline-start: 3px solid var(--cds-border-subtle-02, #c6c6c6);
@@ -1656,7 +2013,7 @@ select {
   overflow: hidden;
 }
 
-.bob-selection-composer__textarea {
+.selection-composer__textarea {
   display: block;
   inline-size: 100%;
   min-block-size: 4.5rem;
@@ -1671,26 +2028,26 @@ select {
   resize: vertical;
 }
 
-.bob-selection-composer__textarea:focus {
+.selection-composer__textarea:focus {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: -2px;
 }
 
-.bob-selection-composer__actions {
+.selection-composer__actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
 
-.bob-selection-composer__hint {
+.selection-composer__hint {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
   letter-spacing: 0.015625rem;
 }
 
-.bob-selection-composer__secondary,
-.bob-selection-composer__primary {
+.selection-composer__secondary,
+.selection-composer__primary {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -1704,31 +2061,31 @@ select {
   transition: background 80ms ease, color 80ms ease;
 }
 
-.bob-selection-composer__secondary {
+.selection-composer__secondary {
   background: transparent;
   color: var(--cds-text-secondary, #525252);
 }
 
-.bob-selection-composer__secondary:hover:not(:disabled) {
+.selection-composer__secondary:hover:not(:disabled) {
   background: var(--cds-layer-hover-02, #e8e8e8);
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-selection-composer__secondary:disabled {
+.selection-composer__secondary:disabled {
   color: var(--cds-text-disabled, #c6c6c6);
   cursor: not-allowed;
 }
 
-.bob-selection-composer__primary {
+.selection-composer__primary {
   background: var(--cds-button-primary, #0f62fe);
   color: #ffffff;
 }
 
-.bob-selection-composer__primary:hover:not(:disabled) {
+.selection-composer__primary:hover:not(:disabled) {
   background: var(--cds-button-primary-hover, #0353e9);
 }
 
-.bob-selection-composer__primary:disabled {
+.selection-composer__primary:disabled {
   background: var(--cds-button-disabled, #c6c6c6);
   color: var(--cds-text-on-color-disabled, #8d8d8d);
   cursor: not-allowed;
@@ -1739,7 +2096,7 @@ select {
 // the CLI / key / Node aren't in place. Keeps the composer open
 // (the user can still draft) and offers a one-click path into
 // Settings without forcing a context switch.
-.bob-selection-composer__notice {
+.selection-composer__notice {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1754,7 +2111,7 @@ select {
   line-height: 1.3;
 }
 
-.bob-selection-composer__setup {
+.selection-composer__setup {
   flex-shrink: 0;
   background: transparent;
   border: 0;
@@ -1767,40 +2124,12 @@ select {
   transition: background 80ms ease;
 }
 
-.bob-selection-composer__setup:hover {
+.selection-composer__setup:hover {
   background: rgba(15, 98, 254, 0.08);
   text-decoration: underline;
 }
 
-// Chat-panel-footer variant of the same affordance. Same intent
-// (Bob isn't ready → CTA to fix it) but laid out across the
-// available width since the footer row is wider than the composer.
-.bob-chat-error--setup {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.bob-chat-setup-link {
-  flex-shrink: 0;
-  background: transparent;
-  border: 0;
-  padding: 0.25rem 0.375rem;
-  color: var(--cds-link-primary, #0f62fe);
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 2px;
-  transition: background 80ms ease;
-}
-
-.bob-chat-setup-link:hover {
-  background: rgba(15, 98, 254, 0.08);
-  text-decoration: underline;
-}
-
-.bob-format-toolbar {
+.format-toolbar {
   position: fixed;
   z-index: 100;
   display: flex;
@@ -1813,15 +2142,15 @@ select {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
   // Subtle slide-in cued by the placement attribute. Keeps the
   // toolbar from feeling like a popover that "snaps" in place.
-  animation: bob-format-toolbar-in 90ms ease-out;
+  animation: format-toolbar-in 90ms ease-out;
 }
 
-.bob-format-toolbar[data-placement="below"] {
+.format-toolbar[data-placement="below"] {
   // No visual difference today; reserved for future arrow / caret
   // pointing up at the selection.
 }
 
-.bob-format-toolbar__button {
+.format-toolbar__button {
   display: inline-grid;
   place-items: center;
   inline-size: 28px;
@@ -1835,17 +2164,17 @@ select {
   transition: background 80ms ease;
 }
 
-.bob-format-toolbar__button:hover {
+.format-toolbar__button:hover {
   background: var(--cds-layer-hover-02, #e8e8e8);
   color: var(--cds-icon-primary, #161616);
 }
 
-.bob-format-toolbar__button:focus-visible {
+.format-toolbar__button:focus-visible {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: -2px;
 }
 
-@keyframes bob-format-toolbar-in {
+@keyframes format-toolbar-in {
   from {
     opacity: 0;
     transform: translateY(2px);
@@ -1856,15 +2185,13 @@ select {
   }
 }
 
-.cm-editor {
-  block-size: 100%;
-}
+// (Stale `.cm-editor` / `.cm-scroller` rules removed — they were
+// leftovers from the previous CM-based code viewer and were
+// out-cascading the new editor's `EditorView.theme`, forcing a
+// JetBrains Mono font everywhere. The new editor owns its own
+// CM internals via `decorations/editorTheme.ts`.)
 
-.cm-scroller {
-  font-family: "JetBrains Mono", "IBM Plex Mono", SFMono-Regular, ui-monospace, monospace;
-}
-
-.bob-empty-state {
+.empty-state {
   display: grid;
   min-block-size: 0;
   flex: 1 1 auto;
@@ -1876,14 +2203,29 @@ select {
   text-align: center;
 }
 
-.bob-empty-state__title {
+.empty-state__title {
   margin: 0 0 var(--cds-spacing-02, 0.25rem);
   color: var(--cds-text-primary, #161616);
   font-weight: 600;
 }
 
+// "Loading file…" shown while a file's buffer is read from disk. It reveals only
+// after a beat — the zero-duration `empty-state-reveal` with a 150ms delay — so a
+// warm read swaps in the editor before it paints, and only a slow/cold-iCloud
+// read ever shows the text.
+.empty-state--loading {
+  opacity: 0;
+  animation: empty-state-reveal 0s linear 150ms forwards;
+}
+
+@keyframes empty-state-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
 /* Empty-folder welcome — the first-run landing in the editor area. */
-.bob-welcome {
+.welcome {
   display: flex;
   flex: 1 1 auto;
   align-items: center;
@@ -1892,7 +2234,7 @@ select {
   padding: 2rem;
 }
 
-.bob-welcome__inner {
+.welcome__inner {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1901,42 +2243,47 @@ select {
   text-align: center;
 }
 
-.bob-welcome__mark {
+.welcome__mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   inline-size: 3rem;
   block-size: 3rem;
   border-radius: 0.75rem;
-  background: var(--cds-layer-accent-01, #e0e7ff);
-  color: var(--cds-link-primary, #0f62fe);
+  // The dark brand tile the cyan ComposeMark glyph is designed to sit on.
+  background: #0f1419;
 }
 
-.bob-welcome__title {
+.welcome__title {
   margin: 0;
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-welcome__lead {
+.welcome__lead {
   margin: 0;
   font-size: 0.875rem;
   line-height: 1.5;
   color: var(--cds-text-secondary, #525252);
 }
 
-.bob-welcome__actions {
+.welcome__actions {
   display: flex;
-  gap: 0.625rem;
-  margin-block-start: 0.25rem;
+  // Stacked full-width rows (Guided), not a horizontal row that wraps a label
+  // onto two lines on a narrow editor.
+  flex-direction: column;
+  gap: 0.5rem;
+  inline-size: 100%;
+  margin-block-start: 0.5rem;
 }
 
-.bob-welcome__action {
-  display: inline-flex;
+.welcome__action {
+  display: flex;
   align-items: center;
-  gap: 0.375rem;
-  min-block-size: 2.25rem;
+  gap: 0.5rem;
+  inline-size: 100%;
+  min-block-size: 2.5rem;
   padding-inline: 0.875rem;
   border: 1px solid var(--cds-border-strong-01, #8d8d8d);
   border-radius: 4px;
@@ -1944,35 +2291,40 @@ select {
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
   font-weight: 500;
+  text-align: start;
   cursor: pointer;
 }
 
-.bob-welcome__action:hover {
+.welcome__action:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-welcome__action--primary {
+.welcome__action--primary {
   border-color: var(--cds-button-primary, #0f62fe);
   background: var(--cds-button-primary, #0f62fe);
   color: #ffffff;
 }
 
-.bob-welcome__action--primary:hover {
+.welcome__action--primary:hover {
   background: var(--cds-button-primary-hover, #0353e9);
 }
 
-.bob-chat-header {
+// Shares --titlebar-height with the sidebar title row and editor tab
+// strip so the bottom border line is continuous across the whole window.
+// Border-subtle-01 (not 02) matches the bottom edge color the rest of the
+// title bar uses.
+.chat-header {
   display: flex;
-  flex: 0 0 2.25rem;
+  flex: 0 0 var(--titlebar-height);
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   padding-inline: 0.75rem;
   background: var(--cds-layer-02, #ffffff);
-  border-block-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-chat-header__title {
+.chat-header__title {
   display: flex;
   min-inline-size: 0;
   flex: 1 1 auto;
@@ -1983,13 +2335,13 @@ select {
   font-weight: 600;
 }
 
-.bob-chat-header__meta {
+.chat-header__meta {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.75rem;
   white-space: nowrap;
 }
 
-.bob-chat-header__actions {
+.chat-header__actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1997,8 +2349,8 @@ select {
 
 // The open conversation's title — a click-to-rename button (or plain text
 // before the first send). Switching/new conversations live in the sidebar now.
-.bob-chat-header__title-button,
-.bob-chat-header__title-text {
+.chat-header__title-button,
+.chat-header__title-text {
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2007,7 +2359,7 @@ select {
   color: inherit;
 }
 
-.bob-chat-header__title-button {
+.chat-header__title-button {
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -2020,7 +2372,7 @@ select {
 // + (new chat) and × (close chat) — square icon buttons matching the
 // row's rhythm. Quiet at rest, faint hover; the ⋮ ConversationActionsMenu
 // (Carbon OverflowMenu) sits between them with its own native styling.
-.bob-chat-header__btn {
+.chat-header__btn {
   display: inline-grid;
   place-items: center;
   inline-size: 1.75rem;
@@ -2033,16 +2385,16 @@ select {
   cursor: pointer;
 }
 
-.bob-chat-header__btn:hover {
+.chat-header__btn:hover {
   background: var(--cds-background-hover, rgba(141, 141, 141, 0.12));
   color: var(--cds-icon-primary, #121619);
 }
 
-.bob-chat-header__title-button:hover {
+.chat-header__title-button:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-mark {
+.mark {
   display: inline-grid;
   place-items: center;
   inline-size: 1.25rem;
@@ -2052,7 +2404,7 @@ select {
   color: var(--cds-text-on-color, #ffffff);
 }
 
-.bob-chat-panel {
+.chat-panel {
   position: relative;
   display: flex;
   min-block-size: 0;
@@ -2065,7 +2417,7 @@ select {
   background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-chat-messages {
+.chat-messages {
   display: flex;
   min-block-size: 0;
   flex: 1 1 auto;
@@ -2074,20 +2426,31 @@ select {
   padding: 1rem 0.75rem;
 }
 
+// Reserves room under the last turn for the floating composer. Sized inline to
+// the composer's live height (a real layout element, so `scrollHeight` includes
+// it deterministically when re-pinning). The message-stack's own row gap keeps
+// the last turn clear of the composer's top edge.
+.chat-messages__composer-spacer {
+  inline-size: 100%;
+}
+
 // The new-conversation empty state: a left-aligned stack (mark, heading,
 // context line, suggested prompts) rather than a centered notice.
-.bob-chat-empty {
+.chat-empty {
   display: grid;
   gap: 0.625rem;
   align-content: start;
   flex: 1 1 auto;
+  // Let this flex item shrink below its content's intrinsic width, so a long
+  // unbreakable filename in the hint wraps instead of widening the panel.
+  min-inline-size: 0;
   padding: 1.25rem 1rem;
   color: var(--cds-text-secondary, #525252);
   font-size: 0.8125rem;
   line-height: 1.375rem;
 }
 
-.bob-chat-empty__mark {
+.chat-empty__mark {
   display: inline-grid;
   place-items: center;
   inline-size: 2rem;
@@ -2097,25 +2460,29 @@ select {
   color: var(--cds-text-on-color, #ffffff);
 }
 
-.bob-chat-empty__title {
+.chat-empty__title {
   margin: 0;
   color: var(--cds-text-primary, #161616);
   font-size: 1rem;
   font-weight: 600;
 }
 
-.bob-chat-empty__hint {
+.chat-empty__hint {
   margin: 0;
   max-inline-size: 22rem;
+  min-inline-size: 0;
+  // `anywhere`, not `break-word`: it also shrinks the element's min-content, so a
+  // long unbreakable filename wraps instead of forcing the grid item full-width.
+  overflow-wrap: anywhere;
 }
 
-.bob-chat-empty__suggestions {
+.chat-empty__suggestions {
   display: grid;
   gap: 0.375rem;
   margin-block-start: 0.25rem;
 }
 
-.bob-chat-empty__suggestion {
+.chat-empty__suggestion {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -2131,47 +2498,92 @@ select {
   cursor: pointer;
 }
 
-.bob-chat-empty__suggestion:hover {
+.chat-empty__suggestion:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-chat-empty__suggestion svg {
+.chat-empty__suggestion svg {
   flex-shrink: 0;
   color: var(--cds-icon-secondary, #525252);
 }
 
-.bob-message-stack {
+.message-stack {
   display: grid;
+  // A single column capped at the panel width (minmax(0, 1fr), NOT the implicit
+  // `auto` track which grows to max-content) so a wide code block or table
+  // scrolls inside its bubble instead of forcing the panel — and the editor —
+  // wider.
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
 }
 
 // Single-column chat — every turn is left-aligned, full panel width.
 // No left/right split, no avatar bubbles, no "assistant" label. The eyebrow
 // + colour difference is what tells the two turns apart, in document order.
-.bob-message-row {
+.message-row {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  min-inline-size: 0;
   gap: 0.25rem;
 }
 
 // The "You" eyebrow used to live here. Replaced by the bordered user-block
-// (see `.bob-message-body--user`) — the contained surface is what marks a
+// (see `.message-body--user`) — the contained surface is what marks a
 // user turn, not a tiny label.
-.bob-message-eyebrow { display: none; }
+.message-eyebrow { display: none; }
 
-.bob-message-activity {
+.message-activity {
   padding-inline: 0.25rem;
   font-size: 0.75rem;
   line-height: 1rem;
   color: var(--cds-text-helper, #525252);
 }
 
+// A reply whose run was cut short (the app quit/crashed mid-stream). Understated
+// — it's incomplete, not an error — with a one-click re-run of the turn.
+.message-interrupted {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-block-start: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cds-layer-01, #f4f4f4);
+  font-size: 0.75rem;
+}
+
+.message-interrupted__text {
+  color: var(--cds-text-secondary, #525252);
+}
+
+.message-interrupted__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+  border: 0;
+  padding: 0.125rem 0.25rem;
+  background: transparent;
+  color: var(--cds-link-primary, #0f62fe);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.message-interrupted__retry:hover,
+.message-interrupted__retry:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
 // The turn's prose. No border, no fill, no max-inline-size cap — it spans the
 // panel column and reads like a document, not a chat-app bubble.
 // `min-inline-size: 0` lets a wide child (a code block, a long URL) wrap
 // inside the column instead of forcing the panel wider.
-.bob-message-body {
+.message-body {
   min-inline-size: 0;
   padding-block: 0.125rem;
   font-size: 0.875rem;
@@ -2186,7 +2598,7 @@ select {
 // subtle 1px border, modest padding, and rounded corners. The block is what
 // marks the turn as the user's; the assistant reply stays open prose.
 // Whitespace preserves the newlines the user typed.
-.bob-message-body--user {
+.message-body--user {
   white-space: pre-wrap;
   align-self: flex-start;
   max-inline-size: min(36rem, 100%);
@@ -2198,13 +2610,13 @@ select {
 }
 
 // A commented passage sent to chat, rendered as a chip inside the user bubble.
-.bob-excerpt-chip {
+.excerpt-chip {
   display: grid;
   gap: 0.5rem;
   white-space: normal;
 }
 
-.bob-excerpt-chip__head {
+.excerpt-chip__head {
   display: flex;
   align-items: center;
   gap: 0.375rem;
@@ -2212,14 +2624,14 @@ select {
   font-size: 0.75rem;
 }
 
-.bob-excerpt-chip__file {
+.excerpt-chip__file {
   overflow: hidden;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.bob-excerpt-chip__loc {
+.excerpt-chip__loc {
   flex: 0 0 auto;
   padding: 0.0625rem 0.375rem;
   border-radius: 999px;
@@ -2229,7 +2641,7 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-.bob-excerpt-chip__text {
+.excerpt-chip__text {
   margin: 0;
   padding: 0.375rem 0.625rem;
   border-inline-start: 3px solid var(--cds-button-primary, #0f62fe);
@@ -2237,9 +2649,14 @@ select {
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
   line-height: 1.25rem;
+  // Keep a multi-line excerpt's structure (a table row/column lands here as a
+  // markdown fragment) instead of collapsing it onto one line; still wrap a long
+  // single line of prose.
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.bob-excerpt-chip__note {
+.excerpt-chip__note {
   margin: 0;
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
@@ -2252,7 +2669,7 @@ select {
 // the text hugs that padding rather than doubling it. Font + line-height
 // are inherited from the bubble so every block reads as one consistent
 // type system; `overflow-wrap` keeps long words/URLs inside the panel.
-.bob-markdown {
+.markdown {
   display: flow-root;
   overflow-wrap: anywhere;
   // One uniform type ramp for the whole reply: a single line-height,
@@ -2268,7 +2685,7 @@ select {
 // Cross-file links. An internal link (a markdown link or a resolved wikilink)
 // gets the accent colour and a pointer; an editor `[[…]]` decoration reads as a
 // link token; a chat wikilink that resolves to no file is shown muted.
-.bob-internal-link {
+.internal-link {
   color: var(--cds-link-primary, #0f62fe);
   cursor: pointer;
   text-decoration: none;
@@ -2279,10 +2696,10 @@ select {
 }
 
 // One uniform link look across the editor — markdown links (`<a>`) AND
-// wikilinks (`.bob-wikilink`): accent colour, no underline at rest, underline
+// wikilinks (`.wikilink`): accent colour, no underline at rest, underline
 // on hover, pointer cursor. A plain click follows them (see handleLinkClick).
-.bob-tiptap-editor a,
-.bob-wikilink {
+.tiptap-editor a,
+.wikilink {
   color: var(--cds-link-primary, #0f62fe);
   text-decoration: none;
   cursor: pointer;
@@ -2294,11 +2711,11 @@ select {
 
 // The `[[ … ]]` (and `target|`) syntax characters are hidden in the editor's
 // WYSIWYG view; the literal text stays in the document for round-tripping.
-.bob-wikilink-syntax {
+.wikilink-syntax {
   display: none;
 }
 
-.bob-wikilink--broken {
+.wikilink--broken {
   color: var(--cds-text-helper, #6f6f6f);
   text-decoration: underline dotted;
   cursor: default;
@@ -2309,23 +2726,23 @@ select {
 // per-element drift is what makes raw markdown render "uneven". Force the
 // bubble's own typography back onto every text element so
 // size / line spacing / kerning / colour are uniform; only weight, style and
-// link colour vary. Code keeps its monospace stack (set on `.bob-markdown code`).
-.bob-markdown p,
-.bob-markdown h1,
-.bob-markdown h2,
-.bob-markdown h3,
-.bob-markdown h4,
-.bob-markdown h5,
-.bob-markdown h6,
-.bob-markdown ul,
-.bob-markdown ol,
-.bob-markdown li,
-.bob-markdown a,
-.bob-markdown strong,
-.bob-markdown em,
-.bob-markdown blockquote,
-.bob-markdown th,
-.bob-markdown td {
+// link colour vary. Code keeps its monospace stack (set on `.markdown code`).
+.markdown p,
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6,
+.markdown ul,
+.markdown ol,
+.markdown li,
+.markdown a,
+.markdown strong,
+.markdown em,
+.markdown blockquote,
+.markdown th,
+.markdown td {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
@@ -2333,79 +2750,79 @@ select {
   color: inherit;
 }
 
-.bob-markdown > :first-child {
+.markdown > :first-child {
   margin-block-start: 0;
 }
 
-.bob-markdown > :last-child {
+.markdown > :last-child {
   margin-block-end: 0;
 }
 
 // Same gap above/below every block, so paragraphs, lists and headings share
 // one rhythm — no heading "section break" larger than a paragraph break.
-.bob-markdown p,
-.bob-markdown ul,
-.bob-markdown ol,
-.bob-markdown h1,
-.bob-markdown h2,
-.bob-markdown h3,
-.bob-markdown h4,
-.bob-markdown h5,
-.bob-markdown h6,
-.bob-markdown blockquote,
-.bob-markdown pre,
-.bob-markdown table {
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6,
+.markdown blockquote,
+.markdown pre,
+.markdown table {
   margin-block: 0.5rem;
 }
 
 // Headings carry no type scale of their own — same size + line-height as
 // body (inherited above); only the weight marks them, matching inline bold.
-.bob-markdown h1,
-.bob-markdown h2,
-.bob-markdown h3,
-.bob-markdown h4,
-.bob-markdown h5,
-.bob-markdown h6 {
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
   font-weight: 600;
 }
 
 // Bold and italic are the only inline variations.
-.bob-markdown strong {
+.markdown strong {
   font-weight: 600;
 }
 
-.bob-markdown em {
+.markdown em {
   font-style: italic;
 }
 
-.bob-markdown ul,
-.bob-markdown ol {
+.markdown ul,
+.markdown ol {
   padding-inline-start: 1.25rem;
 }
 
 // Tailwind's preflight strips `list-style` from ul/ol globally (same reset the
-// editor works around at `.bob-editor`). Restore it so chat lists actually
+// editor works around at `.editor`). Restore it so chat lists actually
 // show bullets / numbers instead of bare hanging indents.
-.bob-markdown ul {
+.markdown ul {
   list-style: disc outside;
 }
-.bob-markdown ol {
+.markdown ol {
   list-style: decimal outside;
 }
-.bob-markdown li {
+.markdown li {
   display: list-item;
 }
 
-.bob-markdown li {
+.markdown li {
   margin-block: 0.25rem;
 }
 
-.bob-markdown a {
+.markdown a {
   color: var(--cds-link-primary, #0f62fe);
   text-decoration: underline;
 }
 
-.bob-markdown code {
+.markdown code {
   padding: 0.0625rem 0.25rem;
   border-radius: 4px;
   background: var(--cds-layer-accent-01, #e0e0e0);
@@ -2416,7 +2833,7 @@ select {
   overflow-wrap: anywhere;
 }
 
-.bob-markdown pre {
+.markdown pre {
   // Long code lines scroll within the block rather than stretch the
   // bubble; `max-inline-size: 100%` keeps the block itself contained.
   max-inline-size: 100%;
@@ -2426,7 +2843,7 @@ select {
   background: var(--cds-layer-accent-01, #e0e0e0);
 }
 
-.bob-markdown pre code {
+.markdown pre code {
   padding: 0;
   background: none;
   font-size: 0.85em;
@@ -2435,7 +2852,7 @@ select {
   line-height: 1.45;
 }
 
-.bob-markdown blockquote {
+.markdown blockquote {
   // Structural indent only — the text colour stays the body colour (colour is
   // uniform everywhere except links).
   margin-inline: 0;
@@ -2443,7 +2860,7 @@ select {
   border-inline-start: 3px solid var(--cds-border-subtle-02, #c6c6c6);
 }
 
-.bob-markdown table {
+.markdown table {
   // `display: block` + overflow lets a wide table scroll inside the
   // bubble instead of forcing the panel wider.
   display: block;
@@ -2452,30 +2869,29 @@ select {
   border-collapse: collapse;
 }
 
-.bob-markdown th,
-.bob-markdown td {
+.markdown th,
+.markdown td {
   padding: 0.25rem 0.5rem;
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   text-align: start;
 }
 
-.bob-markdown hr {
+.markdown hr {
   margin-block: 0.75rem;
   border: 0;
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-markdown img {
+.markdown img {
   max-inline-size: 100%;
   height: auto;
 }
 
-// Transient status indicator shown in the message slot while a turn is
-// running and the answer is still pending. Deliberately NOT styled like
-// the answer bubble (no border/background) — it must not read as a real
-// response. It rewrites itself as events arrive and is removed once the
-// answer lands.
-.bob-message-status {
+// The "working" loader shown in the message slot (and during the brief gap
+// right after send) while a turn runs and the answer is still pending.
+// Deliberately NOT styled like the answer bubble — it must not read as a real
+// response. Replaced by the answer when it lands.
+.working-indicator {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -2483,26 +2899,22 @@ select {
   padding-block: 0.25rem;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.8125rem;
+}
+
+.working-indicator__spinner {
+  display: inline-block;
+  inline-size: 0.9rem;
+  text-align: center;
+  color: var(--cds-link-primary, #0f62fe);
+}
+
+.working-indicator__label {
   font-style: italic;
 }
 
-.bob-message-status__dot {
-  flex-shrink: 0;
-  inline-size: 0.5rem;
-  block-size: 0.5rem;
-  border-radius: 50%;
-  background: var(--cds-icon-secondary, #8d8d8d);
-  animation: bob-status-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes bob-status-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
-  }
+.working-indicator__elapsed {
+  color: var(--cds-text-placeholder, #a8a8a8);
+  font-variant-numeric: tabular-nums;
 }
 
 // --- Per-turn assistant author row: mark + "Assistant" + read pills ---
@@ -2511,12 +2923,12 @@ select {
 // --- File-operation cards: a create / edit the assistant made to a file ---
 // Prominent (a bordered card in the flow, not buried in the trace) because
 // changing the user's workspace is a significant action.
-.bob-message-fileops {
+.message-fileops {
   display: grid;
   gap: 0.375rem;
 }
 
-.bob-fileop {
+.fileop {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
@@ -2526,37 +2938,37 @@ select {
   background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-fileop__icon {
+.fileop__icon {
   flex-shrink: 0;
   margin-block-start: 0.0625rem;
   color: var(--cds-icon-secondary, #8d8d8d);
 }
 
 // Running → the icon spins as a live "working" cue (replacing the status line).
-.bob-fileop--running .bob-fileop__icon {
-  animation: bob-fileop-spin 1s linear infinite;
+.fileop--running .fileop__icon {
+  animation: fileop-spin 1s linear infinite;
 }
 
-.bob-fileop--done .bob-fileop__icon {
+.fileop--done .fileop__icon {
   color: var(--cds-support-success, #24a148);
 }
 
-.bob-fileop--error .bob-fileop__icon {
+.fileop--error .fileop__icon {
   color: var(--cds-support-error, #da1e28);
 }
 
-.bob-fileop__body {
+.fileop__body {
   display: grid;
   gap: 0.0625rem;
   min-inline-size: 0;
 }
 
-.bob-fileop__title {
+.fileop__title {
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
 }
 
-.bob-fileop__file {
+.fileop__file {
   padding: 0.0625rem 0.25rem;
   border-radius: 4px;
   background: var(--cds-layer-accent-01, #e0e0e0);
@@ -2565,12 +2977,12 @@ select {
   overflow-wrap: anywhere;
 }
 
-.bob-fileop__sub {
+.fileop__sub {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.75rem;
 }
 
-@keyframes bob-fileop-spin {
+@keyframes fileop-spin {
   to {
     transform: rotate(360deg);
   }
@@ -2578,7 +2990,7 @@ select {
 
 // Meta row under an assistant turn: the "Agent trace" toggle on the left,
 // usage stats floated to the right.
-.bob-message-meta {
+.message-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2587,14 +2999,14 @@ select {
   max-inline-size: min(32rem, 85%);
 }
 
-.bob-message-stats {
+.message-stats {
   color: var(--cds-text-helper, #8d8d8d);
   font-size: 0.6875rem;
   white-space: nowrap;
 }
 
 // The trace toggle reveals the reasoning + tool calls below.
-.bob-message-trace__toggle {
+.message-trace__toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -2606,18 +3018,18 @@ select {
   cursor: pointer;
 }
 
-.bob-message-trace__toggle:hover,
-.bob-message-trace__toggle:focus-visible {
+.message-trace__toggle:hover,
+.message-trace__toggle:focus-visible {
   color: var(--cds-text-primary, #161616);
   outline: none;
 }
 
-.bob-message-trace__chevron {
+.message-trace__chevron {
   flex-shrink: 0;
   transition: transform 0.12s ease;
 }
 
-.bob-message-trace__toggle[aria-expanded="true"] .bob-message-trace__chevron {
+.message-trace__toggle[aria-expanded="true"] .message-trace__chevron {
   transform: rotate(180deg);
 }
 
@@ -2627,7 +3039,7 @@ select {
 // child receives keyboard focus (so the actions are reachable without a
 // mouse). The "Show work" trace toggle keeps the row open if it's been
 // expanded.
-.bob-message-actions {
+.message-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2638,19 +3050,19 @@ select {
   transition: opacity 120ms ease;
 }
 
-.bob-message-actions__left {
+.message-actions__left {
   display: inline-flex;
   align-items: center;
   gap: 0.125rem;
 }
 
-.bob-message-row--assistant:hover .bob-message-actions,
-.bob-message-row--assistant:focus-within .bob-message-actions,
-.bob-message-actions:has(.bob-message-trace__toggle[aria-expanded="true"]) {
+.message-row--assistant:hover .message-actions,
+.message-row--assistant:focus-within .message-actions,
+.message-actions:has(.message-trace__toggle[aria-expanded="true"]) {
   opacity: 1;
 }
 
-.bob-message-actions__btn {
+.message-actions__btn {
   display: inline-grid;
   place-items: center;
   inline-size: 1.5rem;
@@ -2663,14 +3075,14 @@ select {
   cursor: pointer;
 }
 
-.bob-message-actions__btn:hover,
-.bob-message-actions__btn:focus-visible {
+.message-actions__btn:hover,
+.message-actions__btn:focus-visible {
   background: var(--cds-layer-hover-01, #e8e8e8);
   color: var(--cds-text-primary, #161616);
   outline: none;
 }
 
-.bob-agent-trace {
+.agent-trace {
   display: grid;
   gap: 0.5rem;
   margin-block-start: 0.375rem;
@@ -2682,7 +3094,7 @@ select {
 
 // The ordered timeline: reasoning, narration, and tool calls in arrival
 // order, connected by a left rail so it reads as a sequence.
-.bob-trace-timeline {
+.trace-timeline {
   display: grid;
   gap: 0.375rem;
   margin: 0;
@@ -2690,14 +3102,14 @@ select {
   list-style: none;
 }
 
-.bob-trace-step {
+.trace-step {
   position: relative;
   padding-inline-start: 0.75rem;
   border-inline-start: 2px solid var(--cds-border-subtle-02, #c6c6c6);
 }
 
 // Narration step — the agent's own words, plain text.
-.bob-trace-notice {
+.trace-notice {
   font-size: 0.75rem;
   line-height: 1.25rem;
   color: var(--cds-text-secondary, #525252);
@@ -2705,7 +3117,7 @@ select {
 }
 
 // Reasoning — a collapsed accordion so a long chain doesn't bury the rest.
-.bob-trace-thinking__summary {
+.trace-thinking__summary {
   cursor: pointer;
   font-size: 0.6875rem;
   font-weight: 600;
@@ -2714,7 +3126,7 @@ select {
   color: var(--cds-text-helper, #6f6f6f);
 }
 
-.bob-trace-thinking__body {
+.trace-thinking__body {
   margin-block-start: 0.25rem;
   font-size: 0.75rem;
   line-height: 1.25rem;
@@ -2724,14 +3136,14 @@ select {
 }
 
 // Tool call — a status head, then input → output when captured.
-.bob-trace-tool {
+.trace-tool {
   display: grid;
   gap: 0.25rem;
   font-size: 0.75rem;
   color: var(--cds-text-secondary, #525252);
 }
 
-.bob-trace-tool__head {
+.trace-tool__head {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -2739,41 +3151,41 @@ select {
 
 // When the tool has input/output it's an accordion; the summary carries
 // the head and a pointer affordance.
-.bob-trace-tool__summary {
+.trace-tool__summary {
   cursor: pointer;
 }
 
-.bob-trace-tool__summary:focus-visible {
+.trace-tool__summary:focus-visible {
   outline: none;
   text-decoration: underline;
 }
 
-.bob-trace-tool__icon {
+.trace-tool__icon {
   flex-shrink: 0;
 }
 
-.bob-trace-tool--running .bob-trace-tool__icon {
+.trace-tool--running .trace-tool__icon {
   color: var(--cds-icon-secondary, #8d8d8d);
 }
 
-.bob-trace-tool--done .bob-trace-tool__icon {
+.trace-tool--done .trace-tool__icon {
   color: var(--cds-support-success, #24a148);
 }
 
-.bob-trace-tool--error {
+.trace-tool--error {
   color: var(--cds-text-error, #da1e28);
 }
 
-.bob-trace-tool--error .bob-trace-tool__icon {
+.trace-tool--error .trace-tool__icon {
   color: var(--cds-support-error, #da1e28);
 }
 
-.bob-trace-tool__name {
+.trace-tool__name {
   font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
   font-weight: 600;
 }
 
-.bob-trace-tool__io {
+.trace-tool__io {
   max-block-size: 8rem;
   margin: 0;
   padding: 0.25rem 0.375rem;
@@ -2786,11 +3198,11 @@ select {
   overflow-wrap: anywhere;
 }
 
-.bob-trace-tool__io--out {
+.trace-tool__io--out {
   color: var(--cds-text-secondary, #525252);
 }
 
-.bob-suggestion-list {
+.suggestion-list {
   display: grid;
   gap: 0.5rem;
   align-self: stretch;
@@ -2798,7 +3210,7 @@ select {
 }
 
 /* Binary / oversized change — a size-only note in place of a diff. */
-.bob-diff--omitted {
+.diff--omitted {
   padding: 0.5rem;
   color: var(--cds-text-secondary, #525252);
   background: var(--cds-layer-02, #ffffff);
@@ -2809,14 +3221,14 @@ select {
    spans the full message column (same width the assistant prose uses) so diff
    lines get maximum room before wrapping — the row is `align-items: flex-start`,
    so without this stretch the grid would shrink to its content. */
-.bob-applied-list {
+.applied-list {
   display: grid;
   gap: 0.5rem;
   align-self: stretch;
   inline-size: 100%;
 }
 
-.bob-applied {
+.applied {
   display: grid;
   gap: 0.5rem;
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
@@ -2824,13 +3236,13 @@ select {
   background: var(--cds-layer-01, #f4f4f4);
 }
 
-.bob-applied__header {
+.applied__header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.bob-applied__badge {
+.applied__badge {
   flex: none;
   padding: 0.0625rem 0.375rem;
   border-radius: 0.25rem;
@@ -2840,22 +3252,22 @@ select {
   letter-spacing: 0.02em;
 }
 
-.bob-applied__badge--create {
+.applied__badge--create {
   color: #0e6027;
   background: #defbe6;
 }
 
-.bob-applied__badge--rewrite {
+.applied__badge--rewrite {
   color: #0043ce;
   background: #d0e2ff;
 }
 
-.bob-applied__badge--delete {
+.applied__badge--delete {
   color: #a2191f;
   background: #ffd7d9;
 }
 
-.bob-applied__path {
+.applied__path {
   border: 0;
   background: none;
   padding: 0;
@@ -2866,11 +3278,11 @@ select {
   cursor: pointer;
 }
 
-.bob-applied__path:hover {
+.applied__path:hover {
   text-decoration: underline;
 }
 
-.bob-suggestion {
+.suggestion {
   display: grid;
   gap: 0.5rem;
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
@@ -2878,22 +3290,22 @@ select {
   background: var(--cds-layer-01, #f4f4f4);
 }
 
-.bob-suggestion__header,
-.bob-suggestion__actions {
+.suggestion__header,
+.suggestion__actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
 
-.bob-suggestion__title {
+.suggestion__title {
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1.125rem;
 }
 
-.bob-suggestion__path {
+.suggestion__path {
   border: 0;
   padding: 0;
   color: var(--cds-link-primary, #0f62fe);
@@ -2904,7 +3316,7 @@ select {
   cursor: pointer;
 }
 
-.bob-suggestion__status {
+.suggestion__status {
   flex: 0 0 auto;
   padding: 0.125rem 0.375rem;
   color: var(--cds-text-secondary, #525252);
@@ -2913,35 +3325,35 @@ select {
   text-transform: capitalize;
 }
 
-.bob-suggestion__status--accepted {
+.suggestion__status--accepted {
   color: var(--cds-support-success, #198038);
   background: #defbe6;
 }
 
-.bob-suggestion__status--rejected {
+.suggestion__status--rejected {
   color: var(--cds-text-secondary, #525252);
   background: #e0e0e0;
 }
 
-.bob-suggestion__status--stale {
+.suggestion__status--stale {
   color: var(--cds-support-warning, #f1c21b);
   background: #fcf4d6;
 }
 
 /* Collapsible unified diff (replaces the side-by-side before/after). */
-.bob-diff {
+.diff {
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   border-radius: 4px;
   overflow: hidden;
   font-size: 0.75rem;
 }
 
-.bob-diff--empty {
+.diff--empty {
   padding: 0.5rem;
   color: var(--cds-text-secondary, #525252);
 }
 
-.bob-diff__toggle {
+.diff__toggle {
   display: flex;
   align-items: center;
   gap: 0.375rem;
@@ -2953,37 +3365,37 @@ select {
   cursor: pointer;
 }
 
-.bob-diff__chevron {
+.diff__chevron {
   flex: none;
   transition: transform 0.12s ease;
 }
 
-.bob-diff__chevron--open {
+.diff__chevron--open {
   transform: rotate(90deg);
 }
 
-.bob-diff__summary {
+.diff__summary {
   display: inline-flex;
   align-items: baseline;
   gap: 0.5rem;
   font-variant-numeric: tabular-nums;
 }
 
-.bob-diff__added {
+.diff__added {
   color: var(--cds-support-success, #198038);
   font-weight: 600;
 }
 
-.bob-diff__removed {
+.diff__removed {
   color: var(--cds-support-error, #da1e28);
   font-weight: 600;
 }
 
-.bob-diff__summary-label {
+.diff__summary-label {
   color: var(--cds-text-secondary, #525252);
 }
 
-.bob-diff__body {
+.diff__body {
   max-block-size: 18rem;
   overflow: auto;
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
@@ -2992,13 +3404,13 @@ select {
   line-height: 1.1rem;
 }
 
-.bob-diff__notice {
+.diff__notice {
   padding: 0.375rem 0.5rem;
   color: var(--cds-text-secondary, #525252);
   background: var(--cds-layer-01, #f4f4f4);
 }
 
-.bob-diff__fold {
+.diff__fold {
   padding: 0.125rem 0.5rem;
   color: var(--cds-text-secondary, #8d8d8d);
   background: var(--cds-layer-01, #f4f4f4);
@@ -3006,7 +3418,7 @@ select {
   user-select: none;
 }
 
-.bob-diff__line {
+.diff__line {
   // Compact line-number gutters: just wide enough for ~4-digit line numbers
   // (tabular-nums keeps them aligned) so the code text gets the room. The
   // marker column is a single glyph; the text takes the rest.
@@ -3016,7 +3428,7 @@ select {
   word-break: break-word;
 }
 
-.bob-diff__gutter {
+.diff__gutter {
   padding-inline: 0.125rem;
   color: var(--cds-text-placeholder, #a8a8a8);
   font-variant-numeric: tabular-nums;
@@ -3024,40 +3436,40 @@ select {
   user-select: none;
 }
 
-.bob-diff__sign {
+.diff__sign {
   text-align: center;
   user-select: none;
 }
 
-.bob-diff__line--add {
+.diff__line--add {
   background: rgba(25, 128, 56, 0.12);
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-diff__line--add .bob-diff__sign {
+.diff__line--add .diff__sign {
   color: var(--cds-support-success, #198038);
 }
 
-.bob-diff__line--remove {
+.diff__line--remove {
   background: rgba(218, 30, 40, 0.1);
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-diff__line--remove .bob-diff__sign {
+.diff__line--remove .diff__sign {
   color: var(--cds-support-error, #da1e28);
 }
 
-.bob-suggestion__message {
+.suggestion__message {
   color: var(--cds-text-secondary, #525252);
   font-size: 0.75rem;
   line-height: 1rem;
 }
 
-.bob-suggestion__actions {
+.suggestion__actions {
   justify-content: flex-start;
 }
 
-.bob-suggestion__action {
+.suggestion__action {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -3070,154 +3482,336 @@ select {
   cursor: pointer;
 }
 
-.bob-suggestion__action--accept {
+.suggestion__action--accept {
   border-color: var(--cds-button-primary, #0f62fe);
   color: var(--cds-button-primary, #0f62fe);
 }
 
-.bob-suggestion__action:disabled {
+.suggestion__action:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
 
-.bob-chat-composer {
+.chat-composer {
+  // Pinned to the panel's bottom edge and out of flow, so a growing textarea
+  // expands the composer UPWARD (its top moves up) without resizing the panel
+  // or the transcript; the messages scroll beneath it.
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
-  padding: 0.5rem 0.75rem 0.75rem;
-  background: var(--cds-layer-01, #f4f4f4);
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem 0.75rem;
+  // White, like the transcript above it — the footer is not a coloured strip.
+  // Only the field below carries a subtle fill, so the input zone reads as one
+  // element (textarea + send) on an otherwise seamless surface. Opaque so the
+  // transcript scrolling under it stays occluded.
+  background: var(--cds-layer-02, #ffffff);
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  // Soft upward lift (tinted, low-alpha — not a glow) to separate the floating
+  // composer from the messages passing beneath it.
+  box-shadow: 0 -8px 16px -12px rgba(22, 22, 22, 0.2);
 }
 
-.bob-chat-context-row {
+.chat-setup-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.8125rem;
+  background: var(--cds-layer-01, #f4f4f4);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 4px;
+}
+
+.chat-setup-notice__text {
+  min-inline-size: 0;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.chat-setup-notice__action {
+  flex: none;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--cds-button-primary, #0f62fe);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chat-setup-notice__action:disabled {
+  background: var(--cds-button-disabled, #c6c6c6);
+  cursor: default;
+}
+
+.chat-context-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-.bob-chat-context-chip {
+// Context is supporting information, not the main event — so the chips stay
+// quiet: no fill at rest, just a muted icon + label. A subtle surface appears
+// only on hover, where it doubles as the affordance for the chip's tooltip.
+.chat-context-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  align-self: start;
+  gap: 0.25rem;
+  align-self: center;
   max-inline-size: 100%;
-  padding: 0.125rem 0.5rem;
-  background: var(--cds-layer-accent-01, #e0e0e0);
-  border-radius: 999px;
+  padding: 0.125rem 0.375rem;
+  background: transparent;
+  border-radius: 6px;
   font-size: 0.6875rem;
-  color: var(--cds-text-primary, #161616);
+  color: var(--cds-text-secondary, #525252);
+  transition: background 80ms ease;
 }
 
-.bob-chat-context-chip svg {
+.chat-context-chip:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.chat-context-chip svg {
   flex-shrink: 0;
   color: var(--cds-icon-secondary, #525252);
 }
 
-.bob-chat-context-chip span {
+.chat-context-chip span {
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.bob-chat-context-chip--empty {
+// The chip's ✕ — quiet until the chip is hovered, so a removable chip doesn't
+// read as busier than the others at rest.
+.chat-context-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
   background: transparent;
-  border: 1px dashed var(--cds-border-subtle-02, #c6c6c6);
+  color: var(--cds-icon-secondary, #525252);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 80ms ease, background 80ms ease;
+}
+
+.chat-context-chip:hover .chat-context-chip__remove,
+.chat-context-chip__remove:focus-visible {
+  opacity: 1;
+}
+
+.chat-context-chip__remove:hover {
+  background: var(--cds-layer-active-01, #c6c6c6);
+}
+
+.chat-context-chip--empty {
   color: var(--cds-text-helper, #6f6f6f);
 }
 
-.bob-chat-input-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.25rem;
-  align-items: end;
-  gap: 0.375rem;
+// Nothing to reveal for the placeholder — keep it flat even on hover.
+.chat-context-chip--empty:hover {
+  background: transparent;
 }
 
-.bob-chat-input-row textarea {
+// Cumulative conversation token count, parked at the right end of the row
+// directly above the input.
+.chat-tokens {
+  margin-inline-start: auto;
+  align-self: center;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+// The field is the one tinted element in the composer — a single surface
+// holding the textarea and the send control, sitting on the white footer. A
+// border defines it and lifts to the focus colour on `:focus-within`.
+.chat-input-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.25rem;
+  padding: 0.1875rem;
+  background: var(--cds-layer-01, #f4f4f4);
+  border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  border-radius: 8px;
+  transition: border-color 80ms ease, box-shadow 80ms ease;
+}
+
+.chat-input-field:focus-within {
+  border-color: var(--cds-focus, #0f62fe);
+  box-shadow: inset 0 0 0 1px var(--cds-focus, #0f62fe);
+}
+
+.chat-input-field textarea {
   // Auto-grown by `useAutoGrowTextarea`: it sets an inline `height` from
   // `scrollHeight`, which `min`/`max-block-size` clamp. `border-box` so
   // the scrollHeight math lines up exactly with the padding (the global
-  // reset doesn't set box-sizing, so set it here).
+  // reset doesn't set box-sizing, so set it here). Past the max it scrolls
+  // internally — that's the field's own ceiling, independent of the panel.
   box-sizing: border-box;
-  min-block-size: 2.5rem;
-  max-block-size: 12rem;
+  min-block-size: 2.125rem;
+  max-block-size: 11rem;
   resize: none;
   border: 0;
-  border-block-end: 1px solid var(--cds-border-strong-01, #8d8d8d);
   outline: none;
-  padding: 0.5rem 0.625rem;
-  background: var(--cds-field-01, #ffffff);
+  padding: 0.375rem 0.5rem;
+  background: transparent;
   color: var(--cds-text-primary, #161616);
   font-size: 0.875rem;
   line-height: 1.375rem;
   overflow-y: auto;
 }
 
-.bob-chat-input-row textarea:focus {
-  outline: 2px solid var(--cds-focus, #0f62fe);
-  outline-offset: -2px;
-}
-
-.bob-chat-input-row textarea:disabled {
+.chat-input-field textarea:disabled {
   color: var(--cds-text-disabled, #a8a8a8);
 }
 
-.bob-chat-send {
+// The send control lives inside the field, bottom-aligned so it stays put as
+// the textarea grows. It keeps the one accent in the composer — the context
+// chips deliberately don't compete with it.
+.chat-send {
   display: grid;
-  inline-size: 2.25rem;
-  block-size: 2.25rem;
-  border: 0;
   place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border: 0;
+  border-radius: 6px;
   background: var(--cds-button-primary, #0f62fe);
   color: var(--cds-text-on-color, #ffffff);
+  cursor: pointer;
+  transition: background 80ms ease;
 }
 
-.bob-chat-send:hover {
+.chat-send:hover:not(:disabled) {
   background: var(--cds-button-primary-hover, #0353e9);
 }
 
-.bob-chat-send:disabled {
-  background: var(--cds-button-disabled, #c6c6c6);
-  color: var(--cds-text-on-color-disabled, #8d8d8d);
+// Not sendable yet (empty prompt) → recede into the field rather than sit there
+// as a filled grey box competing for attention.
+.chat-send:disabled {
+  background: transparent;
+  color: var(--cds-icon-disabled, #c6c6c6);
   cursor: not-allowed;
 }
 
-.bob-chat-error {
-  color: var(--cds-text-error, #da1e28);
+// Composer notices (run error / needs-setup), stacked at the top of the
+// composer above the context. A compact banner: a single summary line, with the
+// raw detail revealed only on demand below it — so it stays small at rest.
+.chat-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 6px;
   font-size: 0.75rem;
   line-height: 1rem;
 }
 
-// The composer footer line — compact assistant/model selectors + token count
-// + send hint, on one row. Replaces the old Carbon-Dropdown harness picker,
-// whose form-field chrome shifted the layout.
-.bob-chat-footer {
+// The one-line summary row: dot · summary · actions, vertically centred.
+.chat-notice__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-notice__text {
+  min-inline-size: 0;
+  flex: 1 1 auto;
+}
+
+.chat-notice__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.chat-notice--error {
+  background: var(--cds-notification-background-error, rgba(218, 30, 40, 0.12));
+  color: var(--cds-text-error, #da1e28);
+}
+
+.chat-notice__dot {
+  flex-shrink: 0;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 2px;
+  background: var(--cds-support-error, #da1e28);
+}
+
+// The raw technical text, shown only when "Details" is expanded — small,
+// monospace, and scroll-capped so a long stderr dump can't grow the composer.
+.chat-notice__detail {
+  max-block-size: 7rem;
+  margin: 0;
+  padding: 0.375rem 0.5rem;
+  overflow: auto;
+  border-radius: 4px;
+  background: var(--cds-layer-01, #f4f4f4);
+  color: var(--cds-text-secondary, #525252);
+  font-family: var(--cds-code-01-font-family, "IBM Plex Mono", monospace);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-notice__action {
+  flex-shrink: 0;
+  padding: 0.125rem 0.375rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-link-primary, #0f62fe);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+
+.chat-notice__action:hover {
+  background: rgba(15, 98, 254, 0.12);
+  text-decoration: underline;
+}
+
+// The composer footer line — the combined assistant/model picker on the left,
+// the inline auto-apply toggle on the right, on one row. The picker label
+// truncates so it can't push the toggle off the line; its popup is portaled.
+.chat-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.25rem 0.5rem;
   padding-block-start: 0.125rem;
   font-size: 0.75rem;
   color: var(--cds-text-helper, #6f6f6f);
 }
 
-.bob-chat-footer__meta {
+// Holds the combined picker; can shrink (min-inline-size: 0) so a long label
+// truncates to keep the Auto-apply toggle on the row.
+.chat-footer__meta {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  flex-wrap: nowrap;
   min-inline-size: 0;
+  flex: 0 1 auto;
+  gap: 0.25rem 0.375rem;
 }
 
-.bob-chat-footer__tokens {
-  white-space: nowrap;
-}
-
-.bob-chat-footer__hint {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.bob-chat-footer__end {
+.chat-footer__end {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -3228,7 +3822,7 @@ select {
 // before applying" option. A compact pill, not a Carbon Toggle (its chrome
 // would dwarf the footer line). The dot reads green when edits apply directly
 // (auto), amber when they're held for review.
-.bob-chat-footer__review {
+.chat-footer__review {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -3242,17 +3836,17 @@ select {
   cursor: pointer;
 }
 
-.bob-chat-footer__review:hover {
+.chat-footer__review:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-chat-footer__review:disabled {
+.chat-footer__review:disabled {
   color: var(--cds-text-disabled, #a8a8a8);
   background: transparent;
   cursor: not-allowed;
 }
 
-.bob-chat-footer__review-dot {
+.chat-footer__review-dot {
   inline-size: 0.5rem;
   block-size: 0.5rem;
   border-radius: 50%;
@@ -3260,25 +3854,24 @@ select {
   flex-shrink: 0;
 }
 
-.bob-chat-footer__review--on .bob-chat-footer__review-dot {
+.chat-footer__review--on .chat-footer__review-dot {
   background: var(--cds-support-warning, #f1c21b);
 }
 
-.bob-chat-footer__review:disabled .bob-chat-footer__review-dot {
+.chat-footer__review:disabled .chat-footer__review-dot {
   background: var(--cds-icon-disabled, #c6c6c6);
 }
 
-// --- The inline popover selector (harness / model) ---
-.bob-footer-menu {
-  position: relative;
+// --- The combined assistant/model picker (composer footer) ---
+.assistant-picker {
   display: inline-flex;
   min-inline-size: 0;
 }
 
-.bob-footer-menu__trigger {
+.assistant-picker__trigger {
   display: inline-flex;
   align-items: center;
-  gap: 0.125rem;
+  gap: 0.1875rem;
   min-inline-size: 0;
   padding: 0.125rem 0.25rem;
   border: 0;
@@ -3289,47 +3882,68 @@ select {
   cursor: pointer;
 }
 
-.bob-footer-menu__trigger:hover {
+.assistant-picker__trigger:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-footer-menu__trigger:disabled {
+.assistant-picker__trigger:disabled {
   color: var(--cds-text-disabled, #a8a8a8);
   background: transparent;
   cursor: not-allowed;
 }
 
-.bob-footer-menu__trigger svg {
+// Truncates when the footer is tight, so it can't push the toggle off the row.
+.assistant-picker__label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.assistant-picker__chevron {
   flex-shrink: 0;
   color: var(--cds-icon-secondary, #525252);
 }
 
-.bob-footer-menu__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.assistant-picker__offline {
+  flex-shrink: 0;
+  fill: var(--cds-text-error, #da1e28);
 }
 
-// Opens UPWARD — the footer sits at the panel's bottom edge.
-.bob-footer-menu__list {
-  position: absolute;
-  inset-block-end: calc(100% + 4px);
-  inset-inline-start: 0;
-  z-index: 20;
-  min-inline-size: 10rem;
-  max-block-size: 14rem;
-  margin: 0;
-  padding: 0.25rem;
+// Portaled to <body> and fixed-positioned in JS (anchored above the trigger,
+// clamped into the viewport) so a long model id can't run off the screen edge.
+.assistant-picker__popover {
+  position: fixed;
+  z-index: 9000;
+  max-block-size: min(22rem, 60vh);
   overflow-y: auto;
-  list-style: none;
+  padding: 0.25rem;
   background: var(--cds-layer-02, #ffffff);
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 6px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
-.bob-footer-menu__item {
-  display: block;
+.assistant-picker__section + .assistant-picker__section {
+  margin-block-start: 0.25rem;
+  padding-block-start: 0.25rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.assistant-picker__heading {
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.assistant-picker__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   inline-size: 100%;
   padding: 0.375rem 0.5rem;
   border: 0;
@@ -3339,22 +3953,67 @@ select {
   font: inherit;
   font-size: 0.8125rem;
   text-align: start;
-  white-space: nowrap;
   cursor: pointer;
 }
 
-.bob-footer-menu__item:hover {
+.assistant-picker__item:hover,
+.assistant-picker__item:focus-visible {
   background: var(--cds-layer-hover-01, #e8e8e8);
+  outline: none;
 }
 
-.bob-footer-menu__item--selected {
+.assistant-picker__item[aria-checked="true"] {
   font-weight: 600;
+}
+
+.assistant-picker__item svg {
+  flex-shrink: 0;
+  fill: var(--cds-icon-primary, #161616);
+}
+
+.assistant-picker__item-label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.assistant-picker__status {
+  flex: 0 0 auto;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--cds-border-strong-01, #8d8d8d);
+}
+
+.assistant-picker__status--online {
+  background: var(--cds-support-success, #24a148);
+}
+
+.assistant-picker__status--offline {
+  background: var(--cds-border-strong-01, #8d8d8d);
+}
+
+.assistant-picker__status--connecting {
+  background: var(--cds-support-warning, #f1c21b);
+  animation: assistant-picker-pulse 1s ease-in-out infinite;
+}
+
+@keyframes assistant-picker-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 // --- Conversation title (chat header) --------------------------------------
 
 // Inline title editor (⋮ Rename / replaces the title while editing).
-.bob-conv-title-input {
+.conv-title-input {
   min-inline-size: 0;
   max-inline-size: 14rem;
   padding: 0.125rem 0.375rem;
@@ -3367,24 +4026,24 @@ select {
   font-weight: 600;
 }
 
-.bob-conv-title-input:focus {
+.conv-title-input:focus {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: -2px;
 }
 
 // Per-conversation ⋮ actions menu.
-.bob-conv-menu {
+.conv-menu {
   position: relative;
   display: inline-flex;
 }
 
-.bob-conv-menu__trigger {
+.conv-menu__trigger {
   inline-size: 1.75rem;
   block-size: 1.75rem;
   color: var(--cds-icon-secondary, #525252);
 }
 
-.bob-conv-menu__list {
+.conv-menu__list {
   position: absolute;
   inset-block-start: calc(100% + 4px);
   z-index: 30;
@@ -3398,15 +4057,15 @@ select {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
-.bob-conv-menu__list--end {
+.conv-menu__list--end {
   inset-inline-end: 0;
 }
 
-.bob-conv-menu__list--start {
+.conv-menu__list--start {
   inset-inline-start: 0;
 }
 
-.bob-conv-menu__item {
+.conv-menu__item {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -3422,42 +4081,42 @@ select {
   cursor: pointer;
 }
 
-.bob-conv-menu__item:hover {
+.conv-menu__item:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-conv-menu__item svg {
+.conv-menu__item svg {
   flex-shrink: 0;
   color: var(--cds-icon-secondary, #525252);
 }
 
-.bob-conv-menu__item--danger {
+.conv-menu__item--danger {
   color: var(--cds-text-error, #da1e28);
 }
 
-.bob-conv-menu__item--danger svg {
+.conv-menu__item--danger svg {
   color: var(--cds-text-error, #da1e28);
 }
 
-.bob-conv-menu__item--danger:hover {
+.conv-menu__item--danger:hover {
   background: var(--cds-button-danger-secondary-hover, #ffd7d9);
 }
 
-// === Sidebar Chat tab: conversation list (reuses .bob-conv-row) ===
-.bob-sidebar-chat {
+// === Sidebar Chat tab: conversation list (reuses .conv-row) ===
+.sidebar-chat {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   padding: 0.25rem;
 }
 
-.bob-sidebar-chat__section {
+.sidebar-chat__section {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.bob-sidebar-chat__section-title {
+.sidebar-chat__section-title {
   margin: 0;
   padding-inline: 0.375rem;
   color: var(--cds-text-helper, #6f6f6f);
@@ -3468,7 +4127,7 @@ select {
   text-transform: uppercase;
 }
 
-.bob-sidebar-chat__list {
+.sidebar-chat__list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -3477,14 +4136,14 @@ select {
   gap: 0.25rem;
 }
 
-.bob-sidebar-chat__empty {
+.sidebar-chat__empty {
   padding: 1rem 0.75rem;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.8125rem;
   line-height: 1.3;
 }
 
-.bob-sidebar-chat__empty p {
+.sidebar-chat__empty p {
   margin: 0;
 }
 
@@ -3495,20 +4154,24 @@ select {
 //
 // The ⋮ button is stacked over the time slot (absolute, anchored end), so the
 // title's overflow:ellipsis works against the row's full width without having
-// to reserve space for either chip. Visibility is row-scoped (`.bob-conv-row`
+// to reserve space for either chip. Visibility is row-scoped (`.conv-row`
 // hover) so hovering anywhere in the row triggers the swap, not just the
 // title button.
-.bob-conv-row {
+.conv-row {
   position: relative;
   display: flex;
   align-items: stretch;
 }
 
-.bob-conv-row__main {
+.conv-row__main {
   display: grid;
+  // A zero-min track so the title can shrink and ellipsize instead of forcing
+  // the row wider than the sidebar.
+  grid-template-columns: minmax(0, 1fr);
   flex: 1 1 auto;
   min-inline-size: 0;
-  padding: 0.5rem 0.625rem;
+  // Trailing room so a truncated title clears the hover ⋮ menu (no per-row time).
+  padding: 0.5rem 1.5rem 0.5rem 0.625rem;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
@@ -3518,19 +4181,13 @@ select {
   cursor: pointer;
 }
 
-.bob-conv-row:hover .bob-conv-row__main,
-.bob-conv-row:focus-within .bob-conv-row__main {
+.conv-row:hover .conv-row__main,
+.conv-row:focus-within .conv-row__main {
   background: var(--cds-layer-hover-02, #e0e0e0);
 }
 
-.bob-conv-row__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.bob-conv-row__title {
+.conv-row__title {
+  min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3538,23 +4195,10 @@ select {
   font-weight: 600;
 }
 
-// Time: visible at rest, hidden when the row is hovered or focused (the ⋮
-// takes its slot then).
-.bob-conv-row__time {
-  flex-shrink: 0;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.6875rem;
-}
-
-.bob-conv-row:hover .bob-conv-row__time,
-.bob-conv-row:focus-within .bob-conv-row__time {
-  visibility: hidden;
-}
-
 // The ⋮ actions menu — wraps the Carbon OverflowMenu — sits absolutely on
 // the trailing edge so it overlaps the (now-hidden) time without reflow.
 // Hidden at rest, shown on hover / focus / when the menu itself is open.
-.bob-conv-row__actions {
+.conv-row__actions {
   position: absolute;
   inset-block-start: 50%;
   inset-inline-end: 0.375rem;
@@ -3564,21 +4208,26 @@ select {
   transition: opacity 120ms ease;
 }
 
-.bob-conv-row:hover .bob-conv-row__actions,
-.bob-conv-row:focus-within .bob-conv-row__actions,
-.bob-conv-row__actions:has([aria-expanded="true"]) {
+.conv-row:hover .conv-row__actions,
+.conv-row:focus-within .conv-row__actions,
+.conv-row__actions:has([aria-expanded="true"]) {
   opacity: 1;
   pointer-events: auto;
 }
 
 // --- Post-delete undo toast ------------------------------------------------
 
-.bob-conv-toast {
+.conv-toast {
+  // Float just above the floating composer (its live height drives the offset)
+  // so the undo prompt stays visible instead of hiding behind the input.
+  position: absolute;
+  inset-inline: 0.75rem;
+  inset-block-end: calc(var(--chat-composer-block, 9rem) + 0.5rem);
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin: 0 0.75rem 0.5rem;
   padding: 0.5rem 0.75rem;
   background: var(--cds-background-inverse, #393939);
   color: var(--cds-text-inverse, #ffffff);
@@ -3587,13 +4236,13 @@ select {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 }
 
-.bob-conv-toast__text {
+.conv-toast__text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.bob-conv-toast__undo {
+.conv-toast__undo {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -3609,11 +4258,101 @@ select {
   cursor: pointer;
 }
 
-.bob-conv-toast__undo:hover {
+.conv-toast__undo:hover {
   background: rgba(255, 255, 255, 0.12);
 }
 
-.bob-comments-panel {
+// --- Self-update prompt ----------------------------------------------------
+// A floating card shown only when an update is available or installing.
+// Bottom-center so it clears the bottom-right toasts.
+.update-banner {
+  position: fixed;
+  inset-block-end: 1rem;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  inline-size: min(92vw, 30rem);
+  padding: 0.75rem 1rem;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  font-size: 0.8125rem;
+}
+
+.update-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.update-banner__text strong {
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+}
+
+.update-banner__text span {
+  color: var(--cds-text-secondary, #525252);
+}
+
+.update-banner__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+  flex: none;
+}
+
+.update-banner__later {
+  border: 0;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.update-banner__later:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.update-banner__primary {
+  border: 0;
+  padding: 0.25rem 0.75rem;
+  background: var(--cds-button-primary, #0f62fe);
+  color: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.update-banner__primary:hover {
+  background: var(--cds-button-primary-hover, #0353e9);
+}
+
+.update-banner__progress {
+  flex: 1;
+  block-size: 4px;
+  max-inline-size: 8rem;
+  margin-inline-start: auto;
+  background: var(--cds-layer-accent-01, #dde1e6);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.update-banner__progress-fill {
+  block-size: 100%;
+  background: var(--cds-button-primary, #0f62fe);
+  transition: inline-size 0.2s ease;
+}
+
+.comments-panel {
   display: flex;
   min-block-size: 0;
   flex-direction: column;
@@ -3622,7 +4361,7 @@ select {
   background: var(--cds-layer-01, #f4f4f4);
 }
 
-.bob-comments-header {
+.comments-header {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -3633,7 +4372,7 @@ select {
   background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-comments-eyebrow {
+.comments-eyebrow {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
   font-weight: 600;
@@ -3641,7 +4380,7 @@ select {
   text-transform: uppercase;
 }
 
-.bob-comments-file {
+.comments-file {
   max-inline-size: 12rem;
   overflow: hidden;
   color: var(--cds-text-primary, #161616);
@@ -3651,7 +4390,7 @@ select {
   white-space: nowrap;
 }
 
-.bob-comments-count {
+.comments-count {
   display: grid;
   inline-size: 1.5rem;
   block-size: 1.5rem;
@@ -3661,36 +4400,36 @@ select {
   font-size: 0.75rem;
 }
 
-.bob-comment-compose,
-.bob-comment-card,
-.bob-comments-empty {
+.comment-compose,
+.comment-card,
+.comments-empty {
   margin: 0.75rem;
   background: var(--cds-layer-02, #ffffff);
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-comment-compose {
+.comment-compose {
   display: grid;
   gap: 0.625rem;
   padding: 0.75rem;
 }
 
-.bob-comment-compose__title,
-.bob-comment-card__meta,
-.bob-comment-send {
+.comment-compose__title,
+.comment-card__meta,
+.comment-send {
   display: flex;
   align-items: center;
   gap: 0.375rem;
 }
 
-.bob-comment-compose__title {
+.comment-compose__title {
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
   font-weight: 600;
 }
 
-.bob-comment-selection,
-.bob-comment-card blockquote {
+.comment-selection,
+.comment-card blockquote {
   margin: 0;
   padding: 0.5rem 0.75rem;
   border-inline-start: 3px solid var(--cds-button-primary, #0f62fe);
@@ -3700,7 +4439,7 @@ select {
   line-height: 1.25rem;
 }
 
-.bob-comment-compose textarea {
+.comment-compose textarea {
   min-block-size: 4.5rem;
   resize: vertical;
   border: 0;
@@ -3713,13 +4452,13 @@ select {
   line-height: 1.25rem;
 }
 
-.bob-comment-compose textarea:focus {
+.comment-compose textarea:focus {
   outline: 2px solid var(--cds-focus, #0f62fe);
   outline-offset: -2px;
 }
 
-.bob-comment-primary,
-.bob-comment-send {
+.comment-primary,
+.comment-send {
   min-block-size: 2rem;
   border: 0;
   background: var(--cds-button-primary, #0f62fe);
@@ -3728,64 +4467,64 @@ select {
   font-weight: 600;
 }
 
-.bob-comment-primary:disabled {
+.comment-primary:disabled {
   background: var(--cds-button-disabled, #c6c6c6);
   color: var(--cds-text-on-color-disabled, #8d8d8d);
   cursor: not-allowed;
 }
 
-.bob-comment-list {
+.comment-list {
   min-block-size: 0;
   overflow: auto;
 }
 
-.bob-comment-card {
+.comment-card {
   display: grid;
   gap: 0.625rem;
   padding: 0.75rem;
 }
 
-.bob-comment-card__meta {
+.comment-card__meta {
   justify-content: space-between;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
 }
 
-.bob-comment-card__state {
+.comment-card__state {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
   color: var(--cds-text-error, #da1e28);
 }
 
-.bob-comment-card p,
-.bob-comment-empty-copy,
-.bob-comments-empty {
+.comment-card p,
+.comment-empty-copy,
+.comments-empty {
   margin: 0;
   color: var(--cds-text-secondary, #525252);
   font-size: 0.8125rem;
   line-height: 1.25rem;
 }
 
-.bob-comment-send {
+.comment-send {
   justify-content: space-between;
   padding-inline: 0.75rem;
 }
 
-.bob-comments-empty {
+.comments-empty {
   padding: 0.75rem;
 }
 
-.bob-comment-compose__actions {
+.comment-compose__actions {
   display: flex;
   gap: 0.5rem;
 }
 
-.bob-comment-compose__actions .bob-comment-primary {
+.comment-compose__actions .comment-primary {
   flex: 1;
 }
 
-.bob-comment-list-header {
+.comment-list-header {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -3801,7 +4540,7 @@ select {
   text-transform: uppercase;
 }
 
-.bob-comment-send--bar {
+.comment-send--bar {
   inline-size: auto;
   gap: 0.375rem;
   padding-inline: 0.625rem;
@@ -3810,7 +4549,7 @@ select {
 }
 
 // De-emphasized send (edit mode) — keep the one filled primary per section.
-.bob-comment-send--ghost {
+.comment-send--ghost {
   inline-size: auto;
   gap: 0.375rem;
   padding-inline: 0.75rem;
@@ -3819,13 +4558,13 @@ select {
   color: var(--cds-button-primary, #0f62fe);
 }
 
-.bob-comment-card__actions {
+.comment-card__actions {
   display: inline-flex;
   align-items: center;
   gap: 0.625rem;
 }
 
-.bob-comment-resolve {
+.comment-resolve {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -3837,20 +4576,20 @@ select {
   cursor: pointer;
 }
 
-.bob-comment-resolve:hover {
+.comment-resolve:hover {
   text-decoration: underline;
 }
 
-.bob-comment-card--resolved {
+.comment-card--resolved {
   opacity: 0.66;
 }
 
-.bob-comment-card--resolved blockquote {
+.comment-card--resolved blockquote {
   border-inline-start-color: var(--cds-border-subtle-02, #c6c6c6);
   background: var(--cds-layer-accent-01, #e8e8e8);
 }
 
-.bob-comment-card__resolved-label {
+.comment-card__resolved-label {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -3859,7 +4598,7 @@ select {
   font-weight: 600;
 }
 
-.bob-comment-card__select {
+.comment-card__select {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -3867,18 +4606,18 @@ select {
   cursor: pointer;
 }
 
-.bob-comment-card__select input {
+.comment-card__select input {
   margin: 0;
   cursor: pointer;
 }
 
-.bob-comment-send:disabled {
+.comment-send:disabled {
   background: var(--cds-button-disabled, #c6c6c6);
   color: var(--cds-text-on-color-disabled, #8d8d8d);
   cursor: not-allowed;
 }
 
-.bob-modal-backdrop {
+.modal-backdrop {
   position: fixed;
   z-index: 1000;
   inset: 0;
@@ -3888,77 +4627,70 @@ select {
   background: rgb(0 0 0 / 38%);
 }
 
-.bob-settings-dialog {
-  inline-size: min(100%, 30rem);
+.settings-dialog {
+  // Track the viewport but cap at 960px (60rem): a settings pane wider than that
+  // just stretches line lengths, and below the cap the 92vw keeps a margin on a
+  // small window instead of going edge-to-edge.
+  inline-size: min(92vw, 60rem);
+  // A flex column at a FIXED height (capped to the viewport): the header stays
+  // pinned and the body (nav + content) fills the rest, with only the content
+  // pane scrolling — so switching agents or tabs never resizes the dialog.
+  display: flex;
+  flex-direction: column;
+  block-size: min(41.25rem, calc(100vh - 4rem));
+  overflow: hidden;
   background: var(--cds-layer-02, #ffffff);
   box-shadow: 0 1rem 4rem rgb(0 0 0 / 22%);
 }
 
-.bob-settings-header {
+.settings-header {
+  // Fixed top row of the flex-column dialog; the body scrolls beneath it.
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 1rem;
+  background: var(--cds-layer-02, #ffffff);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-settings-header h2 {
+.settings-header h2 {
   margin: 0 0 0.5rem;
   font-size: 1rem;
   font-weight: 600;
   line-height: 1.375rem;
 }
 
-.bob-settings-form {
+.settings-form {
   display: grid;
   gap: 1rem;
   padding: 1rem;
 }
 
-.bob-settings-actions {
+.settings-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.bob-settings-runtime .cds--inline-notification__subtitle {
+.settings-runtime .cds--inline-notification__subtitle {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.bob-settings-dialog {
-  // The install log + key form together exceed the original 30rem
-  // viewport on smaller screens. Cap the dialog at ~40rem and let
-  // it scroll internally so the close button + headers stay in
-  // view while a long install log streams below.
-  inline-size: min(100%, 40rem);
-  max-block-size: calc(100vh - 4rem);
-  overflow-y: auto;
-}
-
-// Fixed region for the per-provider detail. Always rendered (content
-// swaps in place per provider) with a reserved height that clears the
-// tallest provider's steady-state content (Bob's install + key form), so
-// switching the AI provider never resizes the panel or shifts the cards
-// above it. Shorter providers (Claude/Codex) simply top-align in the
-// reserved space.
-.bob-settings-provider-detail {
-  min-block-size: 24rem;
-}
-
-.bob-settings-section {
+.settings-section {
   display: grid;
   gap: 0.5rem;
   padding: 1rem;
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-settings-section:last-child {
+.settings-section:last-child {
   border-block-end: 0;
 }
 
-.bob-settings-section h3 {
+.settings-section h3 {
   margin: 0;
   font-size: 0.875rem;
   font-weight: 600;
@@ -3966,14 +4698,29 @@ select {
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-settings-helper {
+.settings-helper {
   margin: 0;
   font-size: 0.75rem;
   line-height: 1.125rem;
   color: var(--cds-text-secondary, #525252);
 }
 
-.bob-settings-install-log {
+// The About pane's informational links — a small wrapped row.
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block-start: 0.5rem;
+}
+
+// A setting that only applies when its parent toggle is on — indented under it.
+.settings-subsetting {
+  margin-inline-start: 0.5rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.settings-install-log {
   margin: 0;
   padding: 0.5rem 0.75rem;
   max-block-size: 14rem;
@@ -3988,27 +4735,454 @@ select {
   overflow-wrap: anywhere;
 }
 
-.bob-settings-install-log__line {
+.settings-install-log__line {
   color: var(--cds-text-secondary, #525252);
 }
 
-.bob-settings-install-log__line--step {
+.settings-install-log__line--step {
   color: var(--cds-text-primary, #161616);
   font-weight: 600;
 }
 
-.bob-settings-install-log__line--stderr {
+.settings-install-log__line--stderr {
   color: var(--cds-support-warning, #b28600);
 }
 
-.bob-setup-page {
+// ----- Settings shell: vertical category rail + content pane -----------------
+.settings-shell {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.settings-nav {
+  flex: 0 0 auto;
+  inline-size: 9.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.75rem 0.5rem;
+  overflow-y: auto;
+}
+
+.settings-nav__item {
+  text-align: start;
+  padding: 0.375rem 0.625rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.settings-nav__item:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.settings-nav__item--active {
+  background: var(--cds-layer-selected-01, #e0e0e0);
+  color: var(--cds-text-primary, #161616);
+  font-weight: 600;
+}
+
+.settings-content {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow-y: auto;
+  border-inline-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+// ----- AI agents registry (list + detail) -----------------------------------
+.agent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+// A uniform navigation row: a full-width <button> with the agent name, any
+// identity/attention pills, and a trailing chevron. The add row shares the box.
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  text-align: start;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cds-layer-01, #f4f4f4);
+  color: inherit;
+  font: inherit;
+}
+
+// The navigable agent rows: a clear background change on hover, no selection
+// outline (the "Default" tag, not a border, marks the current default).
+.agent-row--nav {
+  cursor: pointer;
+}
+
+.agent-row--nav:hover {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.agent-row--skeleton {
+  display: block;
+}
+
+.agent-row__name {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+}
+
+.agent-row__chevron {
+  flex: none;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+// A ready agent reads as a muted green dot + word (used in the detail header).
+.agent-row__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.agent-row__status::before {
+  content: "";
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--agent-status-dot, var(--cds-text-helper, #6f6f6f));
+}
+
+.agent-row__status--success {
+  --agent-status-dot: var(--cds-support-success, #24a148);
+}
+
+.agent-row--add {
+  justify-content: flex-start;
+  color: var(--cds-text-secondary, #525252);
+  border-style: dashed;
+  background: transparent;
+  cursor: pointer;
+}
+
+.agent-row--add:hover {
+  color: var(--cds-text-primary, #161616);
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+// ----- Runtime detail tab ---------------------------------------------------
+// An agent's runtime tab: version + status + install-kind badge, an
+// Update/Install action, the resolved path, and an explicit-path override.
+.runtime-detail__status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.runtime-row__version {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.runtime-detail {
+  margin: 0.75rem 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.runtime-detail dt {
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.runtime-detail__path {
+  margin: 0;
+  font-family: var(--cds-code-01-font-family, "IBM Plex Mono", monospace);
+  font-size: 0.75rem;
+  color: var(--cds-text-primary, #161616);
+  overflow-wrap: anywhere;
+}
+
+.runtime-detail__muted {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-style: italic;
+}
+
+.runtime-detail__saved {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-block-start: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--cds-support-success, #24a148);
+
+  svg {
+    fill: currentColor;
+  }
+}
+
+.agent-detail__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.agent-detail__back:hover {
+  color: var(--cds-text-primary, #161616);
+}
+
+// The detail header: name + live status on the left, the set-default control on
+// the right. A separate title group keeps the name and its status pill together
+// while the default control sits opposite.
+.agent-detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.agent-detail__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+}
+
+.agent-detail__head h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+}
+
+// ----- Collapsible detail sections (Advanced / Runtime) ---------------------
+// A section separated by a single top border, with a full-width toggle row and a
+// rotating chevron. Collapsed by default; matches the surrounding section inset.
+.agent-section {
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+// A bordered `.settings-section` already draws the divider above the first
+// collapsible, so drop its top border to avoid a doubled line.
+.settings-section + .agent-section {
+  border-block-start: 0;
+}
+
+.agent-section__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  inline-size: 100%;
+  padding: 1rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.agent-section__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+}
+
+.agent-section__summary {
+  font-size: 0.75rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.agent-section__chevron {
+  flex: none;
+  color: var(--cds-icon-secondary, #525252);
+  transition: transform 110ms cubic-bezier(0.2, 0, 0.38, 0.9);
+}
+
+.agent-section__chevron--open {
+  transform: rotate(180deg);
+}
+
+.agent-section__body {
+  padding: 0 1rem 1rem;
+}
+
+// The runtime facts inside the Runtime section: a plain stack (the collapsible
+// body owns the inset), not a bordered `.settings-section`.
+.runtime-detail-panel {
+  display: grid;
+  gap: 0.5rem;
+}
+
+// ----- Ollama model manager -------------------------------------------------
+.model-manager__list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  // Cap the height so a machine with many models pulled scrolls the list
+  // instead of stretching the whole settings panel into an endless scroll.
+  max-block-size: 17rem;
+  overflow-y: auto;
+}
+
+.model-manager__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--cds-layer-01, #f4f4f4);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 3px;
+}
+
+.model-manager__meta {
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.model-manager__name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cds-text-primary, #161616);
+  overflow-wrap: anywhere;
+}
+
+.model-manager__detail {
+  font-size: 0.6875rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.model-manager__form {
+  display: grid;
+  gap: 0.5rem;
+  max-inline-size: 24rem;
+}
+
+.model-manager__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.model-manager__suggest {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.model-manager__picks-label {
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+.model-manager__picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.model-manager__pull {
+  display: grid;
+  gap: 0.5rem;
+  max-inline-size: 24rem;
+}
+
+// While Ollama is down, the Models section polls quietly and recovers on its
+// own — no button to press, just this hint.
+.model-manager__checking {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+// ----- Default-model picker -------------------------------------------------
+.model-picker {
+  display: grid;
+  gap: 0.375rem;
+  max-inline-size: 24rem;
+}
+
+// A quiet inline "refresh the discovered list" affordance — a link, not a
+// button, so it doesn't compete with the picker.
+.model-picker__refresh {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-link-primary, #0f62fe);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.model-picker__refresh:hover {
+  text-decoration: underline;
+}
+
+.model-picker__refresh:disabled {
+  color: var(--cds-text-disabled, #c6c6c6);
+  cursor: default;
+  text-decoration: none;
+}
+
+// A saved default that vanished from the discovered list — a soft caution, not
+// an error (it may still work if the provider kept it), so it stays quiet.
+.model-picker__stale {
+  margin-block-start: 0.5rem;
+  max-inline-size: 24rem;
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary, #525252);
+}
+
+// The stacked knobs inside the "Advanced" accordion.
+.agent-advanced {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 22rem;
+}
+
+.setup-page {
   block-size: 100%;
   overflow: auto;
   color: var(--cds-text-primary, #161616);
   background: var(--cds-background, #ffffff);
 }
 
-.bob-onboard {
+.onboard {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   block-size: 100vh;
@@ -4016,52 +5190,133 @@ select {
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-onboard__topbar {
+.onboard__topbar {
+  // An empty strip: it clears the window's overlaid native traffic lights and
+  // is this otherwise chrome-less screen's only window-drag handle.
+  block-size: 2.75rem;
+  -webkit-app-region: drag;
+}
+
+.onboard__stage {
+  // A flex column (not grid place-items: center) so a `--fill` screen can claim
+  // the full stage height with `flex: 1`; a normal short screen still centers.
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.5rem;
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  background: var(--cds-layer-02, #ffffff);
-}
-
-.bob-onboard__brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--cds-text-primary, #161616);
-}
-
-.bob-onboard__mark {
-  display: grid;
-  place-items: center;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-  border-radius: 0.375rem;
-  background: var(--cds-background-inverse, #161616);
-  color: var(--cds-text-on-color, #ffffff);
-}
-
-.bob-onboard__stage {
-  display: grid;
-  place-items: center;
+  justify-content: center;
   padding: 2rem 1.5rem;
   overflow: auto;
 }
 
-.bob-onboard__screen {
+.onboard__screen {
   display: grid;
   gap: 1rem;
   inline-size: min(100%, 34rem);
   text-align: start;
-  animation: bob-onboard-in 220ms ease-out both;
+  animation: onboard-in 220ms ease-out both;
 }
 
-@keyframes bob-onboard-in {
+// "Choose your AI" can outgrow the viewport (the agent grid + the permission
+// toggle), which would push the title and Continue button off-screen. `--fill`
+// claims the full stage height with a fixed head and footer and only the middle
+// scrolling, so the title and primary action stay put; it's also wider than the
+// default 34rem to give the agent grid room for ~3 columns.
+.onboard__screen--fill {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  inline-size: min(100%, 50rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.onboard__screen-head {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.onboard__screen-scroll {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding-inline: 2px;
+}
+
+// The agent picker — a responsive card grid (~3 columns where there's room,
+// fewer when narrow, e.g. Settings). While the readiness probe is in flight a
+// card reads "Checking…" and isn't selectable; the cards themselves render
+// immediately from the catalog so the picker never waits on the probe.
+.harness-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.5rem;
+}
+
+.harness-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.harness-card--selected {
+  border-color: var(--cds-interactive, #0f62fe);
+  background: var(--cds-highlight, #edf5ff);
+}
+
+.harness-card__pick {
+  display: grid;
+  gap: 0.375rem;
+  inline-size: 100%;
+  text-align: start;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.harness-card__pick:disabled {
+  cursor: default;
+}
+
+.harness-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.harness-card__radio {
+  font-size: 0.9rem;
+}
+
+.harness-card__name {
+  font-size: 0.8125rem;
+}
+
+.harness-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.harness-card__desc {
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary, #6f6f6f);
+}
+
+.harness-card__version {
+  font-size: 0.6875rem;
+  color: var(--cds-text-placeholder, #8d8d8d);
+}
+
+@keyframes onboard-in {
   from {
     opacity: 0;
     transform: translateY(0.5rem);
@@ -4072,18 +5327,54 @@ select {
   }
 }
 
-.bob-onboard__hero-mark {
+.onboard__hero-mark {
   display: grid;
   place-items: center;
   inline-size: 3.5rem;
   block-size: 3.5rem;
   border-radius: 1rem;
   margin-block-end: 0.5rem;
-  background: var(--cds-background-inverse, #161616);
-  color: var(--cds-text-on-color, #ffffff);
+  background: #0f1419;
 }
 
-.bob-onboard__eyebrow {
+// Pre-React three-pane skeleton (sidebar | editor | chat), empty but for the
+// pane dividers. The inline copy in index.html ships in the first payload (no
+// FOUC) and covers native startup; this copy styles the React <SplashScreen/>
+// while the boot IPC settles. The column template + divider colour match
+// `.workspace--editor-open.workspace--chat-open` so the real panes' content
+// fills into the same structure with no shift. Keep the two in sync.
+.app-skeleton {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
+  background: var(--cds-background, #ffffff);
+}
+
+.app-skeleton__pane {
+  min-inline-size: 0;
+}
+
+.app-skeleton__pane--sidebar {
+  border-inline-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+}
+
+.app-skeleton__pane--chat {
+  border-inline-start: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+}
+
+@media (max-width: 48rem) {
+  .app-skeleton {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-skeleton__pane--sidebar,
+  .app-skeleton__pane--chat {
+    display: none;
+  }
+}
+
+.onboard__eyebrow {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.0625rem;
@@ -4091,7 +5382,7 @@ select {
   color: var(--cds-text-helper, #6f6f6f);
 }
 
-.bob-onboard__title {
+.onboard__title {
   margin: 0;
   font-size: 2rem;
   font-weight: 600;
@@ -4099,7 +5390,7 @@ select {
   letter-spacing: -0.015em;
 }
 
-.bob-onboard__lead {
+.onboard__lead {
   margin: 0;
   max-inline-size: 32rem;
   color: var(--cds-text-secondary, #525252);
@@ -4107,25 +5398,25 @@ select {
   line-height: 1.5rem;
 }
 
-.bob-onboard__small {
+.onboard__small {
   margin: 0;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.8125rem;
 }
 
-.bob-onboard__cta-row {
+.onboard__cta-row {
   display: flex;
   gap: 0.5rem;
   margin-block-start: 1rem;
 }
 
-.bob-onboard__value-grid {
+.onboard__value-grid {
   display: grid;
   gap: 0.75rem;
   margin-block-start: 0.5rem;
 }
 
-.bob-onboard__value {
+.onboard__value {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.5rem 0.875rem;
@@ -4134,7 +5425,7 @@ select {
   background: var(--cds-layer-02, #ffffff);
 }
 
-.bob-onboard__value-icon {
+.onboard__value-icon {
   display: grid;
   place-items: center;
   inline-size: 2rem;
@@ -4145,33 +5436,33 @@ select {
   grid-row: span 2;
 }
 
-.bob-onboard__value h3 {
+.onboard__value h3 {
   margin: 0;
   font-size: 0.9375rem;
   font-weight: 600;
   line-height: 1.25rem;
 }
 
-.bob-onboard__value p {
+.onboard__value p {
   margin: 0;
   color: var(--cds-text-secondary, #525252);
   font-size: 0.8125rem;
   line-height: 1.25rem;
 }
 
-.bob-onboard__form {
+.onboard__form {
   display: grid;
   gap: 1rem;
   margin-block-start: 0.5rem;
 }
 
-.bob-onboard__folder-actions {
+.onboard__folder-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.bob-onboard__nav {
+.onboard__nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -4179,19 +5470,19 @@ select {
   margin-block-start: 0.5rem;
 }
 
-.bob-onboard__footer {
+.onboard__footer {
   display: flex;
   justify-content: center;
   padding: 1rem 1.5rem 1.5rem;
 }
 
-.bob-onboard__dots {
+.onboard__dots {
   display: flex;
   align-items: center;
   gap: 0.4375rem;
 }
 
-.bob-onboard__dot {
+.onboard__dot {
   inline-size: 0.4375rem;
   block-size: 0.4375rem;
   border-radius: 50%;
@@ -4199,17 +5490,17 @@ select {
   transition: inline-size 150ms ease, background 150ms ease;
 }
 
-.bob-onboard__dot--current {
+.onboard__dot--current {
   inline-size: 1.25rem;
   border-radius: 999px;
   background: var(--cds-button-primary, #0f62fe);
 }
 
-.bob-onboard__dot--past {
+.onboard__dot--past {
   background: var(--cds-text-primary, #161616);
 }
 
-.bob-setup {
+.setup {
   display: grid;
   inline-size: min(100%, 36rem);
   min-block-size: 100%;
@@ -4219,12 +5510,12 @@ select {
   padding: 4rem 1.5rem 3rem;
 }
 
-.bob-setup-hero {
+.setup-hero {
   display: grid;
   gap: 0.5rem;
 }
 
-.bob-setup-eyebrow {
+.setup-eyebrow {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.0625rem;
@@ -4232,7 +5523,7 @@ select {
   color: var(--cds-text-helper, #6f6f6f);
 }
 
-.bob-setup-hero h1 {
+.setup-hero h1 {
   margin: 0;
   font-size: 1.75rem;
   font-weight: 600;
@@ -4241,7 +5532,7 @@ select {
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-setup-hero p {
+.setup-hero p {
   margin: 0;
   max-inline-size: 32rem;
   color: var(--cds-text-secondary, #525252);
@@ -4250,7 +5541,7 @@ select {
 }
 
 
-.bob-setup-steps {
+.setup-steps {
   display: grid;
   gap: 1rem;
   margin: 0;
@@ -4258,7 +5549,7 @@ select {
   list-style: none;
 }
 
-.bob-setup-step {
+.setup-step {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 1rem;
@@ -4268,20 +5559,20 @@ select {
   transition: border-color 120ms ease, opacity 120ms ease;
 }
 
-.bob-setup-step--active {
+.setup-step--active {
   border-color: var(--cds-border-strong, #8d8d8d);
 }
 
-.bob-setup-step--done {
+.setup-step--done {
   border-color: var(--cds-support-success, #24a148);
   background: #f6fcf8;
 }
 
-.bob-setup-step--pending {
+.setup-step--pending {
   opacity: 0.55;
 }
 
-.bob-setup-step__marker {
+.setup-step__marker {
   display: grid;
   place-items: center;
   inline-size: 1.75rem;
@@ -4292,28 +5583,28 @@ select {
   font-feature-settings: "tnum";
 }
 
-.bob-setup-step--active .bob-setup-step__marker {
+.setup-step--active .setup-step__marker {
   background: var(--cds-button-primary, #0f62fe);
   color: var(--cds-text-on-color, #ffffff);
 }
 
-.bob-setup-step--pending .bob-setup-step__marker {
+.setup-step--pending .setup-step__marker {
   background: var(--cds-layer-01, #f4f4f4);
   color: var(--cds-text-helper, #6f6f6f);
 }
 
-.bob-setup-step--done .bob-setup-step__marker {
+.setup-step--done .setup-step__marker {
   background: var(--cds-support-success, #24a148);
   color: var(--cds-text-on-color, #ffffff);
 }
 
-.bob-setup-step__body {
+.setup-step__body {
   display: grid;
   gap: 1rem;
   min-inline-size: 0;
 }
 
-.bob-setup-step__header h2 {
+.setup-step__header h2 {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
@@ -4321,19 +5612,19 @@ select {
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-setup-step__header p {
+.setup-step__header p {
   margin: 0.25rem 0 0;
   color: var(--cds-text-secondary, #525252);
   font-size: 0.8125rem;
   line-height: 1.25rem;
 }
 
-.bob-setup-step__form {
+.setup-step__form {
   display: grid;
   gap: 0.75rem;
 }
 
-.bob-folder-actions {
+.folder-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -4345,112 +5636,126 @@ select {
   // (`editorOpen` / `chatOpen`), and at least one is always present. The grid
   // columns are keyed to the open-pane combination via the two modifier
   // classes so the present children always have matching tracks.
-  .bob-workspace {
+  .workspace {
     grid-template-rows: minmax(0, 1fr);
   }
 
   // editor-only (the resting layout) OR chat-only: sidebar + one pane.
-  .bob-workspace--editor-open,
-  .bob-workspace--chat-open {
+  .workspace--editor-open,
+  .workspace--chat-open {
     grid-template-columns: 15rem minmax(0, 1fr);
   }
 
   // both panes open: sidebar + editor + chat.
-  .bob-workspace--editor-open.bob-workspace--chat-open {
+  .workspace--editor-open.workspace--chat-open {
     grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
   }
 
   // Sidebar collapsed: drop its column entirely. The editor's tab strip
   // owns the traffic-lights inset in that mode (and renders a re-open toggle).
-  .bob-workspace--sidebar-collapsed.bob-workspace--editor-open,
-  .bob-workspace--sidebar-collapsed.bob-workspace--chat-open {
+  .workspace--sidebar-collapsed.workspace--editor-open,
+  .workspace--sidebar-collapsed.workspace--chat-open {
     grid-template-columns: minmax(0, 1fr);
   }
-  .bob-workspace--sidebar-collapsed.bob-workspace--editor-open.bob-workspace--chat-open {
+  .workspace--sidebar-collapsed.workspace--editor-open.workspace--chat-open {
     grid-template-columns: minmax(17rem, 1fr) minmax(18rem, 22rem);
   }
 
-  .bob-sidebar {
+  .sidebar {
     max-block-size: none;
     border-block-end: 0;
   }
 
-  .bob-chat-region {
+  .chat-region {
     border-block-start: 0;
     border-inline-start: 1px solid var(--cds-border-subtle-02, #c6c6c6);
   }
 
-  .bob-document-workspace {
+  .document-workspace {
     // Default: editor takes the full width. The grid only expands
     // to two columns when the user explicitly opens the comments
     // panel via the header toggle (`commentsOpen` state).
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .bob-document-workspace--comments-open {
+  .document-workspace--comments-open {
     grid-template-columns: minmax(0, 1fr) minmax(16rem, 18rem);
   }
 
-  .bob-comments-panel {
+  .comments-panel {
     border-block-start: 0;
     border-inline-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   }
 }
 
 @media (max-width: 47.98rem) {
-  .bob-setup {
+  .setup {
     padding: 2rem 1rem 2rem;
   }
 
-  .bob-pane-header {
+  .pane-header {
     padding-inline: 0.75rem;
   }
 
-  .bob-chat-input-row {
-    grid-template-columns: minmax(0, 1fr) 2.5rem;
-  }
-
-  .bob-chat-input-row .cds--btn {
-    inline-size: 2.5rem;
+  .chat-send {
+    inline-size: 2.25rem;
+    block-size: 2.25rem;
   }
 }
 
-.bob-file-row-wrapper {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+.file-row-wrapper {
+  // The row fills the width; the kebab (and its pre-mount spacer) are layered
+  // over the trailing end, so a long name only loses its tail on hover instead
+  // of always ceding a column to the menu.
+  position: relative;
 }
 
-.bob-file-row-wrapper:hover {
+.file-row-wrapper:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-file-row-wrapper--active {
+.file-row-wrapper--active {
   background: var(--cds-layer-selected-01, #e0e0e0);
 }
 
-.bob-file-row-wrapper .bob-file-row {
+.file-row-wrapper .file-row {
   background: transparent;
 }
 
-.bob-file-row-wrapper .bob-file-row:hover {
+.file-row-wrapper .file-row:hover {
   background: transparent;
 }
 
-.bob-file-row-wrapper .cds--overflow-menu {
+.file-row-wrapper .cds--overflow-menu {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0.25rem;
+  transform: translateY(-50%);
   block-size: 1.75rem;
   inline-size: 1.75rem;
+  // Opaque so it masks the name's tail it sits over on hover.
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  border-radius: 4px;
   opacity: 0;
   transition: opacity 80ms ease;
 }
 
-.bob-file-row-wrapper:hover .cds--overflow-menu,
-.bob-file-row-wrapper--active .cds--overflow-menu,
-.bob-file-row-wrapper .cds--overflow-menu--open {
+.file-row-wrapper:hover .cds--overflow-menu,
+.file-row-wrapper--active .cds--overflow-menu,
+.file-row-wrapper .cds--overflow-menu--open {
   opacity: 1;
 }
 
-.bob-file-tree--empty {
+// Placeholder before the OverflowMenu lazily mounts. Layered like the menu (not
+// in flow) so the name keeps the full width either way.
+.file-row-kebab-spacer {
+  position: absolute;
+  inset-inline-end: 0.25rem;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+}
+
+.file-tree--empty {
   padding: 0.75rem 0.5rem;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.8125rem;
@@ -4459,11 +5764,11 @@ select {
   gap: 0.125rem;
 }
 
-.bob-file-tree--empty p {
+.file-tree--empty p {
   margin: 0;
 }
 
-.bob-conflict-banner {
+.conflict-banner {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -4475,12 +5780,12 @@ select {
   font-size: 0.8125rem;
 }
 
-.bob-conflict-banner__actions {
+.conflict-banner__actions {
   display: inline-flex;
   gap: 0.75rem;
 }
 
-.bob-link-button {
+.link-button {
   background: transparent;
   border: none;
   padding: 0;
@@ -4490,7 +5795,7 @@ select {
   text-decoration: underline;
 }
 
-.bob-link-button:hover {
+.link-button:hover {
   color: var(--cds-link-primary-hover, #0043ce);
 }
 
@@ -4498,18 +5803,18 @@ select {
    The top bar is minimal now — just the Compose name and, pinned right, the
    editor + chat toggles (HeaderGlobalBar). The workspace switcher, New, and
    Settings moved into the sidebar. */
-.bob-app-shell .cds--header__global {
+.app-shell .cds--header__global {
   margin-inline-start: auto;
 }
 
 /* === Editor toolbar: Comments button badge === */
-.bob-tiptap-toolbar__comments-icon {
+.tiptap-toolbar__comments-icon {
   position: relative;
   display: inline-grid;
   place-items: center;
 }
 
-.bob-tiptap-toolbar__comments-badge {
+.tiptap-toolbar__comments-badge {
   position: absolute;
   inset-block-start: -0.375rem;
   inset-inline-start: 0.5rem;
@@ -4527,7 +5832,7 @@ select {
 }
 
 /* === No-workspace welcome (replaces the standalone dashboard) === */
-.bob-no-workspace {
+.no-workspace {
   display: flex;
   flex: 1 1 auto;
   min-block-size: 0;
@@ -4538,7 +5843,7 @@ select {
   background: var(--cds-background, #ffffff);
 }
 
-.bob-no-workspace__card {
+.no-workspace__card {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -4546,7 +5851,7 @@ select {
   max-inline-size: 30rem;
 }
 
-.bob-no-workspace__title {
+.no-workspace__title {
   margin: 0;
   font-size: 1.75rem;
   font-weight: 400;
@@ -4555,27 +5860,27 @@ select {
   color: var(--cds-text-primary, #161616);
 }
 
-.bob-no-workspace__lead {
+.no-workspace__lead {
   margin: 0;
   color: var(--cds-text-secondary, #525252);
   font-size: 0.9375rem;
   line-height: 1.5rem;
 }
 
-.bob-no-workspace__cta {
+.no-workspace__cta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-block-start: 0.25rem;
 }
 
-.bob-no-workspace__recent {
+.no-workspace__recent {
   display: grid;
   gap: 0.5rem;
   margin-block-start: 0.5rem;
 }
 
-.bob-no-workspace__recent-heading {
+.no-workspace__recent-heading {
   margin: 0;
   font-size: 0.875rem;
   font-weight: 600;
@@ -4584,7 +5889,7 @@ select {
   color: var(--cds-text-secondary, #525252);
 }
 
-.bob-no-workspace__recent-list {
+.no-workspace__recent-list {
   display: grid;
   margin: 0;
   padding: 0;
@@ -4592,18 +5897,18 @@ select {
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-no-workspace__recent-row {
+.no-workspace__recent-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.bob-no-workspace__recent-row:hover {
+.no-workspace__recent-row:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
-.bob-no-workspace__recent-open {
+.no-workspace__recent-open {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -4618,7 +5923,7 @@ select {
   min-inline-size: 0;
 }
 
-.bob-no-workspace__recent-icon {
+.no-workspace__recent-icon {
   display: grid;
   place-items: center;
   inline-size: 1.5rem;
@@ -4626,18 +5931,18 @@ select {
   color: var(--cds-icon-secondary, #525252);
 }
 
-.bob-no-workspace__recent-meta {
+.no-workspace__recent-meta {
   display: grid;
   gap: 0.0625rem;
   min-inline-size: 0;
 }
 
-.bob-no-workspace__recent-meta strong {
+.no-workspace__recent-meta strong {
   font-size: 0.875rem;
   font-weight: 600;
 }
 
-.bob-no-workspace__recent-meta span {
+.no-workspace__recent-meta span {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.75rem;
   overflow: hidden;
@@ -4645,7 +5950,7 @@ select {
   white-space: nowrap;
 }
 
-.bob-no-workspace__recent-remove {
+.no-workspace__recent-remove {
   padding: 0.375rem 0.625rem;
   border: 0;
   background: transparent;
@@ -4655,7 +5960,7 @@ select {
   cursor: pointer;
 }
 
-.bob-no-workspace__recent-remove:hover {
+.no-workspace__recent-remove:hover {
   color: var(--cds-text-error, #da1e28);
   text-decoration: underline;
 }

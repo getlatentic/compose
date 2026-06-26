@@ -25,6 +25,10 @@ export interface ConversationMessageRecord {
   content: string;
   traceJson?: string | null;
   statsJson?: string | null;
+  /** Run lifecycle: `"streaming"` while a reply is being written, cleared once
+   * it settles. A reply still `"streaming"` on load means its run never
+   * finished (quit/crash mid-stream) — read as interrupted. */
+  runStatus?: string | null;
   createdAt: number;
 }
 

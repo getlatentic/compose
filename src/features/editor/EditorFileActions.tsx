@@ -68,7 +68,7 @@ export function EditorFileActions({
       : "Show comments";
 
   return (
-    <div className="bob-tiptap-toolbar__file-actions" role="group" aria-label="File">
+    <div className="tiptap-toolbar__file-actions" role="group" aria-label="File">
       <FileButton
         label="Save"
         shortcut="⌘S"
@@ -85,10 +85,10 @@ export function EditorFileActions({
         size="sm"
         flipped
         align="bottom"
-        className="bob-tiptap-toolbar__export"
+        className="tiptap-toolbar__export"
         iconDescription="Export"
         renderIcon={() => (
-          <span className="bob-tiptap-toolbar__export-label">
+          <span className="tiptap-toolbar__export-label">
             Export
             <ChevronDown size={14} aria-hidden />
           </span>
@@ -103,10 +103,10 @@ export function EditorFileActions({
         active={commentsOpen}
         onClick={onToggleComments}
         icon={
-          <span className="bob-tiptap-toolbar__comments-icon">
+          <span className="tiptap-toolbar__comments-icon">
             <MessageSquareText size={ICON_SIZE} />
             {commentCount > 0 ? (
-              <span className="bob-tiptap-toolbar__comments-badge" aria-hidden="true">
+              <span className="tiptap-toolbar__comments-badge" aria-hidden="true">
                 {commentCount > 99 ? "99+" : commentCount}
               </span>
             ) : null}
@@ -146,8 +146,8 @@ function FileButton({
     <button
       type="button"
       className={[
-        "bob-tiptap-toolbar__button",
-        active ? "bob-tiptap-toolbar__button--active" : "",
+        "tiptap-toolbar__button",
+        active ? "tiptap-toolbar__button--active" : "",
       ]
         .filter(Boolean)
         .join(" ")}

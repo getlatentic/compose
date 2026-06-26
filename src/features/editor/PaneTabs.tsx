@@ -1,12 +1,30 @@
-import { memo } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Close, Document } from "@carbon/react/icons";
 import { PanelLeft } from "lucide-react";
-import type { WorkspaceFileBuffer, WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
+import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
+import { useWorkspaceStore } from "../../app/workspaceStore";
+import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
+import { markTabSwitchStart } from "../../lib/perf";
 
-/** A file tab: a workspace file plus its (maybe-unloaded) buffer. */
+/** A file tab: just the workspace file entry. The dirty flag is deliberately
+ * NOT here — it's read per-tab by {@link TabDirtyDot}, so a dirty flip (first
+ * edit / autosave) re-renders only that one dot, not the whole strip. That
+ * keeps the `files` array reference stable across edits and saves. */
 export interface EditorTab {
   entry: WorkspaceFileEntry;
-  buffer: WorkspaceFileBuffer | null;
+}
+
+/**
+ * The unsaved-edit dot for one tab. Self-subscribes to just that file's dirty
+ * flag (a boolean), so the dirty flip on first-edit / autosave re-renders ONLY
+ * this dot — never the tab strip.
+ */
+function TabDirtyDot({ path }: { path: string }) {
+  const dirty = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    return Boolean(ws?.fileContents[path]?.dirty);
+  });
+  return dirty ? <span className="dirty-dot" aria-label="Unsaved" /> : null;
 }
 
 /**
@@ -40,15 +58,38 @@ function PaneTabsInner({
 }) {
   const hasInset = (leadingInsetPx ?? 0) > 0;
   const hasShow = Boolean(onShowSidebar);
+  const onStripMouseDown = useWindowDrag();
+
+  // Keep the active tab in view when it changes or a tab is added — opening a
+  // file from search / the file tree appends a tab off-screen to the right, so
+  // the strip must scroll to reveal it. Keyed on the active path + tab count;
+  // the strip only re-renders on tab open/close/active-change (never per
+  // keystroke), so the effect stays off the editing hot path.
+  const activeTabRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [activeFilePath, files.length]);
+
   if (files.length === 0 && !hasInset && !hasShow) {
     return null;
   }
 
+  // The whole strip is a drag region so the empty space between tabs (and
+  // the trailing area after the last tab) drags the window — matches the
+  // macOS expectation of "any empty title-bar area drags the window". The
+  // `mousedown` handler calls `startDragging()`; it auto-ignores clicks on
+  // any descendant `<button>`, so the tab + close buttons keep working.
   return (
-    <div className="bob-tab-strip" role="tablist" aria-label="Open tabs">
+    <div
+      className="tab-strip"
+      role="tablist"
+      aria-label="Open tabs"
+      data-tauri-drag-region
+      onMouseDown={onStripMouseDown}
+    >
       {hasInset ? (
         <div
-          className="bob-tab-strip__traffic-spacer"
+          className="tab-strip__traffic-spacer"
           data-tauri-drag-region
           style={{ width: `${leadingInsetPx}px` }}
           aria-hidden
@@ -57,7 +98,8 @@ function PaneTabsInner({
       {onShowSidebar ? (
         <button
           type="button"
-          className="bob-tab-strip__sidebar-toggle"
+          className="tab-strip__sidebar-toggle"
+          data-tauri-drag-region="false"
           onClick={onShowSidebar}
           aria-label="Show sidebar"
           title="Show sidebar"
@@ -65,7 +107,7 @@ function PaneTabsInner({
           <PanelLeft size={16} aria-hidden />
         </button>
       ) : null}
-      {files.map(({ entry, buffer }) => {
+      {files.map(({ entry }) => {
         const active = entry.relativePath === activeFilePath;
         const slash = entry.relativePath.lastIndexOf("/");
         const fileName = slash >= 0 ? entry.relativePath.slice(slash + 1) : entry.relativePath;
@@ -73,27 +115,34 @@ function PaneTabsInner({
         return (
           <div
             key={`file:${entry.relativePath}`}
-            className={["bob-editor-tab", active ? "bob-editor-tab--active" : ""]
+            ref={active ? activeTabRef : undefined}
+            className={["editor-tab", active ? "editor-tab--active" : ""]
               .filter(Boolean)
               .join(" ")}
             title={entry.relativePath}
+            data-tauri-drag-region="false"
           >
             <button
               type="button"
               role="tab"
               aria-selected={active}
-              className="bob-tab-button"
-              onClick={() => onSelectFile(entry.relativePath)}
+              className="tab-button"
+              data-tauri-drag-region="false"
+              onClick={() => {
+                markTabSwitchStart();
+                onSelectFile(entry.relativePath);
+              }}
             >
               <Document size={14} />
               <span className="truncate">{fileName}</span>
-              {buffer?.dirty ? <span className="bob-dirty-dot" aria-label="Unsaved" /> : null}
+              <TabDirtyDot path={entry.relativePath} />
             </button>
             <button
               type="button"
               aria-label={`Close ${entry.relativePath}`}
               title={`Close ${fileName}`}
-              className="bob-tab-close"
+              className="tab-close"
+              data-tauri-drag-region="false"
               onClick={() => onCloseFile(entry.relativePath)}
             >
               <Close size={14} />
@@ -106,7 +155,8 @@ function PaneTabsInner({
 }
 
 /**
- * Memoized: the strip only changes when files open, close, become dirty, or
- * the active file changes — never during chat streaming or per-keystroke edits.
+ * Memoized: the strip re-renders only when a tab opens/closes or the active
+ * file changes — never on edits, saves, or dirty flips (those update the
+ * per-tab {@link TabDirtyDot} in isolation).
  */
 export const PaneTabs = memo(PaneTabsInner);

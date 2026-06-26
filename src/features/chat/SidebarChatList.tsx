@@ -62,7 +62,7 @@ export function SidebarChatList() {
 
   if (activeSections.length === 0 && archived.length === 0) {
     return (
-      <div className="bob-sidebar-chat__empty">
+      <div className="sidebar-chat__empty">
         <p>No conversations yet.</p>
         <p>Start one with “New chat”.</p>
       </div>
@@ -70,16 +70,15 @@ export function SidebarChatList() {
   }
 
   return (
-    <div className="bob-sidebar-chat" aria-label="Conversations">
+    <div className="sidebar-chat" aria-label="Conversations">
       {activeSections.map((section) => (
-        <section key={section.group} className="bob-sidebar-chat__section">
-          <h4 className="bob-sidebar-chat__section-title">{section.group}</h4>
-          <ul className="bob-sidebar-chat__list">
+        <section key={section.group} className="sidebar-chat__section">
+          <h4 className="sidebar-chat__section-title">{section.group}</h4>
+          <ul className="sidebar-chat__list">
             {section.conversations.map((conversation) => (
               <ConversationListRow
                 key={conversation.conversationId}
                 conversation={conversation}
-                now={now}
                 onOpen={(id) => void openConversationFromSidebar(id)}
                 actions={makeActions(conversation)}
               />
@@ -91,16 +90,15 @@ export function SidebarChatList() {
         // Collapsed by default so it doesn't clutter the daily browse — the
         // disclosure triangle + count make it obvious the chats are still
         // here, just put aside.
-        <details className="bob-sidebar-chat__archived">
-          <summary className="bob-sidebar-chat__section-title">
+        <details className="sidebar-chat__archived">
+          <summary className="sidebar-chat__section-title">
             Archived ({archived.length})
           </summary>
-          <ul className="bob-sidebar-chat__list">
+          <ul className="sidebar-chat__list">
             {archived.map((conversation) => (
               <ConversationListRow
                 key={conversation.conversationId}
                 conversation={conversation}
-                now={now}
                 onOpen={(id) => void openConversationFromSidebar(id)}
                 actions={makeActions(conversation)}
               />

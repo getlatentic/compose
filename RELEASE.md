@@ -26,9 +26,10 @@ metadata lives in app-data SQLite, never inside the vault.
 
 ## 0. What's already done (the strong core — no action needed)
 
-- [x] Tiptap/ProseMirror editor: WYSIWYG + source toggle, headings, bold,
+- [x] CodeMirror 6 rich editor: WYSIWYG + source toggle, headings, bold,
       italic, strike, inline/block code, lists, tables, task lists, links,
-      images, YAML frontmatter preserved, autosave + conflict detection.
+      images, math, footnotes, YAML frontmatter preserved, autosave + conflict
+      detection. Per-tab state caching (cursor, scroll, undo history).
 - [x] AI agent runner: real streaming (`run_harness_stream`), multi-harness
       (bob/claude/codex), cancel mid-run, tool/file-op cards, usage stats,
       full conversation CRUD.
@@ -53,32 +54,44 @@ metadata lives in app-data SQLite, never inside the vault.
 Without these the app cannot reach a non-technical macOS user cleanly. None of
 these are product work; they're the ship vehicle.
 
-> **⛔ Blocked on the Apple Developer Program ($99/yr) — deferred until enrolled.**
-> Signing, notarization, the auto-updater, and every "verify in the packaged
-> `.app`" pass below all depend on it. (The updater is coupled too: it installs a
-> downloaded `.app`, which macOS quarantines/Gatekeeper-blocks unless it's
-> notarized — so there's no point wiring the updater until signing exists.)
-> Everything *not* in this block is actionable now; see §2–§6.
+> **Apple Developer Program: enrolled** (individual account; Team ID `94SW7AUBMX`,
+> Developer ID Application certificate). **Signing + notarization are wired** — see
+> the first item below. Still gated on that: the **auto-updater** (now unblocked,
+> just not built) and the **clean-machine verification** of a downloaded `.dmg`.
 
-- [ ] **[Apple] Code signing + notarization.** `tauri.conf.json` has no Developer
-      ID identity or entitlements (only `scripts/setup-dev-signing.sh` for local).
-      Unsigned/un-notarized → Gatekeeper blocks first launch. A free Apple ID only
-      does local/ad-hoc signing, which is not distributable; notarization is
-      included in the program (no extra cost).
-  - [ ] Enroll in the Apple Developer Program; create a **Developer ID
-        Application** certificate.
-  - [ ] Add `bundle.macOS` signing identity + hardened-runtime entitlements.
-  - [ ] Wire notarization (notarytool) + stapling into the build/release script.
-  - [ ] Verify a downloaded `.dmg` opens clean on a machine that never built it.
-- [ ] **[Apple] Auto-updater.** No `tauri-plugin-updater`, no `updater` config.
-      How it works: the app checks a static manifest you host (GitHub Releases /
-      S3 — no backend), and if there's a newer version downloads + verifies +
-      swaps the bundle and relaunches. Update artifacts are signed with Tauri's
-      own keypair (`tauri signer generate`) — separate from Apple signing — but
-      the installed bundle still must be Apple-notarized to launch, so this is
-      gated on the item above.
-  - [ ] Add `tauri-plugin-updater` + signing keypair; host an update manifest.
-  - [ ] Add an in-app "update available / restart to update" surface.
+- [~] **[Apple] Code signing + notarization — DONE + Apple-verified; one clean-machine check left.**
+      A full `scripts/build-release.sh` run produced a `.app` **and** `.dmg` both
+      **Accepted by Apple's notary service**, stapled, and Gatekeeper-assessed as
+      `Notarized Developer ID`. Driven entirely by env vars, so no personal identity
+      lives in committed config and dev builds stay unsigned: a release sets
+      `APPLE_SIGNING_IDENTITY` (Tauri signs the app, frameworks and main binary with
+      hardened runtime — its default) plus `APPLE_ID` / `APPLE_PASSWORD` /
+      `APPLE_TEAM_ID`. The script loads `src-tauri/.env.release` (gitignored), runs
+      the build, notarizes the DMG, and verifies signature + Gatekeeper + staple.
+  - [x] Enrolled; **Developer ID Application** certificate installed (Team `94SW7AUBMX`).
+  - [x] Hardened runtime (Tauri default) + bundled-runtime entitlements
+        (`entitlements/runtime.plist`: JIT + unsigned-memory + library-validation
+        exceptions). The bundled `node` / `uv` / `uvx` are Resources Tauri doesn't
+        sign, so `fetch-runtime.sh` signs them with the same Developer ID.
+  - [x] Notarization + stapling of **both** the `.app` (Tauri, automatic) and the
+        `.dmg` (a `build-release.sh` post-step — Tauri only *signs* the DMG wrapper).
+  - [ ] Verify the downloaded `.dmg` opens clean on a machine that never built it.
+- [~] **Auto-updater — wired; arming left.** Plugin, config, capabilities, and
+      the in-app surface are in place: a silent launch check + a manual "Check for
+      updates" in About, a download-progress banner, and relaunch. It reads a
+      static `latest.json` on GitHub Releases (no backend), verifies the signed
+      artifact, swaps the bundle, and relaunches. Notarization (above) is done, so
+      it's unblocked. Files: `tauri-plugin-updater`/`-process`, `plugins.updater`
+      in tauri.conf.json (endpoint set; **pubkey blank until armed**),
+      `capabilities/default.json`, `src/lib/ipc/updater.ts`, `app/store/updaterStore.ts`,
+      `features/updater/UpdateBanner.tsx`. `build-release.sh` emits the signed
+      updater artifacts when `TAURI_SIGNING_PRIVATE_KEY` is set;
+      `make-update-manifest.sh` writes `latest.json`.
+  - [ ] **Arm once:** `pnpm tauri signer generate -w ~/.tauri/compose.key` → paste
+        the PUBLIC key into tauri.conf.json `plugins.updater.pubkey`; put the
+        private key + password in `src-tauri/.env.release` (see the example).
+  - [ ] **Each release:** run `build-release.sh` (key set) → `make-update-manifest.sh`
+        → create GitHub Release `v<version>`, upload `Compose.app.tar.gz` + `latest.json`.
 - [x] **Real README** — replaced the Tauri boilerplate with a proper
       Compose README (what it is, features, dev setup, layout, docs, license).
 - [x] **LICENSE file** — MIT (`LICENSE`), `license: "MIT"` added to
@@ -109,6 +122,24 @@ these are product work; they're the ship vehicle.
       Drive `pnpm tauri build` once: save a real key → send a prompt → confirm a
       real edit lands and review/apply works. This is a verification gap, not
       code.
+- [ ] **Open tabs can vanish, replaced by Welcome.md** (#14). `applyScanResult`
+      prunes `openFilePaths` to whatever the latest scan lists, so a partial or
+      racing scan drops open tabs and the empty-tabs fallback opens `Welcome.md` —
+      reads as lost work. Fix: reconcile tab removal only on a confirmed `removed`
+      fs-event; don't let the Welcome fallback overwrite restored tabs.
+- [x] **Chat survives quit / sleep / app-switch.** A reply was only persisted on
+      completion, so a logout/crash mid-stream left a one-sided conversation with
+      no explanation, and the agent child orphaned (could keep editing files).
+      Now: a `run_status` column + throttled incremental saves keep the partial
+      reply and mark it **interrupted** on next load (a Retry, not a dead
+      "thinking…"); and agent children are cancelled on app exit
+      (`RunnerState::cancel_all` on `ExitRequested`) plus reaped on the next launch
+      via a PID file (`harness::orphan_runs`). App-switch was already safe
+      (`backgroundThrottling: disabled`). (A silence-based stall banner was
+      considered and dropped — it can't tell a long tool call / thinking from a
+      hang, and Stop is always available.) Needs `RunControl::pid()` in
+      agent-harness (rides the `0.4.0-alpha.2` bump). Unit-tested; in-app verify
+      pending.
 
 ## 2a. Onboarding: auto-discover installed harnesses — done
 
@@ -165,6 +196,9 @@ agent-skill export route are deferred (re-open below if wanted).
       multi-page PDF with images/tables. (This is the one unverified step.)
 - [ ] **Tune** if needed after first run: page size/margins (`@page` in
       `html.rs` `PRINT_CSS`), readiness timing (`pdf.rs` poll/timeout).
+- [ ] **Math/LaTeX renders as raw text** (#12) — `$…$` / `$$…$$` aren't typeset;
+      the export HTML has no KaTeX. Render math into the export so PDF/HTML match
+      the editor.
 
 ### 3b. HTML export — done; DOCX deferred
 
@@ -218,6 +252,19 @@ agent-skill export route are deferred (re-open below if wanted).
 - [ ] Optional polish: a discoverable affordance for editor links (⌘-click is
       non-obvious for non-technical users — e.g. a hover hint).
 
+### 3d. Print — implemented (system print panel)
+
+- [x] **File → Print + ⌘P open the macOS print panel** (#13). A native menu item
+      (set at construction, so no menu-bar flash) emits `menu://print`; the editor
+      renders the active document to the same self-contained HTML as the PDF
+      export and runs `NSPrintOperation` on an offscreen `WKWebView`
+      ([`src-tauri/src/export/print.rs`](../src-tauri/src/export/print.rs) +
+      `workspace_print`). The panel offers a real printer **and** "Save as PDF" —
+      not a silent PDF-to-disk. `cargo check` + `tsc` + 547 vitest green.
+- [ ] **Drive it in the packaged `.app`** — confirm ⌘P opens the panel and a page
+      prints / saves as PDF correctly (the `NSPrintOperation` path needs a live
+      AppKit main thread, like the PDF export).
+
 ---
 
 ## 4. P1 — Spec v1 gates not yet demonstrably met
@@ -228,8 +275,8 @@ agent-skill export route are deferred (re-open below if wanted).
 - [~] **Perf baseline.** Correction: the benchmark + `baseline.json` are already
       post-Canvas (ops are `positionMapper*` / `comment*`; no Canvas ops), so the
       gate is meaningful as-is. Re-ran `pnpm bench:baseline` to refresh the
-      numbers on the current machine. (The editor itself is Tiptap-owned; the
-      benchmark covers the comment + coordinate hot paths it relies on, DOM-less.)
+      numbers on the current machine. (The benchmark covers the comment +
+      coordinate hot paths, DOM-less.)
 - [ ] **Metadata export / import / purge UI (spec R12).** Backend pieces exist;
       no user surface to back up or delete all app data. P1 for a trust story
       ("your data, your control"), but can be a thin first cut.
@@ -278,6 +325,22 @@ agent-skill export route are deferred (re-open below if wanted).
       `SetupScreen.tsx` and `DashboardScreen.tsx`; no machine-specific path in
       source. *(Earlier: archived the legacy `vellum-*`/`bob4everyone` branding,
       removed dead `vellum-*` CSS, deleted the stale `src-tauri/Cargo.lock`.)*
+- [~] **Launch latency diagnosed; loading screen reworked.** Instrumented the
+      boot end-to-end (native `run()`/`setup()` marks + JS `markBoot`, both
+      COMPOSE_PERF-gated). The slow *first* launch (~3s) is **native cold-start** —
+      loading the release binary off cold disk (dyld) — **not our code**: the React
+      shell paints in ~250ms, `setup()` is ~14ms, and a warm relaunch is ~770ms.
+      Two levers landed: (1) a size-optimized release profile (`lto = "thin"`,
+      `strip = true` in the root `Cargo.toml`; was a 25 MB **unstripped** binary)
+      so the cold dyld load + signature validation are faster — `workspace-index-wasm`
+      pins `wasm-opt = false` (its cached wasm-opt predates default bulk-memory
+      ops); (2) the brand splash — which only blinked ~130ms before the app and
+      read as a "flash" — is replaced by an empty **three-pane skeleton**
+      (sidebar | editor | chat with dividers, matching the real `.workspace` grid)
+      in `index.html` + `SplashScreen`, so content fills the same structure with no
+      swap. Remaining cold-launch lever: **staple the notarization ticket** (offline
+      Gatekeeper) in `build-release.sh`. Optional follow-up: split the shell bundle
+      (defer non-critical Carbon) to trim the ~250ms first paint.
 
 ---
 
@@ -287,8 +350,8 @@ agent-skill export route are deferred (re-open below if wanted).
 pnpm typecheck        # tsc clean, both tsconfigs
 pnpm test             # vitest, all suites green
 pnpm test:rust        # cargo tests green
-pnpm bench:baseline   # re-baselined on Tiptap, no regression
-pnpm tauri build      # signed + notarized .dmg
+pnpm bench:baseline   # perf baseline, no regression
+bash src-tauri/scripts/build-release.sh   # signed + notarized + stapled .app and .dmg
 ```
 
 Then **drive the packaged `.app`** (a real `.app` proves what tests can't):

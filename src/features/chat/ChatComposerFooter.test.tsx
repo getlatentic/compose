@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { HarnessInfo } from "../../lib/ipc/bobClient";
+import type { HarnessInfo } from "../../lib/ipc/harnessClient";
 import { ChatComposerFooterView } from "./ChatComposerFooter";
 
 function harness(id: string, displayName: string): HarnessInfo {
@@ -18,6 +18,7 @@ function harness(id: string, displayName: string): HarnessInfo {
       supportsEffort: false,
       supportsMaxTurns: false,
       supportsLogin: false,
+      supportsCustomInstructions: false,
     },
   };
 }
@@ -33,29 +34,38 @@ const base = {
   selectedModel: "gpt-5-codex",
   modelLabel: "gpt-5-codex",
   onSelectModel: () => {},
-  tokenLabel: "25.7K tokens",
   disabled: false,
 };
 
 describe("ChatComposerFooterView", () => {
-  it("shows the selected harness, model, token count, and send hint", () => {
+  it("collapses the assistant + model into one label", () => {
     const html = renderToStaticMarkup(<ChatComposerFooterView {...base} />);
-    expect(html).toContain("Codex"); // harness trigger
-    expect(html).toContain("gpt-5-codex"); // model trigger
-    expect(html).toContain("25.7K tokens"); // token count
-    expect(html).toContain("to send"); // the ↵ hint
+    expect(html).toContain("Codex/gpt-5-codex");
   });
 
-  it("omits the model selector when there's nothing to switch among", () => {
+  it("avoids repeating the assistant when the model id already carries it", () => {
     const html = renderToStaticMarkup(
-      <ChatComposerFooterView {...base} modelItems={[]} modelLabel="Default" selectedModel="" />,
+      <ChatComposerFooterView
+        {...base}
+        harnesses={[harness("opencode", "OpenCode")]}
+        selectedHarnessId="opencode"
+        selectedModel="opencode/deepseek-v4-flash-free"
+        modelLabel="opencode/deepseek-v4-flash-free"
+      />,
     );
-    expect(html).not.toContain('aria-label="Model"');
-    // …but the harness selector is always present.
-    expect(html).toContain('aria-label="Assistant"');
+    expect(html).toContain("opencode/deepseek-v4-flash-free");
+    expect(html).not.toContain("OpenCode/opencode/");
   });
 
-  it("disables the selectors mid-run", () => {
+  it("shows just the assistant when there's no model to switch among", () => {
+    const html = renderToStaticMarkup(
+      <ChatComposerFooterView {...base} modelItems={[]} selectedModel="" modelLabel="Default" />,
+    );
+    expect(html).toContain(">Codex<");
+    expect(html).not.toContain("Codex/");
+  });
+
+  it("disables the picker mid-run", () => {
     const html = renderToStaticMarkup(<ChatComposerFooterView {...base} disabled />);
     expect(html).toContain("disabled");
   });
@@ -84,5 +94,14 @@ describe("ChatComposerFooterView", () => {
     );
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain("Review edits");
+  });
+
+  it("marks the picker Offline when the harness is unavailable", () => {
+    const html = renderToStaticMarkup(<ChatComposerFooterView {...base} unavailable />);
+    expect(html).toContain("Offline");
+  });
+
+  it("hides the Offline marker when the harness is available", () => {
+    expect(renderToStaticMarkup(<ChatComposerFooterView {...base} />)).not.toContain("Offline");
   });
 });

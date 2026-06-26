@@ -106,10 +106,28 @@ pub fn workspace_scan(
     }
     let entries = scan_markdown_files(&root)?;
     ensure_vault_metadata(&metadata, &workspace_id, &root)?;
-    let inventory = document_inventory_for_entries(&root, &entries)?;
-    metadata.sync_documents(&workspace_id, inventory)?;
     if let Err(message) = watchers.ensure_watcher(&workspace_id, &root) {
         eprintln!("watcher failed to start for {workspace_id}: {message}");
+    }
+    // Build the content-hash inventory off the scan's critical path. It reads
+    // every note's bytes (`std::fs::read`), which materializes dataless iCloud
+    // files and made a large vault take tens of seconds — but the file tree only
+    // needs the directory walk above. Return the entries now and let the
+    // search/metadata inventory catch up on its own thread.
+    {
+        let app = app.clone();
+        let workspace_id = workspace_id.clone();
+        let root = root.clone();
+        let entries = entries.clone();
+        std::thread::spawn(move || {
+            let metadata = app.state::<MetadataStore>();
+            let inventory = document_inventory_for_entries(&root, &entries);
+            if let Err(error) =
+                metadata.sync_documents_retaining(&workspace_id, inventory.entries, &inventory.skipped)
+            {
+                eprintln!("inventory sync failed for {workspace_id}: {error}");
+            }
+        });
     }
     Ok(entries)
 }
@@ -470,23 +488,44 @@ pub(crate) fn ensure_vault_metadata(
     Ok(())
 }
 
+/// The content-hash inventory plus the paths whose bytes couldn't be read.
+///
+/// A `skipped` path was seen on disk by the scan but failed `std::fs::read` —
+/// the canonical case is an iCloud-dataless note that can't be materialized
+/// on demand (offline, evicted, or removed from iCloud). It is reported, not
+/// dropped, so the sync can keep the document's existing metadata row rather
+/// than mistaking a temporarily un-downloadable file for a deletion.
+pub(crate) struct WorkspaceInventory {
+    pub entries: Vec<DocumentInventoryEntry>,
+    pub skipped: Vec<String>,
+}
+
 pub(crate) fn document_inventory_for_entries(
     root: &Path,
     entries: &[WorkspaceFileEntry],
-) -> Result<Vec<DocumentInventoryEntry>, FileError> {
-    entries
-        .iter()
-        .map(|entry| {
-            let bytes = std::fs::read(root.join(&entry.relative_path))?;
-            Ok(DocumentInventoryEntry {
-                content_hash: db::content_hash_bytes(&bytes),
-                last_seen_mtime: entry.last_modified_ms,
-                last_seen_size: entry.size_bytes,
-                relative_path: entry.relative_path.clone(),
-                title: db::title_from_path(&entry.relative_path),
-            })
-        })
-        .collect()
+) -> WorkspaceInventory {
+    let mut inventory = Vec::with_capacity(entries.len());
+    let mut skipped = Vec::new();
+    for entry in entries {
+        // One unreadable file (dataless iCloud placeholder, permission glitch,
+        // a path that vanished mid-scan) must not abort the whole build — skip
+        // it and carry on, mirroring the rebuild's content loop.
+        let Ok(bytes) = std::fs::read(root.join(&entry.relative_path)) else {
+            skipped.push(entry.relative_path.clone());
+            continue;
+        };
+        inventory.push(DocumentInventoryEntry {
+            content_hash: db::content_hash_bytes(&bytes),
+            last_seen_mtime: entry.last_modified_ms,
+            last_seen_size: entry.size_bytes,
+            relative_path: entry.relative_path.clone(),
+            title: db::title_from_path(&entry.relative_path),
+        });
+    }
+    WorkspaceInventory {
+        entries: inventory,
+        skipped,
+    }
 }
 
 fn workspace_name_for_root(root: &Path) -> String {

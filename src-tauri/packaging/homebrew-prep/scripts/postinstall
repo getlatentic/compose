@@ -1,0 +1,25 @@
+#!/bin/bash
+# Runs as root via macOS Installer (the user authenticates once). Creates and
+# hands the Homebrew prefix to the console user so the *unprivileged* Homebrew
+# installer that follows needs no further sudo. Idempotent.
+#
+# This is the trusted, EDR-friendly replacement for the osascript
+# "with administrator privileges" prep: Installer.app is the privileged actor,
+# so there is no scripting-engine-spawns-root-shell signature to flag.
+set -e
+
+USER_NAME="$(stat -f %Su /dev/console)"
+
+if [ "$(uname -m)" = "arm64" ]; then
+  mkdir -p /opt/homebrew
+  chown -R "$USER_NAME":admin /opt/homebrew
+else
+  # /usr/local is shared on Intel — only create/own Homebrew's own subdirs,
+  # never a blanket chown of /usr/local.
+  for d in bin etc include lib sbin share var opt Cellar Caskroom Frameworks Homebrew; do
+    mkdir -p "/usr/local/$d"
+    chown "$USER_NAME":admin "/usr/local/$d"
+  done
+fi
+
+exit 0

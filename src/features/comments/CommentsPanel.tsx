@@ -66,22 +66,22 @@ export function CommentsPanel({
   const selectedCount = selectedIds.size;
 
   return (
-    <aside className="bob-comments-panel" aria-label="Comments">
-      <div className="bob-comments-header">
+    <aside className="comments-panel" aria-label="Comments">
+      <div className="comments-header">
         <div>
-          <div className="bob-comments-eyebrow">Comments</div>
-          <div className="bob-comments-file">{filePath || "No file selected"}</div>
+          <div className="comments-eyebrow">Comments</div>
+          <div className="comments-file">{filePath || "No file selected"}</div>
         </div>
-        <span className="bob-comments-count">{openComments.length}</span>
+        <span className="comments-count">{openComments.length}</span>
       </div>
 
       {openComments.length > 0 ? (
-        <div className="bob-comment-list-header">
+        <div className="comment-list-header">
           <span>Queue</span>
           {selectedCount > 0 ? (
             <button
               type="button"
-              className="bob-comment-send bob-comment-send--bar"
+              className="comment-send comment-send--bar"
               onClick={() => {
                 onSendComments([...selectedIds]);
                 setSelectedIds(new Set());
@@ -95,9 +95,9 @@ export function CommentsPanel({
         </div>
       ) : null}
 
-      <div className="bob-comment-list">
+      <div className="comment-list">
         {openComments.length === 0 ? (
-          <div className="bob-comments-empty">
+          <div className="comments-empty">
             Highlight text in the editor and choose <strong>Queue</strong> to stage a comment here,
             then batch-send them to the assistant.
           </div>
@@ -105,9 +105,9 @@ export function CommentsPanel({
           openComments.map((comment) => {
             const { resolution } = comment.anchor;
             return (
-              <article className="bob-comment-card" key={comment.id}>
-                <div className="bob-comment-card__meta">
-                  <label className="bob-comment-card__select">
+              <article className="comment-card" key={comment.id}>
+                <div className="comment-card__meta">
+                  <label className="comment-card__select">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(comment.id)}
@@ -116,16 +116,16 @@ export function CommentsPanel({
                     />
                     <span>Select</span>
                   </label>
-                  <div className="bob-comment-card__actions">
+                  <div className="comment-card__actions">
                     {resolution === "resolved" ? null : (
-                      <span className="bob-comment-card__state">
+                      <span className="comment-card__state">
                         <WarningAlt size={14} />
                         {RESOLUTION_LABEL[resolution]}
                       </span>
                     )}
                     <button
                       type="button"
-                      className="bob-comment-resolve"
+                      className="comment-resolve"
                       onClick={() => onResolveComment(comment.id)}
                     >
                       <Checkmark size={14} />
@@ -143,20 +143,20 @@ export function CommentsPanel({
 
       {resolvedComments.length > 0 ? (
         <>
-          <div className="bob-comment-list-header bob-comment-list-header--resolved">
+          <div className="comment-list-header comment-list-header--resolved">
             <span>Resolved ({resolvedComments.length})</span>
           </div>
-          <div className="bob-comment-list">
+          <div className="comment-list">
             {resolvedComments.map((comment) => (
-              <article className="bob-comment-card bob-comment-card--resolved" key={comment.id}>
-                <div className="bob-comment-card__meta">
-                  <span className="bob-comment-card__resolved-label">
+              <article className="comment-card comment-card--resolved" key={comment.id}>
+                <div className="comment-card__meta">
+                  <span className="comment-card__resolved-label">
                     <Checkmark size={14} />
                     Resolved
                   </span>
                   <button
                     type="button"
-                    className="bob-comment-resolve"
+                    className="comment-resolve"
                     onClick={() => onReopenComment(comment.id)}
                   >
                     <Undo size={14} />

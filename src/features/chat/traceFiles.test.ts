@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { TraceEntry } from "../../app/workspaceModel";
-import type { ToolKind } from "../../lib/ipc/bobClient";
+import type { ToolKind } from "../../lib/ipc/harnessClient";
 import { appliedChangeBasenames, fileOpsFromTrace, readFilesFromTrace } from "./traceFiles";
 
 /** A tool trace entry carrying a neutral `kind` (as the harness now supplies)
  * — the routing key these helpers read, independent of the tool's `name`. */
 function tool(
   kind: ToolKind,
-  opts: { id?: string; name?: string; input?: string } = {},
+  opts: { id?: string; name?: string; input?: string; status?: "running" | "done" | "error" } = {},
 ): TraceEntry {
   return {
     kind: "tool",
@@ -16,7 +16,7 @@ function tool(
       id: opts.id ?? kind,
       name: opts.name ?? kind,
       kind,
-      status: "done",
+      status: opts.status ?? "done",
       input: opts.input,
     },
   };
@@ -77,6 +77,33 @@ describe("fileOpsFromTrace", () => {
     expect(fileOpsFromTrace(trace).map((entry) => entry.id)).toEqual(["e1", "e2"]);
   });
 
+  it("folds a failed edit into a later success on the same file (recovery)", () => {
+    // Claude's "File has not been read yet" retry: the first edit errors, the
+    // next one lands. The reader should see the outcome, not the scary fumble.
+    const trace: TraceEntry[] = [
+      tool("edit", { id: "e1", status: "error", input: JSON.stringify({ path: "/a/x.md" }) }),
+      tool("edit", { id: "e2", status: "done", input: JSON.stringify({ path: "/a/x.md" }) }),
+    ];
+    expect(fileOpsFromTrace(trace).map((entry) => entry.id)).toEqual(["e2"]);
+  });
+
+  it("keeps a failed op when nothing later succeeds on that file", () => {
+    const trace: TraceEntry[] = [
+      tool("edit", { id: "e1", status: "error", input: JSON.stringify({ path: "/a/x.md" }) }),
+      // a success on a DIFFERENT file must not rescue x.md's failure
+      tool("write", { id: "w1", status: "done", input: JSON.stringify({ path: "/a/y.md" }) }),
+    ];
+    expect(fileOpsFromTrace(trace).map((entry) => entry.id)).toEqual(["e1", "w1"]);
+  });
+
+  it("keeps a failure that comes AFTER a success on the same file (not a recovery)", () => {
+    const trace: TraceEntry[] = [
+      tool("edit", { id: "e1", status: "done", input: JSON.stringify({ path: "/a/x.md" }) }),
+      tool("edit", { id: "e2", status: "error", input: JSON.stringify({ path: "/a/x.md" }) }),
+    ];
+    expect(fileOpsFromTrace(trace).map((entry) => entry.id)).toEqual(["e1", "e2"]);
+  });
+
   it("suppresses write/edit cards for files an applied diff already covers", () => {
     const trace: TraceEntry[] = [
       // a write_to_file overwrite — the applied diff (which knows the file
@@ -87,6 +114,14 @@ describe("fileOpsFromTrace", () => {
     ];
     const covered = appliedChangeBasenames([{ filePath: "notes/x.md" }]);
     expect(fileOpsFromTrace(trace, covered).map((entry) => entry.id)).toEqual(["e1"]);
+  });
+
+  it("dedupes case-insensitively (a `welcome.md` write vs a `Welcome.md` diff)", () => {
+    const trace: TraceEntry[] = [
+      tool("write", { id: "w1", input: JSON.stringify({ path: "/vault/welcome.md" }) }),
+    ];
+    const covered = appliedChangeBasenames([{ filePath: "Welcome.md" }]);
+    expect(fileOpsFromTrace(trace, covered)).toEqual([]);
   });
 
   it("keeps a card when the op has no resolvable filename to match", () => {
@@ -111,6 +146,11 @@ describe("appliedChangeBasenames", () => {
     ]);
     expect(names.has("x.md")).toBe(true);
     expect(names.has("report.md")).toBe(true);
+  });
+
+  it("lower-cases basenames so a case-mismatched path still matches", () => {
+    const names = appliedChangeBasenames([{ filePath: "notes/Welcome.md" }]);
+    expect(names.has("welcome.md")).toBe(true);
   });
 
   it("returns an empty set for undefined", () => {

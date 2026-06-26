@@ -2,11 +2,11 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Compose",
   "version": "0.0.1-alpha.1",
-  "identifier": "com.compose.app",
+  "identifier": "ai.latentic.compose",
   "build": {
     "beforeDevCommand": "pnpm dev:vite",
     "devUrl": "http://localhost:1421",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "bash src-tauri/scripts/fetch-runtime.sh && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -18,27 +18,51 @@
         "minWidth": 1120,
         "minHeight": 760,
         "backgroundColor": "#ffffff",
+        "backgroundThrottling": "disabled",
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 8, "y": 21 },
+        "decorations": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost http://localhost:1421 ws://localhost:1421 ws://localhost:1423",
+      "csp": null,
       "assetProtocol": {
         "enable": true,
         "scope": []
       }
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/getlatentic/compose/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "binaries/runtime/": "runtime"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "name": "Markdown",
+        "description": "Markdown document",
+        "ext": ["md", "markdown", "mdown", "mkd"],
+        "mimeType": "text/markdown",
+        "role": "Editor",
+        "rank": "Alternate"
+      }
     ]
   }
 }

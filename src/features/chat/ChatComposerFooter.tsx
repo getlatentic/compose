@@ -1,28 +1,36 @@
-import {
-  harnessCapabilitiesOf,
-  useWorkspaceStore,
-  type HarnessRunOptions,
-} from "../../app/workspaceStore";
-import { sumChatThreadStats } from "../../app/workspaceModel";
-import type { HarnessCapabilities, HarnessInfo } from "../../lib/ipc/bobClient";
-import { formatCompact } from "../../lib/format/numbers";
-import { FooterMenu, type FooterMenuItem } from "./FooterMenu";
+import { useCallback, useEffect } from "react";
+import { harnessCapabilitiesOf, type HarnessRunOptions } from "../../app/workspaceStore";
+import { useHarnessStore } from "../../app/store/harnessStore";
+import type { HarnessInfo, HarnessModel } from "../../lib/ipc/harnessClient";
+import { AssistantPickerView, type ModelOption } from "./AssistantPicker";
 
 /**
- * The composer footer line, matching the design: a compact
+ * The composer footer line, a compact
  *
- *   {assistant} ▾  /  {model} ▾  ·  {N} tokens          ↵ to send
+ *   {assistant/model} ▾                                [Auto-apply]
  *
- * row pinned under the input. The assistant + model selectors are
- * {@link FooterMenu} popovers (not Carbon form fields, which shifted the
- * layout). The model selector follows the harness's *capabilities* — shown
- * only when there's something to switch among — exactly like the Settings
- * panel. Renders nothing without a catalog (the browser preview is bob-only).
- *
- * Note: the keyboard hint reads "↵ to send" because the composer sends on
- * plain Enter (Shift+Enter = newline). The mockup's "⌘↵" would require
- * changing that binding.
+ * row pinned under the input. The assistant + model live in a single
+ * {@link AssistantPickerView} — one plain-text label that opens a popup with an
+ * Assistant section and a Model section. The model selector follows the
+ * harness's *capabilities* (shown only when there's something to switch among),
+ * exactly like the Settings panel. Renders nothing without a catalog (the
+ * browser preview only).
  */
+
+type PickerStatus = "online" | "offline" | "connecting";
+
+/** The footer's single label: the model when one is chosen (prefixed with the
+ *  assistant unless the model id already carries it), else just the assistant. */
+function combinedLabel(harnessName: string, modelLabel: string, selectedModel: string): string {
+  if (!selectedModel) {
+    return harnessName;
+  }
+  if (modelLabel.toLowerCase().startsWith(harnessName.toLowerCase())) {
+    return modelLabel;
+  }
+  return `${harnessName}/${modelLabel}`;
+}
+
 export function ChatComposerFooterView({
   harnesses,
   selectedHarnessId,
@@ -31,21 +39,28 @@ export function ChatComposerFooterView({
   selectedModel,
   modelLabel,
   onSelectModel,
-  tokenLabel,
   showReviewToggle = false,
   reviewEdits = false,
   onToggleReviewEdits,
+  unavailable = false,
+  statusById,
+  onOpenPicker,
   disabled = false,
 }: {
   harnesses: HarnessInfo[];
   selectedHarnessId: string;
   onSelectHarness: (id: string) => void;
-  /** Empty → the harness has no model to switch among, so no model selector. */
-  modelItems: FooterMenuItem[];
+  /** Empty → the harness has no model to switch among, so no Model section. */
+  modelItems: ModelOption[];
   selectedModel: string;
   modelLabel: string;
   onSelectModel: (value: string) => void;
-  tokenLabel: string | null;
+  /** The selected harness probed as not-ready → a ⚠️ Offline marker. */
+  unavailable?: boolean;
+  /** Per-agent dot status for the picker, keyed by harness id. */
+  statusById?: Record<string, PickerStatus>;
+  /** The picker opened → lazily (re)probe per-agent statuses. */
+  onOpenPicker?: () => void;
   /** Whether the inline review/auto-apply toggle applies to this harness
    * (only write-capable harnesses go through the edit-review gate). */
   showReviewToggle?: boolean;
@@ -58,58 +73,38 @@ export function ChatComposerFooterView({
     return null;
   }
 
-  const harnessItems = harnesses.map((harness) => ({
-    value: harness.id,
-    label: harness.displayName,
+  const assistants = harnesses.map((harness) => ({
+    id: harness.id,
+    name: harness.displayName,
+    status: statusById?.[harness.id],
   }));
   const selectedHarnessName =
     harnesses.find((harness) => harness.id === selectedHarnessId)?.displayName ?? selectedHarnessId;
+  const label = combinedLabel(selectedHarnessName, modelLabel, selectedModel);
 
   return (
-    <div className="bob-chat-footer">
-      <div className="bob-chat-footer__meta">
-        <FooterMenu
-          label={selectedHarnessName}
-          ariaLabel="Assistant"
-          items={harnessItems}
-          selected={selectedHarnessId}
-          onSelect={onSelectHarness}
+    <div className="chat-footer">
+      <div className="chat-footer__meta">
+        <AssistantPickerView
+          label={label}
+          assistants={assistants}
+          selectedAssistantId={selectedHarnessId}
+          onSelectAssistant={onSelectHarness}
+          models={modelItems}
+          selectedModel={selectedModel}
+          onSelectModel={onSelectModel}
+          unavailable={unavailable}
+          onOpen={onOpenPicker}
           disabled={disabled}
         />
-        {modelItems.length > 0 ? (
-          <>
-            <span className="bob-chat-footer__sep" aria-hidden>
-              /
-            </span>
-            <FooterMenu
-              label={modelLabel}
-              ariaLabel="Model"
-              items={modelItems}
-              selected={selectedModel}
-              onSelect={onSelectModel}
-              disabled={disabled}
-            />
-          </>
-        ) : null}
-        {tokenLabel ? (
-          <>
-            <span className="bob-chat-footer__dot" aria-hidden>
-              ·
-            </span>
-            <span className="bob-chat-footer__tokens">{tokenLabel}</span>
-          </>
-        ) : null}
       </div>
-      <div className="bob-chat-footer__end">
-        {showReviewToggle ? (
+      {showReviewToggle ? (
+        <div className="chat-footer__end">
           <button
             type="button"
             role="switch"
             aria-checked={reviewEdits}
-            className={[
-              "bob-chat-footer__review",
-              reviewEdits ? "bob-chat-footer__review--on" : "",
-            ]
+            className={["chat-footer__review", reviewEdits ? "chat-footer__review--on" : ""]
               .filter(Boolean)
               .join(" ")}
             disabled={disabled}
@@ -120,26 +115,24 @@ export function ChatComposerFooterView({
             }
             onClick={() => onToggleReviewEdits?.(!reviewEdits)}
           >
-            <span className="bob-chat-footer__review-dot" aria-hidden />
+            <span className="chat-footer__review-dot" aria-hidden />
             <span>{reviewEdits ? "Review edits" : "Auto-apply"}</span>
           </button>
-        ) : null}
-        <span className="bob-chat-footer__hint">↵ to send</span>
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/** Build the model selector's options from a harness's capabilities — Default
- * plus any curated models, plus an active custom model not already listed.
- * Empty when there's nothing meaningful to switch among (no curated list and
- * no model set), so the selector hides rather than show a lone "Default". */
-function modelItemsFor(caps: HarnessCapabilities, currentModel: string): FooterMenuItem[] {
-  if (caps.models.length === 0 && !currentModel) {
+/** Build the model selector's options — Default plus the harness's models, plus
+ * an active custom model not already listed. Empty when there's nothing to switch
+ * among (no models and no model set), so the Model section hides. */
+function modelItemsFor(models: HarnessModel[], currentModel: string): ModelOption[] {
+  if (models.length === 0 && !currentModel) {
     return [];
   }
-  const items: FooterMenuItem[] = [{ value: "", label: "Default" }];
-  for (const model of caps.models) {
+  const items: ModelOption[] = [{ value: "", label: "Default" }];
+  for (const model of models) {
     items.push({ value: model.value, label: model.label });
   }
   if (currentModel && !items.some((item) => item.value === currentModel)) {
@@ -148,38 +141,70 @@ function modelItemsFor(caps: HarnessCapabilities, currentModel: string): FooterM
   return items;
 }
 
+/** Status dot for a picker agent. A cached result wins — re-probing a known
+ *  agent keeps its last dot rather than flashing back to "connecting"; only an
+ *  agent with no cached status yet shows the connecting state. */
+function pickerStatusOf(
+  id: string,
+  cache: Record<string, { ready: boolean; at: number }>,
+): PickerStatus {
+  const cached = cache[id];
+  if (!cached) {
+    return "connecting";
+  }
+  return cached.ready ? "online" : "offline";
+}
+
 /**
  * Store-connected footer. Reads the catalog + selected harness + per-harness
- * model option + the conversation's token total, and writes the *same* store
- * state Settings does (`setSelectedHarness` / `setHarnessOptions`), so the two
- * stay in lockstep.
+ * model option, and writes the *same* store state Settings does
+ * (`setSelectedHarness` / `setHarnessOptions`), so the two stay in lockstep.
  */
 export function ChatComposerFooter({ disabled = false }: { disabled?: boolean }) {
-  const harnessCatalog = useWorkspaceStore((state) => state.harnessCatalog);
-  const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
-  const setSelectedHarness = useWorkspaceStore((state) => state.setSelectedHarness);
-  const harnessOptions = useWorkspaceStore((state) => state.harnessOptions);
-  const setHarnessOptions = useWorkspaceStore((state) => state.setHarnessOptions);
-  const chatThread = useWorkspaceStore((state) => state.activeWorkspace()?.chatThread ?? null);
+  const harnessCatalog = useHarnessStore((state) => state.harnessCatalog);
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
+  const harnessOptions = useHarnessStore((state) => state.harnessOptions);
+  const setHarnessOptions = useHarnessStore((state) => state.setHarnessOptions);
+  const reviewEdits = useHarnessStore((state) => state.reviewEdits);
+  const setReviewEdits = useHarnessStore((state) => state.setReviewEdits);
+  const harnessModels = useHarnessStore((state) => state.harnessModels);
+  const loadHarnessModels = useHarnessStore((state) => state.loadHarnessModels);
+  const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
+  const harnessStatusById = useHarnessStore((state) => state.harnessStatusById);
+  const refreshHarnessStatuses = useHarnessStore((state) => state.refreshHarnessStatuses);
+  // Stable so the picker's open-effect fires once per open, not on every render —
+  // an inline arrow re-ran it on each render (re-probing, dot flicker on select).
+  const onOpenPicker = useCallback(() => void refreshHarnessStatuses(), [refreshHarnessStatuses]);
 
   const caps = harnessCapabilitiesOf(harnessCatalog, selectedHarnessId);
+  // Only a *definitive* not-ready probe marks Offline; a not-yet-probed (null)
+  // selection stays unmarked — mirrors the composer's send-gate conservatism so
+  // a slow/failed probe never wrongly flags an available harness.
+  const unavailable = Boolean(selectedHarnessReadiness && !selectedHarnessReadiness.ready);
+  // Harnesses with no curated list discover models live (Ollama/OpenCode/OpenRouter).
+  useEffect(() => {
+    if (caps.models.length === 0) {
+      void loadHarnessModels(selectedHarnessId);
+    }
+  }, [selectedHarnessId, caps.models.length, loadHarnessModels]);
   const options: HarnessRunOptions = harnessOptions[selectedHarnessId] ?? {};
   const currentModel = options.model ?? "";
-  const modelItems = modelItemsFor(caps, currentModel);
+  const models = caps.models.length > 0 ? caps.models : harnessModels[selectedHarnessId] ?? [];
+  const modelItems = modelItemsFor(models, currentModel);
   const modelLabel =
     modelItems.find((item) => item.value === currentModel)?.label ?? (currentModel || "Default");
 
-  const totalTokens = chatThread ? sumChatThreadStats(chatThread).totalTokens : undefined;
-  const tokenLabel = totalTokens ? `${formatCompact(totalTokens)} tokens` : null;
-
-  // The inline review/auto-apply toggle mirrors the *same* per-harness
-  // `reviewEdits` option Settings owns (`setHarnessOptions`), so the two stay
-  // in sync. It shows for write-capable harnesses — the ones that write files
-  // directly (`previews_edits: false` — bob, Claude, Codex) and so run through
-  // the edit-review gate. A harness that previewed its own edits in-stream
-  // would skip the gate, hiding the toggle (none do today).
+  // The inline review/auto-apply toggle mirrors the *same* global `reviewEdits`
+  // setting Settings owns. It shows for write-capable agents — the ones that
+  // write files directly (`previewsEdits: false`) and so run through the
+  // edit-review gate.
   const showReviewToggle = !caps.previewsEdits;
-  const reviewEdits = options.reviewEdits ?? false;
+
+  const statusById: Record<string, PickerStatus> = {};
+  for (const agent of harnessCatalog) {
+    statusById[agent.id] = pickerStatusOf(agent.id, harnessStatusById);
+  }
 
   return (
     <ChatComposerFooterView
@@ -190,10 +215,12 @@ export function ChatComposerFooter({ disabled = false }: { disabled?: boolean })
       selectedModel={currentModel}
       modelLabel={modelLabel}
       onSelectModel={(value) => setHarnessOptions(selectedHarnessId, { model: value || undefined })}
-      tokenLabel={tokenLabel}
       showReviewToggle={showReviewToggle}
       reviewEdits={reviewEdits}
-      onToggleReviewEdits={(next) => setHarnessOptions(selectedHarnessId, { reviewEdits: next })}
+      onToggleReviewEdits={(next) => setReviewEdits(next)}
+      unavailable={unavailable}
+      statusById={statusById}
+      onOpenPicker={onOpenPicker}
       disabled={disabled}
     />
   );

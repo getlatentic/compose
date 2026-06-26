@@ -1,20 +1,82 @@
 import { createRequire } from "node:module";
-import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
+import { defineConfig, type Plugin } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 const host = process.env.TAURI_DEV_HOST;
 const require = createRequire(import.meta.url);
 const workerSafeCharacterDecoder = require.resolve("decode-named-character-reference");
 
+// Resolve the in-repo `ai-editor` workspace package to its TypeScript SOURCE
+// for dev / test / Compose's own build — Vite compiles it inline, so the
+// package's `dist/` (built only for npm publish) need not exist here. External
+// npm consumers get the built `dist/` via the package's `exports` field.
+const aiEditorSource = fileURLToPath(
+  new URL("./packages/rich-editor/src/index.ts", import.meta.url),
+);
+
+// Instrumented build? (react-scan overlay and/or perf marks enabled.) When set
+// we tell esbuild to KEEP function/class names through minification — otherwise
+// every component is renamed to a 2-letter token (`AX`, `gz`) and react-scan's
+// tree + "why did X render" panel is unreadable. Costs a few KB of `__name`
+// helpers, so a normal release build (flags unset) stays fully minified.
+const instrumented =
+  process.env.COMPOSE_REACT_SCAN === "1" || process.env.COMPOSE_PERF === "1";
+
+// react-scan re-render overlay, gated on `COMPOSE_REACT_SCAN=1`.
+//
+// react-scan must install its reconciler hook BEFORE React evaluates, so
+// it has to be the first import in the entry module — a dynamic import
+// can't do that (ESM hoists React above runtime code). This plugin
+// prepends `import "./reactScanInit"` to `src/main.tsx` ONLY when the
+// flag is set. When unset the plugin no-ops, `reactScanInit` is never
+// referenced, and react-scan tree-shakes out entirely (zero bytes).
+function reactScanInjectPlugin(): Plugin {
+  const enabled = process.env.COMPOSE_REACT_SCAN === "1";
+  return {
+    name: "compose:react-scan-inject",
+    enforce: "pre",
+    transform(code, id) {
+      if (!enabled) return null;
+      if (!id.includes("/src/main.tsx")) return null;
+      return { code: `import "./reactScanInit";\n${code}`, map: null };
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [reactScanInjectPlugin(), react()],
+  // Keep component names readable in react-scan / perf marks for instrumented
+  // builds; no effect on a normal release build (see `instrumented` above).
+  esbuild: {
+    keepNames: instrumented,
+  },
   resolve: {
     alias: {
       "decode-named-character-reference": workerSafeCharacterDecoder,
+      "ai-editor": aiEditorSource,
     },
   },
+  // Build-time perf gate — symmetric with the Rust-side
+  // `COMPOSE_DEVTOOLS` env var. A normal release build replaces this
+  // with `false`, so the gated code tree-shakes away and ships zero
+  // bytes. See `docs/perf-spec.md` §3.1.
+  //
+  //   COMPOSE_PERF=1  → `[perf]` console lines + User Timing marks
+  //   (react-scan uses the inject plugin above, not a define constant.)
+  define: {
+    __COMPOSE_PERF__: JSON.stringify(process.env.COMPOSE_PERF === "1"),
+  },
   build: {
+    // Don't even prefetch the lazy editor's heavy vendors (CodeMirror, KaTeX) at
+    // boot — they load when a document opens, keeping the initial parse to the
+    // shell. On a local desktop app the on-open fetch is a disk read.
+    modulePreload: {
+      resolveDependencies(_filename: string, deps: string[]) {
+        return deps.filter((dep) => !/(codemirror|katex)-[A-Za-z0-9_]+\.js$/.test(dep));
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id: string) {
@@ -28,6 +90,19 @@ export default defineConfig(async () => ({
 
           if (id.includes("node_modules/hast-util-to-jsx-runtime")) {
             return "markdown";
+          }
+
+          // Heavy editor-only vendors. Splitting them keeps the lazy-loaded
+          // EditorRegion chunk from pulling them into the initial parse — they
+          // download only when a document opens.
+          if (id.includes("node_modules/@codemirror") || id.includes("node_modules/@lezer")) {
+            return "codemirror";
+          }
+          if (id.includes("node_modules/katex")) {
+            return "katex";
+          }
+          if (id.includes("node_modules/@carbon")) {
+            return "carbon";
           }
 
           return undefined;
@@ -57,18 +132,9 @@ export default defineConfig(async () => ({
       ? {
           protocol: "ws",
           host,
-          // Bumped to 1423 because 1422 is now reserved for the
-          // Rust `bob-api` dev server (started by the dev script).
           port: 1423,
         }
       : undefined,
-    // Forward every bob endpoint to the Rust `bob-api` server on
-    // :1422. Same-origin from the browser's perspective. The
-    // handlers all live in Rust (`crates/bob-core`) — same code
-    // the Tauri prod build runs through `invoke()`.
-    proxy: {
-      "/api/bob": "http://127.0.0.1:1422",
-    },
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],

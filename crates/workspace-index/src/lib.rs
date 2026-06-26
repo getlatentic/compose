@@ -303,18 +303,40 @@ pub fn search_snapshot(
 
     for document in &snapshot.documents {
         let ranges = query_ranges(&document.content, query, &terms);
-        let path_match = ascii_contains(&document.path, query);
-        let title_match = ascii_contains(&document.title, query);
-        if ranges.is_empty() && !path_match && !title_match {
+        let title_match = all_terms_contained(&document.title, query, &terms);
+        let path_match = all_terms_contained(&document.path, query, &terms);
+        // A doc matches when every query term lands in *some* field
+        // (content, title, or path) — this catches a query mixing a
+        // filename word with a body concept (`chapter 02 hcf`), where no
+        // single field holds every term. The cheap field signals and a
+        // single-term content hit decide most queries before the
+        // cross-field scan lowercases the whole body.
+        let single_term_in_content = terms.len() == 1 && !ranges.is_empty();
+        let matched = title_match
+            || path_match
+            || single_term_in_content
+            || all_terms_covered(document, &terms);
+        if !matched {
             continue;
         }
+        // Content ranges stay the dominant signal; a per-term filename
+        // match scores high enough that a filename query surfaces the
+        // file even when none of those words appear in the body.
         let mut score = (ranges.len() as f32) * 10.0;
         if title_match {
-            score += 6.0;
+            score += 8.0;
         }
         if path_match {
-            score += 3.0;
+            score += 4.0;
         }
+        // Typing a filename is a high-precision signal: when the query
+        // reads as a contiguous, in-order run at the *start* of the
+        // basename it must outrank docs that merely accumulate incidental
+        // substring hits (a memo whose body says "Chapter 2", or `02`
+        // landing inside a `2026` path). The boost clears the realistic
+        // content-range ceiling so the named file leads; a mid-name run
+        // earns a smaller, content-comparable bump.
+        score += filename_match_boost(&document.path, &terms);
         hits.push(SearchHit {
             doc_id: document.doc_id.clone(),
             path: document.path.clone(),
@@ -591,10 +613,15 @@ fn parse_markdown_links(
 
 // ---- Search helpers --------------------------------------------------------
 
+/// Split a query into search terms. `_`/`-` are kept so intra-word
+/// punctuation survives (`num_ctx`, `read-me`), but a term carrying *no*
+/// alphanumeric character is dropped: a lone `-` from `Chapter 02 -` would
+/// otherwise be a near-universal substring that inflates every doc's range
+/// count and lets punctuation alone satisfy a match.
 fn query_terms(query: &str) -> Vec<&str> {
     query
         .split(|ch: char| !ch.is_alphanumeric() && ch != '_' && ch != '-')
-        .filter(|term| !term.is_empty())
+        .filter(|term| term.chars().any(char::is_alphanumeric))
         .collect()
 }
 
@@ -602,7 +629,7 @@ fn query_ranges(content: &str, query: &str, terms: &[&str]) -> Vec<SourceRange> 
     let mut ranges = exact_ranges(content, query, 6);
     if ranges.is_empty() {
         for term in terms {
-            for range in exact_ranges(content, term, 3) {
+            for range in term_ranges(content, term, 3) {
                 if ranges.len() >= 6 {
                     break;
                 }
@@ -616,6 +643,18 @@ fn query_ranges(content: &str, query: &str, terms: &[&str]) -> Vec<SourceRange> 
         ranges = ascii_case_insensitive_ranges(content, query, 6);
     }
     ranges
+}
+
+/// Byte ranges of a single term in content, case-insensitively for ASCII
+/// terms (so a `hcf` query still snippets a body `HCF`). ASCII
+/// lowercasing preserves byte offsets; non-ASCII terms stay exact to keep
+/// the returned offsets valid against the original content.
+fn term_ranges(content: &str, term: &str, limit: usize) -> Vec<SourceRange> {
+    if term.is_ascii() {
+        ascii_case_insensitive_ranges(content, term, limit)
+    } else {
+        exact_ranges(content, term, limit)
+    }
 }
 
 fn exact_ranges(content: &str, needle: &str, limit: usize) -> Vec<SourceRange> {
@@ -815,10 +854,113 @@ fn normalize_tag(tag: &str) -> String {
     tag.trim().trim_start_matches('#').to_owned()
 }
 
-fn ascii_contains(haystack: &str, needle: &str) -> bool {
-    haystack
-        .to_ascii_lowercase()
-        .contains(&needle.to_ascii_lowercase())
+/// True when the haystack (a path or title) matches the query the way
+/// content does: every query *term* appears as a case-insensitive
+/// substring. A whole-query substring test would miss filenames whose
+/// words are non-contiguous or reordered (`chapter 02 hcf` vs
+/// `Chapter 02 - Highest common factor…`); the term split is shared with
+/// content scoring via `query_terms`.
+fn all_terms_contained(haystack: &str, query: &str, terms: &[&str]) -> bool {
+    if terms.is_empty() {
+        return false;
+    }
+    let haystack = haystack.to_lowercase();
+    if haystack.contains(&query.to_lowercase()) {
+        return true;
+    }
+    terms
+        .iter()
+        .all(|term| haystack.contains(&term.to_lowercase()))
+}
+
+/// True when every query term appears in at least one of the document's
+/// fields (content, title, or path) — terms may be split across fields,
+/// which catches `chapter 02 hcf` where the path holds the chapter words
+/// and the body holds `hcf`. The body is lowercased once and reused for
+/// all terms; callers gate this behind cheaper field checks so it only
+/// runs for genuinely cross-field queries.
+fn all_terms_covered(document: &IndexedDocument, terms: &[&str]) -> bool {
+    if terms.is_empty() {
+        return false;
+    }
+    let title = document.title.to_lowercase();
+    let path = document.path.to_lowercase();
+    let content = document.content.to_lowercase();
+    terms.iter().all(|term| {
+        let term = term.to_lowercase();
+        title.contains(&term) || path.contains(&term) || content.contains(&term)
+    })
+}
+
+/// Score bump when the query names the file. Both sides are reduced to a
+/// "shape" — lowercased, every run of non-alphanumerics collapsed to one
+/// space — so `Chapter 02 -`, `chapter_02`, and `Chapter   02` all line up
+/// with the basename `Chapter 02 - …`. Matching on the shape's *terms*
+/// also means the trailing `-` and the `02`/`2026` near-misses can't fake
+/// a hit: the run must be contiguous and in order.
+///
+/// A prefix (the query opens the basename) is the strongest "I typed this
+/// file" signal and earns a boost above the content-range ceiling; a run
+/// elsewhere in the name earns a smaller, content-comparable bump.
+fn filename_match_boost(path: &str, terms: &[&str]) -> f32 {
+    if terms.is_empty() {
+        return 0.0;
+    }
+    let needle = shape(&terms.join(" "));
+    if needle.is_empty() {
+        return 0.0;
+    }
+    let haystack = shape(path_basename(path));
+    if haystack == needle || haystack.starts_with(&format!("{needle} ")) {
+        120.0
+    } else if shape_contains_run(&haystack, &needle) {
+        40.0
+    } else {
+        0.0
+    }
+}
+
+/// The filename, extension stripped, for shape comparison.
+fn path_basename(path: &str) -> &str {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.strip_suffix(".md").unwrap_or(name)
+}
+
+/// Lowercased, with every maximal run of non-alphanumeric characters
+/// collapsed to a single ASCII space and the ends trimmed.
+fn shape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut in_gap = false;
+    for ch in value.chars() {
+        if ch.is_alphanumeric() {
+            if in_gap && !out.is_empty() {
+                out.push(' ');
+            }
+            in_gap = false;
+            out.extend(ch.to_lowercase());
+        } else {
+            in_gap = true;
+        }
+    }
+    out
+}
+
+/// True when `needle` appears in `haystack` as a whole-token run: it sits
+/// at a token boundary on both ends, so `chapter 2` does not match inside
+/// `chapter 20`. Both inputs are already `shape`d (single-space delimited).
+fn shape_contains_run(haystack: &str, needle: &str) -> bool {
+    let mut from = 0;
+    while let Some(relative) = haystack[from..].find(needle) {
+        let start = from + relative;
+        let end = start + needle.len();
+        let left_ok = start == 0 || haystack.as_bytes()[start - 1] == b' ';
+        let right_ok = end == haystack.len() || haystack.as_bytes()[end] == b' ';
+        if left_ok && right_ok {
+            return true;
+        }
+        from = start + 1;
+    }
+    false
 }
 
 fn byte_range(start: usize, value: &str) -> SourceRange {
@@ -963,6 +1105,162 @@ mod tests {
             snapshot.frontmatter[0].source_range,
             SourceRange { start: 24, end: 34 }
         );
+    }
+
+    #[test]
+    fn filename_search_is_case_insensitive_and_per_term() {
+        let snapshot = build_snapshot(
+            "workspace-1".to_owned(),
+            vec![
+                document(
+                    "textbook/Chapter 02 - Highest common factor and lowest common multiple.md",
+                    "doc-2",
+                    "# Highest common factor\n\nThe HCF (and the LCM) of two numbers.",
+                ),
+                document(
+                    "textbook/Chapter 03 - Binary numbers.md",
+                    "doc-3",
+                    "# Binary numbers\n\nBase two arithmetic and place value.",
+                ),
+            ],
+            2,
+            0,
+        );
+
+        let finds_chapter_two = |query: &str| {
+            search_snapshot(&snapshot, query, 10)
+                .iter()
+                .any(|hit| hit.doc_id == "doc-2")
+        };
+
+        // Differently-cased, reordered, and non-contiguous terms all
+        // resolve to the file via its path even though "hcf"/"02" never
+        // appear together in the body.
+        assert!(finds_chapter_two("chapter 02"));
+        assert!(finds_chapter_two("CHAPTER 02"));
+        assert!(finds_chapter_two("02 chapter"));
+        assert!(finds_chapter_two("lowest common multiple"));
+        assert!(finds_chapter_two("chapter highest factor"));
+
+        // Cross-field: "chapter 02" lives only in the path, "hcf" only in
+        // the body — neither field alone holds every term.
+        let hits = search_snapshot(&snapshot, "chapter 02 hcf", 10);
+        let hit = hits
+            .iter()
+            .find(|hit| hit.doc_id == "doc-2")
+            .expect("cross-field query should match the chapter");
+        assert!(
+            !hit.ranges.is_empty(),
+            "the body term should still produce a content range for the snippet",
+        );
+    }
+
+    #[test]
+    fn content_relevance_outranks_a_bare_filename_match() {
+        let snapshot = build_snapshot(
+            "workspace-1".to_owned(),
+            vec![
+                document(
+                    "guides/binary.md",
+                    "doc-body",
+                    "Binary is base two. Binary digits are bits; binary math underpins computers.",
+                ),
+                document("topics/Chapter 99 - binary trivia.md", "doc-name", "Misc."),
+            ],
+            2,
+            0,
+        );
+
+        let hits = search_snapshot(&snapshot, "binary", 10);
+        assert_eq!(
+            hits.first().map(|hit| hit.doc_id.as_str()),
+            Some("doc-body"),
+            "a document with repeated content hits should outrank a filename-only match",
+        );
+        assert!(hits.iter().any(|hit| hit.doc_id == "doc-name"));
+    }
+
+    #[test]
+    fn filename_prefix_outranks_incidental_chapter_mentions() {
+        // The reported bug: the memos say "Chapter 2" in prose and live
+        // under a `…-2026` path (so `02` matches inside the year), while
+        // the textbook file's heading reads "Chapter 2:" (not "02"). A
+        // `Chapter 02 -` query must still lead with the file whose *name*
+        // it spells, not the prose hits.
+        let snapshot = build_snapshot(
+            "workspace-1".to_owned(),
+            vec![
+                document(
+                    "textbook/Chapter 02 - Highest common factor and lowest common multiple.md",
+                    "doc-target",
+                    "# Chapter 2: Highest common factor\n\nThe HCF and LCM of two numbers.",
+                ),
+                document(
+                    "archive/version-april-2026/chapter2_update_memo.md",
+                    "doc-memo",
+                    "# Chapter 2 Update Memo\n\nChapter 2 should add an adaptive-learning strand. \
+                     Chapter 2 already covers ITS, knowledge tracing, and personalisation.",
+                ),
+                document(
+                    "archive/version-april-2026/chapter6_revised_evaluation_scaffold.md",
+                    "doc-scaffold",
+                    "# Chapter 6\n\nEvaluation scaffold for chapter 2 alignment, revised 2026.",
+                ),
+            ],
+            3,
+            0,
+        );
+
+        let top_doc = |query: &str| {
+            search_snapshot(&snapshot, query, 10)
+                .first()
+                .map(|hit| hit.doc_id.clone())
+        };
+
+        // The trailing `-` is dropped, not turned into a junk term that
+        // every hyphen-rich memo "matches"; the named file still leads.
+        assert_eq!(top_doc("Chapter 02 -").as_deref(), Some("doc-target"));
+        assert_eq!(top_doc("Chapter 02").as_deref(), Some("doc-target"));
+        assert_eq!(top_doc("chapter 02 highest").as_deref(), Some("doc-target"));
+
+        // `02` inside the memo's `…-2026` path must not, on its own, pull a
+        // memo above the file the query names.
+        let hits = search_snapshot(&snapshot, "Chapter 02", 10);
+        let target_rank = hits.iter().position(|h| h.doc_id == "doc-target");
+        let memo_rank = hits.iter().position(|h| h.doc_id == "doc-memo");
+        assert_eq!(target_rank, Some(0));
+        assert!(
+            memo_rank.map_or(true, |memo| memo > 0),
+            "the year-`2026` `02` substring must not outrank the named file",
+        );
+    }
+
+    #[test]
+    fn punctuation_only_query_terms_are_dropped() {
+        assert_eq!(query_terms("Chapter 02 -"), vec!["Chapter", "02"]);
+        assert_eq!(query_terms("read-me num_ctx"), vec!["read-me", "num_ctx"]);
+        assert!(query_terms("- _ /").is_empty());
+    }
+
+    #[test]
+    fn filename_run_match_respects_token_boundaries() {
+        // `02` is a token in the shaped name, not a substring of `2026`;
+        // the run boost only fires when the query spans whole name tokens.
+        let stem = "chapter 02 - highest";
+        assert!(shape_contains_run(&shape(stem), &shape("chapter 02")));
+        assert!(!shape_contains_run(&shape("version april 2026"), &shape("02")));
+        assert!(!shape_contains_run(&shape("chapter 20 review"), &shape("chapter 2")));
+    }
+
+    #[test]
+    fn whitespace_only_query_matches_nothing() {
+        let snapshot = build_snapshot(
+            "workspace-1".to_owned(),
+            vec![document("note.md", "doc-1", "# Note\n\nBody text.")],
+            1,
+            0,
+        );
+        assert!(search_snapshot(&snapshot, "...", 10).is_empty());
     }
 
     #[test]

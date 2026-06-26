@@ -1,11 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import { Add, TrashCan } from "@carbon/react/icons";
-import {
-  parseFrontmatter,
-  serializeMarkdown,
-  type Frontmatter,
-  type FrontmatterValue,
-} from "../editor/frontmatter";
+import { type Frontmatter, type FrontmatterValue } from "ai-editor";
 
 /**
  * Sidebar Properties section.
@@ -30,36 +25,36 @@ import {
  * editor.
  */
 interface PropertiesPanelProps {
-  markdown: string;
-  onChange: (next: string) => void;
+  /** The active file's parsed frontmatter (stable identity across body edits —
+   * see ActiveFileProperties), or null when the file has none. */
+  frontmatter: Frontmatter | null;
+  /** Commit a new frontmatter object; the caller re-serializes against the live
+   * body. Re-rendering is gated on `frontmatter`, so body edits never reach
+   * this panel. */
+  onCommitFrontmatter: (next: Frontmatter | null) => void;
 }
 
-function PropertiesPanelInner({ markdown, onChange }: PropertiesPanelProps) {
-  const doc = useMemo(() => parseFrontmatter(markdown), [markdown]);
-  const entries = useMemo(() => Object.entries(doc.frontmatter ?? {}), [doc.frontmatter]);
+function PropertiesPanelInner({ frontmatter, onCommitFrontmatter }: PropertiesPanelProps) {
+  const entries = useMemo(() => Object.entries(frontmatter ?? {}), [frontmatter]);
   const [draftKey, setDraftKey] = useState("");
 
-  function commitFrontmatter(next: Frontmatter | null) {
-    onChange(serializeMarkdown({ frontmatter: next, body: doc.body }));
-  }
-
   function setField(key: string, value: FrontmatterValue) {
-    const updated: Frontmatter = { ...(doc.frontmatter ?? {}), [key]: value };
-    commitFrontmatter(updated);
+    const updated: Frontmatter = { ...(frontmatter ?? {}), [key]: value };
+    onCommitFrontmatter(updated);
   }
 
   function removeField(key: string) {
-    if (!doc.frontmatter) return;
-    const updated: Frontmatter = { ...doc.frontmatter };
+    if (!frontmatter) return;
+    const updated: Frontmatter = { ...frontmatter };
     delete updated[key];
-    commitFrontmatter(Object.keys(updated).length === 0 ? null : updated);
+    onCommitFrontmatter(Object.keys(updated).length === 0 ? null : updated);
   }
 
   function addField() {
     const trimmed = draftKey.trim();
     if (!trimmed) return;
     // Don't clobber an existing key; the user can edit it directly.
-    if (doc.frontmatter && trimmed in doc.frontmatter) {
+    if (frontmatter && trimmed in frontmatter) {
       setDraftKey("");
       return;
     }
@@ -68,15 +63,15 @@ function PropertiesPanelInner({ markdown, onChange }: PropertiesPanelProps) {
   }
 
   return (
-    <div className="bob-sidebar-properties">
-      <div className="bob-section-label">
+    <div className="sidebar-properties">
+      <div className="section-label">
         <span>Properties</span>
-        <span className="bob-section-meta">
+        <span className="section-meta">
           {entries.length === 0 ? "Empty" : `${entries.length} field${entries.length === 1 ? "" : "s"}`}
         </span>
       </div>
       {entries.length > 0 ? (
-        <ul className="bob-properties-list">
+        <ul className="properties-list">
           {entries.map(([key, value]) => (
             <PropertyRow
               key={key}
@@ -88,14 +83,14 @@ function PropertiesPanelInner({ markdown, onChange }: PropertiesPanelProps) {
           ))}
         </ul>
       ) : (
-        <p className="bob-properties-empty">
+        <p className="properties-empty">
           No frontmatter on this file. Add a field below to start tracking metadata.
         </p>
       )}
-      <div className="bob-properties-add">
+      <div className="properties-add">
         <input
           aria-label="New property name"
-          className="bob-properties-add__key"
+          className="properties-add__key"
           placeholder="New field name"
           value={draftKey}
           onChange={(event) => setDraftKey(event.target.value)}
@@ -108,7 +103,7 @@ function PropertiesPanelInner({ markdown, onChange }: PropertiesPanelProps) {
         />
         <button
           type="button"
-          className="bob-icon-button"
+          className="icon-button"
           onClick={addField}
           aria-label="Add property"
           title="Add property"
@@ -162,18 +157,18 @@ function PropertyRow({
 
   if (typeof value === "boolean") {
     return (
-      <li className="bob-property-row">
-        <span className="bob-property-row__key">{propertyKey}</span>
+      <li className="property-row">
+        <span className="property-row__key">{propertyKey}</span>
         <input
           type="checkbox"
-          className="bob-property-row__checkbox"
+          className="property-row__checkbox"
           checked={value}
           onChange={(event) => onValueChange(event.target.checked)}
           aria-label={`${propertyKey} toggle`}
         />
         <button
           type="button"
-          className="bob-property-row__remove"
+          className="property-row__remove"
           onClick={onRemove}
           aria-label={`Remove ${propertyKey}`}
           title="Remove field"
@@ -185,10 +180,10 @@ function PropertyRow({
   }
 
   return (
-    <li className="bob-property-row">
-      <span className="bob-property-row__key">{propertyKey}</span>
+    <li className="property-row">
+      <span className="property-row__key">{propertyKey}</span>
       <input
-        className="bob-property-row__input"
+        className="property-row__input"
         value={text}
         onChange={(event) => setText(event.target.value)}
         onFocus={() => setIsFocused(true)}
@@ -206,7 +201,7 @@ function PropertyRow({
       />
       <button
         type="button"
-        className="bob-property-row__remove"
+        className="property-row__remove"
         onClick={onRemove}
         aria-label={`Remove ${propertyKey}`}
         title="Remove field"

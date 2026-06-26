@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, InlineNotification, SkeletonText, Tag, Toggle } from "@carbon/react";
-import { useWorkspaceStore } from "../../app/workspaceStore";
+import { Button, InlineNotification, Tag, Toggle } from "@carbon/react";
+import { useHarnessStore } from "../../app/store/harnessStore";
 import {
+  harnessDiscover,
   harnessInstall,
   harnessList,
   harnessLogin,
-  harnessReadiness,
   type HarnessInfo,
   type HarnessReadiness,
-} from "../../lib/ipc/bobClient";
+} from "../../lib/ipc/harnessClient";
+import { agentStatus, statusTagType } from "./agentStatus";
 
 /**
  * The AI-assistant ("harness") picker.
@@ -31,11 +32,11 @@ interface HarnessRow {
 }
 
 /**
- * The harness to recommend as the default, chosen from what discovery
- * actually found — the agent that works *right now* (ready, zero setup),
- * else one that's installed (just needs sign-in / a key), else the first
- * registered harness (which has an install path). No hardcoded id, so a
- * machine with Claude ready isn't told to use bob.
+ * The harness to recommend as the default, in catalog (registration) order: the
+ * first that works *right now* (ready), else the first installed (needs sign-in /
+ * a key), else the first registered. The registry's declared order *is* the
+ * preference — reorder `compose_registry` to change it — so there's no separate
+ * priority list to drift.
  */
 function suggestedDefaultId(rows: HarnessRow[]): string | null {
   return (
@@ -47,18 +48,19 @@ function suggestedDefaultId(rows: HarnessRow[]): string | null {
 }
 
 export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefault?: boolean } = {}) {
-  const selectedHarnessId = useWorkspaceStore((state) => state.selectedHarnessId);
-  const setSelectedHarness = useWorkspaceStore((state) => state.setSelectedHarness);
-  const allowEdits = useWorkspaceStore((state) => state.allowEdits);
-  const setAllowEdits = useWorkspaceStore((state) => state.setAllowEdits);
-  // Re-probe drivers: when the user saves a Bob API key or (re)installs
-  // a CLI elsewhere in Settings, the stored status changes and the
-  // badges must reflect it without reopening the panel.
-  const bobAuthStatus = useWorkspaceStore((state) => state.bobAuthStatus);
-  const bobInstallStatus = useWorkspaceStore((state) => state.bobInstallStatus);
+  const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
+  const setSelectedHarness = useHarnessStore((state) => state.setSelectedHarness);
+  const allowEdits = useHarnessStore((state) => state.allowEdits);
+  const setAllowEdits = useHarnessStore((state) => state.setAllowEdits);
+  // Re-probe driver: when the user saves an API key or (re)installs a CLI
+  // elsewhere in Settings, the selected harness's stored readiness changes and
+  // the badges must reflect it without reopening the panel.
+  const selectedHarnessReadiness = useHarnessStore((state) => state.selectedHarnessReadiness);
 
   const [rows, setRows] = useState<HarnessRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  // True while the readiness probe is in flight. The agent cards render
+  // immediately from the catalog; this only gates the "Checking…" badges.
+  const [probing, setProbing] = useState(true);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [signingInId, setSigningInId] = useState<string | null>(null);
   const [installLog, setInstallLog] = useState<string[]>([]);
@@ -75,26 +77,29 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
     setSelectedHarness(id);
   };
 
-  async function refresh(options?: { quiet?: boolean }) {
-    // A re-probe after a key save shouldn't flash skeletons over an
-    // already-populated list — only the first load shows the spinner.
-    if (!options?.quiet) {
-      setLoading(true);
-    }
+  async function refresh() {
     setError(null);
+    setProbing(true);
     try {
+      // Show the agents IMMEDIATELY from the catalog (fast — no shelling out), so
+      // the picker never blocks on the readiness probe. Preserve any readiness
+      // from a previous pass so a re-probe doesn't blank the badges.
       const list = await harnessList();
-      // Probe readiness in parallel — each is an async (off-thread)
-      // command, and one failing shouldn't sink the rest.
-      const withReadiness = await Promise.all(
-        list.map(async (info) => ({
+      setRows((prev) =>
+        list.map((info) => ({
           info,
-          readiness: await harnessReadiness(info.id).catch(() => null),
+          readiness: prev.find((row) => row.info.id === info.id)?.readiness ?? null,
         })),
       );
+      // The slower part: probe every harness's readiness, then fill the badges in.
+      const discovered = await harnessDiscover();
+      const withReadiness = list.map((info) => ({
+        info,
+        readiness: discovered.find((r) => r.harnessId === info.id) ?? null,
+      }));
       setRows(withReadiness);
-      // Onboarding only: land the first-time user on the agent discovery
-      // suggests, so they can accept it with one click. Once.
+      // Onboarding only: land the first-time user on the discovery-suggested
+      // default, so they can accept it with one click. Once.
       if (autoSuggestDefault && !autoSuggestedRef.current && !userPickedRef.current) {
         const suggested = suggestedDefaultId(withReadiness);
         if (suggested) {
@@ -105,19 +110,17 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load AI assistants");
     } finally {
-      setLoading(false);
+      setProbing(false);
     }
   }
 
-  // Probe on mount (with the skeleton), then re-probe quietly whenever
-  // Bob's stored auth or install status changes — e.g. the moment the
-  // user saves an API key below, Bob flips "Needs sign-in" → "Ready"
-  // without having to close and reopen Settings.
-  const probedOnce = useRef(false);
+  // Probe on mount, then re-probe whenever the selected harness's stored
+  // readiness changes — e.g. the moment the user saves an API key below, its
+  // badge flips "Add a key" → "Ready" without reopening Settings. The cards stay
+  // put (rendered from the catalog); only the badges refresh.
   useEffect(() => {
-    void refresh({ quiet: probedOnce.current });
-    probedOnce.current = true;
-  }, [bobAuthStatus, bobInstallStatus]);
+    void refresh();
+  }, [selectedHarnessReadiness]);
 
   useEffect(() => {
     if (logRef.current) {
@@ -180,115 +183,92 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
   const suggestedId = suggestedDefaultId(rows);
 
   return (
-    <div className="bob-settings-section">
-      <p className="bob-settings-helper">
-        {loading
-          ? "Checking your computer for AI assistants you already have…"
+    <div className="settings-section">
+      <p className="settings-helper">
+        {probing
+          ? "Checking your computer for the AI assistants you already have…"
           : "Choose which AI Compose works with. You can change this anytime."}
       </p>
 
-      {loading ? (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "0.5rem" }} aria-hidden>
-          {[0, 1, 2].map((i) => (
+      <ul className="harness-grid">
+        {rows.map(({ info, readiness }) => {
+          const selected = info.id === selectedHarnessId;
+          // Until the probe lands, a card reads "Checking…" and isn't selectable —
+          // agentStatus(null) would otherwise report a definite (wrong) status.
+          const checking = probing && !readiness;
+          const status = checking ? null : agentStatus(info, readiness);
+          return (
             <li
-              key={i}
-              style={{ border: "1px solid #e0e0e0", borderRadius: 4, padding: "0.75rem" }}
+              key={info.id}
+              className={selected ? "harness-card harness-card--selected" : "harness-card"}
             >
-              <SkeletonText heading width="35%" />
-              <SkeletonText width="80%" />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <ul className="bob-harness-list" style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "0.5rem" }}>
-          {rows.map(({ info, readiness }) => {
-            const selected = info.id === selectedHarnessId;
-            const ready = readiness?.ready ?? false;
-            const installed = readiness?.installed ?? false;
-            return (
-              <li
-                key={info.id}
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "0.5rem",
-                  border: `1px solid ${selected ? "#0f62fe" : "#e0e0e0"}`,
-                  borderRadius: 4,
-                  padding: "0.625rem 0.75rem",
-                  background: selected ? "#edf5ff" : "transparent",
-                }}
+              <button
+                type="button"
+                className="harness-card__pick"
+                onClick={() => pickHarness(info.id)}
+                aria-pressed={selected}
+                disabled={checking}
               >
-                <button
-                  type="button"
-                  onClick={() => pickHarness(info.id)}
-                  aria-pressed={selected}
-                  style={{
-                    flex: 1,
-                    display: "grid",
-                    gap: "0.25rem",
-                    textAlign: "start",
-                    background: "transparent",
-                    border: 0,
-                    cursor: "pointer",
-                    font: "inherit",
-                    color: "inherit",
-                  }}
-                >
-                  <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <span aria-hidden style={{ fontSize: "0.9rem" }}>{selected ? "●" : "○"}</span>
-                    <strong style={{ fontSize: "0.8125rem" }}>{info.displayName}</strong>
-                    {info.id === suggestedId ? (
-                      <Tag size="sm" type="blue">Recommended</Tag>
-                    ) : null}
-                    {ready ? (
-                      <Tag size="sm" type="green">Ready</Tag>
-                    ) : installed ? (
-                      <Tag size="sm" type="warm-gray">Needs sign-in</Tag>
-                    ) : info.requiresInstall ? (
-                      <Tag size="sm" type="warm-gray">Not installed</Tag>
-                    ) : (
-                      <Tag size="sm" type="warm-gray">Add a key</Tag>
-                    )}
+                <span className="harness-card__head">
+                  <span aria-hidden className="harness-card__radio">
+                    {selected ? "●" : "○"}
                   </span>
-                  <span style={{ fontSize: "0.75rem", color: "#6f6f6f" }}>{info.description}</span>
-                  {readiness?.version ? (
-                    <span style={{ fontSize: "0.6875rem", color: "#8d8d8d" }}>{readiness.version}</span>
+                  <strong className="harness-card__name">{info.displayName}</strong>
+                </span>
+                <span className="harness-card__badges">
+                  {info.id === suggestedId && !checking ? (
+                    <Tag size="sm" type="blue">
+                      Recommended
+                    </Tag>
                   ) : null}
-                </button>
-                {info.requiresInstall && !installed ? (
-                  <Button
-                    size="sm"
-                    kind="tertiary"
-                    disabled={installingId !== null}
-                    onClick={() => void handleInstall(info.id)}
-                  >
-                    {installingId === info.id ? "Installing…" : "Install"}
-                  </Button>
-                ) : installed && !ready && info.capabilities.supportsLogin ? (
-                  <Button
-                    size="sm"
-                    kind="tertiary"
-                    disabled={signingInId !== null}
-                    onClick={() => void handleSignIn(info.id)}
-                  >
-                    {signingInId === info.id ? "Signing in…" : "Sign in"}
-                  </Button>
+                  {checking ? (
+                    <Tag size="sm" type="warm-gray">
+                      Checking…
+                    </Tag>
+                  ) : (
+                    <Tag size="sm" type={statusTagType(status!.tone)}>
+                      {status!.label}
+                    </Tag>
+                  )}
+                </span>
+                <span className="harness-card__desc">{info.description}</span>
+                {readiness?.version ? (
+                  <span className="harness-card__version">{readiness.version}</span>
                 ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+              </button>
+              {status?.action === "install" ? (
+                <Button
+                  size="sm"
+                  kind="tertiary"
+                  disabled={installingId !== null}
+                  onClick={() => void handleInstall(info.id)}
+                >
+                  {installingId === info.id ? "Installing…" : "Install"}
+                </Button>
+              ) : status?.action === "signIn" ? (
+                <Button
+                  size="sm"
+                  kind="tertiary"
+                  disabled={signingInId !== null}
+                  onClick={() => void handleSignIn(info.id)}
+                >
+                  {signingInId === info.id ? "Signing in…" : "Sign in"}
+                </Button>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
 
       {installLog.length > 0 ? (
         <pre
           ref={logRef}
-          className="bob-settings-install-log"
+          className="settings-install-log"
           aria-label="Setup progress"
           aria-live="polite"
         >
           {installLog.map((line, i) => (
-            <div key={i} className="bob-settings-install-log__line">
+            <div key={i} className="settings-install-log__line">
               {line}
             </div>
           ))}
@@ -321,7 +301,7 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
           toggled={allowEdits}
           onToggle={(checked) => setAllowEdits(checked)}
         />
-        <p className="bob-settings-helper">
+        <p className="settings-helper">
           Only in your workspace folder — never anywhere else on your computer.{" "}
           {selectedPreviewsEdits
             ? "Proposed edits wait for your approval before they apply."

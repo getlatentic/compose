@@ -1,4 +1,4 @@
-use rusqlite::{params, types::Type, Connection, OptionalExtension, Transaction};
+use rusqlite::{params, types::Type, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -314,13 +314,29 @@ impl MetadataStore {
         vault_id: &str,
         entries: Vec<DocumentInventoryEntry>,
     ) -> Result<(), String> {
+        self.sync_documents_retaining(vault_id, entries, &[])
+    }
+
+    /// Sync the scanned inventory, but treat `retained_paths` as still present
+    /// even though they carry no fresh inventory row this pass.
+    ///
+    /// These are files the scan saw on disk yet couldn't read (an iCloud note
+    /// that wouldn't materialize, a permission glitch). Their existing metadata
+    /// row is left exactly as it was — neither re-hashed nor marked deleted —
+    /// so a transient read failure never erases a real document's search data.
+    pub fn sync_documents_retaining(
+        &self,
+        vault_id: &str,
+        entries: Vec<DocumentInventoryEntry>,
+        retained_paths: &[String],
+    ) -> Result<(), String> {
         validate_storage_id(vault_id, "vault id")?;
         let now = now_ms();
         let mut connection = self.vault_connection(vault_id)?;
         let transaction = connection
             .transaction()
             .map_err(|error| format!("could not start document sync transaction: {error}"))?;
-        let mut seen_paths = Vec::with_capacity(entries.len());
+        let mut seen_paths = Vec::with_capacity(entries.len() + retained_paths.len());
 
         for entry in entries {
             validate_relative_metadata_path(&entry.relative_path)?;
@@ -328,6 +344,7 @@ impl MetadataStore {
             upsert_document(&transaction, &entry, None, None, now)
                 .map_err(|error| format!("could not upsert document metadata: {error}"))?;
         }
+        seen_paths.extend(retained_paths.iter().cloned());
 
         mark_missing_documents_deleted(&transaction, &seen_paths, now)
             .map_err(|error| format!("could not mark missing documents deleted: {error}"))?;
@@ -658,17 +675,19 @@ impl MetadataStore {
             .map_err(|error| format!("could not save LLM user message: {error}"))?;
 
         for item in request.context_items {
+            // The document may not be registered yet — the search index builds in
+            // the background (and may not have run when the first message is sent),
+            // or the file was only scanned, never edited in Compose. The context's
+            // value to the agent is the snapshot + path (carried in the prompt), not
+            // this version linkage — so store what resolves and leave doc_id /
+            // revision null rather than failing the whole send.
             let doc_id = document_id_for_path(&transaction, &item.file_path)
-                .map_err(|error| format!("could not resolve LLM context document: {error}"))?
-                .ok_or_else(|| {
-                    format!(
-                        "{} is not registered in document metadata; scan the workspace before sending context",
-                        item.file_path
-                    )
-                })?;
-            let revision_id = latest_revision_id_for_doc(&transaction, &doc_id)
-                .map_err(|error| format!("could not resolve document revision: {error}"))?
-                .ok_or_else(|| format!("{} has no recorded document revision", item.file_path))?;
+                .map_err(|error| format!("could not resolve LLM context document: {error}"))?;
+            let revision_id = match doc_id.as_deref() {
+                Some(id) => latest_revision_id_for_doc(&transaction, id)
+                    .map_err(|error| format!("could not resolve document revision: {error}"))?,
+                None => None,
+            };
             let source_range_json = optional_json(&item.source_range)?;
             let anchor_json = optional_json(&item.anchor)?;
 
@@ -939,15 +958,13 @@ impl MetadataStore {
 
     fn app_connection(&self) -> Result<Connection, String> {
         let paths = self.paths()?;
-        Connection::open(paths.app_db_path)
-            .map_err(|error| format!("could not open app metadata db: {error}"))
+        open_connection(&paths.app_db_path)
     }
 
     fn vault_connection(&self, vault_id: &str) -> Result<Connection, String> {
         let db_path = self.vault_db_path(vault_id)?;
         migrate_vault_database(&db_path)?;
-        Connection::open(db_path)
-            .map_err(|error| format!("could not open vault metadata db: {error}"))
+        open_connection(&db_path)
     }
 
     fn vault_db_path(&self, vault_id: &str) -> Result<PathBuf, String> {
@@ -1074,13 +1091,33 @@ fn byte_range_to_indices(text: &str, range: &SourceRange) -> Result<(usize, usiz
     Ok((start, end))
 }
 
+/// Open a SQLite connection tuned for Compose's concurrent access. `busy_timeout`
+/// makes a call wait for a brief writer lock instead of failing with "database
+/// is locked"; WAL lets reads proceed while a write is in flight.
+fn open_connection(db_path: &Path) -> Result<Connection, String> {
+    let mut connection = Connection::open(db_path)
+        .map_err(|error| format!("could not open metadata db: {error}"))?;
+    connection
+        .execute_batch(
+            "pragma busy_timeout = 5000;
+             pragma journal_mode = wal;
+             pragma synchronous = normal;
+             pragma foreign_keys = on;",
+        )
+        .map_err(|error| format!("could not configure metadata db: {error}"))?;
+    // Default writes to BEGIN IMMEDIATE so a read-then-write transaction takes
+    // the write lock up front instead of upgrading mid-transaction. The upgrade
+    // is what deadlocks two concurrent writers into "database is locked" —
+    // busy_timeout retries a blocked BEGIN, but not a blocked lock upgrade.
+    connection.set_transaction_behavior(TransactionBehavior::Immediate);
+    Ok(connection)
+}
+
 fn migrate_global_database(db_path: &Path) -> Result<(), String> {
-    let connection = Connection::open(db_path)
-        .map_err(|error| format!("could not open app metadata db: {error}"))?;
+    let connection = open_connection(db_path)?;
     connection
         .execute_batch(
             "
-            pragma journal_mode = wal;
             create table if not exists vaults (
               vault_id text primary key,
               display_name text not null,
@@ -1123,12 +1160,10 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("could not create vault metadata dir: {error}"))?;
     }
-    let connection = Connection::open(db_path)
-        .map_err(|error| format!("could not open vault metadata db: {error}"))?;
+    let connection = open_connection(db_path)?;
     connection
         .execute_batch(
             "
-            pragma journal_mode = wal;
             create table if not exists documents (
               doc_id text primary key,
               current_path text not null,
@@ -1252,6 +1287,7 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
               content text not null,
               trace_json text,
               stats_json text,
+              run_status text,
               created_at integer not null
             );
             create index if not exists idx_conversation_messages_thread
@@ -1891,6 +1927,66 @@ mod tests {
         }
     }
 
+    // Reproduce the chat-send write pattern: many conversations created
+    // concurrently, each racing its first-message `save_conversation` against a
+    // `record_llm_thread` on the SAME vault DB (both fire near-simultaneously in
+    // `runSendChatPrompt`). A silently-failed save strands a 0-message "zombie"
+    // hidden from the sidebar — the reported bug.
+    #[test]
+    fn concurrent_send_writes_never_zombie_a_conversation() {
+        use std::sync::{Arc, Mutex};
+        use std::thread;
+
+        let (_dir, store, vault) = synced_store();
+        let store = Arc::new(store);
+        let errors = Arc::new(Mutex::new(Vec::<String>::new()));
+
+        let handles: Vec<_> = (0..24)
+            .map(|i| {
+                let store = Arc::clone(&store);
+                let errors = Arc::clone(&errors);
+                thread::spawn(move || {
+                    let conv = match store.new_conversation(vault, "ollama") {
+                        Ok(id) => id,
+                        Err(e) => return errors.lock().unwrap().push(format!("new[{i}]: {e}")),
+                    };
+                    let racer = {
+                        let store = Arc::clone(&store);
+                        thread::spawn(move || {
+                            store.record_llm_thread(LlmThreadRecordRequest {
+                                context_items: Vec::new(),
+                                prompt: format!("hello {i}"),
+                                workspace_id: vault.to_owned(),
+                            })
+                        })
+                    };
+                    let msg = ConversationMessageRecord {
+                        message_id: format!("m{i}"),
+                        role: "user".to_owned(),
+                        content: format!("hello {i}"),
+                        trace_json: None,
+                        stats_json: None,
+                        run_status: None,
+                        created_at: 0,
+                    };
+                    if let Err(e) = store.save_conversation(vault, &conv, vec![msg], Vec::new()) {
+                        errors.lock().unwrap().push(format!("save[{i}]: {e}"));
+                    }
+                    let _ = racer.join();
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        let errs = errors.lock().unwrap().clone();
+        let convos = store.list_conversations(vault, true).expect("list");
+        let zombies = convos.iter().filter(|c| c.message_count == 0).count();
+        assert!(errs.is_empty(), "concurrent vault writes failed: {errs:?}");
+        assert_eq!(zombies, 0, "{zombies} of {} conversations are 0-message zombies", convos.len());
+    }
+
     fn synced_store() -> (tempfile::TempDir, MetadataStore, &'static str) {
         let dir = tempdir().expect("temp dir");
         let store = MetadataStore::default();
@@ -1956,6 +2052,46 @@ mod tests {
         assert_eq!(
             paths,
             vec!["notes/a.md".to_owned(), "notes/b.md".to_owned()]
+        );
+    }
+
+    #[test]
+    fn retained_path_is_not_deleted_when_its_content_was_unreadable() {
+        let (_dir, store, vault_id) = synced_store();
+        let before = doc_id_for_test(&store, vault_id, "notes/a.md");
+
+        // A rebuild whose scan still saw `notes/a.md` but couldn't read its
+        // bytes (dataless iCloud note): it carries no fresh inventory row, only
+        // a retained path. The document must survive untouched.
+        store
+            .sync_documents_retaining(vault_id, Vec::new(), &["notes/a.md".to_owned()])
+            .expect("retaining sync");
+
+        assert_eq!(
+            store
+                .document_ids_by_path(vault_id)
+                .expect("doc ids")
+                .get("notes/a.md")
+                .cloned(),
+            Some(before),
+            "a retained (unreadable) path must keep its live metadata row"
+        );
+    }
+
+    #[test]
+    fn plain_sync_deletes_a_path_the_scan_no_longer_sees() {
+        let (_dir, store, vault_id) = synced_store();
+
+        store
+            .sync_documents(vault_id, Vec::new())
+            .expect("empty sync");
+
+        assert!(
+            !store
+                .document_ids_by_path(vault_id)
+                .expect("doc ids")
+                .contains_key("notes/a.md"),
+            "a genuinely absent path must be marked deleted"
         );
     }
 
@@ -2077,15 +2213,18 @@ mod tests {
     }
 
     #[test]
-    fn rejects_llm_context_for_unknown_document() {
+    fn stores_llm_context_for_unknown_document_without_failing() {
+        // An unregistered context file (the background index hasn't run yet, or a
+        // scanned-but-unedited file) must NOT fail the send — the snapshot is what
+        // the agent uses; the doc/revision linkage is best-effort, left null.
         let (_dir, store, vault_id) = synced_store();
-        let error = store
+        store
             .record_llm_thread(LlmThreadRecordRequest {
                 context_items: vec![LlmContextSnapshotRequest {
                     anchor: None,
                     file_path: "notes/missing.md".to_owned(),
                     kind: "file".to_owned(),
-                    selected_text_snapshot: None,
+                    selected_text_snapshot: Some("snippet".to_owned()),
                     source_comment_id: None,
                     source_range: None,
                     surrounding_context_snapshot: None,
@@ -2093,9 +2232,7 @@ mod tests {
                 prompt: "Summarize".to_owned(),
                 workspace_id: vault_id.to_owned(),
             })
-            .expect_err("missing document context must fail");
-
-        assert!(error.contains("is not registered in document metadata"));
+            .expect("an unregistered context document must not fail the send");
     }
 
     #[test]

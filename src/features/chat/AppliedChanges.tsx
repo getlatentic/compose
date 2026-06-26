@@ -1,5 +1,6 @@
 import type { WorkspaceAppliedChange } from "../../app/workspaceModel";
 import { ChangePreview } from "../diff/ChangePreview";
+import { computeUnifiedDiff } from "../diff/lineDiff";
 
 /**
  * The file changes a `snapshot`-mode run already made on disk, shown under its
@@ -14,17 +15,24 @@ export function AppliedChanges({
   changes: WorkspaceAppliedChange[];
   onOpenDocument: (path: string) => void;
 }) {
+  // A "rewrite" whose before/after produce no line diff is a no-op write (a
+  // model re-saving identical content) — an "Edited · No textual changes" card
+  // for it is noise, so drop it. Creates and deletes always show.
+  const visible = changes.filter((change) => !isNoOpRewrite(change));
+  if (visible.length === 0) {
+    return null;
+  }
   return (
-    <div className="bob-applied-list" aria-label="Changes the assistant made">
-      {changes.map((change, index) => (
-        <article className="bob-applied" key={`${change.filePath}-${index}`}>
-          <header className="bob-applied__header">
-            <span className={`bob-applied__badge bob-applied__badge--${change.kind}`}>
+    <div className="applied-list" aria-label="Changes the assistant made">
+      {visible.map((change, index) => (
+        <article className="applied" key={`${change.filePath}-${index}`}>
+          <header className="applied__header">
+            <span className={`applied__badge applied__badge--${change.kind}`}>
               {appliedLabel(change.kind)}
             </span>
             <button
               type="button"
-              className="bob-applied__path"
+              className="applied__path"
               onClick={() => onOpenDocument(change.filePath)}
             >
               {change.filePath}
@@ -46,6 +54,16 @@ function appliedLabel(kind: WorkspaceAppliedChange["kind"]): string {
     case "rewrite":
       return "Edited";
   }
+}
+
+/** A rewrite that produced no textual change (identical before/after at the line
+ * level) — mirrors UnifiedDiff's empty-diff condition. A previewless change
+ * (large/binary, no text to diff) is never treated as a no-op. */
+function isNoOpRewrite(change: WorkspaceAppliedChange): boolean {
+  if (change.kind !== "rewrite" || change.previewOmitted) {
+    return false;
+  }
+  return computeUnifiedDiff(change.originalText ?? "", change.newText ?? "").hunks.length === 0;
 }
 
 /** Map a change to the before/after sides + omitted-card info `ChangePreview` wants. */

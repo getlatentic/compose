@@ -14,3 +14,10 @@ workspace-index = { path = "../workspace-index" }
 wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# The cached wasm-opt predates Rust's now-default bulk-memory ops (`memory.copy`)
+# and rejects the module without `--enable-bulk-memory`. This wasm is a few KB
+# and only powers the browser-preview search index (the packaged app uses the
+# native index), so skip the extra opt pass rather than pin a newer wasm-opt.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

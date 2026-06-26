@@ -1,4 +1,4 @@
-import type { ToolKind } from "../../lib/ipc/bobClient";
+import type { ToolKind } from "../../lib/ipc/harnessClient";
 
 /**
  * Plain-language names for the agent's tools, so a non-technical reader
@@ -37,6 +37,52 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
   web_search: { verb: "Searching", object: "the web", noun: "Searched the web" },
   mcp_tool_call: { verb: "Running", object: "a tool", noun: "Used a tool" },
 };
+
+/** When a harness names its tools differently (Ollama emits a bare `read`,
+ * not `read_file`), match by keyword so the status still reads "Reading…"
+ * rather than the raw "Using read". Matched against whole name *tokens* (not
+ * substrings — so `frobnicate` never matches `cat`). First entry wins. */
+const KEYWORD_LABELS: Array<{ keys: string[]; label: ToolLabel }> = [
+  { keys: ["read", "cat", "view"], label: { verb: "Reading", object: "your notes", noun: "Read file" } },
+  {
+    keys: ["search", "grep", "find"],
+    label: { verb: "Searching", object: "your files", noun: "Searched files" },
+  },
+  {
+    keys: ["list", "ls", "dir", "tree", "glob"],
+    label: { verb: "Looking through", object: "your files", noun: "Listed files" },
+  },
+  {
+    keys: ["edit", "patch", "diff", "replace", "insert", "append", "modify"],
+    label: { verb: "Editing", object: "a file", noun: "Edited file" },
+  },
+  { keys: ["write", "save", "create"], label: { verb: "Writing", object: "a file", noun: "Wrote file" } },
+  {
+    keys: ["run", "exec", "execute", "command", "cmd", "shell", "bash", "terminal"],
+    label: { verb: "Running", object: "a command", noun: "Ran a command" },
+  },
+];
+
+/** Lower-cased name tokens, split on separators and camelCase, e.g.
+ * "readFile" / "read_file" → ["read", "file"]. */
+function tokenize(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^a-zA-Z0-9]+/)
+    .map((token) => token.toLowerCase())
+    .filter(Boolean);
+}
+
+/** The label for a tool: its exact entry, else a keyword (token) match, else
+ * null (the caller falls back to the de-underscored name). */
+function resolveLabel(name: string): ToolLabel | null {
+  const exact = TOOL_LABELS[name];
+  if (exact) {
+    return exact;
+  }
+  const tokens = new Set(tokenize(name));
+  return KEYWORD_LABELS.find((entry) => entry.keys.some((key) => tokens.has(key)))?.label ?? null;
+}
 
 function deUnderscore(name: string): string {
   return name.replace(/_/g, " ");
@@ -81,7 +127,7 @@ function fileFromInput(input: string | undefined): string | null {
 /** Present-continuous status label, e.g. "Reading Notes.md" or, with no
  * filename, "Reading your notes". */
 export function toolActionLabel(name: string, input?: string): string {
-  const label = TOOL_LABELS[name];
+  const label = resolveLabel(name);
   if (!label) {
     return `Using ${deUnderscore(name)}`;
   }
@@ -94,7 +140,7 @@ export function toolActionLabel(name: string, input?: string): string {
 
 /** Past-tense noun phrase for the trace, e.g. "Read file". */
 export function toolName(name: string): string {
-  return TOOL_LABELS[name]?.noun ?? deUnderscore(name);
+  return resolveLabel(name)?.noun ?? deUnderscore(name);
 }
 
 /**

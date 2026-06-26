@@ -42,6 +42,13 @@ pub struct ConversationMessageRecord {
     pub trace_json: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stats_json: Option<String>,
+    /// Lifecycle of the run that produced this message: `"streaming"` while a
+    /// reply is being written, cleared (`None`) once it settles. A reply left
+    /// `"streaming"` on disk means its run never finished (app quit/crashed
+    /// mid-stream) — load reads that as interrupted. `None` for settled turns
+    /// and every user message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_status: Option<String>,
     pub created_at: i64,
 }
 
@@ -85,6 +92,11 @@ pub struct ConversationSummary {
 const TITLE_MAX_CHARS: usize = 60;
 /// Longest a row preview snippet runs.
 const PREVIEW_MAX_CHARS: usize = 120;
+/// The placeholder shown for a not-yet-named conversation. Reserved: it's never
+/// treated as a real explicit title (an older build could persist it by blurring
+/// the rename field on an unnamed chat), so it always falls back to the
+/// first-message-derived title.
+const NEW_CONVERSATION_TITLE: &str = "New conversation";
 
 impl MetadataStore {
     /// The most-recently-*opened* non-archived, non-deleted conversation —
@@ -253,8 +265,8 @@ impl MetadataStore {
             transaction
                 .execute(
                     "insert into conversation_messages
-                       (message_id, conversation_id, seq, role, content, trace_json, stats_json, created_at)
-                     values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                       (message_id, conversation_id, seq, role, content, trace_json, stats_json, run_status, created_at)
+                     values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
                         message.message_id,
                         conversation_id,
@@ -263,6 +275,7 @@ impl MetadataStore {
                         message.content,
                         message.trace_json,
                         message.stats_json,
+                        message.run_status,
                         message.created_at,
                     ],
                 )
@@ -545,7 +558,7 @@ fn load_conversation_messages(
 ) -> Result<Vec<ConversationMessageRecord>, String> {
     let mut statement = connection
         .prepare(
-            "select message_id, role, content, trace_json, stats_json, created_at
+            "select message_id, role, content, trace_json, stats_json, run_status, created_at
              from conversation_messages
              where conversation_id = ?1
              order by seq asc",
@@ -559,7 +572,8 @@ fn load_conversation_messages(
                 content: row.get(2)?,
                 trace_json: row.get(3)?,
                 stats_json: row.get(4)?,
-                created_at: row.get(5)?,
+                run_status: row.get(5)?,
+                created_at: row.get(6)?,
             })
         })
         .map_err(|error| format!("could not query conversation messages: {error}"))?
@@ -568,15 +582,20 @@ fn load_conversation_messages(
     Ok(messages)
 }
 
-/// Resolve the display title: an explicit (non-blank) title wins; otherwise
-/// derive one from the first user message; otherwise "New conversation".
+/// Resolve the display title: a real explicit (non-blank, non-placeholder) title
+/// wins; otherwise derive one from the first user message; otherwise the
+/// placeholder. The placeholder is ignored as an "explicit" title so a row that
+/// had it persisted still derives from its first message.
 fn resolve_title(explicit: Option<&str>, first_user_message: Option<&str>) -> String {
-    if let Some(title) = explicit.map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(title) = explicit
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != NEW_CONVERSATION_TITLE)
+    {
         return truncate_chars(title, TITLE_MAX_CHARS);
     }
     let derived = first_user_message.map(str::trim).unwrap_or("");
     if derived.is_empty() {
-        return "New conversation".to_owned();
+        return NEW_CONVERSATION_TITLE.to_owned();
     }
     truncate_chars(derived, TITLE_MAX_CHARS)
 }
@@ -609,44 +628,60 @@ fn parse_context_files(json: Option<&str>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Idempotently bring an existing `conversations` table up to the current
-/// schema. SQLite has no "add column if not exists", so we read
-/// `pragma table_info` and `ALTER` only the columns that are missing, then
-/// (re)create the indexes that reference the newer columns. Called once from
-/// `migrate_vault_database` after the `create table if not exists` batch.
-pub(super) fn ensure_conversation_columns(connection: &Connection) -> Result<(), String> {
+/// Add any of `columns` — each `(name, full ALTER ddl)` — that `table` is
+/// missing. SQLite has no "add column if not exists", so inspect
+/// `pragma table_info` and `ALTER` only the gaps; idempotent across reopens.
+/// `table` is always a hardcoded literal here (never user input).
+fn add_missing_columns(
+    connection: &Connection,
+    table: &str,
+    columns: &[(&str, &str)],
+) -> Result<(), String> {
     let mut existing = HashSet::new();
     {
         let mut statement = connection
-            .prepare("pragma table_info(conversations)")
-            .map_err(|error| format!("could not inspect conversations schema: {error}"))?;
+            .prepare(&format!("pragma table_info({table})"))
+            .map_err(|error| format!("could not inspect {table} schema: {error}"))?;
         let rows = statement
             .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|error| format!("could not read conversations schema: {error}"))?;
+            .map_err(|error| format!("could not read {table} schema: {error}"))?;
         for name in rows {
             existing.insert(
                 name.map_err(|error| format!("could not decode column name: {error}"))?,
             );
         }
     }
-
-    for (column, ddl) in [
-        ("deleted_at", "alter table conversations add column deleted_at integer"),
-        (
-            "last_opened_at",
-            "alter table conversations add column last_opened_at integer",
-        ),
-        (
-            "context_files_json",
-            "alter table conversations add column context_files_json text",
-        ),
-    ] {
-        if !existing.contains(column) {
+    for (column, ddl) in columns {
+        if !existing.contains(*column) {
             connection
                 .execute(ddl, [])
-                .map_err(|error| format!("could not add conversations.{column}: {error}"))?;
+                .map_err(|error| format!("could not add {table}.{column}: {error}"))?;
         }
     }
+    Ok(())
+}
+
+/// Idempotently bring existing `conversations` / `conversation_messages` tables
+/// up to the current schema (the columns later builds added), then (re)create
+/// the indexes that reference the newer columns. Called once from
+/// `migrate_vault_database` after the `create table if not exists` batch.
+pub(super) fn ensure_conversation_columns(connection: &Connection) -> Result<(), String> {
+    add_missing_columns(
+        connection,
+        "conversations",
+        &[
+            ("deleted_at", "alter table conversations add column deleted_at integer"),
+            ("last_opened_at", "alter table conversations add column last_opened_at integer"),
+            ("context_files_json", "alter table conversations add column context_files_json text"),
+        ],
+    )?;
+    // conversation_messages gained run_status for interrupted-run detection:
+    // a reply left "streaming" on disk means its run never finished.
+    add_missing_columns(
+        connection,
+        "conversation_messages",
+        &[("run_status", "alter table conversation_messages add column run_status text")],
+    )?;
 
     connection
         .execute_batch(
@@ -756,6 +791,21 @@ mod tests {
     use std::path::Path;
     use tempfile::tempdir;
 
+    #[test]
+    fn resolve_title_ignores_placeholder_and_derives_from_first_message() {
+        // A real explicit title wins.
+        assert_eq!(resolve_title(Some("My chat"), Some("hello")), "My chat");
+        // The placeholder is reserved — never treated as an explicit title, so a
+        // row that had it persisted still derives from its first message.
+        assert_eq!(
+            resolve_title(Some(NEW_CONVERSATION_TITLE), Some("Summarize this file")),
+            "Summarize this file",
+        );
+        // Nothing to derive → placeholder.
+        assert_eq!(resolve_title(None, None), NEW_CONVERSATION_TITLE);
+        assert_eq!(resolve_title(Some("   "), None), NEW_CONVERSATION_TITLE);
+    }
+
     fn store() -> (tempfile::TempDir, MetadataStore, &'static str) {
         let dir = tempdir().expect("temp dir");
         let store = MetadataStore::default();
@@ -773,6 +823,7 @@ mod tests {
             content: content.to_owned(),
             trace_json: None,
             stats_json: None,
+            run_status: None,
             created_at: 10,
         }
     }
@@ -786,6 +837,7 @@ mod tests {
         let assistant = ConversationMessageRecord {
             trace_json: Some(r#"[{"kind":"tool","tool":{"id":"t1","name":"read_file","status":"done"}}]"#.to_owned()),
             stats_json: Some(r#"{"totalTokens":21956,"coins":0.05}"#.to_owned()),
+            run_status: Some("interrupted".to_owned()),
             ..message("m2", "assistant", "It's a relocation plan.")
         };
         store
@@ -812,6 +864,7 @@ mod tests {
             loaded.messages[1].stats_json.as_deref(),
             Some(r#"{"totalTokens":21956,"coins":0.05}"#)
         );
+        assert_eq!(loaded.messages[1].run_status.as_deref(), Some("interrupted"));
     }
 
     #[test]

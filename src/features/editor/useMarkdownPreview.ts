@@ -13,11 +13,58 @@ type MarkdownPreviewState =
  * worker. The preview drives the status-bar word count — users
  * don't notice a half-second lag on the count, but they DO feel
  * the keystroke-by-keystroke worker fan-out without this debounce.
- *
- * Tune higher if status-bar updates ever appear in profiles as
- * a top frame; tune lower if word count feels stale.
  */
 const PREVIEW_DEBOUNCE_MS = 500;
+
+/**
+ * Module-level LRU cache of rendered preview docs keyed by content hash.
+ * The dominant tab-switch cost on `compose-test-50` was the worker
+ * re-parsing the same 1 MB markdown every time you switched back to a
+ * file — confirmed via Safari Web Inspector Timeline (see
+ * docs/perf-spec.md §5). With this cache, switching to a file whose
+ * content is unchanged short-circuits the worker entirely; only an
+ * edit invalidates a cached entry.
+ *
+ * 16 entries × max ~1 MB doc reference each is bounded (the
+ * `MarkdownPreviewDocument` is the parsed AST, not the raw string).
+ * Eviction is least-recently-used — re-inserting on hit moves the
+ * key to the tail.
+ */
+const PREVIEW_CACHE_MAX = 16;
+const previewCache = new Map<string, MarkdownPreviewDocument>();
+
+function hashMarkdown(markdown: string): string {
+  // FNV-1a, same tiny hash used by the editor for save-loop dedup.
+  // Collisions don't poison the cache because the consumer is the
+  // word-count status bar — a wrong count is a 500ms blip, not a
+  // correctness bug.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < markdown.length; i += 1) {
+    h ^= markdown.charCodeAt(i);
+    h = (h * 0x01000193) >>> 0;
+  }
+  return h.toString(16) + ":" + markdown.length;
+}
+
+function cacheGet(key: string): MarkdownPreviewDocument | undefined {
+  const cached = previewCache.get(key);
+  if (cached) {
+    // Re-insert to move to tail (LRU touch).
+    previewCache.delete(key);
+    previewCache.set(key, cached);
+  }
+  return cached;
+}
+
+function cacheSet(key: string, doc: MarkdownPreviewDocument): void {
+  if (previewCache.has(key)) {
+    previewCache.delete(key);
+  } else if (previewCache.size >= PREVIEW_CACHE_MAX) {
+    const oldest = previewCache.keys().next().value;
+    if (oldest !== undefined) previewCache.delete(oldest);
+  }
+  previewCache.set(key, doc);
+}
 
 export function useMarkdownPreview(markdown: string): MarkdownPreviewState {
   const [state, setState] = useState<MarkdownPreviewState>({
@@ -27,23 +74,44 @@ export function useMarkdownPreview(markdown: string): MarkdownPreviewState {
 
   useEffect(() => {
     let cancelled = false;
-    // Debounce so each keystroke during fast typing doesn't
-    // post a fresh message to the worker. The preview only
-    // drives the word-count in the status bar — eventual
-    // consistency is fine for that consumer.
+
+    // Cache hit short-circuit — no debounce, no worker, no state churn
+    // beyond the setState. This is the tab-switch-back path.
+    const key = hashMarkdown(markdown);
+    const cached = cacheGet(key);
+    if (cached) {
+      // Reuse the previous state object when nothing actually changed (same
+      // cached doc, already "ready") so the returned reference is stable —
+      // otherwise this effect re-runs on every keystroke that lands on a cached
+      // hash and hands consumers a structurally-identical-but-new object,
+      // forcing a wasted re-render (react-scan: "reference changed but
+      // structurally the same").
+      setState((prev) =>
+        prev.status === "ready" && prev.document === cached
+          ? prev
+          : { document: cached, status: "ready" },
+      );
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Cache miss — debounce so each keystroke during fast typing
+    // doesn't post a fresh message to the worker.
     const timer = window.setTimeout(() => {
       if (cancelled) return;
-      setState((currentState) => ({
-        document: currentState.document,
-        status: "loading",
-      }));
+      setState((currentState) =>
+        currentState.status === "loading"
+          ? currentState
+          : { document: currentState.document, status: "loading" },
+      );
 
       markdownPreviewClient
         .renderPreview(markdown)
         .then((document) => {
-          if (!cancelled) {
-            setState({ document, status: "ready" });
-          }
+          if (cancelled) return;
+          cacheSet(key, document);
+          setState({ document, status: "ready" });
         })
         .catch((error: unknown) => {
           if (!cancelled) {

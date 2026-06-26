@@ -163,18 +163,6 @@ export async function switchWorkspace(workspaceId: string) {
   return invoke<WorkspaceListResult>("workspace_switch", { workspaceId });
 }
 
-export async function markWorkspaceOpened(workspaceId: string) {
-  if (!isTauriRuntime()) {
-    return mutateDevList((current) => ({
-      ...current,
-      workspaces: current.workspaces.map((item) =>
-        item.id === workspaceId ? { ...item, lastOpenedAt: Date.now() } : item,
-      ),
-    }));
-  }
-  return invoke<WorkspaceListResult>("workspace_mark_opened", { workspaceId });
-}
-
 export async function getOnboarding(): Promise<OnboardingState> {
   if (!isTauriRuntime()) {
     return devList.onboarding;

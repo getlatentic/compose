@@ -8,7 +8,7 @@ describe("ChatEmptyState", () => {
     const html = renderToStaticMarkup(
       <ChatEmptyState contextFileLabel="Q3 field notes.md" onUseSuggestion={() => {}} />,
     );
-    expect(html).toContain("New conversation");
+    expect(html).toContain("Ask the assistant");
     expect(html).toContain("Q3 field notes.md");
     expect(html).toContain("the file you"); // "the file you're viewing"
     expect(html).toContain("Summarize this file");
@@ -18,8 +18,8 @@ describe("ChatEmptyState", () => {
     const html = renderToStaticMarkup(
       <ChatEmptyState contextFileLabel={null} onUseSuggestion={() => {}} />,
     );
-    expect(html).toContain("New conversation");
+    expect(html).toContain("Ask the assistant");
     expect(html).not.toContain("the file you"); // the file line is omitted
-    expect(html).toContain("What can you help me with?");
+    expect(html).toContain("What can you help me do?");
   });
 });

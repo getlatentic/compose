@@ -8,29 +8,17 @@ import {
   type SourceRange,
   type WorkspaceCommentThread,
 } from "../features/comments/commentModel";
-import type { ToolKind } from "../lib/ipc/bobClient";
+import type { HarnessReadiness, ToolKind } from "../lib/ipc/harnessClient";
 import type {
   ConversationMessageRecord,
   ConversationSnapshot,
 } from "../lib/ipc/conversationsClient";
-import type { WorkspaceIndexSnapshot } from "../lib/ipc/indexClient";
-import type { BobInstallStatus } from "../lib/ipc/settingsClient";
 
 export type {
   DocumentTextChange,
   SourceRange,
   WorkspaceCommentThread,
 } from "../features/comments/commentModel";
-
-export interface BobAuthStatus {
-  configured: boolean;
-  errorMessage?: string;
-}
-
-export interface BobRuntimeReadiness {
-  message: string | null;
-  ready: boolean;
-}
 
 export type WorkspaceContextItem = WorkspaceFileContextItem | WorkspaceCommentContextItem;
 
@@ -121,6 +109,10 @@ export interface WorkspaceChatMessage {
   role: "assistant" | "user";
   runId?: string;
   streaming?: boolean;
+  /** This reply's run never finished — the app quit/crashed mid-stream, so it
+   * was loaded still marked streaming. Renders a "Response interrupted" note
+   * with a Retry. Set on load (see `hydrateChatThread`), never while live. */
+  interrupted?: boolean;
   suggestions?: WorkspaceDocumentSuggestion[];
   /** File changes a `snapshot`-mode run already applied to disk, shown as an
    * informational diff. Transient UI state — not persisted (see
@@ -285,7 +277,7 @@ export interface WorkspaceAppliedChange {
   previewOmitted: boolean;
 }
 
-export interface BobSuggestedEditInput {
+export interface SuggestedEditInput {
   filePath: string;
   range: SourceRange;
   replacement: string;
@@ -312,18 +304,28 @@ export interface WorkspaceFileBuffer {
 }
 
 export type WorkspaceScanState = "idle" | "loading" | "ready" | "failed";
-export type WorkspaceIndexState = "idle" | "indexing" | "ready" | "failed";
 
-export interface BobWorkspace {
+export type WorkspaceKind = "real" | "loose";
+
+export const LOOSE_WORKSPACE_ID = "compose:loose";
+export const LOOSE_WORKSPACE_NAME = "Open files";
+
+export interface Workspace {
   activeFilePath: string;
   chatThread: WorkspaceChatThread;
   comments: WorkspaceCommentThread[];
   fileContents: Record<string, WorkspaceFileBuffer>;
   files: WorkspaceFileEntry[];
   id: string;
-  indexError: string | null;
-  indexSnapshot: WorkspaceIndexSnapshot | null;
-  indexState: WorkspaceIndexState;
+  /**
+   * `"real"` workspaces have a folder root at `path`; file entries hold
+   * paths relative to that root. `"loose"` is a singleton pseudo-workspace
+   * for files opened individually (Finder Open-With, `compose <file>`,
+   * etc.) — `path` is `""` and file entries' `relativePath` field stores
+   * the **absolute** path. The chat / comments / conversation surfaces
+   * work identically on both.
+   */
+  kind: WorkspaceKind;
   lastOpenedAt?: number;
   lastSavedAt: Date | null;
   name: string;
@@ -367,33 +369,16 @@ export type FsEventEffect =
   | { type: "rescan" }
   | { type: "noop" };
 
-export function isSetupComplete(authStatus: BobAuthStatus, workspaces: BobWorkspace[]) {
-  return authStatus.configured && workspaces.length > 0;
+export function isSetupComplete(
+  selectedHarnessReadiness: HarnessReadiness | null,
+  workspaces: Workspace[],
+) {
+  // "Set up" = the selected harness is installed and a workspace exists; the
+  // key is checked at send.
+  return Boolean(selectedHarnessReadiness?.installed) && workspaces.length > 0;
 }
 
-export function bobRuntimeReadiness(
-  authStatus: BobAuthStatus,
-  installStatus: BobInstallStatus | null,
-): BobRuntimeReadiness {
-  if (authStatus.errorMessage) {
-    return { message: authStatus.errorMessage, ready: false };
-  }
-  if (!authStatus.configured) {
-    return { message: "Connect your Bob API key.", ready: false };
-  }
-  if (!installStatus) {
-    return { message: "Checking Bob CLI.", ready: false };
-  }
-  if (installStatus.requiresDesktopRuntime) {
-    return { message: "Open the desktop app to run Bob.", ready: false };
-  }
-  if (!installStatus.installed) {
-    return { message: installStatus.errorMessage ?? "Bob CLI not found.", ready: false };
-  }
-  return { message: null, ready: true };
-}
-
-export function createWorkspaceFromPath(path: string): BobWorkspace {
+export function createWorkspaceFromPath(path: string): Workspace {
   const normalizedPath = normalizeWorkspacePath(path);
 
   return {
@@ -413,9 +398,7 @@ export function createWorkspaceFromPath(path: string): BobWorkspace {
     fileContents: {},
     files: [],
     id: createWorkspaceId(normalizedPath),
-    indexError: null,
-    indexSnapshot: null,
-    indexState: "idle",
+    kind: "real",
     lastSavedAt: null,
     name: workspaceNameFromPath(normalizedPath),
     openFilePaths: [],
@@ -425,7 +408,41 @@ export function createWorkspaceFromPath(path: string): BobWorkspace {
   };
 }
 
-export function createWorkspaceFromRecord(record: WorkspaceRecord): BobWorkspace {
+/**
+ * Build the singleton "Open files" workspace that houses files opened
+ * individually (Finder Open-With, `compose <file>`). Files added later
+ * to this workspace carry **absolute** paths in their `relativePath`
+ * field — every IO path that consumes a workspace branches on `kind`.
+ */
+export function createLooseWorkspace(): Workspace {
+  return {
+    activeFilePath: "",
+    chatThread: {
+      activeLlmThreadId: null,
+      activeRunId: null,
+      conversationId: null,
+      contextItems: [],
+      messages: [],
+      preparedCommand: null,
+      prompt: "",
+      runError: null,
+      runState: "idle",
+    },
+    comments: [],
+    fileContents: {},
+    files: [],
+    id: LOOSE_WORKSPACE_ID,
+    kind: "loose",
+    lastSavedAt: null,
+    name: LOOSE_WORKSPACE_NAME,
+    openFilePaths: [],
+    path: "",
+    scanError: null,
+    scanState: "idle",
+  };
+}
+
+export function createWorkspaceFromRecord(record: WorkspaceRecord): Workspace {
   const workspace = createWorkspaceFromPath(record.path);
   const restoredOpen = record.tabs?.openFilePaths ?? [];
   const restoredActive = record.tabs?.activeFilePath ?? "";
@@ -442,7 +459,7 @@ export function createWorkspaceFromRecord(record: WorkspaceRecord): BobWorkspace
 }
 
 export function hydrateWorkspaceRecords(
-  existingWorkspaces: BobWorkspace[],
+  existingWorkspaces: Workspace[],
   records: WorkspaceRecord[],
 ) {
   return records.map((record) => {
@@ -483,7 +500,7 @@ export function setCurrentTabContext(
   };
 }
 
-export function openWorkspaceFile(workspace: BobWorkspace, filePath: string): BobWorkspace {
+export function openWorkspaceFile(workspace: Workspace, filePath: string): Workspace {
   const openFilePaths = workspace.openFilePaths.includes(filePath)
     ? workspace.openFilePaths
     : [...workspace.openFilePaths, filePath];
@@ -496,7 +513,7 @@ export function openWorkspaceFile(workspace: BobWorkspace, filePath: string): Bo
   };
 }
 
-export function closeWorkspaceFileTab(workspace: BobWorkspace, filePath: string): BobWorkspace {
+export function closeWorkspaceFileTab(workspace: Workspace, filePath: string): Workspace {
   const closingIndex = workspace.openFilePaths.indexOf(filePath);
   if (closingIndex === -1) {
     return workspace;
@@ -520,42 +537,70 @@ export function closeWorkspaceFileTab(workspace: BobWorkspace, filePath: string)
   };
 }
 
+/**
+ * The file entries to render as open tabs — one per `openFilePaths`, in order.
+ * An open path's real scan entry is used when present; when it's transiently
+ * absent from `files` (a partial / racing scan on a large vault) a minimal
+ * entry is synthesized from the path so the tab keeps rendering. A tab only
+ * closes on a confirmed `removed` fs-event (see applyFsEvent) — never because a
+ * scan momentarily omitted its file. The synthesized entry's size/mtime are
+ * placeholders; PaneTabs reads only `relativePath`, and the dirty dot reads the
+ * buffer, so they're never shown.
+ */
+export function resolveOpenTabs(workspace: Workspace): WorkspaceFileEntry[] {
+  return workspace.openFilePaths.map(
+    (filePath) =>
+      workspace.files.find((entry) => entry.relativePath === filePath) ?? {
+        relativePath: filePath,
+        lastModifiedMs: 0,
+        sizeBytes: 0,
+      },
+  );
+}
+
+/**
+ * Whether the active file should render its document (vs the empty/Welcome
+ * state). True when the active path is an open tab, has a loaded buffer, or is
+ * in the scanned list — so a transient scan miss can't blank an open document.
+ * The buffer/open-tab cases hold the document open while a (re)scan is missing
+ * the file; only closing the tab (a confirmed deletion or the user's ✕) flips
+ * this to false.
+ */
+export function isActiveFilePresent(workspace: Workspace): boolean {
+  const path = workspace.activeFilePath;
+  if (!path) {
+    return false;
+  }
+  return (
+    workspace.openFilePaths.includes(path) ||
+    Boolean(workspace.fileContents[path]) ||
+    workspace.files.some((entry) => entry.relativePath === path)
+  );
+}
+
 export function applyScanResult(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   entries: WorkspaceFileEntry[],
-): BobWorkspace {
-  const knownPaths = new Set(entries.map((entry) => entry.relativePath));
-  const openFilePaths = workspace.openFilePaths.filter((path) => knownPaths.has(path));
-  const fileContents: Record<string, WorkspaceFileBuffer> = {};
-  for (const [path, buffer] of Object.entries(workspace.fileContents)) {
-    if (knownPaths.has(path)) {
-      fileContents[path] = buffer;
-    }
-  }
-
-  let activeFilePath = workspace.activeFilePath;
-  if (activeFilePath && !knownPaths.has(activeFilePath)) {
-    activeFilePath = openFilePaths[0] ?? "";
-  }
-
+): Workspace {
+  // A scan refreshes the file LIST only. It deliberately does NOT prune open
+  // tabs, their buffers, comments, or the active file when a path is missing
+  // from `entries`: a partial or racing scan would otherwise wipe the user's
+  // open work (and the empty-tabs fallback would then swap in Welcome.md). A
+  // genuine deletion closes its tab via the `removed` fs-event (applyFsEvent);
+  // a tab whose file is truly gone just errors gracefully when opened.
   return {
     ...workspace,
-    activeFilePath,
-    chatThread: setCurrentTabContext(workspace.chatThread, workspace.id, activeFilePath),
-    comments: workspace.comments.filter((comment) => knownPaths.has(comment.filePath)),
-    fileContents,
     files: [...entries].sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
-    openFilePaths,
     scanError: null,
     scanState: "ready",
   };
 }
 
 export function applyFileBuffer(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
   buffer: { content: string; lastModifiedMs: number },
-): BobWorkspace {
+): Workspace {
   return {
     ...workspace,
     fileContents: {
@@ -571,48 +616,15 @@ export function applyFileBuffer(
   };
 }
 
-export function markWorkspaceIndexing(workspace: BobWorkspace): BobWorkspace {
-  return {
-    ...workspace,
-    indexError: null,
-    indexState: "indexing",
-  };
-}
 
-export function applyWorkspaceIndexSnapshot(
-  workspace: BobWorkspace,
-  snapshot: WorkspaceIndexSnapshot,
-): BobWorkspace {
-  if (snapshot.workspaceId !== workspace.id) {
-    return workspace;
-  }
-  return {
-    ...workspace,
-    indexError: null,
-    indexSnapshot: snapshot,
-    indexState: "ready",
-  };
-}
-
-export function markWorkspaceIndexFailed(
-  workspace: BobWorkspace,
-  errorMessage: string,
-): BobWorkspace {
-  return {
-    ...workspace,
-    indexError: errorMessage,
-    indexState: "failed",
-  };
-}
-
-export function commentsForFile(workspace: BobWorkspace, filePath: string) {
+export function commentsForFile(workspace: Workspace, filePath: string) {
   return workspace.comments.filter(
     (comment) => comment.filePath === filePath && comment.status === "open",
   );
 }
 
 export function addWorkspaceComment(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   input: {
     body: string;
     filePath: string;
@@ -620,7 +632,7 @@ export function addWorkspaceComment(
     selectedText: string;
     timestamp: number;
   },
-): BobWorkspace {
+): Workspace {
   const buffer = workspace.fileContents[input.filePath];
   if (!buffer || !input.body.trim() || input.range.start >= input.range.end) {
     return workspace;
@@ -664,12 +676,12 @@ export function addWorkspaceComment(
 }
 
 export function applyWorkspaceDocumentChanges(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
   content: string,
   changes: DocumentTextChange[],
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   const next = markBufferDirty(workspace, relativePath, content, changes);
   if (next === workspace || changes.length === 0) {
     return next;
@@ -682,13 +694,13 @@ export function applyWorkspaceDocumentChanges(
 }
 
 export function prepareWorkspaceSuggestionDrafts(
-  workspace: BobWorkspace,
-  edits: BobSuggestedEditInput[],
+  workspace: Workspace,
+  edits: SuggestedEditInput[],
 ): WorkspaceSuggestionPreparation {
   const drafts: WorkspaceSuggestionDraft[] = [];
   let rejectedCount = 0;
   // One mapper per file content reused across edits targeting the same
-  // buffer — a batch of suggestions from one Bob turn typically hits the
+  // buffer — a batch of suggestions from one harness turn typically hits the
   // same document many times.
   const mappersByFilePath = new Map<string, PositionMapper>();
 
@@ -735,11 +747,11 @@ export function prepareWorkspaceSuggestionDrafts(
 }
 
 export function moveWorkspaceComments(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   fromFilePath: string,
   toFilePath: string,
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   return {
     ...workspace,
     comments: moveCommentsToFile(workspace.comments, fromFilePath, toFilePath, timestamp),
@@ -748,11 +760,11 @@ export function moveWorkspaceComments(
 
 /** Flip a comment open ↔ resolved (the "done" state shown in the panel). */
 export function setWorkspaceCommentStatus(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   commentId: string,
   status: "open" | "resolved",
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   return {
     ...workspace,
     comments: workspace.comments.map((comment) =>
@@ -761,13 +773,40 @@ export function setWorkspaceCommentStatus(
   };
 }
 
-function fileContextItem(workspaceId: string, filePath: string): WorkspaceContextItem {
+function fileContextItem(workspaceId: string, filePath: string): WorkspaceFileContextItem {
   return {
     id: createContextId(workspaceId, filePath),
     kind: "file",
     label: filePath,
     path: filePath,
     workspaceId,
+  };
+}
+
+/**
+ * Add a file as chat context (deduped by id), with an explicit display label —
+ * for an attachment whose label isn't its path (e.g. "Pasted text (12 KB)").
+ * Re-adding the same path replaces the existing chip so the label stays current.
+ */
+export function addFileContextItem(
+  chatThread: WorkspaceChatThread,
+  workspaceId: string,
+  filePath: string,
+  label: string,
+): WorkspaceChatThread {
+  const item: WorkspaceFileContextItem = { ...fileContextItem(workspaceId, filePath), label };
+  const withoutDup = chatThread.contextItems.filter((existing) => existing.id !== item.id);
+  return { ...chatThread, contextItems: [...withoutDup, item] };
+}
+
+/** Remove a chat context item by id (a chip's ✕). */
+export function removeContextItem(
+  chatThread: WorkspaceChatThread,
+  id: string,
+): WorkspaceChatThread {
+  return {
+    ...chatThread,
+    contextItems: chatThread.contextItems.filter((item) => item.id !== id),
   };
 }
 
@@ -845,11 +884,11 @@ export function createLlmContextSnapshots(
 }
 
 export function markBufferDirty(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
   content: string,
   changes: DocumentTextChange[] = [],
-): BobWorkspace {
+): Workspace {
   const existing = workspace.fileContents[relativePath];
   if (!existing) {
     return workspace;
@@ -873,10 +912,10 @@ export function markBufferDirty(
 }
 
 export function markBufferSaved(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
   lastModifiedMs: number,
-): BobWorkspace {
+): Workspace {
   const existing = workspace.fileContents[relativePath];
   if (!existing) {
     return workspace;
@@ -904,9 +943,9 @@ export function markBufferSaved(
 }
 
 export function markBufferConflict(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
-): BobWorkspace {
+): Workspace {
   const existing = workspace.fileContents[relativePath];
   if (!existing) {
     return workspace;
@@ -921,9 +960,9 @@ export function markBufferConflict(
 }
 
 export function dismissBufferConflict(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   relativePath: string,
-): BobWorkspace {
+): Workspace {
   const existing = workspace.fileContents[relativePath];
   if (!existing) {
     return workspace;
@@ -938,7 +977,7 @@ export function dismissBufferConflict(
 }
 
 export function applyFsEvent(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   event: WorkspaceFsEvent,
   /**
    * Whether this disk change is attributable to a just-run agent (a
@@ -949,12 +988,34 @@ export function applyFsEvent(
    * history. A genuine external edit (no agent run in flight) still conflicts.
    */
   agentEdit = false,
-): { workspace: BobWorkspace; effect: FsEventEffect } {
-  if (event.kind === "created" || event.kind === "removed") {
+): { workspace: Workspace; effect: FsEventEffect } {
+  if (event.kind === "removed") {
+    // A confirmed deletion: close that file's tab + drop it from the list now,
+    // rather than letting a rescan's absence do it — a transient scan miss must
+    // not be mistaken for a deletion (see applyScanResult). Still rescan to
+    // reconcile the rest of the tree (e.g. a directory removal).
+    const closed = closeWorkspaceFileTab(workspace, event.relativePath);
+    const files = closed.files.filter((entry) => entry.relativePath !== event.relativePath);
+    return { workspace: { ...closed, files }, effect: { type: "rescan" } };
+  }
+  if (event.kind === "created") {
     return { workspace, effect: { type: "rescan" } };
   }
 
   const buffer = workspace.fileContents[event.relativePath];
+
+  // Echo of our OWN write (autosave / manual save), or an older event:
+  // the open buffer's mtime is already >= the event's. Return the
+  // workspace UNCHANGED. We previously rebuilt `files` here to refresh the
+  // entry's mtime, but that churns the `files` array reference on every
+  // autosave-driven watcher echo and re-renders the entire file tree
+  // (incl. each row's Carbon OverflowMenu) for nothing — confirmed via
+  // react-scan. Conflict detection keys off the *buffer's* mtime, not the
+  // file-entry's, so skipping the entry-mtime refresh here is safe.
+  if (buffer && event.lastModifiedMs != null && event.lastModifiedMs <= buffer.lastModifiedMs) {
+    return { workspace, effect: { type: "noop" } };
+  }
+
   const updatedFiles = event.lastModifiedMs
     ? workspace.files.map((entry) =>
         entry.relativePath === event.relativePath
@@ -964,13 +1025,6 @@ export function applyFsEvent(
     : workspace.files;
 
   if (!buffer) {
-    return {
-      workspace: { ...workspace, files: updatedFiles },
-      effect: { type: "noop" },
-    };
-  }
-
-  if (event.lastModifiedMs != null && event.lastModifiedMs <= buffer.lastModifiedMs) {
     return {
       workspace: { ...workspace, files: updatedFiles },
       effect: { type: "noop" },
@@ -993,6 +1047,13 @@ export function applyFsEvent(
   };
 }
 
+/** A globally-unique chat-message id. `conversation_messages.message_id` is a
+ *  global primary key, so a per-conversation scheme like `message-1` collides
+ *  the moment a second conversation persists its first message. */
+function newMessageId(): string {
+  return crypto.randomUUID();
+}
+
 export function appendUserChatMessage(
   chatThread: WorkspaceChatThread,
   userContent: string,
@@ -1005,8 +1066,6 @@ export function appendUserChatMessage(
     return chatThread;
   }
 
-  const nextMessageNumber = chatThread.messages.length + 1;
-
   return {
     ...chatThread,
     messages: [
@@ -1014,7 +1073,7 @@ export function appendUserChatMessage(
       {
         activity: null,
         content: trimmedUserContent,
-        id: `message-${nextMessageNumber}`,
+        id: newMessageId(),
         ...(llmThreadId ? { llmThreadId } : {}),
         ...(excerpt ? { excerpt } : {}),
         role: "user",
@@ -1025,7 +1084,7 @@ export function appendUserChatMessage(
   };
 }
 
-export function startBobRun(
+export function startRun(
   chatThread: WorkspaceChatThread,
   runId: string,
   llmThreadId: string | null = null,
@@ -1039,7 +1098,7 @@ export function startBobRun(
   };
 }
 
-export function markBobRunStreaming(
+export function markRunStreaming(
   chatThread: WorkspaceChatThread,
   runId: string,
 ): WorkspaceChatThread {
@@ -1049,7 +1108,7 @@ export function markBobRunStreaming(
   const placeholder: WorkspaceChatMessage = {
     activity: null,
     content: "",
-    id: `message-${chatThread.messages.length + 1}`,
+    id: newMessageId(),
     ...(chatThread.activeLlmThreadId ? { llmThreadId: chatThread.activeLlmThreadId } : {}),
     role: "assistant",
     runId,
@@ -1073,7 +1132,7 @@ function ensureAssistantMessage(
   const placeholder: WorkspaceChatMessage = {
     activity: null,
     content: "",
-    id: `message-${chatThread.messages.length + 1}`,
+    id: newMessageId(),
     ...(chatThread.activeLlmThreadId ? { llmThreadId: chatThread.activeLlmThreadId } : {}),
     role: "assistant",
     runId,
@@ -1475,10 +1534,10 @@ function reviewChangeTitle(kind: WorkspaceReviewSuggestionDraft["kind"]): string
 }
 
 export function acceptWorkspaceSuggestion(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   suggestionId: string,
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   const suggestion = findSuggestion(workspace.chatThread, suggestionId);
   if (!suggestion || suggestion.status !== "pending") {
     return workspace;
@@ -1505,7 +1564,7 @@ export function acceptWorkspaceSuggestion(
   if (currentText !== suggestion.originalText) {
     return updateWorkspaceSuggestion(workspace, suggestionId, {
       status: "stale",
-      statusMessage: "Source changed since Bob suggested this edit.",
+      statusMessage: "Source changed since this edit was suggested.",
       updatedAt: timestamp,
     });
   }
@@ -1527,10 +1586,10 @@ export function acceptWorkspaceSuggestion(
 }
 
 export function rejectWorkspaceSuggestion(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   suggestionId: string,
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   const suggestion = findSuggestion(workspace.chatThread, suggestionId);
   if (!suggestion || suggestion.status !== "pending") {
     return workspace;
@@ -1567,16 +1626,16 @@ export function assistantMessageContentForRun(chatThread: WorkspaceChatThread, r
   return message?.content.trim() ?? "";
 }
 
-export interface FinalizeBobRunOptions {
+export interface FinalizeRunOptions {
   cancelled?: boolean;
   errorMessage?: string | null;
   exitCode?: number | null;
 }
 
-export function finalizeBobRun(
+export function finalizeRun(
   chatThread: WorkspaceChatThread,
   runId: string,
-  options: FinalizeBobRunOptions = {},
+  options: FinalizeRunOptions = {},
 ): WorkspaceChatThread {
   if (chatThread.activeRunId !== runId) {
     return chatThread;
@@ -1618,24 +1677,36 @@ export function finalizeBobRun(
 
 /**
  * Serialize a thread's messages for persistence — `<role, content, trace,
- * stats>` per message. `trace`/`stats` are JSON-stringified (the trace is
- * already the consolidated `TraceEntry[]` on the message; no transform).
- * Streaming / placeholder messages with no content are skipped — only
- * settled turns are persisted.
+ * stats, runStatus>` per message. `trace`/`stats` are JSON-stringified (the
+ * trace is already the consolidated `TraceEntry[]`; no transform).
+ *
+ * A *live* reply is persisted (with `runStatus: "streaming"`) even before any
+ * text lands, so an incremental save during the run leaves a marker a
+ * quit/crash can't clear — on next load that stale "streaming" reads as
+ * interrupted. A clean finish clears `streaming`, so a settled turn persists
+ * with no status. Empty, non-streaming placeholders are still skipped.
  */
 export function serializeChatMessages(
   thread: WorkspaceChatThread,
 ): ConversationMessageRecord[] {
   return thread.messages
-    .filter((message) => message.content.trim())
-    .map((message, index) => ({
-      messageId: message.id || `message-${index + 1}`,
-      role: message.role,
-      content: message.content,
-      ...(message.trace?.length ? { traceJson: JSON.stringify(message.trace) } : {}),
-      ...(message.stats ? { statsJson: JSON.stringify(message.stats) } : {}),
-      createdAt: index,
-    }));
+    .filter((message) => message.content.trim() || message.streaming || message.interrupted)
+    .map((message, index) => {
+      const runStatus = message.streaming
+        ? "streaming"
+        : message.interrupted
+          ? "interrupted"
+          : undefined;
+      return {
+        messageId: message.id || newMessageId(),
+        role: message.role,
+        content: message.content,
+        ...(message.trace?.length ? { traceJson: JSON.stringify(message.trace) } : {}),
+        ...(message.stats ? { statsJson: JSON.stringify(message.stats) } : {}),
+        ...(runStatus ? { runStatus } : {}),
+        createdAt: index,
+      };
+    });
 }
 
 /**
@@ -1669,6 +1740,12 @@ export function hydrateChatThread(
     role: record.role,
     ...(record.traceJson ? { trace: safeParseJson<TraceEntry[]>(record.traceJson) } : {}),
     ...(record.statsJson ? { stats: safeParseJson<WorkspaceRunStats>(record.statsJson) } : {}),
+    // A reply still marked streaming/interrupted on disk had its run cut short
+    // (the app quit/crashed mid-stream) — there's no live run on load, so
+    // surface it as interrupted with a Retry rather than a dead "thinking…".
+    ...(record.runStatus === "streaming" || record.runStatus === "interrupted"
+      ? { interrupted: true }
+      : {}),
   }));
   return {
     ...thread,
@@ -1715,7 +1792,7 @@ function safeParseJson<T>(value: string): T | undefined {
 // which emit the normalized `RunEvent` stream every harness shares.
 // The front-end now consumes already-decoded events (see
 // `handleHarnessRunEvent` in `workspaceStore.ts`) and no longer parses a
-// harness wire format. `BobSuggestedEditInput` stays — it's the
+// harness wire format. `SuggestedEditInput` stays — it's the
 // shape `prepareWorkspaceSuggestionDrafts` consumes.
 
 function findSuggestion(
@@ -1737,12 +1814,12 @@ function findSuggestion(
  * model can't do the I/O itself.
  */
 export function markWorkspaceSuggestion(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   suggestionId: string,
   status: WorkspaceSuggestionStatus,
   statusMessage: string | null,
   timestamp: number,
-): BobWorkspace {
+): Workspace {
   return updateWorkspaceSuggestion(workspace, suggestionId, {
     status,
     statusMessage,
@@ -1751,10 +1828,10 @@ export function markWorkspaceSuggestion(
 }
 
 function updateWorkspaceSuggestion(
-  workspace: BobWorkspace,
+  workspace: Workspace,
   suggestionId: string,
   updates: Pick<WorkspaceDocumentSuggestion, "status" | "statusMessage" | "updatedAt">,
-): BobWorkspace {
+): Workspace {
   return {
     ...workspace,
     chatThread: {
@@ -1789,6 +1866,38 @@ function replaceByByteRange(mapper: PositionMapper, range: SourceRange, replacem
 export const CONVERSATION_REPLAY_LIMIT = 12;
 
 /**
+ * Inline a file-context item's content only up to this many characters. A larger
+ * file (or the pasted-text attachment) would crowd out a small (~4K) context
+ * window, so it's referenced by path instead and the model reads it on demand
+ * via the `read` tool. The single knob to tune for the context budget.
+ */
+export const FILE_CONTEXT_INLINE_LIMIT = 4000;
+
+/**
+ * Render the file-context block, budgeted for small windows: each item's
+ * content (from `contentByPath`) is inlined as `### <path>\n<content>` when it's
+ * small enough, otherwise reduced to a `- <path> (large; read it for details)`
+ * pointer so a big attachment can't blow the prompt. A path absent from the map
+ * (content not loaded) also degrades to the reference form. Pure — takes the
+ * pre-fetched content map so it stays unit-testable without IO.
+ */
+export function buildFileContextBlock(
+  fileItems: WorkspaceFileContextItem[],
+  contentByPath: Map<string, string>,
+  inlineLimit = FILE_CONTEXT_INLINE_LIMIT,
+): string {
+  return fileItems
+    .map((item) => {
+      const content = contentByPath.get(item.path);
+      if (content != null && content.length <= inlineLimit) {
+        return `### ${item.path}\n${content}`;
+      }
+      return `- ${item.path} (large; read it for details)`;
+    })
+    .join("\n\n");
+}
+
+/**
  * Build the harness prompt: the prior-conversation transcript (for
  * continuity), then the open-file / comment context, then the new
  * prompt. The transcript is harness-neutral — it's just text every
@@ -1799,20 +1908,27 @@ export const CONVERSATION_REPLAY_LIMIT = 12;
  * never the agent trace (that is display history, not model input). The
  * replay is capped at `CONVERSATION_REPLAY_LIMIT` most-recent prior
  * messages so a long thread can't blow the prompt size.
+ *
+ * File context carries each attached file's CONTENT (budgeted — see
+ * {@link buildFileContextBlock}), so a small model can act on an attached chip
+ * without a separate read. `contentByPath` is pre-fetched by the caller
+ * (keeping this function pure); a path missing from it falls back to a
+ * read-on-demand reference.
  */
 export function createPromptWithContext(
   prompt: string,
   contextItems: WorkspaceContextItem[],
   priorMessages: WorkspaceChatMessage[] = [],
+  contentByPath: Map<string, string> = new Map(),
 ) {
   const trimmedPrompt = prompt.trim();
 
   const transcript = buildConversationTranscript(priorMessages);
 
-  const fileContext = contextItems
-    .filter((item): item is WorkspaceFileContextItem => item.kind === "file")
-    .map((item) => `- ${item.path}`)
-    .join("\n");
+  const fileContext = buildFileContextBlock(
+    contextItems.filter((item): item is WorkspaceFileContextItem => item.kind === "file"),
+    contentByPath,
+  );
   const commentContext = contextItems
     .filter((item): item is WorkspaceCommentContextItem => item.kind === "comment")
     .map(

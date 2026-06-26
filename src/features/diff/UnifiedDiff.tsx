@@ -28,33 +28,33 @@ export function UnifiedDiff({
   const [open, setOpen] = useState(defaultOpen ?? autoOpen);
 
   if (diff.hunks.length === 0) {
-    return <div className="bob-diff bob-diff--empty">No textual changes.</div>;
+    return <div className="diff diff--empty">No textual changes.</div>;
   }
 
   return (
-    <div className="bob-diff">
+    <div className="diff">
       <button
         type="button"
-        className="bob-diff__toggle"
+        className="diff__toggle"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
         <ChevronRight
           size={14}
-          className={`bob-diff__chevron${open ? " bob-diff__chevron--open" : ""}`}
+          className={`diff__chevron${open ? " diff__chevron--open" : ""}`}
           aria-hidden
         />
-        <span className="bob-diff__summary">
-          {diff.added > 0 ? <span className="bob-diff__added">+{diff.added}</span> : null}
-          {diff.removed > 0 ? <span className="bob-diff__removed">−{diff.removed}</span> : null}
-          <span className="bob-diff__summary-label">{open ? "Hide changes" : "Show changes"}</span>
+        <span className="diff__summary">
+          {diff.added > 0 ? <span className="diff__added">+{diff.added}</span> : null}
+          {diff.removed > 0 ? <span className="diff__removed">−{diff.removed}</span> : null}
+          <span className="diff__summary-label">{open ? "Hide changes" : "Show changes"}</span>
         </span>
       </button>
 
       {open ? (
-        <div className="bob-diff__body" role="table" aria-label="Unified diff">
+        <div className="diff__body" role="table" aria-label="Unified diff">
           {diff.truncated ? (
-            <div className="bob-diff__notice">
+            <div className="diff__notice">
               File too large to diff line-by-line — showing the full replacement.
             </div>
           ) : null}
@@ -62,9 +62,9 @@ export function UnifiedDiff({
               for a given before/after pair — never reordered — so the index
               is a stable key. */}
           {diff.hunks.map((hunk, hunkIndex) => (
-            <div className="bob-diff__hunk" key={hunkIndex}>
+            <div className="diff__hunk" key={hunkIndex}>
               {hunk.skippedBefore > 0 ? (
-                <div className="bob-diff__fold" role="separator">
+                <div className="diff__fold" role="separator">
                   ⋯ {hunk.skippedBefore} unchanged{" "}
                   {hunk.skippedBefore === 1 ? "line" : "lines"}
                 </div>
@@ -72,19 +72,19 @@ export function UnifiedDiff({
               {hunk.lines.map((line, lineIndex) => (
                 <div
                   key={lineIndex}
-                  className={`bob-diff__line bob-diff__line--${line.kind}`}
+                  className={`diff__line diff__line--${line.kind}`}
                   role="row"
                 >
-                  <span className="bob-diff__gutter" aria-hidden>
+                  <span className="diff__gutter" aria-hidden>
                     {line.beforeLine ?? ""}
                   </span>
-                  <span className="bob-diff__gutter" aria-hidden>
+                  <span className="diff__gutter" aria-hidden>
                     {line.afterLine ?? ""}
                   </span>
-                  <span className="bob-diff__sign" aria-hidden>
+                  <span className="diff__sign" aria-hidden>
                     {line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}
                   </span>
-                  <span className="bob-diff__text">{line.text || " "}</span>
+                  <span className="diff__text">{line.text || " "}</span>
                 </div>
               ))}
             </div>

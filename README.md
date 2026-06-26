@@ -1,48 +1,100 @@
-# Compose — write with AI, privately, on your own Mac
+# Compose — the AI-native markdown editor for macOS
 
-**Compose is a local-first AI writing app for macOS.** It pairs a clean, distraction‑free Markdown editor with an AI assistant that can read and rewrite your notes for you — and everything stays on your computer. No cloud, no account, no copy of your work on someone else's server.
+**Write in a rich editor. Edit with AI agents you already use. Everything stays on your Mac.**
 
-Your documents are plain Markdown files in a folder you choose. The assistant edits *those* files directly, but every change is reviewable and undoable, so the AI can never quietly lose your work.
+Compose is a local-first writing app that combines a rich markdown editor — where you see headings, bullets, and images instead of raw syntax — with AI assistants that read and rewrite your documents directly. No cloud account, no proprietary format: your files are plain `.md` in a folder you choose, editable in any other app.
+
+The AI doesn't live in a separate window. It sees the document you're working on, edits it in place, and every change goes through a review step with full version history — so an AI edit is always one click from being undone.
 
 > **Status:** early alpha (`0.0.1-alpha.1`), macOS (Apple Silicon). [Download below.](#download)
 
-## An AI-native editor
+![Compose — a rich markdown editor with an AI assistant editing your documents alongside you](.github/screenshot.png)
 
-Compose isn't a text editor with a chatbot bolted on — the AI lives *inside* your workspace. It already sees the document you're looking at, edits it in place, follows the `[[links]]` between your notes, and shows you every change before it sticks.
+---
 
-![Compose — an AI-native Markdown editor with the assistant working alongside your notes](.github/screenshot.png)
+## What makes Compose different
 
-## Why Compose
+Most markdown editors bolt on a chatbot. Most AI writing tools lock you into their format. Compose is neither:
 
-- **Your files, your Mac.** Everything runs locally. Your writing never leaves your device, and it's stored as ordinary `.md` files you can open in any other app — no lock‑in, no proprietary format.
-- **AI you can trust with your work.** The assistant edits your real documents, but you get a built‑in review step and a complete version history — so a bad edit is always one click from being undone.
-- **Bring your own AI.** Compose drives the coding agents you already use — Claude Code, Codex, or bob — so you pick the assistant and it runs on your terms.
-- **Works offline.** Open a folder and start writing. The editor needs no internet; the AI uses whatever agent you've connected.
+- **Rich editor, plain files.** You write in a clean visual view — headings render as headings, bullets as bullets, images inline — but the file on disk is always standard markdown. Switch to raw mode anytime. No lock-in, no export step.
+- **Your AI tools, not ours.** Compose connects to the agent CLIs you already have installed — [Claude Code](https://claude.ai/claude-code), [Codex](https://github.com/openai/codex), or bob. You pick the model, the provider, and the plan. Compose discovers what's on your system and helps you connect it.
+- **AI edits your real files — safely.** The assistant writes directly into your documents, but every edit is gated: review and accept/reject per file, or let edits apply with automatic snapshots for one-click undo. The AI can never quietly lose your work.
+- **Local-first, private by default.** Your writing never leaves your device. No account, no sync, no telemetry. The editor works fully offline; the AI uses whatever agent you've connected.
+
+---
 
 ## Features
 
-- **Markdown editor** — write in a clean visual view or raw Markdown: headings, lists, tables, checklists, links, images, and code, with autosave as you type.
-- **AI assistant** — ask it to draft, rewrite, summarize, or reorganize, and watch it work in a live chat. Stop it anytime.
-- **Review & undo** — see exactly what the AI changed and accept or reject it, or let edits apply directly with automatic version history for one‑click undo.
-- **Version history** — every file keeps a timeline of past versions you can restore.
-- **Recoverable trash** — nothing is ever permanently deleted out from under you.
-- **Search, backlinks & wiki‑links** — instant full‑text search across your whole folder, with `[[wiki‑links]]` and backlinks between notes.
-- **Comments** — leave notes on any passage, and turn a comment into an AI request.
-- **Beautiful export** — save any document to **PDF** or **HTML**, typeset in Computer Modern for a classic, polished look.
+### Rich markdown editing
+- Visual editor powered by [CodeMirror 6](https://codemirror.net/) — headings, bold, italic, strikethrough, inline code, and block code render in place
+- Bullet lists, ordered lists, task lists (checkboxes), tables, horizontal rules
+- Inline images with drag-and-drop and paste support
+- LaTeX math rendering (inline `$...$` and block `$$...$$`)
+- Footnotes with inline preview
+- YAML frontmatter preserved (never stripped, never corrupted)
+- Toggle between **Rich** and **Raw** mode per document
+- Autosave as you type — edits hit disk within ~1.5 seconds
+
+### AI assistant
+- Live streaming chat — ask the AI to draft, rewrite, summarize, restructure, or answer questions about your writing
+- Multi-agent support: Claude Code, Codex, and bob, auto-discovered on your system
+- The assistant sees your full workspace — it follows `[[wiki-links]]` between notes and understands your file structure
+- Cancel a run mid-stream, adjust model/effort/turn limits per session
+- Tool and file-operation cards show exactly what the agent is doing
+
+### Edit review and safety
+- **Review mode**: AI edits land in a sandbox — diff each file, accept or reject individually, then apply
+- **Direct mode**: edits apply immediately with automatic version snapshots
+- Stale-edit detection — if the source changed since the AI read it, the edit is flagged
+- Full version history per file: browse past revisions, restore any version with one click
+
+### Workspace and navigation
+- Open any folder as a workspace — multi-workspace with tabs
+- File tree with create, rename, move, and soft-delete (recoverable trash, 30-day retention)
+- Full-text search powered by a Rust/WASM index — instant results across thousands of files
+- `[[Wiki-links]]` and backlinks — click to navigate in the editor or chat
+- Standard `[markdown links](./path.md)` navigate between files (⌘-click in the editor)
+
+### Comments
+- Select any passage and leave a comment — the composer anchors to your selection
+- Turn a comment into an AI request: send it to the chat and the assistant responds
+- Queue multiple comments to batch-send later
+- Comments panel with open/resolved sections per file
+
+### Export
+- **PDF** — native macOS WebKit rendering, Computer Modern typeset, multi-page with images and tables
+- **HTML** — self-contained single file with inlined images and print CSS
+- **Markdown** — download the raw `.md` file
+
+---
+
+## Roadmap
+
+Compose is in active development. Here's what's next:
+
+- [ ] **Code signing and notarization** — eliminate the Gatekeeper warning on first launch
+- [ ] **Auto-updater** — in-app update notifications with one-click install
+- [ ] **Canvas documents** — a Mural/Miro-style infinite canvas with sticky notes, text, and images
+- [ ] **HTML documents** — create and edit rich HTML alongside markdown
+- [x] **Editor as a standalone package** — the rich markdown editor extracted as [`ai-editor`](packages/rich-editor) (decoupled, builds to `dist/`, npm-publishable)
+- [ ] **Accessibility pass** — VoiceOver, keyboard-only navigation, and IME support
+- [ ] **Cross-platform** — Linux and Windows support via Tauri
+
+---
 
 ## Download
 
-> ⚠️ This alpha isn't code‑signed or notarized yet, so macOS Gatekeeper will warn on first launch.
+> ⚠️ This alpha isn't code-signed or notarized yet, so macOS Gatekeeper will warn on first launch.
 
 1. Download the latest `.dmg` from the [**Releases page**](https://github.com/getlatentic/compose/releases/latest).
 2. Open it and drag **Compose** into your Applications folder.
-3. **Right‑click Compose → Open** (not a double‑click) → **Open**. You only need to do this once.
+3. **Right-click Compose → Open** (not a double-click) → **Open**. You only need to do this once.
 
-**Requirements:** an Apple Silicon Mac (M1 or newer). For the AI features, install one agent CLI — [Claude Code](https://claude.com/claude-code), Codex, or bob — and Compose's setup will help you connect it.
+**Requirements:** an Apple Silicon Mac (M1 or newer). For the AI features, install one agent CLI — [Claude Code](https://claude.ai/claude-code), [Codex](https://github.com/openai/codex), or bob — and Compose's setup will help you connect it.
+
+---
 
 ## Build from source
-
-For developers who want to run the latest from `main`:
 
 ```sh
 pnpm install
@@ -50,7 +102,9 @@ pnpm tauri dev      # the full desktop app (real filesystem + AI agent)
 pnpm tauri build    # a packaged .app / .dmg
 ```
 
-You'll need Node + [pnpm](https://pnpm.io), Rust + the [Tauri prerequisites](https://tauri.app/start/prerequisites/), and `wasm-pack` for the search core. Compose is built with [Tauri 2](https://tauri.app) (Rust + native WebView), React + TypeScript, and [Tiptap](https://tiptap.dev)/ProseMirror.
+**Prerequisites:** Node.js + [pnpm](https://pnpm.io), Rust + the [Tauri 2 prerequisites](https://tauri.app/start/prerequisites/), and `wasm-pack` for the search index. Built with [Tauri 2](https://tauri.app) (Rust + native WebView), React, TypeScript, [CodeMirror 6](https://codemirror.net/), and [Zustand](https://zustand.docs.pmnd.rs/).
+
+---
 
 ## License
 

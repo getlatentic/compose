@@ -14,8 +14,12 @@ import {
   setAssistantSession,
   setAssistantStats,
   startAssistantToolCall,
+  addFileContextItem,
+  buildFileContextBlock,
   createPromptWithContext,
+  FILE_CONTEXT_INLINE_LIMIT,
   hydrateChatThread,
+  removeContextItem,
   resetChatThread,
   serializeChatMessages,
   CONVERSATION_REPLAY_LIMIT,
@@ -23,15 +27,16 @@ import {
   applyFsEvent,
   applyScanResult,
   closeWorkspaceFileTab,
-  bobRuntimeReadiness,
+  isActiveFilePresent,
+  resolveOpenTabs,
   createLlmContextSnapshots,
   createWorkspaceFromPath,
   createWorkspaceFromRecord,
   dismissBufferConflict,
-  finalizeBobRun,
+  finalizeRun,
   hydrateWorkspaceRecords,
   isSetupComplete,
-  markBobRunStreaming,
+  markRunStreaming,
   markBufferConflict,
   markBufferDirty,
   markBufferSaved,
@@ -41,16 +46,30 @@ import {
   setAssistantActivity,
   setCommentChatContext,
   setCurrentTabContext,
-  startBobRun,
-  type BobWorkspace,
+  startRun,
+  type Workspace,
+  type WorkspaceFileContextItem,
   type WorkspaceFileEntry,
 } from "./workspaceModel";
+import type { HarnessReadiness } from "../lib/ipc/harnessClient";
 
 function makeEntry(relativePath: string, lastModifiedMs = 1_000): WorkspaceFileEntry {
   return { relativePath, lastModifiedMs, sizeBytes: 16 };
 }
 
-function workspaceWithFiles(path: string, files: string[]): BobWorkspace {
+function selectedHarnessReadiness(installed: boolean): HarnessReadiness {
+  return {
+    harnessId: "bob",
+    ready: installed,
+    installed,
+    version: installed ? "1.0.4" : null,
+    authConfigured: false,
+    error: null,
+    details: null,
+  };
+}
+
+function workspaceWithFiles(path: string, files: string[]): Workspace {
   return applyScanResult(
     createWorkspaceFromPath(path),
     files.map((file) => makeEntry(file)),
@@ -58,45 +77,16 @@ function workspaceWithFiles(path: string, files: string[]): BobWorkspace {
 }
 
 describe("workspace model", () => {
-  it("blocks first-run entry until Bob auth and one workspace are configured", () => {
-    expect(isSetupComplete({ configured: false }, [])).toBe(false);
-    expect(isSetupComplete({ configured: true }, [])).toBe(false);
-    expect(isSetupComplete({ configured: false }, [createWorkspaceFromPath("/tmp/project")])).toBe(
-      false,
-    );
-    expect(isSetupComplete({ configured: true }, [createWorkspaceFromPath("/tmp/project")])).toBe(
-      true,
-    );
-  });
-
-  it("reports Bob runtime readiness without treating browser preview as real Bob", () => {
-    expect(bobRuntimeReadiness({ configured: false }, null)).toEqual({
-      message: "Connect your Bob API key.",
-      ready: false,
-    });
+  it("blocks first-run entry until the selected harness is installed and one workspace exists", () => {
+    expect(isSetupComplete(null, [])).toBe(false);
+    expect(isSetupComplete(selectedHarnessReadiness(false), [])).toBe(false);
+    expect(isSetupComplete(selectedHarnessReadiness(true), [])).toBe(false);
     expect(
-      bobRuntimeReadiness(
-        { configured: true },
-        {
-          errorMessage: "Bob credentials and CLI checks require the Tauri desktop runtime.",
-          installed: false,
-          requiresDesktopRuntime: true,
-        },
-      ),
-    ).toEqual({
-      message: "Open the desktop app to run Bob.",
-      ready: false,
-    });
+      isSetupComplete(selectedHarnessReadiness(false), [createWorkspaceFromPath("/tmp/project")]),
+    ).toBe(false);
     expect(
-      bobRuntimeReadiness(
-        { configured: true },
-        {
-          installed: true,
-          path: "/usr/local/bin/bob",
-          version: "1.0.4",
-        },
-      ),
-    ).toEqual({ message: null, ready: true });
+      isSetupComplete(selectedHarnessReadiness(true), [createWorkspaceFromPath("/tmp/project")]),
+    ).toBe(true);
   });
 
   it("starts a workspace with no files and no active tab", () => {
@@ -212,14 +202,27 @@ describe("workspace model", () => {
 
     expect(chatThread.prompt).toBe("");
     expect(chatThread.preparedCommand).toContain("--auth-method api-key");
+    // Message ids are globally-unique (UUIDs), not a per-conversation `message-N`
+    // sequence — `seq` already orders them, and the DB PK is global.
+    expect(chatThread.messages[0].id).toEqual(expect.any(String));
     expect(chatThread.messages).toEqual([
       {
         activity: null,
         content: "Summarize this note",
-        id: "message-1",
+        id: chatThread.messages[0].id,
         role: "user",
       },
     ]);
+  });
+
+  it("gives each message a globally-unique id, not a per-conversation message-N", () => {
+    // `conversation_messages.message_id` is a global primary key, so two
+    // different conversations' first messages must not share an id (the old
+    // `message-${n}` scheme collided the moment a second conversation saved).
+    const a = appendUserChatMessage(createWorkspaceFromPath("/tmp/a").chatThread, "hi", null);
+    const b = appendUserChatMessage(createWorkspaceFromPath("/tmp/b").chatThread, "hi", null);
+    expect(a.messages[0].id).not.toBe(b.messages[0].id);
+    expect(a.messages[0].id).not.toMatch(/^message-\d+$/);
   });
 
   it("links persisted LLM thread ids to the auditable chat messages", () => {
@@ -227,8 +230,8 @@ describe("workspace model", () => {
     const runId = "run-1";
     const llmThreadId = "llm-thread-1";
     const withUser = appendUserChatMessage(workspace.chatThread, "Audit this context", null, llmThreadId);
-    const started = startBobRun(withUser, runId, llmThreadId);
-    const streaming = markBobRunStreaming(started, runId);
+    const started = startRun(withUser, runId, llmThreadId);
+    const streaming = markRunStreaming(started, runId);
 
     expect(streaming.messages[0]).toMatchObject({
       content: "Audit this context",
@@ -242,7 +245,7 @@ describe("workspace model", () => {
     });
   });
 
-  it("applyScanResult preserves open tabs and buffers that still exist on disk", () => {
+  it("applyScanResult refreshes the file list without dropping open tabs (a scan miss isn't a deletion)", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md"]);
     const opened = applyFileBuffer(
       openWorkspaceFile(openWorkspaceFile(workspace, "a.md"), "b.md"),
@@ -250,13 +253,79 @@ describe("workspace model", () => {
       { content: "# A", lastModifiedMs: 1_500 },
     );
 
+    // b.md is absent from this scan (a partial/racing scan). Its tab + the active
+    // file must survive — only a confirmed `removed` event closes a tab.
     const rescanned = applyScanResult(opened, [makeEntry("a.md", 2_000), makeEntry("c.md")]);
 
     expect(rescanned.files.map((entry) => entry.relativePath)).toEqual(["a.md", "c.md"]);
-    expect(rescanned.openFilePaths).toEqual(["a.md"]);
-    expect(rescanned.activeFilePath).toBe("a.md");
+    expect(rescanned.openFilePaths).toEqual(["a.md", "b.md"]);
+    expect(rescanned.activeFilePath).toBe("b.md");
     expect(rescanned.fileContents["a.md"].content).toBe("# A");
-    expect(rescanned.fileContents).not.toHaveProperty("b.md");
+
+    // The rendered tab strip + the active-document gate must ALSO survive: both
+    // key off the open paths / buffer, not `files` membership, so a tab whose
+    // file is transiently absent from the scan keeps rendering (bug #14).
+    expect(resolveOpenTabs(rescanned).map((entry) => entry.relativePath)).toEqual([
+      "a.md",
+      "b.md",
+    ]);
+    expect(isActiveFilePresent(rescanned)).toBe(true);
+  });
+
+  it("resolveOpenTabs renders a tab per open path even when its file is absent from the scan", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+    // b.md is open (e.g. restored) but not yet/again in `files` — a partial scan.
+    const opened = openWorkspaceFile(openWorkspaceFile(workspace, "a.md"), "b.md");
+
+    const tabs = resolveOpenTabs(opened);
+    // One tab per open path, in order — the missing file gets a synthesized
+    // entry rather than being dropped from the strip.
+    expect(tabs.map((entry) => entry.relativePath)).toEqual(["a.md", "b.md"]);
+    // The real entry is used where present; the synthesized one carries the path.
+    expect(tabs[0]).toEqual(makeEntry("a.md"));
+    expect(tabs[1].relativePath).toBe("b.md");
+  });
+
+  it("isActiveFilePresent holds an open document through a transient scan miss", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+    const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {
+      content: "# A",
+      lastModifiedMs: 1_000,
+    });
+
+    // The active file vanished from `files` (a racing/partial scan) but is still
+    // open with a loaded buffer — the document must stay, not fall to Welcome.
+    const afterMiss = applyScanResult(opened, [makeEntry("c.md")]);
+    expect(afterMiss.files.map((entry) => entry.relativePath)).toEqual(["c.md"]);
+    expect(isActiveFilePresent(afterMiss)).toBe(true);
+
+    // No active file → not present (the empty/Welcome state is correct).
+    expect(isActiveFilePresent(workspaceWithFiles("/tmp/beta", ["x.md"]))).toBe(false);
+
+    // A confirmed deletion closes the tab → then it's genuinely not present.
+    const { workspace: afterDelete } = applyFsEvent(afterMiss, {
+      kind: "removed",
+      lastModifiedMs: null,
+      relativePath: "a.md",
+    });
+    expect(afterDelete.openFilePaths).toEqual([]);
+    expect(isActiveFilePresent(afterDelete)).toBe(false);
+  });
+
+  it("applyFsEvent on a removed file closes that tab (a confirmed deletion)", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md"]);
+    const opened = openWorkspaceFile(openWorkspaceFile(workspace, "a.md"), "b.md");
+
+    const { workspace: next, effect } = applyFsEvent(opened, {
+      kind: "removed",
+      lastModifiedMs: null,
+      relativePath: "b.md",
+    });
+
+    expect(effect.type).toBe("rescan");
+    expect(next.openFilePaths).toEqual(["a.md"]);
+    expect(next.activeFilePath).toBe("a.md");
+    expect(next.files.map((entry) => entry.relativePath)).toEqual(["a.md"]);
   });
 
   it("applyFsEvent on a dirty buffer marks it as conflicted", () => {
@@ -426,16 +495,16 @@ describe("workspace model", () => {
     expect(merged[0]).toBe(populated);
   });
 
-  it("startBobRun → markBobRunStreaming → appendAssistantText builds a streaming reply", () => {
+  it("startRun → markRunStreaming → appendAssistantText builds a streaming reply", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
     const t1 = appendUserChatMessage(workspace.chatThread, "Hi Bob", null);
-    const t2 = startBobRun(t1, runId, "llm-thread-1");
+    const t2 = startRun(t1, runId, "llm-thread-1");
     expect(t2.runState).toBe("starting");
     expect(t2.activeRunId).toBe(runId);
     expect(t2.activeLlmThreadId).toBe("llm-thread-1");
 
-    const t3 = markBobRunStreaming(t2, runId);
+    const t3 = markRunStreaming(t2, runId);
     expect(t3.runState).toBe("streaming");
     expect(t3.messages[t3.messages.length - 1]?.role).toBe("assistant");
     expect(t3.messages[t3.messages.length - 1]?.streaming).toBe(true);
@@ -445,15 +514,15 @@ describe("workspace model", () => {
     expect(assistantMessageContentForRun(t4, runId)).toBe("Hello world");
   });
 
-  it("finalizeBobRun marks success and clears the streaming flag", () => {
+  it("finalizeRun marks success and clears the streaming flag", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
     const streaming = appendAssistantText(
-      markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId),
+      markRunStreaming(startRun(workspace.chatThread, runId), runId),
       runId,
       "done",
     );
-    const finalized = finalizeBobRun(streaming, runId, { exitCode: 0 });
+    const finalized = finalizeRun(streaming, runId, { exitCode: 0 });
     expect(finalized.runState).toBe("idle");
     expect(finalized.activeRunId).toBeNull();
     expect(finalized.activeLlmThreadId).toBeNull();
@@ -461,26 +530,26 @@ describe("workspace model", () => {
     expect(finalized.runError).toBeNull();
   });
 
-  it("finalizeBobRun surfaces a runError on non-zero exit", () => {
+  it("finalizeRun surfaces a runError on non-zero exit", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
 
-    const failed = finalizeBobRun(streaming, runId, { exitCode: 2 });
+    const failed = finalizeRun(streaming, runId, { exitCode: 2 });
     expect(failed.runState).toBe("error");
     expect(failed.runError).toContain("2");
   });
 
-  it("finalizeBobRun surfaces an in-band errorMessage as the runError", () => {
+  it("finalizeRun surfaces an in-band errorMessage as the runError", () => {
     // The path a failing codex/claude run takes: a ChatEvent::Error (now
     // produced by agent-harness 0.3.0 from codex's turn.failed/error) →
     // finalize({ errorMessage }). The message must reach runError + the
     // assistant trace, not vanish — the run is shown as errored, not silent.
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
 
-    const failed = finalizeBobRun(streaming, runId, { errorMessage: "quota exceeded" });
+    const failed = finalizeRun(streaming, runId, { errorMessage: "quota exceeded" });
     expect(failed.runState).toBe("error");
     expect(failed.runError).toBe("quota exceeded");
     expect(failed.activeRunId).toBeNull();
@@ -492,7 +561,7 @@ describe("workspace model", () => {
   it("setAssistantActivity attaches a status line to the latest assistant message", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
 
     const annotated = setAssistantActivity(streaming, runId, "Reading notes/a.md");
     expect(annotated.messages[annotated.messages.length - 1]?.activity).toBe("Reading notes/a.md");
@@ -501,7 +570,7 @@ describe("workspace model", () => {
   it("concatenates narration deltas into one ordered trace entry, never the answer", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
 
     // Two deltas of the same narration message concatenate into one entry.
     const t1 = appendAssistantNotice(streaming, runId, "I'll read ");
@@ -523,7 +592,7 @@ describe("workspace model", () => {
     // trace step (which would blank the live status line).
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    let thread = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    let thread = markRunStreaming(startRun(workspace.chatThread, runId), runId);
     thread = appendAssistantNotice(thread, runId, "Reading the notes.");
     thread = startAssistantToolCall(thread, runId, "t1", "read_file", "read", "{}");
     thread = endAssistantToolCall(thread, runId, "t1", true, "ok");
@@ -539,7 +608,7 @@ describe("workspace model", () => {
   it("builds an ordered trace: thinking → notice → tool, with tool input/output", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    let thread = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    let thread = markRunStreaming(startRun(workspace.chatThread, runId), runId);
     thread = appendAssistantThinking(thread, runId, "Let me ");
     thread = appendAssistantThinking(thread, runId, "look.");
     thread = appendAssistantNotice(thread, runId, "Reading the notes.");
@@ -565,14 +634,14 @@ describe("workspace model", () => {
     ]);
 
     // The trace survives finalize.
-    const finalized = finalizeBobRun(thread, runId, { exitCode: 0 });
+    const finalized = finalizeRun(thread, runId, { exitCode: 0 });
     expect(finalized.messages[finalized.messages.length - 1]?.trace).toHaveLength(3);
   });
 
   it("records session id and usage stats on the assistant message", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    const streaming = markBobRunStreaming(startBobRun(workspace.chatThread, runId), runId);
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId), runId);
     const withSession = setAssistantSession(streaming, runId, "session-abc");
     const withStats = setAssistantStats(withSession, runId, {
       totalTokens: 1234,
@@ -591,7 +660,7 @@ describe("workspace model", () => {
       { content: "# Old title\n", lastModifiedMs: 1_000 },
     );
     const runId = "run-1";
-    const started = startBobRun(
+    const started = startRun(
       appendUserChatMessage(workspace.chatThread, "Improve the title", null),
       runId,
     );
@@ -611,7 +680,7 @@ describe("workspace model", () => {
         kind: "replace",
         createdAt: 123,
         filePath: "a.md",
-        id: "message-2-suggestion-1",
+        id: withSuggestion.messages[1].suggestions![0].id,
         originalText: "Old title",
         range: { start: 2, end: 11 },
         replacement: "Launch plan",
@@ -631,7 +700,7 @@ describe("workspace model", () => {
       { content: "# Old title\n", lastModifiedMs: 1_000 },
     );
     const runId = "run-1";
-    const started = startBobRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
+    const started = startRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
     const { drafts } = prepareWorkspaceSuggestionDrafts(base, [
       {
         filePath: "a.md",
@@ -645,7 +714,8 @@ describe("workspace model", () => {
       chatThread: appendAssistantSuggestions(started, runId, drafts, 123),
     };
 
-    const accepted = acceptWorkspaceSuggestion(withSuggestion, "message-2-suggestion-1", 456);
+    const suggestionId = withSuggestion.chatThread.messages[1].suggestions![0].id;
+    const accepted = acceptWorkspaceSuggestion(withSuggestion, suggestionId, 456);
 
     expect(accepted.fileContents["a.md"].content).toBe("# Launch plan\n");
     expect(accepted.fileContents["a.md"].dirty).toBe(true);
@@ -665,7 +735,7 @@ describe("workspace model", () => {
       { content: "# Old title\n", lastModifiedMs: 1_000 },
     );
     const runId = "run-1";
-    const started = startBobRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
+    const started = startRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
     const { drafts } = prepareWorkspaceSuggestionDrafts(base, [
       {
         filePath: "a.md",
@@ -680,12 +750,13 @@ describe("workspace model", () => {
     };
     const changed = markBufferDirty(withSuggestion, "a.md", "# Changed\n");
 
-    const accepted = acceptWorkspaceSuggestion(changed, "message-2-suggestion-1", 456);
+    const suggestionId = withSuggestion.chatThread.messages[1].suggestions![0].id;
+    const accepted = acceptWorkspaceSuggestion(changed, suggestionId, 456);
 
     expect(accepted.fileContents["a.md"].content).toBe("# Changed\n");
     expect(accepted.chatThread.messages[1].suggestions?.[0]).toMatchObject({
       status: "stale",
-      statusMessage: "Source changed since Bob suggested this edit.",
+      statusMessage: "Source changed since this edit was suggested.",
     });
   });
 
@@ -696,7 +767,7 @@ describe("workspace model", () => {
       { content: "# Old title\n", lastModifiedMs: 1_000 },
     );
     const runId = "run-1";
-    const started = startBobRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
+    const started = startRun(appendUserChatMessage(base.chatThread, "Improve title", null), runId);
     const { drafts } = prepareWorkspaceSuggestionDrafts(base, [
       {
         filePath: "a.md",
@@ -710,7 +781,8 @@ describe("workspace model", () => {
       chatThread: appendAssistantSuggestions(started, runId, drafts, 123),
     };
 
-    const rejected = rejectWorkspaceSuggestion(withSuggestion, "message-2-suggestion-1", 456);
+    const suggestionId = withSuggestion.chatThread.messages[1].suggestions![0].id;
+    const rejected = rejectWorkspaceSuggestion(withSuggestion, suggestionId, 456);
 
     expect(rejected.fileContents["a.md"].content).toBe("# Old title\n");
     expect(rejected.chatThread.messages[1].suggestions?.[0]).toMatchObject({
@@ -723,7 +795,7 @@ describe("workspace model", () => {
     const base = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
     const started = appendAssistantText(
-      startBobRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
+      startRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
       runId,
       "Done.",
     );
@@ -780,7 +852,7 @@ describe("workspace model", () => {
     const base = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
     const started = appendAssistantText(
-      startBobRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
+      startRun(appendUserChatMessage(base.chatThread, "Edit my notes", null), runId),
       runId,
       "Done.",
     );
@@ -824,7 +896,7 @@ describe("workspace model", () => {
     const runId = "run-1";
     const chatThread = appendReviewChangeSuggestions(
       appendAssistantText(
-        startBobRun(appendUserChatMessage(base.chatThread, "x", null), runId),
+        startRun(appendUserChatMessage(base.chatThread, "x", null), runId),
         runId,
         "Done.",
       ),
@@ -847,12 +919,13 @@ describe("workspace model", () => {
 
     // File-level kinds don't touch the in-memory buffer here — the store
     // applies them to disk through the review session, so accept is a no-op.
-    const untouched = acceptWorkspaceSuggestion(workspace, "message-2-suggestion-1", 300);
+    const suggestionId = workspace.chatThread.messages[1].suggestions![0].id;
+    const untouched = acceptWorkspaceSuggestion(workspace, suggestionId, 300);
     expect(untouched.chatThread.messages[1].suggestions?.[0]?.status).toBe("pending");
     expect(untouched.fileContents).toEqual(base.fileContents);
 
     // The store records the outcome after applying on disk.
-    const marked = markWorkspaceSuggestion(workspace, "message-2-suggestion-1", "accepted", null, 300);
+    const marked = markWorkspaceSuggestion(workspace, suggestionId, "accepted", null, 300);
     expect(marked.chatThread.messages[1].suggestions?.[0]).toMatchObject({
       status: "accepted",
       updatedAt: 300,
@@ -875,8 +948,8 @@ describe("workspace model", () => {
   it("serialize → hydrate round-trips content, trace, and stats", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    let thread = markBobRunStreaming(
-      startBobRun(appendUserChatMessage(workspace.chatThread, "what is this about?", null), runId),
+    let thread = markRunStreaming(
+      startRun(appendUserChatMessage(workspace.chatThread, "what is this about?", null), runId),
       runId,
     );
     thread = appendAssistantThinking(thread, runId, "Let me look.");
@@ -884,7 +957,7 @@ describe("workspace model", () => {
     thread = endAssistantToolCall(thread, runId, "t1", true, "ok: 10 lines");
     thread = appendAssistantText(thread, runId, "It is a relocation plan.");
     thread = setAssistantStats(thread, runId, { totalTokens: 21956, coins: 0.05 });
-    thread = finalizeBobRun(thread, runId, { exitCode: 0 });
+    thread = finalizeRun(thread, runId, { exitCode: 0 });
     thread = { ...thread, conversationId: "conv-1" };
 
     const records = serializeChatMessages(thread);
@@ -925,14 +998,76 @@ describe("workspace model", () => {
     expect(answer.stats).toEqual({ totalTokens: 21956, coins: 0.05 });
   });
 
+  it("persists a live reply as streaming; loads a stale one as interrupted", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-2";
+    // A reply that streamed partial text but never finalized — the app quit or
+    // crashed mid-stream.
+    let thread = markRunStreaming(
+      startRun(appendUserChatMessage(workspace.chatThread, "summarize", null), runId),
+      runId,
+    );
+    thread = appendAssistantText(thread, runId, "Here is the par");
+    thread = { ...thread, conversationId: "conv-2" };
+
+    const records = serializeChatMessages(thread);
+    // The in-flight reply is persisted (not skipped) and tagged streaming, so a
+    // crash leaves a marker on disk instead of losing the turn.
+    const answer = records.find((record) => record.role === "assistant");
+    expect(answer?.runStatus).toBe("streaming");
+
+    // Loading it in a fresh session (no live run) reads the stale streaming
+    // marker as an interrupted reply — surfaced with a Retry, not a dead spinner.
+    const snapshot = {
+      conversationId: "conv-2",
+      title: null,
+      harnessId: "bob",
+      contextFiles: [],
+      messages: records,
+      createdAt: 0,
+      updatedAt: 1,
+    };
+    const restored = hydrateChatThread(createWorkspaceFromPath("/tmp/alpha").chatThread, snapshot);
+    const restoredAnswer = restored.messages[1];
+    expect(restoredAnswer.interrupted).toBe(true);
+    expect(restoredAnswer.streaming).toBeUndefined();
+    expect(restoredAnswer.content).toBe("Here is the par");
+  });
+
+  it("leaves a settled reply unmarked, so it never reads as interrupted", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-3";
+    let thread = markRunStreaming(
+      startRun(appendUserChatMessage(workspace.chatThread, "q", null), runId),
+      runId,
+    );
+    thread = appendAssistantText(thread, runId, "done");
+    thread = finalizeRun(thread, runId, { exitCode: 0 });
+    thread = { ...thread, conversationId: "conv-3" };
+
+    const records = serializeChatMessages(thread);
+    expect(records.every((record) => record.runStatus == null)).toBe(true);
+
+    const restored = hydrateChatThread(createWorkspaceFromPath("/tmp/alpha").chatThread, {
+      conversationId: "conv-3",
+      title: null,
+      harnessId: null,
+      contextFiles: [],
+      messages: records,
+      createdAt: 0,
+      updatedAt: 1,
+    });
+    expect(restored.messages.some((message) => message.interrupted)).toBe(false);
+  });
+
   it("resetChatThread clears messages + run state, keeps context", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
     const withContext = setCurrentTabContext(workspace.chatThread, workspace.id, "a.md");
     const runId = "run-1";
-    const used = finalizeBobRun(
+    const used = finalizeRun(
       appendAssistantText(
-        markBobRunStreaming(
-          startBobRun(appendUserChatMessage(withContext, "hi", null), runId),
+        markRunStreaming(
+          startRun(appendUserChatMessage(withContext, "hi", null), runId),
           runId,
         ),
         runId,
@@ -952,13 +1087,13 @@ describe("workspace model", () => {
   it("createPromptWithContext replays prior request/answer turns, excludes trace", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
-    let thread = markBobRunStreaming(
-      startBobRun(appendUserChatMessage(workspace.chatThread, "first question", null), runId),
+    let thread = markRunStreaming(
+      startRun(appendUserChatMessage(workspace.chatThread, "first question", null), runId),
       runId,
     );
     thread = appendAssistantThinking(thread, runId, "secret reasoning");
     thread = appendAssistantText(thread, runId, "first answer");
-    thread = finalizeBobRun(thread, runId, { exitCode: 0 });
+    thread = finalizeRun(thread, runId, { exitCode: 0 });
 
     const prompt = createPromptWithContext("second question", [], thread.messages);
     expect(prompt).toContain("Conversation so far:");
@@ -984,5 +1119,78 @@ describe("workspace model", () => {
 
   it("createPromptWithContext with no prior turns and no context is just the prompt", () => {
     expect(createPromptWithContext("hello", [])).toBe("hello");
+  });
+
+  it("buildFileContextBlock inlines small file content and references large ones", () => {
+    const fileItem = (path: string): WorkspaceFileContextItem => ({
+      id: path,
+      kind: "file",
+      label: path,
+      path,
+      workspaceId: "w1",
+    });
+    const big = "x".repeat(FILE_CONTEXT_INLINE_LIMIT + 1);
+    const block = buildFileContextBlock(
+      [fileItem("small.md"), fileItem("big.md"), fileItem("missing.md")],
+      new Map([
+        ["small.md", "hello world"],
+        ["big.md", big],
+      ]),
+    );
+    // Small file: inlined under a `### <path>` heading with its content.
+    expect(block).toContain("### small.md\nhello world");
+    // Large file: referenced by path, content withheld (read on demand).
+    expect(block).toContain("- big.md (large; read it for details)");
+    expect(block).not.toContain(big);
+    // Path with no content in the map also degrades to a reference.
+    expect(block).toContain("- missing.md (large; read it for details)");
+  });
+
+  it("addFileContextItem adds a labelled chip and dedupes by path", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const added = addFileContextItem(
+      workspace.chatThread,
+      workspace.id,
+      "/scratch/paste-1.md",
+      "Pasted text (12 KB)",
+    );
+    expect(added.contextItems).toHaveLength(1);
+    expect(added.contextItems[0]).toMatchObject({
+      kind: "file",
+      label: "Pasted text (12 KB)",
+      path: "/scratch/paste-1.md",
+    });
+    // Re-adding the same path replaces (keeps one chip, updates the label).
+    const again = addFileContextItem(added, workspace.id, "/scratch/paste-1.md", "Pasted text (13 KB)");
+    expect(again.contextItems).toHaveLength(1);
+    expect(again.contextItems[0].label).toBe("Pasted text (13 KB)");
+  });
+
+  it("removeContextItem drops the chip with the given id", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const added = addFileContextItem(workspace.chatThread, workspace.id, "/scratch/p.md", "Pasted");
+    const id = added.contextItems[0].id;
+    expect(removeContextItem(added, id).contextItems).toHaveLength(0);
+    // Unknown id is a no-op.
+    expect(removeContextItem(added, "nope").contextItems).toHaveLength(1);
+  });
+
+  it("createPromptWithContext inlines attached file content from the content map", () => {
+    const fileItem: WorkspaceFileContextItem = {
+      id: "notes/a.md",
+      kind: "file",
+      label: "notes/a.md",
+      path: "notes/a.md",
+      workspaceId: "w1",
+    };
+    const prompt = createPromptWithContext(
+      "summarize this",
+      [fileItem],
+      [],
+      new Map([["notes/a.md", "the file body"]]),
+    );
+    expect(prompt).toContain("Context files:");
+    expect(prompt).toContain("### notes/a.md\nthe file body");
+    expect(prompt.endsWith("summarize this")).toBe(true);
   });
 });

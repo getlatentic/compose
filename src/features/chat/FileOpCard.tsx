@@ -31,21 +31,21 @@ export function FileOpCard({ tool }: { tool: WorkspaceToolCall }) {
   const file = toolFile(tool.input);
 
   return (
-    <div className={`bob-fileop bob-fileop--${tool.status}`}>
-      <Icon size={16} className="bob-fileop__icon" aria-hidden />
-      <span className="bob-fileop__body">
-        <span className="bob-fileop__title">
+    <div className={`fileop fileop--${tool.status}`}>
+      <Icon size={16} className="fileop__icon" aria-hidden />
+      <span className="fileop__body">
+        <span className="fileop__title">
           {verb}
           {file ? (
             <>
               {" "}
-              <code className="bob-fileop__file">{file}</code>
+              <code className="fileop__file">{file}</code>
             </>
           ) : (
             " a file"
           )}
         </span>
-        <span className="bob-fileop__sub">{STATUS_SUBTITLE[tool.status]}</span>
+        <span className="fileop__sub">{STATUS_SUBTITLE[tool.status]}</span>
       </span>
     </div>
   );
