@@ -1372,13 +1372,23 @@ select {
   display: flex;
   flex: 0 0 var(--titlebar-height);
   min-inline-size: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   background: var(--cds-layer-02, #ffffff);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
-.tab-strip::-webkit-scrollbar {
+// Only the tabs scroll; the leading traffic-light spacer + show-sidebar toggle
+// are siblings of this scroller, so they stay pinned at the strip's start
+// instead of sliding under the macOS window controls when tabs overflow.
+.tab-strip__scroll {
+  display: flex;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.tab-strip__scroll::-webkit-scrollbar {
   block-size: 0.1875rem;
 }
 
@@ -3669,7 +3679,10 @@ select {
   background: transparent;
   color: var(--cds-text-primary, #161616);
   font-size: 0.875rem;
-  line-height: 1.375rem;
+  // Keep the line box close to the glyph height — the textarea caret spans the
+  // full line box, so a loose line-height makes the cursor look much taller than
+  // the text.
+  line-height: 1.25rem;
   overflow-y: auto;
 }
 
@@ -5716,6 +5729,13 @@ select {
 
 .file-row-wrapper--active {
   background: var(--cds-layer-selected-01, #e0e0e0);
+}
+
+// The folder a plain "New note" lands in (`newNoteDir`). A left accent bar
+// reads as "new notes go here", kept visually distinct from the gray
+// selected-file highlight (`--active`).
+.file-row-wrapper--target {
+  box-shadow: inset 2px 0 0 0 var(--cds-border-interactive, #0f62fe);
 }
 
 .file-row-wrapper .file-row {

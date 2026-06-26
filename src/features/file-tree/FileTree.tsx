@@ -101,32 +101,59 @@ const FileRow = memo(function FileRow({
   );
 });
 
-/** One folder row, memoised — only re-renders when its own open state flips. */
+/** One folder row, memoised — re-renders only when its open/selected state
+ * flips. Mirrors {@link FileRow}: a lazily-mounted, hover-revealed kebab with
+ * folder actions ("New note here" / "Reveal in Finder"). `selected` marks it as
+ * the destination a plain "New note" lands in. */
 const FolderRow = memo(function FolderRow({
   path,
   name,
   depth,
   open,
-  onToggle,
+  selected,
+  onActivate,
+  onNewNoteHere,
+  onReveal,
 }: {
   path: string;
   name: string;
   depth: number;
   open: boolean;
-  onToggle: (path: string) => void;
+  selected: boolean;
+  onActivate: (path: string) => void;
+  onNewNoteHere: (path: string) => void;
+  onReveal: (path: string) => void;
 }) {
+  const [menuMounted, setMenuMounted] = useState(false);
+  const mountMenu = useCallback(() => setMenuMounted(true), []);
   return (
-    <button
-      type="button"
-      className="file-row file-row--folder"
-      style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
-      onClick={() => onToggle(path)}
-      aria-expanded={open}
-      title={name}
+    <div
+      className={["file-row-wrapper", selected ? "file-row-wrapper--target" : ""]
+        .filter(Boolean)
+        .join(" ")}
+      onMouseEnter={mountMenu}
+      onFocus={mountMenu}
     >
-      {open ? <CaretDown size={16} /> : <CaretRight size={16} />}
-      <span className="truncate">{name}</span>
-    </button>
+      <button
+        type="button"
+        className="file-row file-row--folder"
+        style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
+        onClick={() => onActivate(path)}
+        aria-expanded={open}
+        title={name}
+      >
+        {open ? <CaretDown size={16} /> : <CaretRight size={16} />}
+        <span className="truncate">{name}</span>
+      </button>
+      {menuMounted ? (
+        <OverflowMenu aria-label={`Actions for ${path}`} size="sm" flipped align="bottom">
+          <OverflowMenuItem itemText="New note here" onClick={() => onNewNoteHere(path)} />
+          <OverflowMenuItem itemText="Reveal in Finder" onClick={() => onReveal(path)} />
+        </OverflowMenu>
+      ) : (
+        <span className="file-row-kebab-spacer" aria-hidden />
+      )}
+    </div>
   );
 });
 
@@ -246,6 +273,12 @@ function FileTreeInner({
     const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
     return ws?.path ?? "";
   });
+  // The folder a plain "New note" lands in. A string that changes only on a
+  // deliberate select, so subscribing here re-renders the tree (and the two
+  // folder rows whose `selected` flips) without touching the editing hot path.
+  const newNoteDir = useWorkspaceStore((state) => state.newNoteDir);
+  const setNewNoteDir = useWorkspaceStore((state) => state.setNewNoteDir);
+  const createNote = useWorkspaceStore((state) => state.createNote);
 
   // Stable so the memoised FolderRow doesn't re-render on every keystroke /
   // file-select that re-renders FileTree.
@@ -278,6 +311,33 @@ function FileTreeInner({
         .catch(() => {});
     },
     [absPath],
+  );
+
+  // Clicking a folder both toggles it and marks it as the new-note target;
+  // clicking a file targets its parent folder — so the highlighted target
+  // always tracks where the user is, and gives a way back to the root (open a
+  // root-level note). Stable so the memoised rows don't churn.
+  const activateFolder = useCallback(
+    (path: string) => {
+      toggleFolder(path);
+      setNewNoteDir(path);
+    },
+    [toggleFolder, setNewNoteDir],
+  );
+  const newNoteHere = useCallback(
+    (path: string) => {
+      setNewNoteDir(path);
+      void createNote({ dir: path });
+    },
+    [setNewNoteDir, createNote],
+  );
+  const selectFileTrackingDir = useCallback(
+    (relativePath: string) => {
+      onSelectFile(relativePath);
+      const slash = relativePath.lastIndexOf("/");
+      setNewNoteDir(slash >= 0 ? relativePath.slice(0, slash) : "");
+    },
+    [onSelectFile, setNewNoteDir],
   );
 
   // Window the (already collapse-flattened) rows: only ~a viewport-worth mount,
@@ -325,7 +385,10 @@ function FileTreeInner({
                   name={node.name}
                   depth={node.depth}
                   open={!collapsed.has(node.path)}
-                  onToggle={toggleFolder}
+                  selected={node.path === newNoteDir}
+                  onActivate={activateFolder}
+                  onNewNoteHere={newNoteHere}
+                  onReveal={revealInFinder}
                 />
               ) : (
                 <FileRow
@@ -333,7 +396,7 @@ function FileTreeInner({
                   name={node.name}
                   depth={node.depth}
                   active={node.path === activePath}
-                  onSelect={onSelectFile}
+                  onSelect={selectFileTrackingDir}
                   onRename={onRename}
                   onDelete={onDelete}
                   onCopyPath={copyPath}

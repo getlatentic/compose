@@ -80,13 +80,7 @@ function PaneTabsInner({
   // `mousedown` handler calls `startDragging()`; it auto-ignores clicks on
   // any descendant `<button>`, so the tab + close buttons keep working.
   return (
-    <div
-      className="tab-strip"
-      role="tablist"
-      aria-label="Open tabs"
-      data-tauri-drag-region
-      onMouseDown={onStripMouseDown}
-    >
+    <div className="tab-strip" data-tauri-drag-region onMouseDown={onStripMouseDown}>
       {hasInset ? (
         <div
           className="tab-strip__traffic-spacer"
@@ -107,49 +101,59 @@ function PaneTabsInner({
           <PanelLeft size={16} aria-hidden />
         </button>
       ) : null}
-      {files.map(({ entry }) => {
-        const active = entry.relativePath === activeFilePath;
-        const slash = entry.relativePath.lastIndexOf("/");
-        const fileName = slash >= 0 ? entry.relativePath.slice(slash + 1) : entry.relativePath;
+      {/* Only the tabs scroll. The traffic-light spacer + show-sidebar toggle
+          are siblings of this scroller, so they stay pinned at the start and
+          never slide under the macOS window controls when tabs overflow. */}
+      <div
+        className="tab-strip__scroll"
+        role="tablist"
+        aria-label="Open tabs"
+        data-tauri-drag-region
+      >
+        {files.map(({ entry }) => {
+          const active = entry.relativePath === activeFilePath;
+          const slash = entry.relativePath.lastIndexOf("/");
+          const fileName = slash >= 0 ? entry.relativePath.slice(slash + 1) : entry.relativePath;
 
-        return (
-          <div
-            key={`file:${entry.relativePath}`}
-            ref={active ? activeTabRef : undefined}
-            className={["editor-tab", active ? "editor-tab--active" : ""]
-              .filter(Boolean)
-              .join(" ")}
-            title={entry.relativePath}
-            data-tauri-drag-region="false"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className="tab-button"
+          return (
+            <div
+              key={`file:${entry.relativePath}`}
+              ref={active ? activeTabRef : undefined}
+              className={["editor-tab", active ? "editor-tab--active" : ""]
+                .filter(Boolean)
+                .join(" ")}
+              title={entry.relativePath}
               data-tauri-drag-region="false"
-              onClick={() => {
-                markTabSwitchStart();
-                onSelectFile(entry.relativePath);
-              }}
             >
-              <Document size={14} />
-              <span className="truncate">{fileName}</span>
-              <TabDirtyDot path={entry.relativePath} />
-            </button>
-            <button
-              type="button"
-              aria-label={`Close ${entry.relativePath}`}
-              title={`Close ${fileName}`}
-              className="tab-close"
-              data-tauri-drag-region="false"
-              onClick={() => onCloseFile(entry.relativePath)}
-            >
-              <Close size={14} />
-            </button>
-          </div>
-        );
-      })}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className="tab-button"
+                data-tauri-drag-region="false"
+                onClick={() => {
+                  markTabSwitchStart();
+                  onSelectFile(entry.relativePath);
+                }}
+              >
+                <Document size={14} />
+                <span className="truncate">{fileName}</span>
+                <TabDirtyDot path={entry.relativePath} />
+              </button>
+              <button
+                type="button"
+                aria-label={`Close ${entry.relativePath}`}
+                title={`Close ${fileName}`}
+                className="tab-close"
+                data-tauri-drag-region="false"
+                onClick={() => onCloseFile(entry.relativePath)}
+              >
+                <Close size={14} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

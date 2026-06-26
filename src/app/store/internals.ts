@@ -25,19 +25,20 @@ export function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-/** Next free `untitled-N.md` path — at the workspace root, alongside any other
- * notes — that collides with neither an existing file nor an open (possibly
- * unsaved) tab. */
-export function nextUntitledPath(workspace: Workspace): string {
+/** Next free `untitled-N.md` path — inside `dir` when given, else at the
+ * workspace root, alongside any other notes — that collides with neither an
+ * existing file nor an open (possibly unsaved) tab. */
+export function nextUntitledPath(workspace: Workspace, dir?: string): string {
+  const prefix = dir ? `${dir.replace(/\/+$/, "")}/` : "";
   const existing = new Set([
     ...workspace.files.map((entry) => entry.relativePath),
     ...workspace.openFilePaths,
   ]);
   let index = 1;
-  while (existing.has(`untitled-${index}.md`)) {
+  while (existing.has(`${prefix}untitled-${index}.md`)) {
     index += 1;
   }
-  return `untitled-${index}.md`;
+  return `${prefix}untitled-${index}.md`;
 }
 
 /**
