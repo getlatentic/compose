@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
 import { CaretDown, CaretRight, Document } from "@carbon/react/icons";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -24,6 +24,48 @@ function FileRowDirtyDot({ path }: { path: string }) {
     return Boolean(ws?.fileContents[path]?.dirty);
   });
   return dirty ? <span className="dirty-dot" aria-label="Unsaved" /> : null;
+}
+
+/**
+ * Row-menu wiring shared by file + folder rows. The Carbon `OverflowMenu` (the
+ * ⋯ kebab) mounts lazily on first hover/focus — mounting one per row up front
+ * tanked first paint on large vaults. Right-clicking the row opens that same
+ * menu (and suppresses the OS context menu), so the row's actions are a
+ * right-click away — the file-explorer expectation — without duplicating them.
+ */
+function useRowMenu() {
+  const [menuMounted, setMenuMounted] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const openWhenMounted = useRef(false);
+  const openMenu = useCallback(() => {
+    wrapperRef.current?.querySelector<HTMLButtonElement>(".cds--overflow-menu")?.click();
+  }, []);
+  const mountMenu = useCallback(() => setMenuMounted(true), []);
+  const onContextMenu = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      // Open our menu instead of the webview's native context menu. Defer the
+      // open past this right-click's own mouseup — Carbon treats that mouseup as
+      // an outside-click and would instantly close a menu opened synchronously.
+      // (The not-yet-mounted branch is naturally deferred: it opens in the
+      // effect below, after the mount render commits.)
+      event.preventDefault();
+      if (menuMounted) {
+        window.setTimeout(openMenu, 0);
+      } else {
+        openWhenMounted.current = true;
+        setMenuMounted(true);
+      }
+    },
+    [menuMounted, openMenu],
+  );
+  // A right-click before the menu has ever mounted opens it once it renders.
+  useEffect(() => {
+    if (menuMounted && openWhenMounted.current) {
+      openWhenMounted.current = false;
+      openMenu();
+    }
+  }, [menuMounted, openMenu]);
+  return { menuMounted, wrapperRef, mountMenu, onContextMenu };
 }
 
 /**
@@ -64,15 +106,16 @@ const FileRow = memo(function FileRow({
   // revealed on hover/focus anyway (CSS opacity), so mount it lazily then; at
   // rest the slot is an empty same-size spacer (no layout shift), and a freshly
   // opened vault mounts ZERO menus.
-  const [menuMounted, setMenuMounted] = useState(false);
-  const mountMenu = useCallback(() => setMenuMounted(true), []);
+  const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
   return (
     <div
+      ref={wrapperRef}
       className={["file-row-wrapper", active ? "file-row-wrapper--active" : ""]
         .filter(Boolean)
         .join(" ")}
       onMouseEnter={mountMenu}
       onFocus={mountMenu}
+      onContextMenu={onContextMenu}
     >
       <button
         type="button"
@@ -124,15 +167,16 @@ const FolderRow = memo(function FolderRow({
   onNewNoteHere: (path: string) => void;
   onReveal: (path: string) => void;
 }) {
-  const [menuMounted, setMenuMounted] = useState(false);
-  const mountMenu = useCallback(() => setMenuMounted(true), []);
+  const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
   return (
     <div
+      ref={wrapperRef}
       className={["file-row-wrapper", selected ? "file-row-wrapper--target" : ""]
         .filter(Boolean)
         .join(" ")}
       onMouseEnter={mountMenu}
       onFocus={mountMenu}
+      onContextMenu={onContextMenu}
     >
       <button
         type="button"

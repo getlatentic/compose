@@ -56,7 +56,6 @@ function PaneTabsInner({
    * the sidebar (visible only when collapsed). */
   onShowSidebar?: () => void;
 }) {
-  const hasInset = (leadingInsetPx ?? 0) > 0;
   const hasShow = Boolean(onShowSidebar);
   const onStripMouseDown = useWindowDrag();
 
@@ -70,7 +69,7 @@ function PaneTabsInner({
     activeTabRef.current?.scrollIntoView({ inline: "nearest", block: "nearest" });
   }, [activeFilePath, files.length]);
 
-  if (files.length === 0 && !hasInset && !hasShow) {
+  if (files.length === 0 && !hasShow) {
     return null;
   }
 
@@ -81,25 +80,27 @@ function PaneTabsInner({
   // any descendant `<button>`, so the tab + close buttons keep working.
   return (
     <div className="tab-strip" data-tauri-drag-region onMouseDown={onStripMouseDown}>
-      {hasInset ? (
-        <div
-          className="tab-strip__traffic-spacer"
-          data-tauri-drag-region
-          style={{ width: `${leadingInsetPx}px` }}
-          aria-hidden
-        />
-      ) : null}
       {onShowSidebar ? (
-        <button
-          type="button"
-          className="tab-strip__sidebar-toggle"
-          data-tauri-drag-region="false"
-          onClick={onShowSidebar}
-          aria-label="Show sidebar"
-          title="Show sidebar"
+        // Collapsed: reuse the sidebar titlebar's styling so the toggle sits
+        // exactly where it does with the sidebar open (aligned with the traffic
+        // lights), and the tabs don't shift. `--traffic-lights-inset` reserves
+        // the macOS lights' home, matching the expanded titlebar.
+        <div
+          className="sidebar-titlebar tab-strip__lead"
+          data-tauri-drag-region
+          style={{ ["--traffic-lights-inset" as never]: `${leadingInsetPx}px` }}
         >
-          <PanelLeft size={16} aria-hidden />
-        </button>
+          <button
+            type="button"
+            className="sidebar-titlebar__btn"
+            data-tauri-drag-region="false"
+            onClick={onShowSidebar}
+            aria-label="Show sidebar"
+            title="Show sidebar"
+          >
+            <PanelLeft size={16} aria-hidden />
+          </button>
+        </div>
       ) : null}
       {/* Only the tabs scroll. The traffic-light spacer + show-sidebar toggle
           are siblings of this scroller, so they stay pinned at the start and

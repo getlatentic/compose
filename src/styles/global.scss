@@ -773,33 +773,19 @@ select {
   white-space: nowrap;
 }
 
-// === Editor tab strip: traffic-lights inset + show-sidebar toggle ===
-// When the sidebar is collapsed, the tab strip hosts both — the spacer
-// reserves room for the macOS traffic lights (their new home), and the
-// toggle gets the sidebar back.
-.tab-strip__traffic-spacer {
-  flex: 0 0 auto;
-  block-size: 100%;
-}
-
-.tab-strip__sidebar-toggle {
-  display: inline-grid;
-  place-items: center;
-  inline-size: var(--titlebar-btn-size);
-  block-size: var(--titlebar-btn-size);
-  margin-inline: 0.25rem;
-  border: 0;
-  background: transparent;
-  color: var(--cds-icon-secondary, #525252);
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.tab-strip__sidebar-toggle:hover,
-.tab-strip__sidebar-toggle:focus-visible {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-  color: var(--cds-text-primary, #161616);
-  outline: none;
+// === Editor tab strip: collapsed-sidebar leading chrome ===
+// When the sidebar is collapsed, the tab strip's leading region REUSES the
+// sidebar titlebar's styling (`.sidebar-titlebar` + `.sidebar-titlebar__btn`)
+// so the show-sidebar toggle sits exactly where it does with the sidebar open
+// — same position, same vertical alignment with the traffic lights. This only
+// adds the fixed sidebar width (so the tabs don't shift on collapse) and the
+// vertical border that separates it from the tabs (the sidebar's own
+// `border-inline-end` in the open state). The expanded-state styling is
+// untouched.
+.tab-strip__lead {
+  // Matches the sidebar grid column width, so collapsing doesn't move the tabs.
+  flex: 0 0 15rem;
+  border-inline-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
 .chat-context {
@@ -5719,8 +5705,12 @@ select {
 .file-row-wrapper {
   // The row fills the width; the kebab (and its pre-mount spacer) are layered
   // over the trailing end, so a long name only loses its tail on hover instead
-  // of always ceding a column to the menu.
+  // of always ceding a column to the menu. Clamp to one row's height: a mounted
+  // Carbon OverflowMenu keeps an in-flow ~19px wrapper element that would
+  // otherwise inflate the row and spill the hover/selection bg into the next
+  // row (the kebab itself is absolutely overlaid, so clamping never hides it).
   position: relative;
+  block-size: 1.75rem;
 }
 
 .file-row-wrapper:hover {
@@ -5746,11 +5736,21 @@ select {
   background: transparent;
 }
 
-.file-row-wrapper .cds--overflow-menu {
+// Carbon wraps the kebab trigger in `.cds--overflow-menu__wrapper`. Position
+// THAT wrapper (not the inner trigger — Carbon's own styles fight a trigger
+// override and shove it off-screen) at the row's trailing edge and out of flow,
+// so the kebab sits at the right and adds nothing to the row's height.
+.file-row-wrapper .cds--overflow-menu__wrapper {
   position: absolute;
   inset-block-start: 50%;
   inset-inline-end: 0.25rem;
+  left: auto;
   transform: translateY(-50%);
+}
+
+.file-row-wrapper .cds--overflow-menu {
+  position: static;
+  transform: none;
   block-size: 1.75rem;
   inline-size: 1.75rem;
   // Opaque so it masks the name's tail it sits over on hover.
@@ -5762,6 +5762,7 @@ select {
 
 .file-row-wrapper:hover .cds--overflow-menu,
 .file-row-wrapper--active .cds--overflow-menu,
+.file-row-wrapper--target .cds--overflow-menu,
 .file-row-wrapper .cds--overflow-menu--open {
   opacity: 1;
 }
