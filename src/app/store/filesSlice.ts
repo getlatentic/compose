@@ -39,7 +39,7 @@ import {
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "closeFileTab" | "createNote" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "updateActiveContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "closeFileTab" | "createNote" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "updateActiveContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -119,6 +119,8 @@ export const createFilesSlice = (
     }));
     persistTabs(get().workspaces, workspace.id);
   },
+  newNoteDir: "",
+  setNewNoteDir: (dir) => set({ newNoteDir: dir }),
   createNote: async (seed) => {
     const workspace = get().activeWorkspace();
     if (!workspace) {
@@ -126,8 +128,10 @@ export const createFilesSlice = (
     }
 
     // A seed (the empty view's first "New note") writes the welcome note; the
-    // plain `+` falls back to a blank untitled note.
-    const relativePath = seed?.relativePath ?? nextUntitledPath(workspace);
+    // plain `+` falls back to a blank untitled note — in the chosen folder
+    // (`newNoteDir`, set by selecting a folder/file in the tree) or the root.
+    const dir = seed?.dir ?? get().newNoteDir;
+    const relativePath = seed?.relativePath ?? nextUntitledPath(workspace, dir);
     const content = seed?.content ?? `# Untitled\n\n`;
 
     try {

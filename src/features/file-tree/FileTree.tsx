@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
 import { CaretDown, CaretRight, Document } from "@carbon/react/icons";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -24,6 +24,48 @@ function FileRowDirtyDot({ path }: { path: string }) {
     return Boolean(ws?.fileContents[path]?.dirty);
   });
   return dirty ? <span className="dirty-dot" aria-label="Unsaved" /> : null;
+}
+
+/**
+ * Row-menu wiring shared by file + folder rows. The Carbon `OverflowMenu` (the
+ * ⋯ kebab) mounts lazily on first hover/focus — mounting one per row up front
+ * tanked first paint on large vaults. Right-clicking the row opens that same
+ * menu (and suppresses the OS context menu), so the row's actions are a
+ * right-click away — the file-explorer expectation — without duplicating them.
+ */
+function useRowMenu() {
+  const [menuMounted, setMenuMounted] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const openWhenMounted = useRef(false);
+  const openMenu = useCallback(() => {
+    wrapperRef.current?.querySelector<HTMLButtonElement>(".cds--overflow-menu")?.click();
+  }, []);
+  const mountMenu = useCallback(() => setMenuMounted(true), []);
+  const onContextMenu = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      // Open our menu instead of the webview's native context menu. Defer the
+      // open past this right-click's own mouseup — Carbon treats that mouseup as
+      // an outside-click and would instantly close a menu opened synchronously.
+      // (The not-yet-mounted branch is naturally deferred: it opens in the
+      // effect below, after the mount render commits.)
+      event.preventDefault();
+      if (menuMounted) {
+        window.setTimeout(openMenu, 0);
+      } else {
+        openWhenMounted.current = true;
+        setMenuMounted(true);
+      }
+    },
+    [menuMounted, openMenu],
+  );
+  // A right-click before the menu has ever mounted opens it once it renders.
+  useEffect(() => {
+    if (menuMounted && openWhenMounted.current) {
+      openWhenMounted.current = false;
+      openMenu();
+    }
+  }, [menuMounted, openMenu]);
+  return { menuMounted, wrapperRef, mountMenu, onContextMenu };
 }
 
 /**
@@ -64,15 +106,16 @@ const FileRow = memo(function FileRow({
   // revealed on hover/focus anyway (CSS opacity), so mount it lazily then; at
   // rest the slot is an empty same-size spacer (no layout shift), and a freshly
   // opened vault mounts ZERO menus.
-  const [menuMounted, setMenuMounted] = useState(false);
-  const mountMenu = useCallback(() => setMenuMounted(true), []);
+  const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
   return (
     <div
+      ref={wrapperRef}
       className={["file-row-wrapper", active ? "file-row-wrapper--active" : ""]
         .filter(Boolean)
         .join(" ")}
       onMouseEnter={mountMenu}
       onFocus={mountMenu}
+      onContextMenu={onContextMenu}
     >
       <button
         type="button"
@@ -101,32 +144,60 @@ const FileRow = memo(function FileRow({
   );
 });
 
-/** One folder row, memoised — only re-renders when its own open state flips. */
+/** One folder row, memoised — re-renders only when its open/selected state
+ * flips. Mirrors {@link FileRow}: a lazily-mounted, hover-revealed kebab with
+ * folder actions ("New note here" / "Reveal in Finder"). `selected` marks it as
+ * the destination a plain "New note" lands in. */
 const FolderRow = memo(function FolderRow({
   path,
   name,
   depth,
   open,
-  onToggle,
+  selected,
+  onActivate,
+  onNewNoteHere,
+  onReveal,
 }: {
   path: string;
   name: string;
   depth: number;
   open: boolean;
-  onToggle: (path: string) => void;
+  selected: boolean;
+  onActivate: (path: string) => void;
+  onNewNoteHere: (path: string) => void;
+  onReveal: (path: string) => void;
 }) {
+  const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
   return (
-    <button
-      type="button"
-      className="file-row file-row--folder"
-      style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
-      onClick={() => onToggle(path)}
-      aria-expanded={open}
-      title={name}
+    <div
+      ref={wrapperRef}
+      className={["file-row-wrapper", selected ? "file-row-wrapper--target" : ""]
+        .filter(Boolean)
+        .join(" ")}
+      onMouseEnter={mountMenu}
+      onFocus={mountMenu}
+      onContextMenu={onContextMenu}
     >
-      {open ? <CaretDown size={16} /> : <CaretRight size={16} />}
-      <span className="truncate">{name}</span>
-    </button>
+      <button
+        type="button"
+        className="file-row file-row--folder"
+        style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
+        onClick={() => onActivate(path)}
+        aria-expanded={open}
+        title={name}
+      >
+        {open ? <CaretDown size={16} /> : <CaretRight size={16} />}
+        <span className="truncate">{name}</span>
+      </button>
+      {menuMounted ? (
+        <OverflowMenu aria-label={`Actions for ${path}`} size="sm" flipped align="bottom">
+          <OverflowMenuItem itemText="New note here" onClick={() => onNewNoteHere(path)} />
+          <OverflowMenuItem itemText="Reveal in Finder" onClick={() => onReveal(path)} />
+        </OverflowMenu>
+      ) : (
+        <span className="file-row-kebab-spacer" aria-hidden />
+      )}
+    </div>
   );
 });
 
@@ -246,6 +317,12 @@ function FileTreeInner({
     const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
     return ws?.path ?? "";
   });
+  // The folder a plain "New note" lands in. A string that changes only on a
+  // deliberate select, so subscribing here re-renders the tree (and the two
+  // folder rows whose `selected` flips) without touching the editing hot path.
+  const newNoteDir = useWorkspaceStore((state) => state.newNoteDir);
+  const setNewNoteDir = useWorkspaceStore((state) => state.setNewNoteDir);
+  const createNote = useWorkspaceStore((state) => state.createNote);
 
   // Stable so the memoised FolderRow doesn't re-render on every keystroke /
   // file-select that re-renders FileTree.
@@ -278,6 +355,33 @@ function FileTreeInner({
         .catch(() => {});
     },
     [absPath],
+  );
+
+  // Clicking a folder both toggles it and marks it as the new-note target;
+  // clicking a file targets its parent folder — so the highlighted target
+  // always tracks where the user is, and gives a way back to the root (open a
+  // root-level note). Stable so the memoised rows don't churn.
+  const activateFolder = useCallback(
+    (path: string) => {
+      toggleFolder(path);
+      setNewNoteDir(path);
+    },
+    [toggleFolder, setNewNoteDir],
+  );
+  const newNoteHere = useCallback(
+    (path: string) => {
+      setNewNoteDir(path);
+      void createNote({ dir: path });
+    },
+    [setNewNoteDir, createNote],
+  );
+  const selectFileTrackingDir = useCallback(
+    (relativePath: string) => {
+      onSelectFile(relativePath);
+      const slash = relativePath.lastIndexOf("/");
+      setNewNoteDir(slash >= 0 ? relativePath.slice(0, slash) : "");
+    },
+    [onSelectFile, setNewNoteDir],
   );
 
   // Window the (already collapse-flattened) rows: only ~a viewport-worth mount,
@@ -325,7 +429,10 @@ function FileTreeInner({
                   name={node.name}
                   depth={node.depth}
                   open={!collapsed.has(node.path)}
-                  onToggle={toggleFolder}
+                  selected={node.path === newNoteDir}
+                  onActivate={activateFolder}
+                  onNewNoteHere={newNoteHere}
+                  onReveal={revealInFinder}
                 />
               ) : (
                 <FileRow
@@ -333,7 +440,7 @@ function FileTreeInner({
                   name={node.name}
                   depth={node.depth}
                   active={node.path === activePath}
-                  onSelect={onSelectFile}
+                  onSelect={selectFileTrackingDir}
                   onRename={onRename}
                   onDelete={onDelete}
                   onCopyPath={copyPath}

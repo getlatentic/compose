@@ -82,6 +82,15 @@ clean_dmg_state() {
 # transient race clears on a retry, while a real error (e.g. a compile failure)
 # fails every attempt fast.
 echo "[release] building, signing + notarizing — several minutes (notarization waits on Apple)…"
+
+# Force a fresh frontend re-embed. Tauri bakes `dist/` into the binary via
+# `generate_context!` (in lib.rs) at COMPILE time, but Cargo doesn't treat a
+# frontend-only `dist/` change as a reason to recompile lib.rs — so an
+# incremental build can ship a STALE embedded frontend while codesign +
+# notarization still pass (only launching the app reveals it). Touching lib.rs
+# makes Cargo recompile, which re-reads the freshly built `dist/`.
+touch "$ROOT/src-tauri/src/lib.rs"
+
 built=0
 for attempt in 1 2 3; do
   clean_dmg_state

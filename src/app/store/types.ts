@@ -113,7 +113,15 @@ export interface WorkspaceState {
    */
   regenerateLastTurn: () => Promise<void>;
   closeFileTab: (filePath: string) => void;
-  createNote: (seed?: { relativePath: string; content: string }) => Promise<void>;
+  createNote: (seed?: { relativePath?: string; content?: string; dir?: string }) => Promise<void>;
+  /**
+   * Directory a plain "New note" lands in — set by selecting a folder (or a
+   * file → its parent) in the tree. `""` = workspace root. Both the sidebar
+   * "New note" button and the folder menu's "New note here" honor it; the
+   * tree highlights the current target folder so it's visible where a note goes.
+   */
+  newNoteDir: string;
+  setNewNoteDir: (dir: string) => void;
   deleteActiveFile: () => Promise<void>;
   dismissConflict: (relativePath: string) => void;
   handleFsEvent: (workspaceId: string, event: WorkspaceFsEvent) => Promise<void>;

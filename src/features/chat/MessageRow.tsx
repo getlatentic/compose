@@ -54,9 +54,10 @@ export function MessageRow({
 }) {
   const isAssistant = message.role === "assistant";
   const trace = message.trace;
-  // The agent trace + stats appear only once the answer is final (the
-  // answer landed, or the run ended) — never while it's still working.
-  const isFinal = Boolean(message.content) || !message.streaming;
+  // The action row (copy / regenerate / show-work + stats) appears only once
+  // the run has ended — never mid-stream, even though `message.content` fills
+  // in progressively while the answer is still streaming.
+  const isFinal = !message.streaming;
   const hasTrace = isAssistant && Boolean(trace?.length);
   // File create/edit ops surface as prominent cards. A running op's spinner
   // is itself the live status, so it suppresses the generic status line.
