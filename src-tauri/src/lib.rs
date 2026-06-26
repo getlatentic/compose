@@ -34,6 +34,22 @@ fn boot_native_mark(label: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     boot_native_mark("run-start");
+    // The aptabase analytics plugin starts its dispatcher with `tokio::spawn` at
+    // setup (and flushes via reqwest on exit) — both need an entered Tokio
+    // runtime, which Tauri v2 doesn't provide on the main thread. When analytics
+    // is built in, hold a multi-threaded runtime entered for the app's lifetime
+    // (its worker threads run the poller); unconfigured builds skip it entirely.
+    let analytics_rt: Option<tokio::runtime::Runtime> = match option_env!("COMPOSE_APTABASE_KEY") {
+        Some(key) if !key.is_empty() => Some(
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build the analytics Tokio runtime"),
+        ),
+        _ => None,
+    };
+    let _analytics_guard = analytics_rt.as_ref().map(|rt| rt.enter());
+
     // A "Reset all data" requested last session is applied here — before the
     // migration below or the webview can repopulate anything — so the app comes
     // up as a clean first-run.

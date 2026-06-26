@@ -101,21 +101,17 @@ export function AppRouter() {
       .catch(() => setSelectedHarnessReadiness(null));
   }, [selectedHarnessId, setSelectedHarnessReadiness]);
 
-  // Once the boot gate releases, fire a single anonymous active-user signal —
-  // a no-op unless the user left the analytics toggle on AND the build carries
-  // GA4 credentials. Deferred to an idle moment so it never competes with
-  // boot-critical work (sendBeacon then hands the POST off the JS thread); the
-  // getState() read (not a selector) keeps it a one-shot.
+  // Once the boot gate releases, fire a single anonymous active-user signal — a
+  // no-op unless the user left the analytics toggle on. Called directly from this
+  // post-paint effect: requestIdleCallback proved unreliable in the macOS
+  // WKWebView when the window isn't frontmost (it never fired, suppressing the
+  // event). The work here is microseconds; the Rust plugin does the actual send.
+  // getState() (not a selector) keeps it a one-shot read.
   useEffect(() => {
     if (!bootHydrated) {
       return;
     }
-    const enabled = useUiStore.getState().analyticsEnabled;
-    if (typeof window.requestIdleCallback === "function") {
-      window.requestIdleCallback(() => trackAppLaunch(enabled), { timeout: 2000 });
-    } else {
-      window.setTimeout(() => trackAppLaunch(enabled), 0);
-    }
+    trackAppLaunch(useUiStore.getState().analyticsEnabled);
   }, [bootHydrated]);
 
   if (!bootHydrated) {

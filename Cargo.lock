@@ -840,6 +840,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "tempfile",
+ "tokio",
  "uuid",
  "walkdir",
  "workspace-index",

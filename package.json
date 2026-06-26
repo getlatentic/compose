@@ -20,7 +20,6 @@
     "check": "pnpm build && pnpm test && pnpm test:rust"
   },
   "dependencies": {
-    "@aptabase/tauri": "^0.4.1",
     "@carbon/react": "^1.108.0",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-markdown": "^6.5.0",

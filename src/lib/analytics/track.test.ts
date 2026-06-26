@@ -1,15 +1,28 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Mock the Tauri plugin binding so the gating logic is testable in node.
-vi.mock("@aptabase/tauri", () => ({ trackEvent: vi.fn() }));
+// Hoisted so vi.mock (itself hoisted) can reference the spy without a TDZ error.
+const { invoke } = vi.hoisted(() => ({
+  invoke: vi.fn((_cmd: string, _args?: unknown): Promise<void> => Promise.resolve()),
+}));
+vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-import { shouldTrack } from "./track";
+import { trackAppLaunch } from "./track";
 
-describe("analytics gating", () => {
-  it("tracks only when enabled AND the build is configured", () => {
-    expect(shouldTrack({ enabled: true, configured: true })).toBe(true);
-    expect(shouldTrack({ enabled: false, configured: true })).toBe(false);
-    expect(shouldTrack({ enabled: true, configured: false })).toBe(false);
-    expect(shouldTrack({ enabled: false, configured: false })).toBe(false);
+describe("trackAppLaunch", () => {
+  afterEach(() => invoke.mockClear());
+
+  it("does not fire when the user has opted out", () => {
+    trackAppLaunch(false);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("invokes the aptabase track_event command once when enabled (idempotent)", () => {
+    trackAppLaunch(true);
+    trackAppLaunch(true);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("plugin:aptabase|track_event", {
+      name: "app_launched",
+      props: null,
+    });
   });
 });
