@@ -28,6 +28,7 @@ import {
 } from "./navigation";
 import {
   readFile as readFileIpc,
+  scanFolders,
   scanWorkspace,
 } from "../../lib/ipc/filesClient";
 import {
@@ -157,8 +158,9 @@ export const createLifecycleSlice = (
     try {
       // Independent IPC calls, run concurrently rather than awaited in series —
       // the load is a single round-trip instead of four.
-      const [entries, comments, conversation, knownBuffer] = await Promise.all([
+      const [entries, folders, comments, conversation, knownBuffer] = await Promise.all([
         scanWorkspace(workspaceId),
+        scanFolders(workspaceId).catch(() => [] as string[]),
         loadWorkspaceComments(workspaceId),
         // Active conversation (most-recently-OPENED, non-archived) so the chat
         // survives reload. Best-effort — a failure mustn't block the scan.
@@ -169,7 +171,7 @@ export const createLifecycleSlice = (
       ]);
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => {
-          let scanned = applyScanResult({ ...item, comments }, entries);
+          let scanned = applyScanResult({ ...item, comments, folders }, entries);
           // Apply the concurrently-read buffer if its file survived the scan.
           if (knownActiveFile && knownBuffer && scanned.activeFilePath === knownActiveFile) {
             scanned = applyFileBuffer(scanned, knownActiveFile, knownBuffer);

@@ -336,43 +336,42 @@ function rowKey(node: TreeNode): string {
   return node.type === "folder" ? `folder:${node.path}` : `file:${node.path}`;
 }
 
-function buildTree(files: WorkspaceFileEntry[]): TreeNode[] {
+export function buildTree(files: WorkspaceFileEntry[], folders: string[]): TreeNode[] {
   const root: TreeNode[] = [];
 
-  for (const file of files) {
-    const segments = file.relativePath.split("/").filter(Boolean);
+  // Walk (creating as needed) the folder-node chain for a directory path,
+  // returning the deepest folder's `children` — where its files/subfolders go.
+  const ensureFolder = (segments: string[]): TreeNode[] => {
     let level = root;
     let pathSoFar = "";
-
     segments.forEach((segment, index) => {
       pathSoFar = pathSoFar ? `${pathSoFar}/${segment}` : segment;
-      const isFile = index === segments.length - 1;
-
-      if (isFile) {
-        level.push({
-          type: "file",
-          name: segment,
-          path: file.relativePath,
-          depth: index,
-        });
-        return;
-      }
-
       let folder = level.find(
         (node): node is FolderNode => node.type === "folder" && node.name === segment,
       );
       if (!folder) {
-        folder = {
-          type: "folder",
-          name: segment,
-          path: pathSoFar,
-          depth: index,
-          children: [],
-        };
+        folder = { type: "folder", name: segment, path: pathSoFar, depth: index, children: [] };
         level.push(folder);
       }
       level = folder.children;
     });
+    return level;
+  };
+
+  // Materialise every directory first — incl. empty ones — so a folder with no
+  // markdown file still appears (and survives losing its last file).
+  for (const folder of folders) {
+    ensureFolder(folder.split("/").filter(Boolean));
+  }
+
+  for (const file of files) {
+    const segments = file.relativePath.split("/").filter(Boolean);
+    const fileName = segments.pop();
+    if (fileName === undefined) {
+      continue;
+    }
+    const level = segments.length > 0 ? ensureFolder(segments) : root;
+    level.push({ type: "file", name: fileName, path: file.relativePath, depth: segments.length });
   }
 
   const sort = (nodes: TreeNode[]) => {
@@ -420,6 +419,7 @@ export function ancestorFolders(path: string): string[] {
 function FileTreeInner({
   activePath,
   files,
+  folders,
   onDelete,
   onRename,
   onMoveFile,
@@ -427,12 +427,13 @@ function FileTreeInner({
 }: {
   activePath: string;
   files: WorkspaceFileEntry[];
+  folders: string[];
   onDelete: (relativePath: string) => void;
   onRename: (relativePath: string) => void;
   onMoveFile: (fromPath: string, folderPath: string) => void;
   onSelectFile: (relativePath: string) => void;
 }) {
-  const tree = useMemo(() => buildTree(files), [files]);
+  const tree = useMemo(() => buildTree(files, folders), [files, folders]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const rows = useMemo(() => flatten(tree, collapsed), [tree, collapsed]);
   // The active workspace's scan runs in the background (MainApp no longer gates
@@ -452,6 +453,7 @@ function FileTreeInner({
   const newNoteDir = useWorkspaceStore((state) => state.newNoteDir);
   const setNewNoteDir = useWorkspaceStore((state) => state.setNewNoteDir);
   const createNote = useWorkspaceStore((state) => state.createNote);
+  const createFolder = useWorkspaceStore((state) => state.createFolder);
 
   // Stable so the memoised FolderRow doesn't re-render on every keystroke /
   // file-select that re-renders FileTree.
@@ -504,10 +506,8 @@ function FileTreeInner({
     },
     [setNewNoteDir, createNote],
   );
-  // A markdown vault's tree is built from files, so a folder only appears once it
-  // holds one. "New folder here" names the folder and seeds it with a first note
-  // (which also survives a rescan, unlike a tracked-but-empty dir). Empty at root
-  // (path === "") creates a top-level folder.
+  // "New folder here" creates a real empty directory. `path === ""` makes a
+  // top-level folder.
   const newFolderHere = useCallback(
     (path: string) => {
       void (async () => {
@@ -521,11 +521,10 @@ function FileTreeInner({
           return;
         }
         const dir = path ? `${path}/${trimmed}` : trimmed;
-        setNewNoteDir(dir);
-        await createNote({ dir });
+        await createFolder(dir);
       })();
     },
-    [promptText, setNewNoteDir, createNote],
+    [promptText, createFolder],
   );
   const selectFileTrackingDir = useCallback(
     (relativePath: string) => {

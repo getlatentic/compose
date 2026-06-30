@@ -16,6 +16,7 @@ import {
 } from "./persistence";
 import {
   readFile as readFileIpc,
+  scanFolders,
   scanWorkspace,
 } from "../../lib/ipc/filesClient";
 import {
@@ -81,10 +82,13 @@ export const createFsEventsSlice = (
       }
     } else if (effect.type === "rescan") {
       try {
-        const entries = await scanWorkspace(workspaceId);
+        const [entries, folders] = await Promise.all([
+          scanWorkspace(workspaceId),
+          scanFolders(workspaceId).catch(() => [] as string[]),
+        ]);
         set((state) => ({
           workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
-            applyScanResult(item, entries),
+            applyScanResult({ ...item, folders }, entries),
           ),
         }));
         persistTabs(get().workspaces, workspaceId);

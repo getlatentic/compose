@@ -114,6 +114,7 @@ export interface WorkspaceState {
   regenerateLastTurn: () => Promise<void>;
   closeFileTab: (filePath: string) => void;
   createNote: (seed?: { relativePath?: string; content?: string; dir?: string }) => Promise<void>;
+  createFolder: (relativePath: string) => Promise<void>;
   /**
    * Directory a plain "New note" lands in — set by selecting a folder (or a
    * file → its parent) in the tree. `""` = workspace root. Both the sidebar

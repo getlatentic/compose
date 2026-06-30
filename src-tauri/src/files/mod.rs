@@ -132,6 +132,27 @@ pub fn workspace_scan(
     Ok(entries)
 }
 
+/// The workspace's directories (relative paths), so the tree can show folders
+/// that hold no markdown file yet — `workspace_scan` only surfaces `.md` files.
+#[tauri::command(async)]
+pub fn workspace_scan_folders(
+    workspace_id: String,
+    registry: State<'_, WorkspaceRegistry>,
+) -> Result<Vec<String>, FileError> {
+    let root = registry.workspace_root(&workspace_id)?;
+    scan_folders(&root)
+}
+
+/// Create an empty directory in the workspace (a real "New folder").
+#[tauri::command(async)]
+pub fn workspace_create_folder(
+    workspace_id: String,
+    relative_path: String,
+    registry: State<'_, WorkspaceRegistry>,
+) -> Result<(), FileError> {
+    create_folder(&registry, &workspace_id, &relative_path)
+}
+
 #[tauri::command(async)]
 pub fn workspace_read_file(
     workspace_id: String,
@@ -408,6 +429,21 @@ pub(crate) fn create_file(
     })
 }
 
+pub(crate) fn create_folder(
+    registry: &WorkspaceRegistry,
+    workspace_id: &str,
+    relative_path: &str,
+) -> Result<(), FileError> {
+    let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
+    if absolute.exists() {
+        return Err(FileError::AlreadyExists {
+            message: format!("{relative_path} already exists"),
+        });
+    }
+    std::fs::create_dir_all(&absolute)?;
+    Ok(())
+}
+
 pub(crate) fn rename_file(
     registry: &WorkspaceRegistry,
     workspace_id: &str,
@@ -477,6 +513,45 @@ pub(crate) fn scan_markdown_files(root: &Path) -> Result<Vec<WorkspaceFileEntry>
 
     entries.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     Ok(entries)
+}
+
+/// Every directory under `root` (relative paths), so empty folders show in the
+/// tree and persist when their last file is removed. Mirrors the file walk's
+/// ignore rules; the root itself is excluded.
+pub(crate) fn scan_folders(root: &Path) -> Result<Vec<String>, FileError> {
+    let mut folders = Vec::new();
+    let walker = WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| {
+            if entry.depth() == 0 {
+                return true;
+            }
+            let name = entry.file_name().to_string_lossy();
+            !is_ignored_segment(&name)
+        });
+
+    for entry in walker {
+        let entry = match entry {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if entry.depth() == 0 || !entry.file_type().is_dir() {
+            continue;
+        }
+        let relative_path = entry
+            .path()
+            .strip_prefix(root)
+            .map_err(|error| FileError::Message {
+                message: error.to_string(),
+            })?
+            .to_string_lossy()
+            .replace('\\', "/");
+        folders.push(relative_path);
+    }
+
+    folders.sort();
+    Ok(folders)
 }
 
 pub(crate) fn ensure_vault_metadata(
@@ -673,6 +748,33 @@ mod tests {
         let entries = scan_markdown_files(dir.path()).expect("scan");
         let paths: Vec<_> = entries.iter().map(|e| e.relative_path.clone()).collect();
         assert_eq!(paths, vec!["README.md", "notes/launch.md"]);
+    }
+
+    #[test]
+    fn scan_folders_returns_every_dir_including_empty_and_ignores_dot_dirs() {
+        let dir = tempdir().expect("tempdir");
+        fs::create_dir_all(dir.path().join("Talks")).unwrap(); // empty — has no .md
+        fs::create_dir_all(dir.path().join("Projects/sub")).unwrap();
+        fs::write(dir.path().join("Projects/a.md"), "x").unwrap();
+        fs::create_dir_all(dir.path().join(".git")).unwrap();
+        fs::create_dir_all(dir.path().join("node_modules")).unwrap();
+
+        let folders = scan_folders(dir.path()).expect("scan_folders");
+        assert_eq!(folders, vec!["Projects", "Projects/sub", "Talks"]);
+    }
+
+    #[test]
+    fn create_folder_makes_an_empty_dir_then_errors_if_it_exists() {
+        let dir = tempdir().expect("tempdir");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+
+        create_folder(&registry, &workspace_id, "Talks").expect("create");
+        assert!(dir.path().join("Talks").is_dir());
+        assert_eq!(fs::read_dir(dir.path().join("Talks")).unwrap().count(), 0);
+        assert!(scan_folders(dir.path()).unwrap().contains(&"Talks".to_string()));
+
+        let again = create_folder(&registry, &workspace_id, "Talks");
+        assert!(matches!(again, Err(FileError::AlreadyExists { .. })));
     }
 
     #[test]

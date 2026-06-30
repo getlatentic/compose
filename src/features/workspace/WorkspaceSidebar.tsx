@@ -296,6 +296,7 @@ const FilesTab = memo(function FilesTab({
   // re-rendering the sidebar shell. The dirty set is deliberately NOT read here
   // (it flipped this pane on every edit/save) — each row owns its own dot.
   const files = useStableFileList();
+  const folders = useFolderList();
   const activeFilePath = useWorkspaceStore((state) => {
     const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
     return ws?.activeFilePath ?? "";
@@ -320,6 +321,7 @@ const FilesTab = memo(function FilesTab({
         <FileTree
           activePath={activeFilePath}
           files={files}
+          folders={folders}
           onDelete={onDeleteFile}
           onRename={onRenameFile}
           onMoveFile={onMoveFile}
@@ -354,5 +356,17 @@ function useStableFileList(): WorkspaceFileEntry[] | null {
     const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
     return ws?.files ?? null;
   }, [key]);
+}
+
+const EMPTY_FOLDERS: string[] = [];
+
+/** The active workspace's folder paths. They change only on a scan or a
+ *  create/delete — not on a save — so the stored array reference is already
+ *  stable to pass straight to the memoised tree. */
+function useFolderList(): string[] {
+  return useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
+    return ws?.folders ?? EMPTY_FOLDERS;
+  });
 }
 

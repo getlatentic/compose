@@ -316,6 +316,9 @@ export interface Workspace {
   comments: WorkspaceCommentThread[];
   fileContents: Record<string, WorkspaceFileBuffer>;
   files: WorkspaceFileEntry[];
+  /** Directory paths (incl. empty ones), so the tree shows folders with no
+   *  markdown file. Sourced from `scanFolders`; files derive their own. */
+  folders: string[];
   id: string;
   /**
    * `"real"` workspaces have a folder root at `path`; file entries hold
@@ -397,6 +400,7 @@ export function createWorkspaceFromPath(path: string): Workspace {
     comments: [],
     fileContents: {},
     files: [],
+    folders: [],
     id: createWorkspaceId(normalizedPath),
     kind: "real",
     lastSavedAt: null,
@@ -431,6 +435,7 @@ export function createLooseWorkspace(): Workspace {
     comments: [],
     fileContents: {},
     files: [],
+    folders: [],
     id: LOOSE_WORKSPACE_ID,
     kind: "loose",
     lastSavedAt: null,

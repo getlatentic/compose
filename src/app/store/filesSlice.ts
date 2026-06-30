@@ -3,6 +3,7 @@ import { showErrorToast } from "../../features/toast/toastStore";
 import {
   FileConflictError,
   createFile as createFileIpc,
+  createFolder as createFolderIpc,
   deleteFile as deleteFileIpc,
   readFile as readFileIpc,
   renameFile as renameFileIpc,
@@ -40,7 +41,7 @@ import {
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "closeFileTab" | "createNote" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "updateActiveContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "closeFileTab" | "createNote" | "createFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "updateActiveContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -160,6 +161,29 @@ export const createFilesSlice = (
       void get().rebuildWorkspaceIndex(workspace.id);
     } catch (error) {
       showErrorToast(error instanceof Error ? error.message : "Could not create note");
+    }
+  },
+  createFolder: async (relativePath) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    try {
+      await createFolderIpc(workspace.id, relativePath);
+      set((state) => ({
+        workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
+          item.folders.includes(relativePath)
+            ? item
+            : {
+                ...item,
+                folders: [...item.folders, relativePath].sort((a, b) => a.localeCompare(b)),
+              },
+        ),
+      }));
+      // New notes now default into the folder just created.
+      get().setNewNoteDir(relativePath);
+    } catch (error) {
+      showErrorToast(error instanceof Error ? error.message : "Could not create folder");
     }
   },
   deleteActiveFile: async () => {
