@@ -5801,8 +5801,7 @@ select {
 }
 
 .file-row-wrapper:hover .cds--overflow-menu,
-.file-row-wrapper--active .cds--overflow-menu,
-.file-row-wrapper--target .cds--overflow-menu,
+.file-row-wrapper:focus-within .cds--overflow-menu,
 .file-row-wrapper .cds--overflow-menu--open {
   opacity: 1;
 }
