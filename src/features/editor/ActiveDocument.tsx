@@ -23,6 +23,7 @@ import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { markBoot, markTabSwitchEnd } from "../../lib/perf";
 import { registerActiveEditorFlush } from "../../lib/editor/editorFlush";
 import { showToast } from "../toast/toastStore";
+import { useConfirm } from "../dialogs/ConfirmProvider";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
@@ -375,6 +376,7 @@ export function ActiveDocument() {
 
   const dismissConflict = useWorkspaceStore((state) => state.dismissConflict);
   const reloadActiveFile = useWorkspaceStore((state) => state.reloadActiveFile);
+  const confirm = useConfirm();
   const sendCommentsToChat = useWorkspaceStore((state) => state.sendCommentsToChat);
   const setCommentResolved = useWorkspaceStore((state) => state.setCommentResolved);
 
@@ -392,6 +394,22 @@ export function ActiveDocument() {
   const handleShowVersionHistory = useCallback(() => setVersionHistoryOpen(true), []);
   const handleCloseVersionHistory = useCallback(() => setVersionHistoryOpen(false), []);
   const handleRestored = useCallback(() => void reloadActiveFile(), [reloadActiveFile]);
+
+  // "Reload from disk" throws away the unsaved edits that caused the conflict
+  // (the buffer is dirty whenever this banner shows), so confirm first. "Keep
+  // my changes" stays the no-data-loss escape hatch.
+  const handleReloadFromDisk = useCallback(async () => {
+    const confirmed = await confirm({
+      title: "Discard your changes?",
+      message: `${activeFilePath} has unsaved changes. Reload the version on disk and discard them?`,
+      confirmLabel: "Reload and discard",
+      cancelLabel: "Keep editing",
+      danger: true,
+    });
+    if (confirmed) {
+      void reloadActiveFile();
+    }
+  }, [confirm, reloadActiveFile, activeFilePath]);
 
   // Buffer not loaded yet (file is in the scan list, its contents are still
   // being read). EditorRegion already confirmed the file exists. The text is
@@ -413,7 +431,11 @@ export function ActiveDocument() {
         <div className="conflict-banner" role="alert">
           <span>{activeFilePath} was changed on disk since you opened it.</span>
           <div className="conflict-banner__actions">
-            <button type="button" className="link-button" onClick={() => void reloadActiveFile()}>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => void handleReloadFromDisk()}
+            >
               Reload from disk
             </button>
             <button
