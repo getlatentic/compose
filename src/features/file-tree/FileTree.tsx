@@ -22,6 +22,14 @@ const ROW_HEIGHT = 28;
 /** dataTransfer MIME for a file path dragged to move it into a folder (#28). */
 const DRAG_FILE_MIME = "application/x-compose-file-path";
 
+/** The path of the file row being dragged, tracked here rather than read back
+ *  from `dataTransfer`: WebKit doesn't expose a custom MIME in `dataTransfer.types`
+ *  during `dragover` (and protects `getData` until drop), so a folder couldn't tell
+ *  an in-app file drag from any other, never called `preventDefault()`, and so never
+ *  became a drop target (the drag showed a "copy" cursor and the drop was dropped).
+ *  Set on dragstart, read on dragover/drop, cleared on dragend. */
+let draggedFilePath: string | null = null;
+
 /**
  * The unsaved-edit dot for one file row. Self-subscribes to just that file's
  * dirty flag (a boolean), so a dirty flip on first-edit / autosave re-renders
@@ -90,9 +98,11 @@ function useFolderDrop(
 ) {
   const [dropTarget, setDropTarget] = useState(false);
   const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!event.dataTransfer.types.includes(DRAG_FILE_MIME)) {
+    if (draggedFilePath === null) {
       return;
     }
+    // preventDefault is what marks this folder a valid drop target — without it
+    // the browser rejects the drop (the "copy" cursor) and `onDrop` never fires.
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDropTarget(true);
@@ -100,10 +110,11 @@ function useFolderDrop(
   const onDragLeave = useCallback(() => setDropTarget(false), []);
   const onDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
       setDropTarget(false);
-      const from = event.dataTransfer.getData(DRAG_FILE_MIME);
+      const from = draggedFilePath ?? event.dataTransfer.getData(DRAG_FILE_MIME);
+      draggedFilePath = null;
       if (from) {
-        event.preventDefault();
         onMoveHere(from, folderPath);
       }
     },
@@ -155,9 +166,15 @@ const FileRow = memo(function FileRow({
     (event: DragEvent<HTMLButtonElement>) => {
       event.dataTransfer.setData(DRAG_FILE_MIME, path);
       event.dataTransfer.effectAllowed = "move";
+      draggedFilePath = path;
     },
     [path],
   );
+  // Clears the tracked path when a drag ends anywhere (dropped outside a folder,
+  // or cancelled) so a later dragover doesn't see a stale drag.
+  const onDragEnd = useCallback(() => {
+    draggedFilePath = null;
+  }, []);
   return (
     <div
       ref={wrapperRef}
@@ -172,6 +189,7 @@ const FileRow = memo(function FileRow({
         type="button"
         draggable
         onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
         onClick={() => onSelect(path)}
         className={["file-row", active ? "file-row--active" : ""]
           .filter(Boolean)
