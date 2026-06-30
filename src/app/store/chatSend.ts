@@ -156,11 +156,16 @@ export async function runSendChatPrompt(
   const contextFilePaths = thread.contextItems
     .filter((item) => item.kind === "file")
     .map((item) => item.path);
-  // Attached files carry their CONTENT into the prompt (budgeted) so a small
-  // model can act on a chip without a separate read — big files fall back to a
-  // read-on-demand reference. Fetched here (IO) and passed in to keep the
-  // prompt builder pure.
-  const fileContextContent = await collectFileContextContent(workspace, contextFilePaths);
+  // Tool-native CLI agents (claude/codex/bob) read context files on demand via
+  // their own tools, so we send a PATH REFERENCE — keeping the prompt small,
+  // current, and cache-stable rather than inlining a snapshot. The openai-
+  // compatible adapter (Ollama / OpenRouter, capability `supportsCustomInstructions`)
+  // gets the file CONTENT inlined (budgeted), since a weak local model may not
+  // reliably read on its own. Only that path needs the IO.
+  const inlineContext = harnessCapabilitiesOf(harnessCatalog, harnessId).supportsCustomInstructions;
+  const fileContextContent = inlineContext
+    ? await collectFileContextContent(workspace, contextFilePaths)
+    : new Map<string, string>();
   // `thread` is the pre-append snapshot, so `thread.messages` are the
   // *prior* turns — replay them into the prompt for harness-neutral
   // continuity (the agent "remembers" the conversation). Trace excluded.
@@ -169,6 +174,7 @@ export async function runSendChatPrompt(
     thread.contextItems,
     thread.messages,
     fileContextContent,
+    inlineContext,
   );
 
   // Map the thread to a persisted conversation. The id is generated client-side

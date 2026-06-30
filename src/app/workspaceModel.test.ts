@@ -1164,6 +1164,42 @@ describe("workspace model", () => {
     expect(block).toContain("- missing.md (large; read it for details)");
   });
 
+  it("buildFileContextBlock references every file (no inlined content) when inlineContent is off", () => {
+    const fileItem = (path: string): WorkspaceFileContextItem => ({
+      id: path,
+      kind: "file",
+      label: path,
+      path,
+      workspaceId: "w1",
+    });
+    // Tool-native CLI agent: even a small file is a bare path reference it reads.
+    const block = buildFileContextBlock(
+      [fileItem("a.md"), fileItem("b.md")],
+      new Map([
+        ["a.md", "hello world"],
+        ["b.md", "more"],
+      ]),
+      FILE_CONTEXT_INLINE_LIMIT,
+      false,
+    );
+    expect(block).toBe("- a.md\n\n- b.md");
+    expect(block).not.toContain("hello world");
+    expect(block).not.toContain("###");
+  });
+
+  it("createPromptWithContext labels the references for read-on-demand when not inlining", () => {
+    const fileItem = (path: string): WorkspaceFileContextItem => ({
+      id: path,
+      kind: "file",
+      label: path,
+      path,
+      workspaceId: "w1",
+    });
+    const prompt = createPromptWithContext("do the thing", [fileItem("a.md")], [], new Map(), false);
+    expect(prompt).toContain("Context files (read these as needed):");
+    expect(prompt).toContain("- a.md");
+  });
+
   it("addFileContextItem adds a labelled chip and dedupes by path", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const added = addFileContextItem(

@@ -1910,25 +1910,30 @@ export const CONVERSATION_REPLAY_LIMIT = 12;
 export const FILE_CONTEXT_INLINE_LIMIT = 4000;
 
 /**
- * Render the file-context block, budgeted for small windows: each item's
- * content (from `contentByPath`) is inlined as `### <path>\n<content>` when it's
- * small enough, otherwise reduced to a `- <path> (large; read it for details)`
- * pointer so a big attachment can't blow the prompt. A path absent from the map
- * (content not loaded) also degrades to the reference form. Pure — takes the
- * pre-fetched content map so it stays unit-testable without IO.
+ * Render the file-context block. With `inlineContent` (the openai-compatible /
+ * local path), each item's content is inlined as `### <path>\n<content>` when
+ * small enough, else reduced to a `- <path> (large; read it for details)`
+ * pointer so a big attachment can't blow a small window. Without it (tool-native
+ * CLI agents), every item is a bare `- <path>` reference the agent reads on
+ * demand — smaller, always-current, cache-stable. Pure — takes the pre-fetched
+ * content map so it stays unit-testable without IO.
  */
 export function buildFileContextBlock(
   fileItems: WorkspaceFileContextItem[],
   contentByPath: Map<string, string>,
   inlineLimit = FILE_CONTEXT_INLINE_LIMIT,
+  inlineContent = true,
 ): string {
   return fileItems
     .map((item) => {
-      const content = contentByPath.get(item.path);
-      if (content != null && content.length <= inlineLimit) {
-        return `### ${item.path}\n${content}`;
+      if (inlineContent) {
+        const content = contentByPath.get(item.path);
+        if (content != null && content.length <= inlineLimit) {
+          return `### ${item.path}\n${content}`;
+        }
+        return `- ${item.path} (large; read it for details)`;
       }
-      return `- ${item.path} (large; read it for details)`;
+      return `- ${item.path}`;
     })
     .join("\n\n");
 }
@@ -1956,6 +1961,7 @@ export function createPromptWithContext(
   contextItems: WorkspaceContextItem[],
   priorMessages: WorkspaceChatMessage[] = [],
   contentByPath: Map<string, string> = new Map(),
+  inlineContent = true,
 ) {
   const trimmedPrompt = prompt.trim();
 
@@ -1964,6 +1970,8 @@ export function createPromptWithContext(
   const fileContext = buildFileContextBlock(
     contextItems.filter((item): item is WorkspaceFileContextItem => item.kind === "file"),
     contentByPath,
+    FILE_CONTEXT_INLINE_LIMIT,
+    inlineContent,
   );
   const commentContext = contextItems
     .filter((item): item is WorkspaceCommentContextItem => item.kind === "comment")
@@ -1983,7 +1991,9 @@ export function createPromptWithContext(
 
   const blocks = [
     transcript ? `Conversation so far:\n${transcript}` : null,
-    fileContext ? `Context files:\n${fileContext}` : null,
+    fileContext
+      ? `Context files${inlineContent ? "" : " (read these as needed)"}:\n${fileContext}`
+      : null,
     commentContext ? `Comment context:\n${commentContext}` : null,
   ].filter(Boolean);
 
