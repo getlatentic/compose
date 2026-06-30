@@ -838,6 +838,11 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  // Cap the visible rows (~6) so a note with many frontmatter fields doesn't
+  // crowd out the file tree; the rest scroll. The header and "add field" stay
+  // fixed since only the list scrolls.
+  max-block-size: 12rem;
+  overflow-y: auto;
 }
 
 .property-row {
