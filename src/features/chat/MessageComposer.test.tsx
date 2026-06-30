@@ -34,6 +34,7 @@ const baseProps = {
   assistantReady: { ready: true, message: null },
   canSend: false,
   contextItems: [],
+  activeFilePath: "",
   harnessName: "Bob",
   onAddFileContext: () => {},
   onOpenSettings: () => {},

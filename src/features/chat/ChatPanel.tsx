@@ -51,6 +51,11 @@ function ChatPanelInner() {
   const dismissChatRunError = useWorkspaceStore((state) => state.dismissChatRunError);
   const addChatFileContext = useWorkspaceStore((state) => state.addChatFileContext);
   const removeChatContextItem = useWorkspaceStore((state) => state.removeChatContextItem);
+  // The active file, so the composer can offer "add this file" to context — the
+  // explicit way to set context now that switching tabs no longer does (#30).
+  const activeFilePath = useWorkspaceStore(
+    (state) => state.activeWorkspace()?.activeFilePath ?? "",
+  );
   // Narrow selector: the chat panel only needs the active workspace's
   // chat thread, NOT the whole `workspaces` array. The store preserves
   // `chatThread`'s reference when other workspace fields change (e.g. a
@@ -344,6 +349,7 @@ function ChatPanelInner() {
         assistantReady={assistantReady}
         canSend={canSend}
         contextItems={chatThread.contextItems}
+        activeFilePath={activeFilePath}
         harnessName={selectedHarnessName}
         onAddFileContext={addChatFileContext}
         onHeightChange={setComposerHeight}

@@ -3622,6 +3622,35 @@ select {
   background: transparent;
 }
 
+// "Add this file" — the explicit way to put the current file in context now that
+// switching tabs doesn't (#30). A dashed chip-button; it and the chip removes are
+// disabled while a response streams, so context only changes when the chat is idle.
+.chat-context-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  align-self: center;
+  padding: 0.125rem 0.375rem;
+  border: 1px dashed var(--cds-border-strong-01, #8d8d8d);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.6875rem;
+  color: var(--cds-text-secondary, #525252);
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+
+.chat-context-add:hover:not(:disabled) {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  border-color: var(--cds-border-interactive, #0f62fe);
+}
+
+.chat-context-add:disabled,
+.chat-context-chip__remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 // Cumulative conversation token count, parked at the right end of the row
 // directly above the input.
 .chat-tokens {

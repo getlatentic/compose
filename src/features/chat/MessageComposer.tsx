@@ -5,7 +5,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { Close, Document, Send, StopFilledAlt } from "@carbon/react/icons";
+import { Add, Close, Document, Send, StopFilledAlt } from "@carbon/react/icons";
 
 import type { WorkspaceContextItem } from "../../app/workspaceModel";
 import { useUiStore } from "../../app/store/uiStore";
@@ -40,6 +40,7 @@ export function MessageComposer({
   assistantReady,
   canSend,
   contextItems,
+  activeFilePath,
   harnessName,
   onAddFileContext,
   onHeightChange,
@@ -64,6 +65,8 @@ export function MessageComposer({
   assistantReady: AssistantReadiness;
   canSend: boolean;
   contextItems: WorkspaceContextItem[];
+  /** The active file, offered as a one-click "add this file" to context. */
+  activeFilePath: string;
   /** The selected harness's display name, for the friendly error summary. */
   harnessName: string;
   /** Attach a spilled paste as a file context chip. */
@@ -241,7 +244,7 @@ export function MessageComposer({
 
       <div className="chat-context-row">
         {contextItems.length === 0 ? (
-          <span className="chat-context-chip chat-context-chip--empty">No note selected</span>
+          <span className="chat-context-chip chat-context-chip--empty">No note in context</span>
         ) : (
           contextItems.map((item) => (
             <span className="chat-context-chip" key={item.id} title={item.label}>
@@ -251,6 +254,7 @@ export function MessageComposer({
                 type="button"
                 className="chat-context-chip__remove"
                 aria-label={`Remove ${item.label}`}
+                disabled={running}
                 onClick={() => onRemoveContextItem(item.id)}
               >
                 <Close size={12} />
@@ -258,6 +262,23 @@ export function MessageComposer({
             </span>
           ))
         )}
+        {activeFilePath &&
+        !contextItems.some((item) => item.kind === "file" && item.path === activeFilePath) ? (
+          <button
+            type="button"
+            className="chat-context-add"
+            disabled={running}
+            title={
+              running
+                ? "Finish the current response before changing context"
+                : `Add ${activeFilePath} to the chat context`
+            }
+            onClick={() => onAddFileContext({ label: activeFilePath, path: activeFilePath })}
+          >
+            <Add size={14} />
+            Add this file
+          </button>
+        ) : null}
         {tokenLabel ? <span className="chat-tokens">{tokenLabel}</span> : null}
       </div>
 
