@@ -9,6 +9,10 @@ export interface Toast {
   message: string;
   /** Auto-dismiss after this many ms. 0 = sticky. */
   timeoutMs: number;
+  /** How many times this identical toast has been raised. Shown as "(×N)" so a
+   *  re-firing error (a watcher event, a retried save) reads as one toast, not
+   *  a stack of duplicates. */
+  count: number;
 }
 
 interface ToastState {
@@ -26,7 +30,21 @@ interface ToastState {
  */
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
-  push: (toast) => set((state) => ({ toasts: [...state.toasts, toast] })),
+  push: (toast) =>
+    set((state) => {
+      // Coalesce an identical toast (same kind + title + message) already on
+      // screen: bump its count and swap in the new id so the viewport re-arms
+      // its dismiss timer — one refreshing toast instead of a duplicate stack.
+      const index = state.toasts.findIndex(
+        (t) => t.kind === toast.kind && t.title === toast.title && t.message === toast.message,
+      );
+      if (index >= 0) {
+        const toasts = state.toasts.slice();
+        toasts[index] = { ...toast, count: state.toasts[index].count + 1 };
+        return { toasts };
+      }
+      return { toasts: [...state.toasts, toast] };
+    }),
   dismiss: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
 }));
 
@@ -46,6 +64,7 @@ export function showToast(opts: {
     title: opts.title ?? defaultTitle(opts.kind),
     message: opts.message,
     timeoutMs: opts.timeoutMs ?? (opts.kind === "error" ? 8000 : 6000),
+    count: 1,
   });
   return id;
 }
