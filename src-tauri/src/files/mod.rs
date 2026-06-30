@@ -610,8 +610,17 @@ fn workspace_name_for_root(root: &Path) -> String {
         .unwrap_or_else(|| root.to_string_lossy().to_string())
 }
 
+/// Directory names hidden from the workspace scan (both the file tree and the
+/// folder list): dotfiles/dotdirs (`.git`, `.obsidian`, `.trash`, …) plus common
+/// tool/build/cache dirs a notes vault never wants to see. Kept conservative —
+/// only names a user is very unlikely to give a real notes folder (so no
+/// `build`/`out`/`vendor`, which double as ordinary words).
 pub(crate) fn is_ignored_segment(name: &str) -> bool {
-    name.starts_with('.') || matches!(name, "node_modules" | "target" | "dist")
+    name.starts_with('.')
+        || matches!(
+            name,
+            "node_modules" | "target" | "dist" | "__pycache__" | "venv" | "__MACOSX"
+        )
 }
 
 pub(crate) fn mtime_ms(metadata: &std::fs::Metadata) -> Result<i64, FileError> {
@@ -751,13 +760,16 @@ mod tests {
     }
 
     #[test]
-    fn scan_folders_returns_every_dir_including_empty_and_ignores_dot_dirs() {
+    fn scan_folders_returns_every_dir_including_empty_and_ignores_tool_dirs() {
         let dir = tempdir().expect("tempdir");
         fs::create_dir_all(dir.path().join("Talks")).unwrap(); // empty — has no .md
         fs::create_dir_all(dir.path().join("Projects/sub")).unwrap();
         fs::write(dir.path().join("Projects/a.md"), "x").unwrap();
         fs::create_dir_all(dir.path().join(".git")).unwrap();
+        fs::create_dir_all(dir.path().join(".obsidian")).unwrap();
         fs::create_dir_all(dir.path().join("node_modules")).unwrap();
+        fs::create_dir_all(dir.path().join("__pycache__")).unwrap();
+        fs::create_dir_all(dir.path().join("venv")).unwrap();
 
         let folders = scan_folders(dir.path()).expect("scan_folders");
         assert_eq!(folders, vec!["Projects", "Projects/sub", "Talks"]);
