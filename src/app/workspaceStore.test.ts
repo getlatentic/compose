@@ -18,7 +18,7 @@ import { useHarnessStore } from "./store/harnessStore";
 import { useUiStore } from "./store/uiStore";
 import { useToastStore } from "../features/toast/toastStore";
 import type { HarnessCapabilities, HarnessInfo, HarnessReadiness } from "../lib/ipc/harnessClient";
-import { FileConflictError, readFile, writeFile } from "../lib/ipc/filesClient";
+import { deleteFile, FileConflictError, readFile, writeFile } from "../lib/ipc/filesClient";
 import { switchWorkspace as switchWorkspaceIpc } from "../lib/ipc/workspaceClient";
 
 vi.mock("../lib/ipc/filesClient", () => ({
@@ -551,6 +551,41 @@ describe("workspace store", () => {
       expect(buffer?.conflict).toBe(true);
       expect(buffer?.content).toBe("local edits");
       expect(useToastStore.getState().toasts.slice(-1)[0]?.message).toContain("changed on disk");
+    });
+
+    it("deleteActiveFile flushes unsaved edits to disk before deleting, so trash is recoverable", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "old", lastModifiedMs: 100 });
+      vi.mocked(writeFile).mockResolvedValue({ lastModifiedMs: 200 });
+      vi.mocked(deleteFile).mockResolvedValue(undefined);
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      useWorkspaceStore.getState().updateActiveContent("unsaved edits");
+
+      await useWorkspaceStore.getState().deleteActiveFile();
+
+      // The dirty buffer is written first (so the trashed copy holds the edits) ...
+      expect(writeFile).toHaveBeenCalledWith(
+        workspaceId,
+        "a.md",
+        "unsaved edits",
+        100,
+        expect.anything(),
+      );
+      // ... then the file is deleted, and its tab is gone.
+      expect(deleteFile).toHaveBeenCalledWith(workspaceId, "a.md");
+      expect(useWorkspaceStore.getState().activeWorkspace()?.openFilePaths).not.toContain("a.md");
+    });
+
+    it("deleteActiveFile does not re-write a clean file before deleting", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "clean", lastModifiedMs: 100 });
+      vi.mocked(deleteFile).mockResolvedValue(undefined);
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+
+      await useWorkspaceStore.getState().deleteActiveFile();
+
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(deleteFile).toHaveBeenCalledWith(workspaceId, "a.md");
     });
   });
 

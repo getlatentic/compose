@@ -168,6 +168,17 @@ export const createFilesSlice = (
     }
     const filePath = workspace.activeFilePath;
 
+    // Persist any unsaved edits before deleting, so the trashed copy — and the
+    // history snapshot the backend takes on soft-delete — hold the user's latest
+    // work. Otherwise deleting drops the in-memory buffer and the edits are gone
+    // with no way back (#44). flushActiveEditor pulls the editor's live content
+    // into the buffer first (the 500ms debounce may not have fired), matching
+    // saveActiveFile's flush-first guarantee.
+    flushActiveEditor();
+    if (get().activeWorkspace()?.fileContents[filePath]?.dirty) {
+      await get().saveActiveFile();
+    }
+
     try {
       await deleteFileIpc(workspace.id, filePath);
       set((state) => ({
