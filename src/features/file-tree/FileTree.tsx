@@ -548,6 +548,33 @@ function FileTreeInner({
     getItemKey: (index) => rowKey(rows[index]),
   });
 
+  // Open a workspace with only the FIRST level of folders expanded (#52) — not
+  // the whole tree blown open. Runs once per workspace (keyed by workspaceRoot)
+  // when its tree first loads; the active file's ancestors are kept open so the
+  // reveal effect below still shows it, and the user's later expand/collapse is
+  // left untouched (a new folder doesn't re-collapse the tree).
+  const collapsedForWorkspace = useRef<string | null>(null);
+  useEffect(() => {
+    if (collapsedForWorkspace.current === workspaceRoot || tree.length === 0) {
+      return;
+    }
+    collapsedForWorkspace.current = workspaceRoot;
+    const keepOpen = new Set(activePath ? ancestorFolders(activePath) : []);
+    const belowTop = new Set<string>();
+    const collect = (nodes: TreeNode[]) => {
+      for (const node of nodes) {
+        if (node.type === "folder") {
+          if (node.depth >= 1 && !keepOpen.has(node.path)) {
+            belowTop.add(node.path);
+          }
+          collect(node.children);
+        }
+      }
+    };
+    collect(tree);
+    setCollapsed(belowTop);
+  }, [tree, workspaceRoot, activePath]);
+
   // Reveal the active file: expand its ancestor folders so its row exists in the
   // flattened list, then scroll it into view. The ref bridges the two effects so
   // that an unrelated collapse/expand (which also changes `rows`) doesn't yank
