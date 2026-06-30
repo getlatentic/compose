@@ -16,6 +16,7 @@ import {
   Code,
   Image as ImageIcon,
   ListBulleted,
+  ListChecked,
   ListNumbered,
   Quotes,
   Table,
@@ -52,6 +53,7 @@ interface CaretContext {
   heading: 1 | 2 | 3 | 4 | 5 | 6 | 0;
   bulletList: boolean;
   orderedList: boolean;
+  taskList: boolean;
   blockquote: boolean;
 }
 
@@ -63,6 +65,7 @@ const EMPTY_CONTEXT: CaretContext = {
   heading: 0,
   bulletList: false,
   orderedList: false,
+  taskList: false,
   blockquote: false,
 };
 
@@ -82,6 +85,7 @@ function caretContext(view: EditorView): CaretContext {
     else if (n === "Link") ctx.link = true;
     else if (n === "BulletList") ctx.bulletList = true;
     else if (n === "OrderedList") ctx.orderedList = true;
+    else if (n === "Task") ctx.taskList = true;
     else if (n === "Blockquote") ctx.blockquote = true;
     else if (n.startsWith("ATXHeading")) {
       const lvl = Number(n.slice("ATXHeading".length));
@@ -89,6 +93,8 @@ function caretContext(view: EditorView): CaretContext {
     }
     node = node.parent;
   }
+  // A task item lives inside a BulletList; surface it as a task, not a bullet.
+  if (ctx.taskList) ctx.bulletList = false;
   return ctx;
 }
 
@@ -101,6 +107,7 @@ function caretContextsEqual(a: CaretContext, b: CaretContext): boolean {
     a.heading === b.heading &&
     a.bulletList === b.bulletList &&
     a.orderedList === b.orderedList &&
+    a.taskList === b.taskList &&
     a.blockquote === b.blockquote
   );
 }
@@ -230,6 +237,12 @@ function FormattingButtons({
         active={ctx.orderedList}
         onClick={() => run(blockCommands.toggleOrderedList)}
         icon={<ListNumbered size={16} />}
+      />
+      <Button
+        label="Task list"
+        active={ctx.taskList}
+        onClick={() => run(blockCommands.toggleTaskList)}
+        icon={<ListChecked size={16} />}
       />
       <Button
         label="Quote"
