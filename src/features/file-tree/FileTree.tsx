@@ -89,24 +89,37 @@ function useRowMenu() {
   return { menuMounted, wrapperRef, mountMenu, onContextMenu };
 }
 
-/** Drop handling for a folder row: highlight while a draggable file is over it,
- *  and move that file in on drop. Handlers are memoised (like {@link useRowMenu})
- *  so the memoised FolderRow keeps stable identities across renders. */
-function useFolderDrop(
-  folderPath: string,
+/** The parent directory of a path ("" for a root item). */
+function parentDirOf(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash >= 0 ? path.slice(0, slash) : "";
+}
+
+/** Drop handling for any row that accepts a dragged file into `targetDir` — a
+ *  folder row (its own path) or a file row (its parent dir, VS Code-style, so you
+ *  can drop onto a file to land beside it). Highlights while a draggable file is
+ *  over it and moves the file in on drop, but stays inert when the file already
+ *  lives in `targetDir` (a no-op move) so the source row and its siblings don't
+ *  light up. Handlers are memoised (like {@link useRowMenu}) so the memoised rows
+ *  keep stable identities across renders. */
+function useDropInto(
+  targetDir: string,
   onMoveHere: (fromPath: string, folderPath: string) => void,
 ) {
   const [dropTarget, setDropTarget] = useState(false);
-  const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (draggedFilePath === null) {
-      return;
-    }
-    // preventDefault is what marks this folder a valid drop target — without it
-    // the browser rejects the drop (the "copy" cursor) and `onDrop` never fires.
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    setDropTarget(true);
-  }, []);
+  const onDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (draggedFilePath === null || parentDirOf(draggedFilePath) === targetDir) {
+        return;
+      }
+      // preventDefault is what marks this row a valid drop target — without it
+      // the browser rejects the drop (the "copy" cursor) and `onDrop` never fires.
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      setDropTarget(true);
+    },
+    [targetDir],
+  );
   const onDragLeave = useCallback(() => setDropTarget(false), []);
   const onDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
@@ -115,10 +128,10 @@ function useFolderDrop(
       const from = draggedFilePath ?? event.dataTransfer.getData(DRAG_FILE_MIME);
       draggedFilePath = null;
       if (from) {
-        onMoveHere(from, folderPath);
+        onMoveHere(from, targetDir);
       }
     },
-    [folderPath, onMoveHere],
+    [targetDir, onMoveHere],
   );
   return { dropTarget, onDragOver, onDragLeave, onDrop };
 }
@@ -143,6 +156,7 @@ const FileRow = memo(function FileRow({
   onDelete,
   onCopyPath,
   onReveal,
+  onMoveHere,
 }: {
   path: string;
   name: string;
@@ -153,6 +167,7 @@ const FileRow = memo(function FileRow({
   onDelete: (relativePath: string) => void;
   onCopyPath: (relativePath: string) => void;
   onReveal: (relativePath: string) => void;
+  onMoveHere: (fromPath: string, folderPath: string) => void;
 }) {
   // Carbon's `OverflowMenu` mounts a whole Popover + floating-ui + Icon stack
   // even while closed. Mounting one per row meant a large vault paid that cost
@@ -175,15 +190,28 @@ const FileRow = memo(function FileRow({
   const onDragEnd = useCallback(() => {
     draggedFilePath = null;
   }, []);
+  // A file row is also a drop target: dropping onto it lands the dragged file in
+  // this file's folder (VS Code-style), so you needn't aim for the folder row.
+  const { dropTarget, onDragOver, onDragLeave, onDrop } = useDropInto(
+    parentDirOf(path),
+    onMoveHere,
+  );
   return (
     <div
       ref={wrapperRef}
-      className={["file-row-wrapper", active ? "file-row-wrapper--active" : ""]
+      className={[
+        "file-row-wrapper",
+        active ? "file-row-wrapper--active" : "",
+        dropTarget ? "file-row-wrapper--drop" : "",
+      ]
         .filter(Boolean)
         .join(" ")}
       onMouseEnter={mountMenu}
       onFocus={mountMenu}
       onContextMenu={onContextMenu}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       <button
         type="button"
@@ -243,7 +271,7 @@ const FolderRow = memo(function FolderRow({
   onReveal: (path: string) => void;
 }) {
   const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
-  const { dropTarget, onDragOver, onDragLeave, onDrop } = useFolderDrop(path, onMoveHere);
+  const { dropTarget, onDragOver, onDragLeave, onDrop } = useDropInto(path, onMoveHere);
   return (
     <div
       ref={wrapperRef}
@@ -598,6 +626,7 @@ function FileTreeInner({
                   onDelete={onDelete}
                   onCopyPath={copyPath}
                   onReveal={revealInFinder}
+                  onMoveHere={onMoveFile}
                 />
               )}
             </div>
