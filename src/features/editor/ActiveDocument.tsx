@@ -379,6 +379,17 @@ export function ActiveDocument() {
   const confirm = useConfirm();
   const sendCommentsToChat = useWorkspaceStore((state) => state.sendCommentsToChat);
   const setCommentResolved = useWorkspaceStore((state) => state.setCommentResolved);
+  const ensureActiveBuffer = useWorkspaceStore((state) => state.ensureActiveBuffer);
+
+  // Active file ⇒ its buffer loads. `selectFile` reads on a tab click, but
+  // closing or deleting a tab (and tab restore on open) repoints the active file
+  // without a read — load it here so the editor never strands on "Loading file…"
+  // (#50). The store guards against a double read racing `selectFile`.
+  useEffect(() => {
+    if (activeFilePath && !bufferLoaded) {
+      void ensureActiveBuffer();
+    }
+  }, [activeFilePath, bufferLoaded, ensureActiveBuffer]);
 
   // All comments for the active file (open + resolved) — the panel shows the
   // resolved ones in their own "done" section.

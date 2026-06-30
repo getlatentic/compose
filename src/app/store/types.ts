@@ -172,6 +172,10 @@ export interface WorkspaceState {
   renameActiveFile: (toRelativePath: string) => Promise<void>;
   saveActiveFile: () => Promise<void>;
   selectFile: (path: string) => Promise<void>;
+  /** Read the active file's buffer if it isn't loaded — the invariant that keeps
+   *  the editor off a stuck "Loading file…" when the active file changes without
+   *  a read (closing/deleting a tab, restoring tabs). */
+  ensureActiveBuffer: () => Promise<void>;
   rejectSuggestedEdit: (suggestionId: string) => void;
   sendChatPrompt: (options?: { readOnly?: boolean }) => Promise<void>;
   sendCommentToChat: (commentId: string) => Promise<void>;

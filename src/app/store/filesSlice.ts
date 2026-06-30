@@ -38,10 +38,52 @@ import {
   pushNavEntry,
 } from "./navigation";
 
+/** Files whose buffer is being read, keyed `${workspaceId}\n${path}`, so the
+ *  editor's load-if-missing effect never races `selectFile` into a duplicate
+ *  read of the same file. */
+const loadingBuffers = new Set<string>();
+
+/** The single buffer loader: read a file's content into its buffer if it isn't
+ *  loaded yet. `selectFile` uses it on a tab click; an editor effect uses it for
+ *  every other path that points `activeFilePath` at an unread file — closing or
+ *  deleting a tab, restoring tabs on open — which used to strand the editor on
+ *  "Loading file…" because only `selectFile` ever read (#50). */
+async function loadBufferIfMissing(
+  set: WorkspaceStoreSet,
+  get: WorkspaceStoreGet,
+  workspaceId: string,
+  path: string,
+): Promise<void> {
+  if (!path) {
+    return;
+  }
+  const workspace = get().workspaces.find((item) => item.id === workspaceId);
+  if (!workspace || workspace.fileContents[path]) {
+    return;
+  }
+  const key = `${workspaceId}\n${path}`;
+  if (loadingBuffers.has(key)) {
+    return;
+  }
+  loadingBuffers.add(key);
+  try {
+    const buffer = await readFileIpc(workspaceId, path);
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
+        applyFileBuffer(item, path, buffer),
+      ),
+    }));
+  } catch (error) {
+    showErrorToast(error instanceof Error ? error.message : "Could not open file");
+  } finally {
+    loadingBuffers.delete(key);
+  }
+}
+
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "closeFileTab" | "createNote" | "createFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "updateActiveContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "createNote" | "createFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "updateActiveContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -92,20 +134,12 @@ export const createFilesSlice = (
     });
     persistTabs(get().workspaces, workspace.id);
 
-    const current = get().workspaces.find((item) => item.id === workspace.id);
-    if (current && current.fileContents[path]) {
-      return;
-    }
-
-    try {
-      const buffer = await readFileIpc(workspace.id, path);
-      set((state) => ({
-        workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
-          applyFileBuffer(item, path, buffer),
-        ),
-      }));
-    } catch (error) {
-      showErrorToast(error instanceof Error ? error.message : "Could not open file");
+    await loadBufferIfMissing(set, get, workspace.id, path);
+  },
+  ensureActiveBuffer: async () => {
+    const workspace = get().activeWorkspace();
+    if (workspace?.activeFilePath) {
+      await loadBufferIfMissing(set, get, workspace.id, workspace.activeFilePath);
     }
   },
   closeFileTab: (filePath: string) => {

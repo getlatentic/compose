@@ -23,11 +23,13 @@ import { switchWorkspace as switchWorkspaceIpc } from "../lib/ipc/workspaceClien
 
 vi.mock("../lib/ipc/filesClient", () => ({
   createFile: vi.fn(),
+  createFolder: vi.fn(() => Promise.resolve()),
   deleteFile: vi.fn(),
   FileConflictError: class FileConflictError extends Error {},
   readFile: vi.fn(),
   renameFile: vi.fn(),
   scanWorkspace: vi.fn(),
+  scanFolders: vi.fn(() => Promise.resolve([])),
   writeFile: vi.fn(),
 }));
 
@@ -481,6 +483,37 @@ describe("workspace store", () => {
       await useWorkspaceStore.getState().selectFile("missing.md");
 
       expect(useToastStore.getState().toasts.slice(-1)[0]?.message).toBe("disk gone");
+    });
+
+    it("ensureActiveBuffer loads the active file's buffer when it is missing (#50)", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "# Recovered", lastModifiedMs: 7 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      // The post-close/delete state: a tab is active but its buffer was never
+      // read — the bug stranded the editor on "Loading file…" right here.
+      useWorkspaceStore.setState((state) => ({
+        workspaces: state.workspaces.map((workspace) =>
+          workspace.id === workspaceId
+            ? { ...workspace, activeFilePath: "b.md", openFilePaths: ["b.md"], fileContents: {} }
+            : workspace,
+        ),
+      }));
+
+      await useWorkspaceStore.getState().ensureActiveBuffer();
+
+      expect(readFile).toHaveBeenCalledWith(workspaceId, "b.md");
+      expect(useWorkspaceStore.getState().activeWorkspace()?.fileContents["b.md"]?.content).toBe(
+        "# Recovered",
+      );
+    });
+
+    it("ensureActiveBuffer does not re-read an already-loaded file", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+
+      await useWorkspaceStore.getState().ensureActiveBuffer();
+
+      expect(readFile).toHaveBeenCalledTimes(1);
     });
 
     it("saveActiveFile guards on the buffer's mtime and marks it saved on success", async () => {
