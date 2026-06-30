@@ -17,6 +17,8 @@
     "test": "vitest run",
     "bench:baseline": "vitest run --config vitest.bench.config.ts",
     "test:rust": "cargo test",
+    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.include='src/**' --coverage.include='packages/*/src/**' --coverage.exclude='**/*.test.{ts,tsx}' --coverage.exclude='**/*.d.ts' --coverage.reporter=text-summary",
+    "coverage:rust": "cd src-tauri && cargo llvm-cov --workspace --summary-only",
     "check": "pnpm build && pnpm test && pnpm test:rust"
   },
   "dependencies": {
@@ -60,6 +62,7 @@
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.6.0",
+    "@vitest/coverage-v8": "3.2.4",
     "autoprefixer": "^10.4.21",
     "codemirror": "^6.0.2",
     "concurrently": "^10.0.0",
@@ -71,5 +74,15 @@
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "overrides": {
+      "jiti": "1.21.7"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "@amiceli/vitest-cucumber>vitest": "3"
+      }
+    }
   }
 }
