@@ -6,6 +6,7 @@ import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_NAME } from "./welcomeNote";
 import { WorkspaceWelcome } from "../workspace/WorkspaceWelcome";
 import { MAC_TRAFFIC_LIGHTS_INSET } from "../workspace/WorkspaceSidebar";
 import { useWorkspaceActions } from "../workspace/useWorkspaceActions";
+import { useConfirm } from "../dialogs/ConfirmProvider";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
@@ -69,6 +70,7 @@ export function EditorRegion() {
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const requestComposerFocus = useUiStore((state) => state.requestComposerFocus);
   const { openFolder, canOpenNativeFolder } = useWorkspaceActions();
+  const confirm = useConfirm();
 
   const openTabs = useMemo<EditorTab[]>(() => {
     const ws = useWorkspaceStore.getState().activeWorkspace();
@@ -89,17 +91,23 @@ export function EditorRegion() {
     (filePath: string) => {
       const workspace = useWorkspaceStore.getState().activeWorkspace();
       const buffer = workspace?.fileContents[filePath];
-      if (buffer?.dirty) {
-        const confirmed = window.confirm(
-          `${filePath} has unsaved changes. Close the tab without saving?`,
-        );
-        if (!confirmed) {
-          return;
-        }
+      if (!buffer?.dirty) {
+        closeFileTab(filePath);
+        return;
       }
-      closeFileTab(filePath);
+      void (async () => {
+        const confirmed = await confirm({
+          title: "Unsaved changes",
+          message: `${filePath} has unsaved changes. Close the tab without saving?`,
+          confirmLabel: "Close without saving",
+          danger: true,
+        });
+        if (confirmed) {
+          closeFileTab(filePath);
+        }
+      })();
     },
-    [closeFileTab],
+    [closeFileTab, confirm],
   );
 
   // Empty-state "Ask the assistant": open the chat, pre-fill a first-note starter,

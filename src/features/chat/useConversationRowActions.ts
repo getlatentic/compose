@@ -6,6 +6,7 @@ import { conversationToMarkdown } from "../../lib/export/conversationMarkdown";
 import { loadConversation } from "../../lib/ipc/conversationsClient";
 import type { ConversationSummary } from "../../lib/ipc/conversationsClient";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
+import { useConfirm } from "../dialogs/ConfirmProvider";
 import type { ConversationActions } from "./ConversationActionsMenu";
 
 /**
@@ -28,6 +29,7 @@ export function useConversationRowActions(): (
   const archiveConversation = useWorkspaceStore((state) => state.archiveConversation);
   const deleteConversation = useWorkspaceStore((state) => state.deleteConversation);
   const promptText = useTextPrompt();
+  const confirm = useConfirm();
 
   return useCallback(
     (conversation: ConversationSummary): ConversationActions => ({
@@ -49,7 +51,12 @@ export function useConversationRowActions(): (
           if (!activeWorkspaceId) {
             return;
           }
-          if (!window.confirm(`Export “${conversation.title}” as a Markdown file?`)) {
+          const confirmed = await confirm({
+            title: "Export conversation",
+            message: `Export “${conversation.title}” as a Markdown file?`,
+            confirmLabel: "Export",
+          });
+          if (!confirmed) {
             return;
           }
           const snapshot = await loadConversation(
@@ -72,6 +79,7 @@ export function useConversationRowActions(): (
     [
       activeWorkspaceId,
       archiveConversation,
+      confirm,
       deleteConversation,
       duplicateConversation,
       promptText,

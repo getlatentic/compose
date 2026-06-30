@@ -14,9 +14,9 @@ import { Modal, TextInput } from "@carbon/react";
  * WKWebView (via wry) never implements the JavaScript text-input panel, so
  * `window.prompt` silently returns `null` in the packaged `.app` while working
  * fine in the browser dev build — a file/conversation rename or a link/image
- * URL prompt just no-ops with no feedback. (`window.confirm`/`alert` *are*
- * wired by wry, so those still work; only `prompt` is dead.) This provider
- * renders one real modal and hands back an imperative `promptText` so call
+ * URL prompt just no-ops with no feedback. (`window.confirm` is likewise unusable
+ * in the packaged app — it returns a rejecting Promise; see ConfirmProvider.) This
+ * provider renders one real modal and hands back an imperative `promptText` so call
  * sites read almost identically to the old `window.prompt`.
  */
 export interface TextPromptOptions {

@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
+import { useConfirm } from "../dialogs/ConfirmProvider";
 import { FileTree } from "../file-tree/FileTree";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { SidebarChatList } from "../chat/SidebarChatList";
@@ -55,6 +56,7 @@ export function WorkspaceSidebar() {
   const openSearch = useUiStore((state) => state.openSearch);
   const onTitlebarMouseDown = useWindowDrag();
   const promptText = useTextPrompt();
+  const confirm = useConfirm();
   // Narrow, churn-free reads: a boolean for "is a workspace open" + the footer
   // note count. Both are primitives, so editing/saving (which churns the
   // workspace object on every flush) never re-renders the sidebar shell. The
@@ -89,13 +91,19 @@ export function WorkspaceSidebar() {
 
   const handleDelete = useCallback(
     async (relativePath: string) => {
-      if (!window.confirm(`Delete ${relativePath}? This cannot be undone.`)) {
+      const confirmed = await confirm({
+        title: "Delete file",
+        message: `Delete ${relativePath}? This cannot be undone.`,
+        confirmLabel: "Delete",
+        danger: true,
+      });
+      if (!confirmed) {
         return;
       }
       await selectFile(relativePath);
       await deleteActiveFile();
     },
-    [selectFile, deleteActiveFile],
+    [selectFile, deleteActiveFile, confirm],
   );
 
   // FileTree's callbacks pass through to store actions. The wrapping arrows

@@ -11,6 +11,7 @@ import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
 import { conversationToMarkdown } from "../../lib/export/conversationMarkdown";
 import { loadConversation } from "../../lib/ipc/conversationsClient";
+import { useConfirm } from "../dialogs/ConfirmProvider";
 import { ChatMessageList } from "./ChatMessageList";
 import type { MessageRowCallbacks } from "./MessageRow";
 import { MessageComposer } from "./MessageComposer";
@@ -71,6 +72,7 @@ function ChatPanelInner() {
   const newChat = useWorkspaceStore((state) => state.newChat);
   const toggleChat = useUiStore((state) => state.toggleChat);
   const deleteNotice = useWorkspaceStore((state) => state.conversationDeleteNotice);
+  const confirm = useConfirm();
 
   const [editingTitle, setEditingTitle] = useState(false);
   // Live height of the floating composer, measured by `MessageComposer`. The
@@ -216,7 +218,12 @@ function ChatPanelInner() {
   // Export the open conversation: prefer the live thread (it has the latest
   // in-flight turns), else fall back to the persisted snapshot.
   const exportConversation = async (conversationId: string, title: string) => {
-    if (!window.confirm(`Export “${title}” as a Markdown file?`)) {
+    const confirmed = await confirm({
+      title: "Export conversation",
+      message: `Export “${title}” as a Markdown file?`,
+      confirmLabel: "Export",
+    });
+    if (!confirmed) {
       return;
     }
     let messages: { role: "user" | "assistant"; content: string }[];
