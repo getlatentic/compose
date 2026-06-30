@@ -8,6 +8,7 @@ import { useUpdaterStore } from "./store/updaterStore";
 import { TextPromptProvider, useTextPrompt } from "../features/dialogs/TextPromptProvider";
 import { LinkInsertProvider } from "../features/dialogs/LinkInsertProvider";
 import { ConfirmProvider } from "../features/dialogs/ConfirmProvider";
+import { RenameProvider } from "../features/dialogs/RenameProvider";
 import {
   IMAGE_EDIT_ALT_EVENT,
   type ImageEditAltEventDetail,
@@ -23,12 +24,14 @@ export function App() {
     <TextPromptProvider>
       <LinkInsertProvider>
         <ConfirmProvider>
-          <ImageEditAltListener />
-          <ExternalFileOpenListener />
-          <UpdateChecker />
-          <ToastViewport />
-          <UpdateBanner />
-          <AppRouter />
+          <RenameProvider>
+            <ImageEditAltListener />
+            <ExternalFileOpenListener />
+            <UpdateChecker />
+            <ToastViewport />
+            <UpdateBanner />
+            <AppRouter />
+          </RenameProvider>
         </ConfirmProvider>
       </LinkInsertProvider>
     </TextPromptProvider>

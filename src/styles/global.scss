@@ -5988,3 +5988,36 @@ select {
   color: var(--cds-text-error, #da1e28);
   text-decoration: underline;
 }
+
+// Rename dialog: an editable base name with the extension pinned beside it as a
+// read-only box, and the file's folder shown beneath. The extension box
+// continues the input's bottom border so it reads as a fixed suffix.
+.rename-field__row {
+  display: flex;
+  align-items: stretch;
+}
+
+.rename-field__input {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.rename-field__ext {
+  display: flex;
+  align-items: center;
+  padding-inline: 0.75rem;
+  background: var(--cds-field, #f4f4f4);
+  border-block-end: 1px solid var(--cds-border-strong-01, #8d8d8d);
+  color: var(--cds-text-secondary, #525252);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.rename-field__location {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-block-start: 0.5rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
+}

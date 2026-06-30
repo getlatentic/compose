@@ -5,7 +5,7 @@ import { PanelLeft, Search, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
-import { useTextPrompt } from "../dialogs/TextPromptProvider";
+import { useRename } from "../dialogs/RenameProvider";
 import { useConfirm } from "../dialogs/ConfirmProvider";
 import { FileTree } from "../file-tree/FileTree";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
@@ -55,7 +55,7 @@ export function WorkspaceSidebar() {
   const openSettings = useUiStore((state) => state.openSettings);
   const openSearch = useUiStore((state) => state.openSearch);
   const onTitlebarMouseDown = useWindowDrag();
-  const promptText = useTextPrompt();
+  const requestRename = useRename();
   const confirm = useConfirm();
   // Narrow, churn-free reads: a boolean for "is a workspace open" + the footer
   // note count. Both are primitives, so editing/saving (which churns the
@@ -75,18 +75,13 @@ export function WorkspaceSidebar() {
   const handleRename = useCallback(
     async (relativePath: string) => {
       await selectFile(relativePath);
-      const next = await promptText({
-        title: "Rename file",
-        label: "New name",
-        defaultValue: relativePath,
-        submitLabel: "Rename",
-      });
-      if (!next || next.trim() === relativePath) {
+      const target = await requestRename(relativePath);
+      if (!target || target === relativePath) {
         return;
       }
-      await renameActiveFile(next.trim());
+      await renameActiveFile(target);
     },
-    [selectFile, renameActiveFile, promptText],
+    [selectFile, renameActiveFile, requestRename],
   );
 
   const handleDelete = useCallback(
