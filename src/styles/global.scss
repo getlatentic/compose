@@ -5749,8 +5749,10 @@ select {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
+// The selected/active row — a distinctly darker fill than the subtle hover
+// (#e8e8e8) so a hovered row never reads as selected (#53).
 .file-row-wrapper--active {
-  background: var(--cds-layer-selected-01, #e0e0e0);
+  background: var(--cds-layer-active-01, #c6c6c6);
 }
 
 // The folder a plain "New note" lands in (`newNoteDir`). A left accent bar
