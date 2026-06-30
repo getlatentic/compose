@@ -291,6 +291,20 @@ function flatten(nodes: TreeNode[], collapsed: Set<string>, out: TreeNode[] = []
   return out;
 }
 
+/** The folder paths leading to a file, outermost first — the ancestors that
+ *  must be expanded for the file's row to appear in the flattened tree. */
+export function ancestorFolders(path: string): string[] {
+  const segments = path.split("/");
+  segments.pop(); // drop the file name itself
+  const out: string[] = [];
+  let acc = "";
+  for (const segment of segments) {
+    acc = acc ? `${acc}/${segment}` : segment;
+    out.push(acc);
+  }
+  return out;
+}
+
 function FileTreeInner({
   activePath,
   files,
@@ -396,6 +410,33 @@ function FileTreeInner({
     overscan: 12,
     getItemKey: (index) => rowKey(rows[index]),
   });
+
+  // Reveal the active file: expand its ancestor folders so its row exists in the
+  // flattened list, then scroll it into view. The ref bridges the two effects so
+  // that an unrelated collapse/expand (which also changes `rows`) doesn't yank
+  // the view back to the active file.
+  const pendingReveal = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activePath) return;
+    pendingReveal.current = activePath;
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const folder of ancestorFolders(activePath)) {
+        if (next.delete(folder)) changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [activePath]);
+  useEffect(() => {
+    const target = pendingReveal.current;
+    if (!target) return;
+    const index = rows.findIndex((node) => node.type === "file" && node.path === target);
+    if (index >= 0) {
+      virtualizer.scrollToIndex(index, { align: "auto" });
+      pendingReveal.current = null;
+    }
+  }, [activePath, rows, virtualizer]);
 
   if (files.length === 0) {
     return (
