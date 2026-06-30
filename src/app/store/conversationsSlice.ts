@@ -17,6 +17,7 @@ import {
 import {
   hydrateChatThread,
   resetChatThread,
+  setCurrentTabContext,
 } from "../workspaceModel";
 import {
   pushNavEntry,
@@ -121,7 +122,13 @@ export const createConversationsSlice = (
     set((state) => ({
       workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
         ...item,
-        chatThread: { ...resetChatThread(item.chatThread), conversationId: null },
+        // A new chat defaults its context to the current file, then stays pinned
+        // there regardless of tab switches (#30).
+        chatThread: setCurrentTabContext(
+          { ...resetChatThread(item.chatThread), conversationId: null },
+          workspaceId,
+          item.activeFilePath,
+        ),
       })),
     }));
   },

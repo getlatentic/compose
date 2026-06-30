@@ -117,7 +117,7 @@ describe("workspace model", () => {
     expect(firstChat.contextItems[0].id).not.toBe(secondChat.contextItems[0].id);
   });
 
-  it("opens multiple editor tabs and keeps Bob context on the active tab", () => {
+  it("opens tabs as navigation only — it does not bind chat context to the active tab", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md", "c.md"]);
     const first = workspace.files[0].relativePath;
     const second = workspace.files[1].relativePath;
@@ -126,7 +126,20 @@ describe("workspace model", () => {
 
     expect(secondOpen.openFilePaths).toEqual([first, second]);
     expect(secondOpen.activeFilePath).toBe(second);
-    expect(secondOpen.chatThread.contextItems.map((item) => item.path)).toEqual([second]);
+    // Opening / switching tabs must NOT repoint the chat context (#30); the
+    // user controls it explicitly, and it's seeded at load / new chat instead.
+    expect(secondOpen.chatThread.contextItems).toHaveLength(0);
+  });
+
+  it("keeps the chat context pinned when switching tabs", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md"]);
+    const pinned = {
+      ...workspace,
+      chatThread: setCurrentTabContext(workspace.chatThread, workspace.id, "a.md"),
+    };
+    const switched = openWorkspaceFile(pinned, "b.md");
+    expect(switched.activeFilePath).toBe("b.md");
+    expect(switched.chatThread.contextItems.map((item) => item.path)).toEqual(["a.md"]);
   });
 
   it("builds auditable LLM context snapshots from file and comment context", () => {
@@ -171,7 +184,7 @@ describe("workspace model", () => {
     ]);
   });
 
-  it("closes the active tab, moves Bob context, and drops its buffer", () => {
+  it("closes the active tab and drops its buffer, leaving the chat context untouched", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md", "c.md"]);
     const [a, b, c] = workspace.files.map((entry) => entry.relativePath);
     const withTabs = [a, b, c].reduce(
@@ -182,13 +195,18 @@ describe("workspace model", () => {
         }),
       workspace,
     );
+    const pinned = {
+      ...withTabs,
+      chatThread: setCurrentTabContext(withTabs.chatThread, withTabs.id, a),
+    };
 
-    expect(Object.keys(withTabs.fileContents)).toHaveLength(3);
+    expect(Object.keys(pinned.fileContents)).toHaveLength(3);
 
-    const closed = closeWorkspaceFileTab(withTabs, c);
+    const closed = closeWorkspaceFileTab(pinned, c);
     expect(closed.openFilePaths).toEqual([a, b]);
     expect(closed.activeFilePath).toBe(b);
-    expect(closed.chatThread.contextItems.map((item) => item.path)).toEqual([b]);
+    // Closing a tab is navigation only — the pinned chat context is untouched (#30).
+    expect(closed.chatThread.contextItems.map((item) => item.path)).toEqual([a]);
     expect(Object.keys(closed.fileContents).sort()).toEqual([a, b]);
   });
 

@@ -17,7 +17,8 @@ import {
   markBufferSaved,
   moveWorkspaceComments,
   openWorkspaceFile,
-  setCurrentTabContext,
+  removeFileContext,
+  renameContextItemPath,
   type DocumentTextChange,
   type WorkspaceFileEntry,
 } from "../workspaceModel";
@@ -186,6 +187,7 @@ export const createFilesSlice = (
           const withoutTab = closeWorkspaceFileTab(item, filePath);
           return {
             ...withoutTab,
+            chatThread: removeFileContext(withoutTab.chatThread, filePath),
             comments: withoutTab.comments.filter((comment) => comment.filePath !== filePath),
             files: withoutTab.files.filter((entry) => entry.relativePath !== filePath),
           };
@@ -231,7 +233,7 @@ export const createFilesSlice = (
           const renamed = {
             ...item,
             activeFilePath,
-            chatThread: setCurrentTabContext(item.chatThread, item.id, activeFilePath),
+            chatThread: renameContextItemPath(item.chatThread, item.id, from, trimmed),
             fileContents: remainingContents,
             files,
             openFilePaths,

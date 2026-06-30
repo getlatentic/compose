@@ -587,6 +587,59 @@ describe("workspace store", () => {
       expect(writeFile).not.toHaveBeenCalled();
       expect(deleteFile).toHaveBeenCalledWith(workspaceId, "a.md");
     });
+
+    it("switching tabs leaves the chat context where the user pinned it (#30)", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      useWorkspaceStore.getState().addChatFileContext({ label: "a.md", path: "a.md" });
+
+      await useWorkspaceStore.getState().selectFile("b.md");
+
+      const ws = useWorkspaceStore.getState().activeWorkspace();
+      expect(ws?.activeFilePath).toBe("b.md");
+      expect(ws?.chatThread.contextItems.map((item) => item.path)).toEqual(["a.md"]);
+    });
+
+    it("a new chat defaults its context to the active file (#30)", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      useWorkspaceStore.getState().addChatFileContext({ label: "a.md", path: "a.md" });
+      await useWorkspaceStore.getState().selectFile("b.md");
+
+      await useWorkspaceStore.getState().newChat();
+
+      const ctx = useWorkspaceStore.getState().activeWorkspace()?.chatThread.contextItems;
+      expect(ctx?.map((item) => item.path)).toEqual(["b.md"]);
+    });
+
+    it("deleting a file removes only its context item, keeping the rest (#30)", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
+      vi.mocked(deleteFile).mockResolvedValue(undefined);
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      await useWorkspaceStore.getState().selectFile("b.md");
+      useWorkspaceStore.getState().addChatFileContext({ label: "a.md", path: "a.md" });
+      useWorkspaceStore.getState().addChatFileContext({ label: "b.md", path: "b.md" });
+
+      await useWorkspaceStore.getState().deleteActiveFile(); // active is b.md
+
+      const ctx = useWorkspaceStore.getState().activeWorkspace()?.chatThread.contextItems;
+      expect(ctx?.map((item) => item.path)).toEqual(["a.md"]);
+    });
+
+    it("renaming a context file re-points its context item to the new path (#30)", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+      useWorkspaceStore.getState().addChatFileContext({ label: "a.md", path: "a.md" });
+
+      await useWorkspaceStore.getState().renameActiveFile("c.md");
+
+      const ctx = useWorkspaceStore.getState().activeWorkspace()?.chatThread.contextItems;
+      expect(ctx?.map((item) => item.path)).toEqual(["c.md"]);
+    });
   });
 
   describe("workspace switch persistence", () => {

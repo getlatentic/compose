@@ -500,15 +500,49 @@ export function setCurrentTabContext(
   };
 }
 
+/** Remove a file from the chat context by path (e.g. when it's deleted), leaving
+ *  any other attached context untouched. */
+export function removeFileContext(
+  chatThread: WorkspaceChatThread,
+  filePath: string,
+): WorkspaceChatThread {
+  return {
+    ...chatThread,
+    contextItems: chatThread.contextItems.filter(
+      (item) => !(item.kind === "file" && item.path === filePath),
+    ),
+  };
+}
+
+/** Re-point a file already in the chat context to its new path on rename, so a
+ *  pinned context survives the rename instead of dangling or being replaced. */
+export function renameContextItemPath(
+  chatThread: WorkspaceChatThread,
+  workspaceId: string,
+  from: string,
+  to: string,
+): WorkspaceChatThread {
+  return {
+    ...chatThread,
+    contextItems: chatThread.contextItems.map((item) =>
+      item.kind === "file" && item.path === from
+        ? { ...item, id: createContextId(workspaceId, to), label: to, path: to }
+        : item,
+    ),
+  };
+}
+
 export function openWorkspaceFile(workspace: Workspace, filePath: string): Workspace {
   const openFilePaths = workspace.openFilePaths.includes(filePath)
     ? workspace.openFilePaths
     : [...workspace.openFilePaths, filePath];
 
+  // Opening / switching to a tab is navigation only — it must NOT repoint the
+  // chat context, which the user controls explicitly (#30). The context defaults
+  // to the active file at load and on a new chat, then stays pinned.
   return {
     ...workspace,
     activeFilePath: filePath,
-    chatThread: setCurrentTabContext(workspace.chatThread, workspace.id, filePath),
     openFilePaths,
   };
 }
@@ -528,10 +562,12 @@ export function closeWorkspaceFileTab(workspace: Workspace, filePath: string): W
   const remainingFileContents = { ...workspace.fileContents };
   delete remainingFileContents[filePath];
 
+  // Closing a tab is navigation too — leave the chat context as the user set it
+  // (#30). A still-existing file can stay in context even with no tab open; a
+  // deleted file is removed from context by deleteActiveFile.
   return {
     ...workspace,
     activeFilePath,
-    chatThread: setCurrentTabContext(workspace.chatThread, workspace.id, activeFilePath),
     fileContents: remainingFileContents,
     openFilePaths,
   };
