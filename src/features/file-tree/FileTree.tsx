@@ -1,13 +1,26 @@
-import { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type DragEvent,
+  type MouseEvent,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
 import { CaretDown, CaretRight, Document } from "@carbon/react/icons";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { useTextPrompt } from "../dialogs/TextPromptProvider";
 
 /** Fixed row height in px — must match `.file-row` `block-size: 1.75rem` (28px)
  * in global.scss. The virtualizer needs it to place rows without measuring each. */
 const ROW_HEIGHT = 28;
+
+/** dataTransfer MIME for a file path dragged to move it into a folder (#28). */
+const DRAG_FILE_MIME = "application/x-compose-file-path";
 
 /**
  * The unsaved-edit dot for one file row. Self-subscribes to just that file's
@@ -68,6 +81,37 @@ function useRowMenu() {
   return { menuMounted, wrapperRef, mountMenu, onContextMenu };
 }
 
+/** Drop handling for a folder row: highlight while a draggable file is over it,
+ *  and move that file in on drop. Handlers are memoised (like {@link useRowMenu})
+ *  so the memoised FolderRow keeps stable identities across renders. */
+function useFolderDrop(
+  folderPath: string,
+  onMoveHere: (fromPath: string, folderPath: string) => void,
+) {
+  const [dropTarget, setDropTarget] = useState(false);
+  const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(DRAG_FILE_MIME)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDropTarget(true);
+  }, []);
+  const onDragLeave = useCallback(() => setDropTarget(false), []);
+  const onDrop = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      setDropTarget(false);
+      const from = event.dataTransfer.getData(DRAG_FILE_MIME);
+      if (from) {
+        event.preventDefault();
+        onMoveHere(from, folderPath);
+      }
+    },
+    [folderPath, onMoveHere],
+  );
+  return { dropTarget, onDragOver, onDragLeave, onDrop };
+}
+
 /**
  * One file row, memoised. Each row mounts a Carbon `OverflowMenu` (the ⋯
  * kebab) which drags in a Popover + Icon floating-ui stack. Before this,
@@ -107,6 +151,13 @@ const FileRow = memo(function FileRow({
   // rest the slot is an empty same-size spacer (no layout shift), and a freshly
   // opened vault mounts ZERO menus.
   const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
+  const onDragStart = useCallback(
+    (event: DragEvent<HTMLButtonElement>) => {
+      event.dataTransfer.setData(DRAG_FILE_MIME, path);
+      event.dataTransfer.effectAllowed = "move";
+    },
+    [path],
+  );
   return (
     <div
       ref={wrapperRef}
@@ -119,6 +170,8 @@ const FileRow = memo(function FileRow({
     >
       <button
         type="button"
+        draggable
+        onDragStart={onDragStart}
         onClick={() => onSelect(path)}
         className={["file-row", active ? "file-row--active" : ""]
           .filter(Boolean)
@@ -156,6 +209,8 @@ const FolderRow = memo(function FolderRow({
   selected,
   onActivate,
   onNewNoteHere,
+  onNewFolderHere,
+  onMoveHere,
   onReveal,
 }: {
   path: string;
@@ -165,18 +220,28 @@ const FolderRow = memo(function FolderRow({
   selected: boolean;
   onActivate: (path: string) => void;
   onNewNoteHere: (path: string) => void;
+  onNewFolderHere: (path: string) => void;
+  onMoveHere: (fromPath: string, folderPath: string) => void;
   onReveal: (path: string) => void;
 }) {
   const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
+  const { dropTarget, onDragOver, onDragLeave, onDrop } = useFolderDrop(path, onMoveHere);
   return (
     <div
       ref={wrapperRef}
-      className={["file-row-wrapper", selected ? "file-row-wrapper--target" : ""]
+      className={[
+        "file-row-wrapper",
+        selected ? "file-row-wrapper--target" : "",
+        dropTarget ? "file-row-wrapper--drop" : "",
+      ]
         .filter(Boolean)
         .join(" ")}
       onMouseEnter={mountMenu}
       onFocus={mountMenu}
       onContextMenu={onContextMenu}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       <button
         type="button"
@@ -192,6 +257,7 @@ const FolderRow = memo(function FolderRow({
       {menuMounted ? (
         <OverflowMenu aria-label={`Actions for ${path}`} size="sm" flipped align="bottom">
           <OverflowMenuItem itemText="New note here" onClick={() => onNewNoteHere(path)} />
+          <OverflowMenuItem itemText="New folder here" onClick={() => onNewFolderHere(path)} />
           <OverflowMenuItem itemText="Reveal in Finder" onClick={() => onReveal(path)} />
         </OverflowMenu>
       ) : (
@@ -310,12 +376,14 @@ function FileTreeInner({
   files,
   onDelete,
   onRename,
+  onMoveFile,
   onSelectFile,
 }: {
   activePath: string;
   files: WorkspaceFileEntry[];
   onDelete: (relativePath: string) => void;
   onRename: (relativePath: string) => void;
+  onMoveFile: (fromPath: string, folderPath: string) => void;
   onSelectFile: (relativePath: string) => void;
 }) {
   const tree = useMemo(() => buildTree(files), [files]);
@@ -334,6 +402,7 @@ function FileTreeInner({
   // The folder a plain "New note" lands in. A string that changes only on a
   // deliberate select, so subscribing here re-renders the tree (and the two
   // folder rows whose `selected` flips) without touching the editing hot path.
+  const promptText = useTextPrompt();
   const newNoteDir = useWorkspaceStore((state) => state.newNoteDir);
   const setNewNoteDir = useWorkspaceStore((state) => state.setNewNoteDir);
   const createNote = useWorkspaceStore((state) => state.createNote);
@@ -388,6 +457,29 @@ function FileTreeInner({
       void createNote({ dir: path });
     },
     [setNewNoteDir, createNote],
+  );
+  // A markdown vault's tree is built from files, so a folder only appears once it
+  // holds one. "New folder here" names the folder and seeds it with a first note
+  // (which also survives a rescan, unlike a tracked-but-empty dir). Empty at root
+  // (path === "") creates a top-level folder.
+  const newFolderHere = useCallback(
+    (path: string) => {
+      void (async () => {
+        const name = await promptText({
+          title: "New folder",
+          label: "Folder name",
+          submitLabel: "Create",
+        });
+        const trimmed = name?.trim();
+        if (!trimmed) {
+          return;
+        }
+        const dir = path ? `${path}/${trimmed}` : trimmed;
+        setNewNoteDir(dir);
+        await createNote({ dir });
+      })();
+    },
+    [promptText, setNewNoteDir, createNote],
   );
   const selectFileTrackingDir = useCallback(
     (relativePath: string) => {
@@ -473,6 +565,8 @@ function FileTreeInner({
                   selected={node.path === newNoteDir}
                   onActivate={activateFolder}
                   onNewNoteHere={newNoteHere}
+                  onNewFolderHere={newFolderHere}
+                  onMoveHere={onMoveFile}
                   onReveal={revealInFinder}
                 />
               ) : (

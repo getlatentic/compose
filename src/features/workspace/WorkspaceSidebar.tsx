@@ -116,6 +116,24 @@ export function WorkspaceSidebar() {
     (relativePath: string) => void handleRename(relativePath),
     [handleRename],
   );
+  // Moving a file into a folder is a rename into that folder — which already
+  // carries the open tab, chat context, comments, and version history along
+  // (renameActiveFile). selectFile makes the dragged file the active target.
+  const handleMoveFile = useCallback(
+    (from: string, folderPath: string) => {
+      const slash = from.lastIndexOf("/");
+      const base = slash >= 0 ? from.slice(slash + 1) : from;
+      const dest = folderPath ? `${folderPath}/${base}` : base;
+      if (dest === from) {
+        return;
+      }
+      void (async () => {
+        await selectFile(from);
+        await renameActiveFile(dest);
+      })();
+    },
+    [selectFile, renameActiveFile],
+  );
 
   // One context-aware "New" button: a note on the Notes tab, a chat on the
   // Chat tab.
@@ -203,6 +221,7 @@ export function WorkspaceSidebar() {
           onSelectFile={handleSelectFile}
           onRenameFile={handleRenameAdapter}
           onDeleteFile={handleDeleteAdapter}
+          onMoveFile={handleMoveFile}
         />
       </div>
       <div hidden={sidebarTab !== "chat"} className="sidebar-pane-wrap">
@@ -265,10 +284,12 @@ const FilesTab = memo(function FilesTab({
   onSelectFile,
   onRenameFile,
   onDeleteFile,
+  onMoveFile,
 }: {
   onSelectFile: (path: string) => void;
   onRenameFile: (path: string) => void;
   onDeleteFile: (path: string) => void;
+  onMoveFile: (fromPath: string, folderPath: string) => void;
 }) {
   // Self-subscribing leaf: the file list and active path are read here via
   // NARROW selectors, so a structural change re-renders this pane WITHOUT
@@ -301,6 +322,7 @@ const FilesTab = memo(function FilesTab({
           files={files}
           onDelete={onDeleteFile}
           onRename={onRenameFile}
+          onMoveFile={onMoveFile}
           onSelectFile={onSelectFile}
         />
       </div>

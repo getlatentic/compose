@@ -5760,6 +5760,14 @@ select {
   box-shadow: inset 2px 0 0 0 var(--cds-border-interactive, #0f62fe);
 }
 
+// Drop target while dragging a file onto a folder (#28): a tinted fill + ring so
+// the folder clearly reads as the destination.
+.file-row-wrapper--drop {
+  background: var(--cds-highlight, #d0e2ff);
+  box-shadow: inset 0 0 0 2px var(--cds-border-interactive, #0f62fe);
+  border-radius: 4px;
+}
+
 .file-row-wrapper .file-row {
   background: transparent;
 }

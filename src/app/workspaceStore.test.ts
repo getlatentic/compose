@@ -640,6 +640,19 @@ describe("workspace store", () => {
       const ctx = useWorkspaceStore.getState().activeWorkspace()?.chatThread.contextItems;
       expect(ctx?.map((item) => item.path)).toEqual(["c.md"]);
     });
+
+    it("moving a file = renaming it into another folder, carrying its open tab (#28)", async () => {
+      vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      await useWorkspaceStore.getState().selectFile("a.md");
+
+      await useWorkspaceStore.getState().renameActiveFile("Archive/a.md");
+
+      const ws = useWorkspaceStore.getState().activeWorkspace();
+      expect(ws?.activeFilePath).toBe("Archive/a.md");
+      expect(ws?.openFilePaths).toContain("Archive/a.md");
+      expect(ws?.openFilePaths).not.toContain("a.md");
+    });
   });
 
   describe("workspace switch persistence", () => {
