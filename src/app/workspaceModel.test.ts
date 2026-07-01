@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   reorderOpenTabs,
+  renameContextItemPath,
+  type WorkspaceChatThread,
   acceptWorkspaceSuggestion,
   appendAssistantText,
   appendAssistantNotice,
@@ -1249,6 +1251,42 @@ describe("workspace model", () => {
     // Edit-scope guardrail so the agent only touches the intended files (#31).
     expect(prompt).toContain("only modify the Context files listed above");
     expect(prompt.endsWith("summarize this")).toBe(true);
+  });
+});
+
+describe("renameContextItemPath comment items (#32)", () => {
+  it("re-points a comment context item's filePath so the agent reads the new path", () => {
+    const thread = {
+      activeLlmThreadId: null,
+      activeRunId: null,
+      conversationId: null,
+      contextItems: [
+        {
+          kind: "comment",
+          filePath: "old.md",
+          path: "old.md",
+          id: "c1",
+          label: "excerpt",
+          workspaceId: "w",
+          commentBody: "",
+          selectedText: "",
+          surroundingContext: "",
+          anchor: { from: 0, to: 0 },
+          range: { start: 0, end: 0 },
+        },
+      ],
+      messages: [],
+      preparedCommand: null,
+      prompt: "",
+      runError: null,
+      runState: "idle",
+    } as unknown as WorkspaceChatThread;
+
+    const result = renameContextItemPath(thread, "w", "old.md", "new.md");
+    const item = result.contextItems[0] as { kind: string; filePath: string; path: string };
+    expect(item.kind).toBe("comment");
+    expect(item.filePath).toBe("new.md");
+    expect(item.path).toBe("new.md");
   });
 });
 

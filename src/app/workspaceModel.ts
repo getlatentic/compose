@@ -529,11 +529,18 @@ export function renameContextItemPath(
 ): WorkspaceChatThread {
   return {
     ...chatThread,
-    contextItems: chatThread.contextItems.map((item) =>
-      item.kind === "file" && item.path === from
-        ? { ...item, id: createContextId(workspaceId, to), label: to, path: to }
-        : item,
-    ),
+    contextItems: chatThread.contextItems.map((item) => {
+      if (item.kind === "file" && item.path === from) {
+        return { ...item, id: createContextId(workspaceId, to), label: to, path: to };
+      }
+      // A comment excerpt in chat references its file by path too (the prompt
+      // emits `File: <filePath>`); re-point it so the agent never reads the old,
+      // now-missing path (#32).
+      if (item.kind === "comment" && item.filePath === from) {
+        return { ...item, filePath: to, path: item.path === from ? to : item.path };
+      }
+      return item;
+    }),
   };
 }
 
