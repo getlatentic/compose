@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo } from "react";
-import { InlineNotification } from "@carbon/react";
-import { AddAlt, FolderAdd } from "@carbon/react/icons";
+import { InlineNotification, MenuButton, MenuItem, MenuItemDivider } from "@carbon/react";
+import { Document, Folder, Chat } from "@carbon/react/icons";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { PanelLeft, Search, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../../app/workspaceStore";
@@ -139,12 +139,12 @@ export function WorkspaceSidebar() {
     [selectFile, renameActiveFile],
   );
 
-  // One context-aware "New" button: a note on the Notes tab, a chat on the
-  // Chat tab.
-  const newLabel = sidebarTab === "files" ? "New note" : "New chat";
-  const onNew = sidebarTab === "files" ? createNote : newChat;
+  // Stable menu-item handlers for the single "+ New" button. Not a hot-path row
+  // (the shell re-renders rarely), but kept off inline arrows for consistency.
+  const handleNewNote = useCallback(() => void createNote(), [createNote]);
+  const handleNewChat = useCallback(() => void newChat(), [newChat]);
 
-  // A header-level "New folder" so the first/top-level folder can be created
+  // A "New folder" create action so the first/top-level folder can be created
   // even in an empty workspace (the tree's "New folder here" needs an existing
   // folder row). Lands in the selected folder (newNoteDir) or the root (#56).
   const handleNewFolder = useCallback(() => {
@@ -222,29 +222,31 @@ export function WorkspaceSidebar() {
         >
           Chat
         </button>
-        <button
-          type="button"
-          className="sidebar-new"
-          onClick={() => void onNew()}
+        {/* One "+ New" button replaces the old New-note + folder-add cluster;
+            it opens every create action, each named with a word and an icon.
+            The menu leads with what the current tab is about — New chat first
+            on the Chat tab, New note first on Notes. */}
+        <MenuButton
+          label="New"
+          size="sm"
+          className="sidebar-new-menu"
+          menuAlignment="bottom-end"
           disabled={!hasWorkspace}
-          aria-label={newLabel}
-          title={newLabel}
         >
-          <AddAlt size={16} />
-          <span>{newLabel}</span>
-        </button>
-        {sidebarTab === "files" ? (
-          <button
-            type="button"
-            className="sidebar-new sidebar-new--icon"
-            onClick={handleNewFolder}
-            disabled={!hasWorkspace}
-            aria-label="New folder"
-            title="New folder"
-          >
-            <FolderAdd size={16} />
-          </button>
-        ) : null}
+          {sidebarTab === "files"
+            ? [
+                <MenuItem key="note" label="New note" renderIcon={Document} onClick={handleNewNote} />,
+                <MenuItem key="folder" label="New folder" renderIcon={Folder} onClick={handleNewFolder} />,
+                <MenuItemDivider key="div" />,
+                <MenuItem key="chat" label="New chat" renderIcon={Chat} onClick={handleNewChat} />,
+              ]
+            : [
+                <MenuItem key="chat" label="New chat" renderIcon={Chat} onClick={handleNewChat} />,
+                <MenuItemDivider key="div" />,
+                <MenuItem key="note" label="New note" renderIcon={Document} onClick={handleNewNote} />,
+                <MenuItem key="folder" label="New folder" renderIcon={Folder} onClick={handleNewFolder} />,
+              ]}
+        </MenuButton>
       </div>
 
       {/* Both panes stay mounted; visibility flips via the `hidden` attribute.
