@@ -505,20 +505,25 @@ select {
 .sidebar-tabs {
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
+  // Tabs sit ON the row's bottom border: no bottom padding, items bottom-aligned,
+  // and each tab pulls its underline down 1px to overlap that border.
+  align-items: end;
   gap: 0.25rem;
-  padding: 0.5rem;
+  padding: 0.5rem 0.5rem 0;
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
 // Underline tabs (interaction spec §03) — no fill; the active tab is marked by a
 // 2px blue bottom border that sits on the tab-row's own divider.
 .sidebar-tab {
+  display: inline-flex;
+  align-items: center;
   border: 0;
   border-block-end: 2px solid transparent;
+  margin-block-end: -1px;
   background: transparent;
   cursor: pointer;
-  block-size: 2.25rem;
+  block-size: 2rem;
   padding-inline: 0.25rem;
   color: var(--cds-text-secondary, #6f6f6f);
   font-size: 0.875rem;
@@ -540,6 +545,10 @@ select {
 // the end of the tab row.
 .new-menu {
   position: relative;
+  // The tab row is bottom-aligned for the underline; keep the button vertically
+  // centred and off the border instead of dropping onto it.
+  align-self: center;
+  margin-block-end: 0.5rem;
   margin-inline-start: auto;
 }
 
