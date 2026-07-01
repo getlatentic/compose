@@ -5826,12 +5826,30 @@ select {
   position: static;
   transform: none;
   block-size: 1.75rem;
+  // Carbon ships a 2rem min-block-size that inflated this fill 4px past the 28px
+  // row (2px proud top and bottom); pin the min so the kebab is exactly one row
+  // tall and its bg lines up with the row's.
+  min-block-size: 1.75rem;
   inline-size: 1.75rem;
-  // Opaque so it masks the name's tail it sits over on hover.
+  // Opaque so it masks the name's tail it sits over on hover, tinted to the
+  // hovered-row fill so the two read as one surface.
   background: var(--cds-layer-hover-01, #e8e8e8);
   border-radius: 4px;
   opacity: 0;
   transition: opacity 80ms ease;
+}
+
+// The selected row's fill is darker than a hover; match the kebab to it so it
+// doesn't read as a lighter pill floating on the row (same colour + height).
+.file-row-wrapper--active .cds--overflow-menu {
+  background: var(--cds-layer-active-01, #c6c6c6);
+}
+
+// The trigger button carries no fill of its own — the wrapper's row-matched
+// background shows through in every state (Carbon's own hover/focus tint would
+// otherwise read a shade off the row). Class-over-pseudo specificity wins.
+.file-row-wrapper .cds--overflow-menu__trigger {
+  background-color: transparent;
 }
 
 .file-row-wrapper:hover .cds--overflow-menu,
