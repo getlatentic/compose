@@ -5965,6 +5965,14 @@ select {
   box-shadow: none;
 }
 
+// Carbon wraps the kebab trigger in an IconButton that pops an "Options" tooltip
+// on hover — suppress it. The button keeps its accessible name via
+// aria-labelledby (name-from-labelledby includes hidden content), so screen
+// readers are unaffected.
+.cds--overflow-menu__wrapper [role="tooltip"] {
+  display: none;
+}
+
 .file-tree--empty {
   padding: 0.75rem 0.5rem;
   color: var(--cds-text-helper, #6f6f6f);
