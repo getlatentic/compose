@@ -5953,12 +5953,16 @@ select {
   color: var(--cds-text-error, #da1e28);
 }
 
-// Sharp Carbon focus on a menu option — a 2px inset outline, no thick rounded
-// ring.
-.cds--overflow-menu-options__btn:focus {
-  outline: 2px solid var(--cds-focus, #0f62fe);
-  outline-offset: -3px;
-  border-radius: 0;
+// Carbon auto-focuses the first option when the menu opens, and WebKit paints
+// its focus ring on that programmatic focus — so a mouse-opened menu shows the
+// first item "selected", which the spec doesn't want. Drop the focus ring on the
+// options; the menu stays keyboard-operable and the neutral hover marks the
+// pointer target. (No CSS reliably tells open-focus from keyboard nav here.)
+.cds--overflow-menu-options__btn:focus,
+.cds--overflow-menu-options__btn:focus-visible,
+.cds--overflow-menu-options__option:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 .file-tree--empty {
