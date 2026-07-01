@@ -301,9 +301,9 @@ export function WorkspaceSidebar() {
 }
 
 /**
- * The Files tab body: the file tree, the active file's Properties (frontmatter)
- * editor, and the backlinks list. Search moved to the footer popover — the
- * INDEX section is gone from here.
+ * The Files tab body: the file tree and the active file's Properties
+ * (frontmatter) editor. Search moved to the footer popover — the INDEX section
+ * is gone from here.
  */
 /**
  * Memoised on FILE-ONLY props (`files`, `activeFilePath`, callbacks) — all
