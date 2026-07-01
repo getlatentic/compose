@@ -582,21 +582,24 @@ select {
   flex: 0 0 auto;
 }
 
-// Panel: a 246px white surface anchored under the button's right edge.
+// Panel: a 246px white surface anchored under the button's right edge. White +
+// a neutral #e0e0e0 border, NOT the Cool Gray layer-01 (#f2f4f8) / border-subtle
+// (#dde1e6) tokens, which carry a blue undertone the spec forbids ("one blue
+// accent").
 .new-menu__panel {
   position: absolute;
   inset-block-start: calc(100% + 6px);
   inset-inline-end: 0;
   inline-size: 246px;
-  background: var(--cds-layer-01, #ffffff);
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid #e0e0e0;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
   z-index: 100;
 }
 
 // A neutral divider between the file-system group and chat.
 .new-menu__group + .new-menu__group {
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-block-start: 1px solid #e0e0e0;
 }
 
 // Item: a 46px row — 16px icon, 12px gap, label, right-aligned mono shortcut.
@@ -5927,10 +5930,22 @@ select {
   block-size: 1.75rem;
 }
 
-// Context/kebab menu polish (interaction spec §02). Destructive Delete reads in
-// the error colour — Carbon's `isDelete` flag alone isn't colouring it under the
-// app's cherry-picked styles, so force it here (same selector, declared later
-// wins).
+// Context/kebab menu polish (interaction spec §02).
+// The menu is a WHITE surface with a neutral border — Carbon defaults it to the
+// tinted Cool Gray layer-01, so pin it to the white layer.
+.cds--overflow-menu-options {
+  background-color: var(--cds-layer-02, #ffffff);
+  border: 1px solid #e0e0e0;
+}
+
+// Neutral hover on an option — not the blue-tinted layer-hover token.
+.cds--overflow-menu-options__btn:hover {
+  background-color: var(--cds-background-hover, rgba(141, 141, 141, 0.12));
+}
+
+// Destructive Delete reads in the error colour — Carbon's `isDelete` flag alone
+// isn't colouring it under the app's cherry-picked styles, so force it (same
+// selector, declared later wins).
 .cds--overflow-menu-options__option--danger .cds--overflow-menu-options__btn {
   color: var(--cds-text-error, #da1e28);
 }
