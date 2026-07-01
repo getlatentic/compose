@@ -539,6 +539,39 @@ describe("workspace store", () => {
       expect(useToastStore.getState().toasts).toHaveLength(0);
     });
 
+    it("saveAllDirtyBuffers writes every dirty buffer and skips clean/conflicted ones (#43)", async () => {
+      vi.mocked(writeFile).mockResolvedValue({ lastModifiedMs: 500 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      useWorkspaceStore.setState((state) => ({
+        workspaces: state.workspaces.map((workspace) =>
+          workspace.id === workspaceId
+            ? {
+                ...workspace,
+                activeFilePath: "a.md",
+                openFilePaths: ["a.md", "b.md", "c.md", "d.md"],
+                fileContents: {
+                  // active dirty + background dirty → both written; clean +
+                  // conflicted → skipped (a conflicted write would clobber disk).
+                  "a.md": { content: "A", lastModifiedMs: 1, dirty: true, conflict: false, pendingChanges: [] },
+                  "b.md": { content: "B", lastModifiedMs: 2, dirty: true, conflict: false, pendingChanges: [] },
+                  "c.md": { content: "C", lastModifiedMs: 3, dirty: false, conflict: false, pendingChanges: [] },
+                  "d.md": { content: "D", lastModifiedMs: 4, dirty: true, conflict: true, pendingChanges: [] },
+                },
+              }
+            : workspace,
+        ),
+      }));
+
+      await useWorkspaceStore.getState().saveAllDirtyBuffers();
+
+      expect(writeFile).toHaveBeenCalledTimes(2);
+      expect(writeFile).toHaveBeenCalledWith(workspaceId, "a.md", "A", 1, []);
+      expect(writeFile).toHaveBeenCalledWith(workspaceId, "b.md", "B", 2, []);
+      const ws = useWorkspaceStore.getState().activeWorkspace();
+      expect(ws?.fileContents["a.md"].dirty).toBe(false);
+      expect(ws?.fileContents["b.md"].dirty).toBe(false);
+    });
+
     it("handleFsEvent ignores its own autosave echo (disk byte-identical to the buffer)", async () => {
       vi.mocked(readFile).mockResolvedValueOnce({ content: "# Hello", lastModifiedMs: 100 });
       const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");

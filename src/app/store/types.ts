@@ -171,6 +171,10 @@ export interface WorkspaceState {
   removeWorkspace: (workspaceId: string) => void;
   renameActiveFile: (toRelativePath: string) => Promise<void>;
   saveActiveFile: () => Promise<void>;
+  /** Flush the active editor and write every dirty buffer (all workspaces, incl.
+   *  background tabs) — the flush-on-quit that keeps closing the app from
+   *  dropping unsaved edits (#43). */
+  saveAllDirtyBuffers: () => Promise<void>;
   selectFile: (path: string) => Promise<void>;
   /** Read the active file's buffer if it isn't loaded — the invariant that keeps
    *  the editor off a stuck "Loading file…" when the active file changes without

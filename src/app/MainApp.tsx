@@ -3,6 +3,7 @@ import { subscribeToWorkspaceFs } from "../lib/ipc/fileWatcherClient";
 import { AppShell } from "./AppShell";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useUiStore } from "./store/uiStore";
+import { useSaveOnExit } from "./useSaveOnExit";
 
 /**
  * The main app screen (mounted by AppRouter once boot + onboarding are done).
@@ -17,6 +18,8 @@ export function MainApp() {
   const loadActiveWorkspaceFiles = useWorkspaceStore((state) => state.loadActiveWorkspaceFiles);
   const saveActiveFile = useWorkspaceStore((state) => state.saveActiveFile);
   const openSearch = useUiStore((state) => state.openSearch);
+
+  useSaveOnExit();
 
   useEffect(() => {
     if (!activeWorkspaceId) {
@@ -71,23 +74,6 @@ export function MainApp() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [saveActiveFile, openSearch]);
-
-  useEffect(() => {
-    function onBeforeUnload(event: BeforeUnloadEvent) {
-      const hasDirty = useWorkspaceStore
-        .getState()
-        .workspaces.some((workspace) =>
-          Object.values(workspace.fileContents).some((buffer) => buffer.dirty),
-        );
-      if (!hasDirty) {
-        return;
-      }
-      event.preventDefault();
-      event.returnValue = "";
-    }
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, []);
 
   // Render the shell immediately — the active workspace's file scan runs in the
   // background (loadActiveWorkspaceFiles above) and streams into the file tree,

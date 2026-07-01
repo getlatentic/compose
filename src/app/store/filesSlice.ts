@@ -83,7 +83,7 @@ async function loadBufferIfMissing(
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "createNote" | "createFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "updateActiveContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "createNote" | "createFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -112,11 +112,12 @@ export const createFilesSlice = (
     // flushes the live editor + captures the current file path synchronously
     // before its first await, so firing it un-awaited here saves the
     // outgoing file in the background without slowing the switch.
-    if (path !== workspace.activeFilePath) {
-      const outgoing = workspace.activeFilePath
-        ? workspace.fileContents[workspace.activeFilePath]
-        : null;
-      if (outgoing?.dirty) {
+    if (path !== workspace.activeFilePath && workspace.activeFilePath) {
+      // Flush the outgoing editor FIRST (its buffer write is 500ms debounced),
+      // then save it if dirty — otherwise a fast switch strands the keystrokes
+      // typed in that window off-disk (#43).
+      flushActiveEditor();
+      if (get().activeWorkspace()?.fileContents[workspace.activeFilePath]?.dirty) {
         void get().saveActiveFile();
       }
     }
@@ -367,6 +368,40 @@ export const createFilesSlice = (
       }
       showErrorToast(error instanceof Error ? error.message : "Save failed");
     }
+  },
+  saveAllDirtyBuffers: async () => {
+    // Flush the active editor (its buffer write is 500ms debounced), then write
+    // EVERY dirty buffer across all workspaces — including background tabs that
+    // never autosave on their own. This is the flush-on-quit so closing the app
+    // doesn't drop unsaved edits (#43). Best-effort per file: one failure (e.g.
+    // a disk conflict) must not block the others or trap the user's quit.
+    flushActiveEditor();
+    const writes: Promise<unknown>[] = [];
+    for (const workspace of get().workspaces) {
+      for (const [filePath, buffer] of Object.entries(workspace.fileContents)) {
+        if (!buffer.dirty || buffer.conflict) {
+          continue;
+        }
+        writes.push(
+          writeFileIpc(
+            workspace.id,
+            filePath,
+            buffer.content,
+            buffer.lastModifiedMs,
+            buffer.pendingChanges,
+          )
+            .then((result) => {
+              set((state) => ({
+                workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
+                  markBufferSaved(item, filePath, result.lastModifiedMs),
+                ),
+              }));
+            })
+            .catch(() => {}),
+        );
+      }
+    }
+    await Promise.all(writes);
   },
   updateActiveContent: (markdown: string, changes: DocumentTextChange[] = []) => {
     const workspace = get().activeWorkspace();
