@@ -1233,7 +1233,7 @@ select {
   // scrollbar gutter rather than reserving a whole column for the menu.
   padding-inline: 0.5rem 0.5rem;
   color: var(--cds-text-secondary, #525252);
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.75rem;
   text-align: start;
   // Rows are navigation, not prose — don't let a click/right-click select the
@@ -5942,6 +5942,21 @@ select {
 .cds--overflow-menu-options {
   background-color: var(--cds-layer-02, #ffffff);
   border: 1px solid #e0e0e0;
+}
+
+// Options match the "+ New" menu's type exactly: 14px regular gray-100 in
+// generous 46px rows (Carbon defaults them to gray-70 in cramped 32px rows).
+.cds--overflow-menu-options__option,
+.cds--overflow-menu-options__btn {
+  block-size: 2.875rem;
+  max-block-size: none;
+}
+
+.cds--overflow-menu-options__btn {
+  padding: 0 1rem;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.875rem;
+  font-weight: 400;
 }
 
 // Neutral hover on an option — the spec background-hover overlay.
