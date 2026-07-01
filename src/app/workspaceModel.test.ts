@@ -1020,6 +1020,37 @@ describe("workspace model", () => {
     expect(answer.stats).toEqual({ totalTokens: 21956, coins: 0.05 });
   });
 
+  it("serialize → hydrate round-trips a comment's excerpt card", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const excerpt = {
+      filePath: "Others/Writing/data-science-nigeria-video.md",
+      line: 39,
+      column: 1,
+      text: "Hi, I'm Tosin Amuda.",
+      note: "is this relevant?",
+    };
+    const thread = {
+      ...appendUserChatMessage(workspace.chatThread, "About this excerpt…", null, null, excerpt),
+      conversationId: "conv-x",
+    };
+
+    const records = serializeChatMessages(thread);
+    // The excerpt is serialized onto the persisted record...
+    expect(records[0].excerptJson).toBe(JSON.stringify(excerpt));
+
+    const restored = hydrateChatThread(createWorkspaceFromPath("/tmp/alpha").chatThread, {
+      conversationId: "conv-x",
+      title: null,
+      harnessId: "bob",
+      contextFiles: [],
+      messages: records,
+      createdAt: 0,
+      updatedAt: 1,
+    });
+    // ...and rebuilt on load, so the chat renders the card, not the raw prompt text.
+    expect(restored.messages[0].excerpt).toEqual(excerpt);
+  });
+
   it("persists a live reply as streaming; loads a stale one as interrupted", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-2";

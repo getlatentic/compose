@@ -1967,6 +1967,7 @@ mod tests {
                         trace_json: None,
                         stats_json: None,
                         run_status: None,
+                        excerpt_json: None,
                         created_at: 0,
                     };
                     if let Err(e) = store.save_conversation(vault, &conv, vec![msg], Vec::new()) {

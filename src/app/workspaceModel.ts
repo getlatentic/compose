@@ -1803,6 +1803,7 @@ export function serializeChatMessages(
         ...(message.trace?.length ? { traceJson: JSON.stringify(message.trace) } : {}),
         ...(message.stats ? { statsJson: JSON.stringify(message.stats) } : {}),
         ...(runStatus ? { runStatus } : {}),
+        ...(message.excerpt ? { excerptJson: JSON.stringify(message.excerpt) } : {}),
         createdAt: index,
       };
     });
@@ -1839,6 +1840,7 @@ export function hydrateChatThread(
     role: record.role,
     ...(record.traceJson ? { trace: safeParseJson<TraceEntry[]>(record.traceJson) } : {}),
     ...(record.statsJson ? { stats: safeParseJson<WorkspaceRunStats>(record.statsJson) } : {}),
+    ...(record.excerptJson ? { excerpt: safeParseJson<ChatExcerptRef>(record.excerptJson) } : {}),
     // A reply still marked streaming/interrupted on disk had its run cut short
     // (the app quit/crashed mid-stream) — there's no live run on load, so
     // surface it as interrupted with a Retry rather than a dead "thinking…".
