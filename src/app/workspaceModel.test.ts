@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  reorderOpenTabs,
   acceptWorkspaceSuggestion,
   appendAssistantText,
   appendAssistantNotice,
@@ -1246,5 +1247,18 @@ describe("workspace model", () => {
     expect(prompt).toContain("Context files:");
     expect(prompt).toContain("### notes/a.md\nthe file body");
     expect(prompt.endsWith("summarize this")).toBe(true);
+  });
+});
+
+describe("reorderOpenTabs (#29)", () => {
+  it("moves a tab to sit just before the drop target", () => {
+    expect(reorderOpenTabs(["a", "b", "c"], "a", "c")).toEqual(["b", "a", "c"]);
+    expect(reorderOpenTabs(["a", "b", "c"], "c", "a")).toEqual(["c", "a", "b"]);
+  });
+
+  it("is a no-op for the same tab or an unknown path", () => {
+    expect(reorderOpenTabs(["a", "b"], "a", "a")).toEqual(["a", "b"]);
+    expect(reorderOpenTabs(["a", "b"], "a", "z")).toEqual(["a", "b"]);
+    expect(reorderOpenTabs(["a", "b"], "z", "a")).toEqual(["a", "b"]);
   });
 });

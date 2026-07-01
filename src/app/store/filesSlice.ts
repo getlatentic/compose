@@ -20,6 +20,7 @@ import {
   openWorkspaceFile,
   removeFileContext,
   renameContextItemPath,
+  reorderOpenTabs,
   type DocumentTextChange,
   type WorkspaceFileEntry,
 } from "../workspaceModel";
@@ -84,7 +85,7 @@ async function loadBufferIfMissing(
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "createNote" | "createFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -154,6 +155,19 @@ export const createFilesSlice = (
       workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
         closeWorkspaceFileTab(item, filePath),
       ),
+    }));
+    persistTabs(get().workspaces, workspace.id);
+  },
+  reorderTab: (fromPath, toPath) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
+        ...item,
+        openFilePaths: reorderOpenTabs(item.openFilePaths, fromPath, toPath),
+      })),
     }));
     persistTabs(get().workspaces, workspace.id);
   },

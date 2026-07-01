@@ -60,6 +60,7 @@ export function EditorRegion() {
   );
 
   const closeFileTab = useWorkspaceStore((state) => state.closeFileTab);
+  const reorderTab = useWorkspaceStore((state) => state.reorderTab);
   const createNote = useWorkspaceStore((state) => state.createNote);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const setChatPrompt = useWorkspaceStore((state) => state.setChatPrompt);
@@ -87,6 +88,10 @@ export function EditorRegion() {
   // Stable so the memoised PaneTabs isn't re-rendered by a fresh callback
   // identity on every render.
   const handleSelectTab = useCallback((path: string) => void selectFile(path), [selectFile]);
+  const handleReorderTab = useCallback(
+    (fromPath: string, toPath: string) => reorderTab(fromPath, toPath),
+    [reorderTab],
+  );
   const handleCloseTab = useCallback(
     (filePath: string) => {
       const workspace = useWorkspaceStore.getState().activeWorkspace();
@@ -133,6 +138,7 @@ export function EditorRegion() {
         activeFilePath={activeFilePath}
         onSelectFile={handleSelectTab}
         onCloseFile={handleCloseTab}
+        onReorderTab={handleReorderTab}
         leadingInsetPx={sidebarCollapsed ? MAC_TRAFFIC_LIGHTS_INSET : 0}
         onShowSidebar={sidebarCollapsed ? toggleSidebar : undefined}
       />

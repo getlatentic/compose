@@ -113,6 +113,8 @@ export interface WorkspaceState {
    */
   regenerateLastTurn: () => Promise<void>;
   closeFileTab: (filePath: string) => void;
+  /** Drag-to-reorder: move an open tab to sit just before another (#29). */
+  reorderTab: (fromPath: string, toPath: string) => void;
   createNote: (seed?: { relativePath?: string; content?: string; dir?: string }) => Promise<void>;
   createFolder: (relativePath: string) => Promise<void>;
   /**

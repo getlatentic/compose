@@ -33,6 +33,7 @@ function render(files: EditorTab[], activeFilePath: string): void {
         files={files}
         onCloseFile={noop}
         onSelectFile={noop}
+        onReorderTab={noop}
       />,
     );
   });

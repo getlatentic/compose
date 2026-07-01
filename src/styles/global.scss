@@ -1413,6 +1413,12 @@ select {
   background: var(--cds-layer-01, #f4f4f4);
 }
 
+// Drop indicator while dragging a tab to reorder (#29): a left bar marks where
+// the dragged tab will land (just before this one).
+.editor-tab--drop {
+  box-shadow: inset 2px 0 0 0 var(--cds-border-interactive, #0f62fe);
+}
+
 .tab-button,
 .tab-close {
   border: 0;

@@ -537,6 +537,25 @@ export function renameContextItemPath(
   };
 }
 
+/** Move an open tab to sit just before another, preserving the rest of the
+ * order — drag-to-reorder (#29). The active file is untouched. */
+export function reorderOpenTabs(
+  openFilePaths: string[],
+  fromPath: string,
+  toPath: string,
+): string[] {
+  if (
+    fromPath === toPath ||
+    !openFilePaths.includes(fromPath) ||
+    !openFilePaths.includes(toPath)
+  ) {
+    return openFilePaths;
+  }
+  const without = openFilePaths.filter((path) => path !== fromPath);
+  without.splice(without.indexOf(toPath), 0, fromPath);
+  return without;
+}
+
 export function openWorkspaceFile(workspace: Workspace, filePath: string): Workspace {
   const openFilePaths = workspace.openFilePaths.includes(filePath)
     ? workspace.openFilePaths
