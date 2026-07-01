@@ -8,6 +8,7 @@ use walkdir::WalkDir;
 
 pub mod clone;
 pub mod diff;
+pub(crate) mod icloud;
 pub mod starter;
 pub mod trash;
 pub mod trash_sweep;
@@ -355,7 +356,16 @@ pub(crate) fn read_file(
     relative_path: &str,
 ) -> Result<WorkspaceFileContent, FileError> {
     let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
-    let content = std::fs::read_to_string(&absolute)?;
+    let content = match std::fs::read_to_string(&absolute) {
+        Ok(content) => content,
+        Err(error) => {
+            // A dataless iCloud file (evicted locally) can fail to read; kick its
+            // download so a reopen materializes it instead of leaving it stuck
+            // blank (#26). Best-effort — a no-op for non-iCloud files.
+            icloud::start_download(&absolute);
+            return Err(error.into());
+        }
+    };
     let metadata = std::fs::metadata(&absolute)?;
     Ok(WorkspaceFileContent {
         content,

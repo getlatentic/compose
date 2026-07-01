@@ -51,6 +51,7 @@ objc2-foundation = { version = "0.3", features = [
   "NSData",
   "NSURL",
   "NSError",
+  "NSFileManager",
 ] }
 objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
 block2 = "0.6"
