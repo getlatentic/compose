@@ -216,7 +216,9 @@ function ExcerptChip({ excerpt }: { excerpt: ChatExcerptRef }) {
     <div className="excerpt-chip">
       <div className="excerpt-chip__head">
         <Document size={14} aria-hidden />
-        <span className="excerpt-chip__file">{excerpt.filePath}</span>
+        <span className="excerpt-chip__file" title={excerpt.filePath}>
+          {excerpt.filePath}
+        </span>
         <span className="excerpt-chip__loc">
           L{excerpt.line}:C{excerpt.column}
         </span>

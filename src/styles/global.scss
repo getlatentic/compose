@@ -2635,6 +2635,11 @@ select {
 }
 
 .excerpt-chip__file {
+  // Fill the head row but be allowed to shrink below its content width — without
+  // min-inline-size:0 a flex item won't ellipsize, so a long path overflowed the
+  // chat and forced a horizontal scroll (#33). Full path stays on hover (title).
+  flex: 1 1 auto;
+  min-inline-size: 0;
   overflow: hidden;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -3281,10 +3286,15 @@ select {
   border: 0;
   background: none;
   padding: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
   color: var(--cds-link-primary, #0f62fe);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.75rem;
   text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -3318,11 +3328,16 @@ select {
 .suggestion__path {
   border: 0;
   padding: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
   color: var(--cds-link-primary, #0f62fe);
   background: transparent;
   font-size: 0.75rem;
   line-height: 1rem;
   text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
