@@ -34,6 +34,29 @@ export function pushNavEntry(
   return { navHistory: truncated, navIndex: truncated.length - 1 };
 }
 
+/** Drop every history entry a file's removal invalidates, keeping `navIndex`
+ * pointed at the same surviving entry. Called when a file is deleted so
+ * Back/Forward can't resurrect it as a dangling error tab (#45). */
+export function pruneNavHistory(
+  state: { navHistory: NavEntry[]; navIndex: number },
+  keep: (entry: NavEntry) => boolean,
+): { navHistory: NavEntry[]; navIndex: number } {
+  const navHistory: NavEntry[] = [];
+  let navIndex = state.navIndex;
+  state.navHistory.forEach((entry, index) => {
+    if (keep(entry)) {
+      navHistory.push(entry);
+    } else if (index <= state.navIndex) {
+      // A removed entry at or before the cursor shifts the cursor left.
+      navIndex -= 1;
+    }
+  });
+  return {
+    navHistory,
+    navIndex: navHistory.length === 0 ? -1 : Math.max(0, Math.min(navIndex, navHistory.length - 1)),
+  };
+}
+
 /** Re-apply a nav entry without pushing a new one (the flag does the work).
  * Reads through the live store so the entry can target a different workspace
  * than the current one. */

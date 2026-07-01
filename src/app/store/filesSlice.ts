@@ -35,6 +35,7 @@ import {
   persistTabs,
 } from "./persistence";
 import {
+  pruneNavHistory,
   pushNavEntry,
 } from "./navigation";
 
@@ -251,6 +252,13 @@ export const createFilesSlice = (
             files: withoutTab.files.filter((entry) => entry.relativePath !== filePath),
           };
         }),
+        // Drop the deleted file from nav history so Back/Forward can't resurrect
+        // it as a dangling error tab (#45).
+        ...pruneNavHistory(
+          state,
+          (entry) =>
+            !(entry.kind === "file" && entry.workspaceId === workspace.id && entry.id === filePath),
+        ),
       }));
       persistTabs(get().workspaces, workspace.id);
       persistComments(get().workspaces, workspace.id, showErrorToast);
