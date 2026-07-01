@@ -11,7 +11,7 @@ import { useConfirm } from "../dialogs/ConfirmProvider";
 import { FileTree } from "../file-tree/FileTree";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { SidebarChatList } from "../chat/SidebarChatList";
-import { ActiveFileBacklinks, ActiveFileProperties } from "./ActiveFilePanels";
+import { ActiveFileProperties } from "./ActiveFilePanels";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
 /**
@@ -310,9 +310,9 @@ export function WorkspaceSidebar() {
  * stable across content edits and the autosave index rebuild. So a keystroke no
  * longer re-renders the files pane. The unsaved-dot is NOT read here — each row
  * self-subscribes via `FileRowDirtyDot`, so a dirty flip re-renders only that
- * one dot, not this pane or the file tree. The active file's frontmatter and
- * backlinks render via their own self-subscribing components
- * (ActiveFileProperties / ActiveFileBacklinks), isolated from the file list.
+ * one dot, not this pane or the file tree. The active file's frontmatter
+ * renders via its own self-subscribing component (ActiveFileProperties),
+ * isolated from the file list.
  */
 const FilesTab = memo(function FilesTab({
   onSelectFile,
@@ -364,7 +364,6 @@ const FilesTab = memo(function FilesTab({
       </div>
 
       <ActiveFileProperties />
-      <ActiveFileBacklinks />
     </div>
   );
 });
