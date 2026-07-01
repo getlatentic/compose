@@ -2018,6 +2018,12 @@ export function createPromptWithContext(
     fileContext
       ? `Context files${inlineContent ? "" : " (read these as needed)"}:\n${fileContext}`
       : null,
+    // Scope edits to the intended files so the agent doesn't write to files the
+    // user never asked it to touch (#31). A prompt guardrail, not a hard sandbox
+    // (clone mode is the hard version) — but it makes the intended target explicit.
+    fileContext
+      ? "When you edit files, only modify the Context files listed above. Do not create or change any other file unless I explicitly ask you to."
+      : null,
     commentContext ? `Comment context:\n${commentContext}` : null,
   ].filter(Boolean);
 
