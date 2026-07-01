@@ -5,6 +5,7 @@ import {
   createFile as createFileIpc,
   createFolder as createFolderIpc,
   deleteFile as deleteFileIpc,
+  deleteFolder as deleteFolderIpc,
   readFile as readFileIpc,
   renameFile as renameFileIpc,
   writeFile as writeFileIpc,
@@ -19,6 +20,7 @@ import {
   moveWorkspaceComments,
   openWorkspaceFile,
   removeFileContext,
+  removeWorkspaceFolder,
   renameContextItemPath,
   reorderOpenTabs,
   type DocumentTextChange,
@@ -85,7 +87,7 @@ async function loadBufferIfMissing(
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -234,6 +236,37 @@ export const createFilesSlice = (
       get().setNewNoteDir(relativePath);
     } catch (error) {
       showErrorToast(error instanceof Error ? error.message : "Could not create folder");
+    }
+  },
+  deleteFolder: async (folderPath) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    try {
+      await deleteFolderIpc(workspace.id, folderPath);
+      const prefix = `${folderPath}/`;
+      set((state) => ({
+        workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
+          removeWorkspaceFolder(item, folderPath),
+        ),
+        // Prune the folder's files from nav history so Back/Forward can't
+        // resurrect them (#45).
+        ...pruneNavHistory(
+          state,
+          (entry) =>
+            !(
+              entry.kind === "file" &&
+              entry.workspaceId === workspace.id &&
+              (entry.id === folderPath || entry.id.startsWith(prefix))
+            ),
+        ),
+      }));
+      persistTabs(get().workspaces, workspace.id);
+      persistComments(get().workspaces, workspace.id, showErrorToast);
+      void get().rebuildWorkspaceIndex(workspace.id);
+    } catch (error) {
+      showErrorToast(error instanceof Error ? error.message : "Could not delete folder");
     }
   },
   deleteActiveFile: async () => {

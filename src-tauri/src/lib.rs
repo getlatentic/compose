@@ -300,6 +300,7 @@ pub fn run() {
             files::workspace_create_file,
             files::workspace_create_folder,
             files::workspace_delete_file,
+            files::workspace_delete_folder,
             files::workspace_list_versions,
             files::workspace_read_file,
             files::workspace_rename_file,

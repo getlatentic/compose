@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   reorderOpenTabs,
+  removeWorkspaceFolder,
   renameContextItemPath,
   type WorkspaceChatThread,
   acceptWorkspaceSuggestion,
@@ -1287,6 +1288,40 @@ describe("renameContextItemPath comment items (#32)", () => {
     expect(item.kind).toBe("comment");
     expect(item.filePath).toBe("new.md");
     expect(item.path).toBe("new.md");
+  });
+});
+
+describe("removeWorkspaceFolder (#55)", () => {
+  it("prunes files, folders, buffers, tabs, context, and comments under the path", () => {
+    const buffer = { content: "", lastModifiedMs: 0, dirty: false, conflict: false, pendingChanges: [] };
+    const workspace = {
+      activeFilePath: "Talks/a.md",
+      openFilePaths: ["Talks/a.md", "Other/c.md"],
+      files: [
+        { relativePath: "Talks/a.md", lastModifiedMs: 0, sizeBytes: 0 },
+        { relativePath: "Talks/sub/b.md", lastModifiedMs: 0, sizeBytes: 0 },
+        { relativePath: "Other/c.md", lastModifiedMs: 0, sizeBytes: 0 },
+      ],
+      folders: ["Talks", "Talks/sub", "Other"],
+      fileContents: { "Talks/a.md": buffer, "Other/c.md": buffer },
+      chatThread: {
+        contextItems: [
+          { kind: "file", path: "Talks/a.md", id: "x", label: "Talks/a.md", workspaceId: "w" },
+        ],
+        messages: [],
+      },
+      comments: [{ filePath: "Talks/a.md" }, { filePath: "Other/c.md" }],
+    } as unknown as Workspace;
+
+    const result = removeWorkspaceFolder(workspace, "Talks");
+
+    expect(result.files.map((entry) => entry.relativePath)).toEqual(["Other/c.md"]);
+    expect(result.folders).toEqual(["Other"]);
+    expect(result.fileContents["Talks/a.md"]).toBeUndefined();
+    expect(result.openFilePaths).toEqual(["Other/c.md"]);
+    expect(result.activeFilePath).toBe("Other/c.md"); // moved off the deleted active file
+    expect(result.chatThread.contextItems).toHaveLength(0);
+    expect(result.comments.map((comment) => comment.filePath)).toEqual(["Other/c.md"]);
   });
 });
 

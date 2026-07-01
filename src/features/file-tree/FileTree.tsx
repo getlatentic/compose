@@ -14,6 +14,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
+import { useConfirm } from "../dialogs/ConfirmProvider";
 
 /** Fixed row height in px — must match `.file-row` `block-size: 1.75rem` (28px)
  * in global.scss. The virtualizer needs it to place rows without measuring each. */
@@ -258,6 +259,7 @@ const FolderRow = memo(function FolderRow({
   onNewFolderHere,
   onMoveHere,
   onReveal,
+  onDeleteFolder,
 }: {
   path: string;
   name: string;
@@ -269,6 +271,7 @@ const FolderRow = memo(function FolderRow({
   onNewFolderHere: (path: string) => void;
   onMoveHere: (fromPath: string, folderPath: string) => void;
   onReveal: (path: string) => void;
+  onDeleteFolder: (path: string) => void;
 }) {
   const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
   const { dropTarget, onDragOver, onDragLeave, onDrop } = useDropInto(path, onMoveHere);
@@ -305,6 +308,12 @@ const FolderRow = memo(function FolderRow({
           <OverflowMenuItem itemText="New note here" onClick={() => onNewNoteHere(path)} />
           <OverflowMenuItem itemText="New folder here" onClick={() => onNewFolderHere(path)} />
           <OverflowMenuItem itemText="Reveal in Finder" onClick={() => onReveal(path)} />
+          <OverflowMenuItem
+            hasDivider
+            isDelete
+            itemText="Delete folder"
+            onClick={() => onDeleteFolder(path)}
+          />
         </OverflowMenu>
       ) : (
         <span className="file-row-kebab-spacer" aria-hidden />
@@ -454,6 +463,8 @@ function FileTreeInner({
   const setNewNoteDir = useWorkspaceStore((state) => state.setNewNoteDir);
   const createNote = useWorkspaceStore((state) => state.createNote);
   const createFolder = useWorkspaceStore((state) => state.createFolder);
+  const deleteFolder = useWorkspaceStore((state) => state.deleteFolder);
+  const confirm = useConfirm();
 
   // Stable so the memoised FolderRow doesn't re-render on every keystroke /
   // file-select that re-renders FileTree.
@@ -525,6 +536,32 @@ function FileTreeInner({
       })();
     },
     [promptText, createFolder],
+  );
+  const handleDeleteFolder = useCallback(
+    (path: string) => {
+      void (async () => {
+        const state = useWorkspaceStore.getState();
+        const ws = state.workspaces.find((item) => item.id === state.activeWorkspaceId);
+        const count = ws
+          ? ws.files.filter(
+              (entry) => entry.relativePath === path || entry.relativePath.startsWith(`${path}/`),
+            ).length
+          : 0;
+        const confirmed = await confirm({
+          title: "Delete folder",
+          message:
+            count > 0
+              ? `Delete "${path}" and its ${count} note${count === 1 ? "" : "s"}? They move to trash.`
+              : `Delete the empty folder "${path}"?`,
+          confirmLabel: "Delete",
+          danger: true,
+        });
+        if (confirmed) {
+          await deleteFolder(path);
+        }
+      })();
+    },
+    [confirm, deleteFolder],
   );
   const selectFileTrackingDir = useCallback(
     (relativePath: string) => {
@@ -640,6 +677,7 @@ function FileTreeInner({
                   onNewFolderHere={newFolderHere}
                   onMoveHere={onMoveFile}
                   onReveal={revealInFinder}
+                  onDeleteFolder={handleDeleteFolder}
                 />
               ) : (
                 <FileRow

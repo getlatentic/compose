@@ -563,6 +563,38 @@ export function reorderOpenTabs(
   return without;
 }
 
+/** Remove a folder and everything under it from workspace state — files,
+ * folders, buffers, open tabs, chat context, and comments (#55). The IPC delete
+ * moves the folder to trash; this reconciles the in-memory state. */
+export function removeWorkspaceFolder(workspace: Workspace, folderPath: string): Workspace {
+  const prefix = `${folderPath}/`;
+  const underFolder = (path: string) => path === folderPath || path.startsWith(prefix);
+  const removedFiles = workspace.files
+    .filter((entry) => underFolder(entry.relativePath))
+    .map((entry) => entry.relativePath);
+
+  // Close each removed file's tab first (carries openFilePaths + the active-file
+  // fallback), then drop its buffer and any chat-context reference.
+  const next = removedFiles.reduce((ws, path) => closeWorkspaceFileTab(ws, path), workspace);
+  const fileContents = { ...next.fileContents };
+  for (const path of removedFiles) {
+    delete fileContents[path];
+  }
+  const chatThread = removedFiles.reduce(
+    (thread, path) => removeFileContext(thread, path),
+    next.chatThread,
+  );
+
+  return {
+    ...next,
+    files: next.files.filter((entry) => !underFolder(entry.relativePath)),
+    folders: next.folders.filter((path) => !underFolder(path)),
+    fileContents,
+    chatThread,
+    comments: next.comments.filter((comment) => !underFolder(comment.filePath)),
+  };
+}
+
 export function openWorkspaceFile(workspace: Workspace, filePath: string): Workspace {
   const openFilePaths = workspace.openFilePaths.includes(filePath)
     ? workspace.openFilePaths

@@ -117,6 +117,8 @@ export interface WorkspaceState {
   reorderTab: (fromPath: string, toPath: string) => void;
   createNote: (seed?: { relativePath?: string; content?: string; dir?: string }) => Promise<void>;
   createFolder: (relativePath: string) => Promise<void>;
+  /** Move a folder + its contents to trash and prune all state under it (#55). */
+  deleteFolder: (folderPath: string) => Promise<void>;
   /**
    * Directory a plain "New note" lands in — set by selecting a folder (or a
    * file → its parent) in the tree. `""` = workspace root. Both the sidebar

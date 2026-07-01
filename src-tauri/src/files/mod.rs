@@ -298,6 +298,38 @@ pub fn workspace_delete_file(
     soft_delete(&registry, &metadata, &workspace_id, &relative_path)
 }
 
+/// Move a folder (and everything under it) to the trash. Free-function core of
+/// [`workspace_delete_folder`] — unit-testable without Tauri `State`, mirroring
+/// how [`soft_delete`] backs `workspace_delete_file`.
+fn delete_folder(
+    registry: &WorkspaceRegistry,
+    trash_root: &Path,
+    workspace_id: &str,
+    relative_path: &str,
+) -> Result<(), FileError> {
+    let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
+    if !absolute.is_dir() {
+        return Err(FileError::NotFound {
+            message: format!("{relative_path} is not a folder"),
+        });
+    }
+    trash::move_to_trash(trash_root, workspace_id, &absolute)?;
+    Ok(())
+}
+
+/// Move a folder and its contents to the trash — recoverable, like file delete.
+/// The frontend prunes the tree/tabs/context/nav for every removed path.
+#[tauri::command(async)]
+pub fn workspace_delete_folder(
+    workspace_id: String,
+    relative_path: String,
+    registry: State<'_, WorkspaceRegistry>,
+    metadata: State<'_, MetadataStore>,
+) -> Result<(), FileError> {
+    let trash_root = metadata.trash_root()?;
+    delete_folder(&registry, &trash_root, &workspace_id, &relative_path)
+}
+
 /// Recent restorable versions of a file (newest first). The live file's
 /// content hash is computed here so the UI can flag which version is current.
 #[tauri::command(async)]
@@ -942,12 +974,56 @@ mod tests {
     }
 
     #[test]
+    fn delete_folder_moves_the_whole_subtree_to_trash() {
+        let data = tempdir().expect("data");
+        let dir = tempdir().expect("workspace");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+        let metadata = MetadataStore::default();
+        metadata.init_from_dir(data.path()).expect("init metadata");
+        let trash_root = metadata.trash_root().expect("trash root");
+        fs::create_dir_all(dir.path().join("Talks/sub")).unwrap();
+        fs::write(dir.path().join("Talks/a.md"), "one").unwrap();
+        fs::write(dir.path().join("Talks/sub/b.md"), "two").unwrap();
+
+        delete_folder(&registry, &trash_root, &workspace_id, "Talks").expect("delete folder");
+
+        // The whole subtree left the workspace...
+        assert!(!dir.path().join("Talks").exists());
+        // ...and landed in the vault's trash intact (nested file included).
+        let vault_trash = trash_root.join(&workspace_id);
+        let moved: Vec<_> = fs::read_dir(&vault_trash)
+            .expect("read trash")
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(moved.len(), 1);
+        assert!(moved[0].is_dir());
+        assert_eq!(fs::read_to_string(moved[0].join("a.md")).unwrap(), "one");
+        assert_eq!(fs::read_to_string(moved[0].join("sub/b.md")).unwrap(), "two");
+    }
+
+    #[test]
+    fn delete_folder_rejects_a_file_path() {
+        let data = tempdir().expect("data");
+        let dir = tempdir().expect("workspace");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+        let metadata = MetadataStore::default();
+        metadata.init_from_dir(data.path()).expect("init metadata");
+        let trash_root = metadata.trash_root().expect("trash root");
+        fs::write(dir.path().join("note.md"), "x").unwrap();
+
+        let result = delete_folder(&registry, &trash_root, &workspace_id, "note.md");
+        assert!(matches!(result, Err(FileError::NotFound { .. })));
+        assert!(dir.path().join("note.md").exists()); // the file is untouched
+    }
+
+    #[test]
     fn commands_reject_path_traversal() {
         let data = tempdir().expect("data");
         let dir = tempdir().expect("tempdir");
         let (registry, workspace_id) = registry_with_workspace(dir.path());
         let metadata = MetadataStore::default();
         metadata.init_from_dir(data.path()).expect("init metadata");
+        let trash_root = metadata.trash_root().expect("trash root");
 
         assert!(read_file(&registry, &workspace_id, "../escape.md").is_err());
         assert!(write_file(&registry, &workspace_id, "../escape.md", "x", None).is_err());
@@ -955,5 +1031,6 @@ mod tests {
         assert!(create_file(&registry, &workspace_id, "../escape.md", "x").is_err());
         assert!(rename_file(&registry, &workspace_id, "a.md", "../escape.md").is_err());
         assert!(soft_delete(&registry, &metadata, &workspace_id, "../escape.md").is_err());
+        assert!(delete_folder(&registry, &trash_root, &workspace_id, "../escape").is_err());
     }
 }

@@ -199,6 +199,15 @@ export async function deleteFile(workspaceId: string, relativePath: string): Pro
   await invokeFile<null>("workspace_delete_file", { workspaceId, relativePath });
 }
 
+/** Move a folder and its contents to the trash (recoverable). No-op in the
+ *  browser preview. */
+export async function deleteFolder(workspaceId: string, relativePath: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+  await invokeFile<null>("workspace_delete_folder", { workspaceId, relativePath });
+}
+
 export function _resetFallbackForTests() {
   _resetVirtualWorkspaceForTests();
 }
