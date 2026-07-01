@@ -5816,34 +5816,29 @@ select {
   transform: translateY(-50%);
 }
 
+// The kebab is just the ⋮ icon — no fill, no border, no shadow in any state, so
+// nothing but the glyph sits on the row. Carbon paints a background on
+// hover/focus and a shadow + border when the menu is open; the kebab IS the
+// `.cds--overflow-menu` button (no separate trigger element), so name every
+// interactive state here to beat Carbon's equal-specificity, later-loaded rules.
 .file-row-wrapper .cds--overflow-menu {
   position: static;
   transform: none;
   block-size: 1.75rem;
-  // Carbon ships a 2rem min-block-size that inflated this fill 4px past the 28px
-  // row (2px proud top and bottom); pin the min so the kebab is exactly one row
-  // tall and its bg lines up with the row's.
   min-block-size: 1.75rem;
   inline-size: 1.75rem;
-  // Opaque so it masks the name's tail it sits over on hover, tinted to the
-  // hovered-row fill so the two read as one surface. Square, like the row, so it
-  // merges into the fill instead of reading as a rounded pill on top of it.
-  background: var(--cds-layer-hover-01, #e8e8e8);
-  border-radius: 0;
   opacity: 0;
   transition: opacity 80ms ease;
 }
 
-// The kebab IS the `.cds--overflow-menu` button (no separate trigger element),
-// and it only shows while its row is hovered — and a hovered row is always
-// layer-hover-01, even when it's the selected row (`:hover` outranks `--active`
-// on the row). So the kebab is hover-01 in every visible state: match that, and
-// override Carbon's own hover/focus/open tint (named states beat Carbon's
-// equal-specificity, later-loaded rules) so the kebab reads as part of the row.
+.file-row-wrapper .cds--overflow-menu,
 .file-row-wrapper .cds--overflow-menu:hover,
 .file-row-wrapper .cds--overflow-menu:focus,
+.file-row-wrapper .cds--overflow-menu:active,
 .file-row-wrapper .cds--overflow-menu--open {
-  background-color: var(--cds-layer-hover-01, #e8e8e8);
+  background-color: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .file-row-wrapper:hover .cds--overflow-menu,
