@@ -401,11 +401,14 @@ export function buildTree(files: WorkspaceFileEntry[], folders: string[]): TreeN
   return root;
 }
 
-function flatten(nodes: TreeNode[], collapsed: Set<string>, out: TreeNode[] = []) {
+/** The rows a tree shows given the set of OPEN folder paths: a folder's children
+ *  appear only when its path is in `expanded`, so an absent folder stays closed
+ *  (the default, so the tree opens collapsed). */
+export function flatten(nodes: TreeNode[], expanded: Set<string>, out: TreeNode[] = []) {
   for (const node of nodes) {
     out.push(node);
-    if (node.type === "folder" && !collapsed.has(node.path)) {
-      flatten(node.children, collapsed, out);
+    if (node.type === "folder" && expanded.has(node.path)) {
+      flatten(node.children, expanded, out);
     }
   }
   return out;
@@ -443,8 +446,10 @@ function FileTreeInner({
   onSelectFile: (relativePath: string) => void;
 }) {
   const tree = useMemo(() => buildTree(files, folders), [files, folders]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const rows = useMemo(() => flatten(tree, collapsed), [tree, collapsed]);
+  // Folders open by presence in this set — default (absent) is COLLAPSED, so the
+  // tree opens showing only top-level rows plus whatever the effects below add.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const rows = useMemo(() => flatten(tree, expanded), [tree, expanded]);
   // The active workspace's scan runs in the background (MainApp no longer gates
   // the app on it), so an empty tree means "still scanning", not "no notes".
   const scanning = useWorkspaceStore((state) => {
@@ -469,7 +474,7 @@ function FileTreeInner({
   // Stable so the memoised FolderRow doesn't re-render on every keystroke /
   // file-select that re-renders FileTree.
   const toggleFolder = useCallback((path: string) => {
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
         next.delete(path);
@@ -585,31 +590,18 @@ function FileTreeInner({
     getItemKey: (index) => rowKey(rows[index]),
   });
 
-  // Open a workspace with only the FIRST level of folders expanded (#52) — not
-  // the whole tree blown open. Runs once per workspace (keyed by workspaceRoot)
-  // when its tree first loads; the active file's ancestors are kept open so the
-  // reveal effect below still shows it, and the user's later expand/collapse is
-  // left untouched (a new folder doesn't re-collapse the tree).
-  const collapsedForWorkspace = useRef<string | null>(null);
+  // Open a workspace fully collapsed — only top-level folders and files show,
+  // plus the ancestor chain of the active file so it stays revealed (#52). Runs
+  // once per workspace (keyed by workspaceRoot) when its tree first loads; the
+  // user's later expand/collapse is left untouched. Because folders default
+  // collapsed, a subfolder that loads late can't spring the tree open.
+  const initializedForWorkspace = useRef<string | null>(null);
   useEffect(() => {
-    if (collapsedForWorkspace.current === workspaceRoot || tree.length === 0) {
+    if (initializedForWorkspace.current === workspaceRoot || tree.length === 0) {
       return;
     }
-    collapsedForWorkspace.current = workspaceRoot;
-    const keepOpen = new Set(activePath ? ancestorFolders(activePath) : []);
-    const belowTop = new Set<string>();
-    const collect = (nodes: TreeNode[]) => {
-      for (const node of nodes) {
-        if (node.type === "folder") {
-          if (node.depth >= 1 && !keepOpen.has(node.path)) {
-            belowTop.add(node.path);
-          }
-          collect(node.children);
-        }
-      }
-    };
-    collect(tree);
-    setCollapsed(belowTop);
+    initializedForWorkspace.current = workspaceRoot;
+    setExpanded(new Set(activePath ? ancestorFolders(activePath) : []));
   }, [tree, workspaceRoot, activePath]);
 
   // Reveal the active file: expand its ancestor folders so its row exists in the
@@ -620,11 +612,14 @@ function FileTreeInner({
   useEffect(() => {
     if (!activePath) return;
     pendingReveal.current = activePath;
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       let changed = false;
       for (const folder of ancestorFolders(activePath)) {
-        if (next.delete(folder)) changed = true;
+        if (!next.has(folder)) {
+          next.add(folder);
+          changed = true;
+        }
       }
       return changed ? next : prev;
     });
@@ -670,7 +665,7 @@ function FileTreeInner({
                   path={node.path}
                   name={node.name}
                   depth={node.depth}
-                  open={!collapsed.has(node.path)}
+                  open={expanded.has(node.path)}
                   selected={node.path === newNoteDir}
                   onActivate={activateFolder}
                   onNewNoteHere={newNoteHere}
