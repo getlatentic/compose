@@ -685,7 +685,10 @@ select {
   flex: 1 1 auto;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 0.75rem 0.5rem 0.5rem;
+  // No right padding: the file tree (and its scrollbar) reaches the sidebar's
+  // right border. The classic 8px scrollbar reserves its own space, so the rows
+  // and their kebab stay clear of it.
+  padding: 0.75rem 0 0.5rem 0.5rem;
 }
 
 // === Sidebar: footer (pinned bottom) ===
