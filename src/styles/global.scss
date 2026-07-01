@@ -553,6 +553,12 @@ select {
   border-radius: 2px;
 }
 
+// The icon-only "New folder" sits right after "New note" (no auto-margin gap).
+.sidebar-new--icon {
+  margin-inline-start: 0;
+  padding-inline: 0.375rem;
+}
+
 .sidebar-new:hover:not(:disabled) {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }

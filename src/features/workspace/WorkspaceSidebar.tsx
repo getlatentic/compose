@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo } from "react";
 import { InlineNotification } from "@carbon/react";
-import { AddAlt } from "@carbon/react/icons";
+import { AddAlt, FolderAdd } from "@carbon/react/icons";
+import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { PanelLeft, Search, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
@@ -44,6 +45,9 @@ export const MAC_TRAFFIC_LIGHTS_INSET = 78;
  */
 export function WorkspaceSidebar() {
   const createNote = useWorkspaceStore((state) => state.createNote);
+  const createFolder = useWorkspaceStore((state) => state.createFolder);
+  const newNoteDir = useWorkspaceStore((state) => state.newNoteDir);
+  const promptText = useTextPrompt();
   const newChat = useWorkspaceStore((state) => state.newChat);
   const deleteActiveFile = useWorkspaceStore((state) => state.deleteActiveFile);
   const renameActiveFile = useWorkspaceStore((state) => state.renameActiveFile);
@@ -140,6 +144,24 @@ export function WorkspaceSidebar() {
   const newLabel = sidebarTab === "files" ? "New note" : "New chat";
   const onNew = sidebarTab === "files" ? createNote : newChat;
 
+  // A header-level "New folder" so the first/top-level folder can be created
+  // even in an empty workspace (the tree's "New folder here" needs an existing
+  // folder row). Lands in the selected folder (newNoteDir) or the root (#56).
+  const handleNewFolder = useCallback(() => {
+    void (async () => {
+      const name = await promptText({
+        title: "New folder",
+        label: "Folder name",
+        submitLabel: "Create",
+      });
+      const trimmed = name?.trim();
+      if (!trimmed) {
+        return;
+      }
+      await createFolder(newNoteDir ? `${newNoteDir}/${trimmed}` : trimmed);
+    })();
+  }, [promptText, createFolder, newNoteDir]);
+
   if (sidebarCollapsed) {
     return null;
   }
@@ -211,6 +233,18 @@ export function WorkspaceSidebar() {
           <AddAlt size={16} />
           <span>{newLabel}</span>
         </button>
+        {sidebarTab === "files" ? (
+          <button
+            type="button"
+            className="sidebar-new sidebar-new--icon"
+            onClick={handleNewFolder}
+            disabled={!hasWorkspace}
+            aria-label="New folder"
+            title="New folder"
+          >
+            <FolderAdd size={16} />
+          </button>
+        ) : null}
       </div>
 
       {/* Both panes stay mounted; visibility flips via the `hidden` attribute.
