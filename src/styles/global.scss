@@ -515,39 +515,130 @@ select {
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
+// Underline tabs (interaction spec §03) — no fill; the active tab is marked by a
+// 2px blue bottom border that sits on the tab-row's own divider.
 .sidebar-tab {
   border: 0;
+  border-block-end: 2px solid transparent;
   background: transparent;
   cursor: pointer;
-  block-size: 1.75rem;
-  padding-inline: 0.625rem;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.8125rem;
+  block-size: 2.25rem;
+  padding-inline: 0.25rem;
+  color: var(--cds-text-secondary, #6f6f6f);
+  font-size: 0.875rem;
   font-weight: 500;
-  border-radius: 2px;
+  border-radius: 0;
 }
 
 .sidebar-tab:hover {
-  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
 }
 
 .sidebar-tab--active {
   color: var(--cds-text-primary, #161616);
-  background: var(--cds-layer-selected-01, #e0e0e0);
+  border-block-end-color: var(--cds-border-interactive, #0f62fe);
   font-weight: 600;
 }
 
-// The single "+ New" create menu — a primary MenuButton pinned to the end of
-// the tab row. Carbon styles the trigger; we only push it right and prefix the
-// "+" glyph onto the label (MenuButton takes a string label, no leading icon).
-.sidebar-new-menu {
+// The "+ New" create menu (interaction spec §03) — a custom dropdown pinned to
+// the end of the tab row.
+.new-menu {
+  position: relative;
   margin-inline-start: auto;
 }
 
-.sidebar-new-menu .cds--menu-button__trigger::before {
-  content: "+";
-  margin-inline-end: 0.25rem;
+// Trigger: a compact primary button — plus, label, then a bare caret (no boxed
+// divider section).
+.new-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  block-size: 34px;
+  padding: 0 9px 0 12px;
+  border: 0;
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.new-menu__trigger:hover:not(:disabled) {
+  background: var(--cds-button-primary-hover, #0043ce);
+}
+
+.new-menu__trigger:disabled {
+  background: var(--cds-button-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
+.new-menu__plus {
+  font-size: 16px;
   font-weight: 400;
+  line-height: 1;
+}
+
+.new-menu__caret {
+  flex: 0 0 auto;
+}
+
+// Panel: a 246px white surface anchored under the button's right edge.
+.new-menu__panel {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-end: 0;
+  inline-size: 246px;
+  background: var(--cds-layer-01, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+}
+
+// A neutral divider between the file-system group and chat.
+.new-menu__group + .new-menu__group {
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+// Item: a 46px row — 16px icon, 12px gap, label, right-aligned mono shortcut.
+.new-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  inline-size: 100%;
+  block-size: 46px;
+  padding-inline: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font-size: 14px;
+  font-weight: 400;
+  text-align: start;
+  cursor: pointer;
+}
+
+// Neutral hover — deliberately NOT the Cool Gray blue-tinted layer token.
+.new-menu__item:hover {
+  background: #f4f4f4;
+}
+
+.new-menu__item-icon {
+  flex: 0 0 auto;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.new-menu__item:hover .new-menu__item-icon {
+  color: var(--cds-link-primary, #0f62fe);
+}
+
+.new-menu__item-label {
+  flex: 1 1 auto;
+}
+
+.new-menu__item-shortcut {
+  flex: 0 0 auto;
+  font-family: var(--cds-code-01-font-family, ui-monospace, "SF Mono", monospace);
+  font-size: 12px;
+  color: var(--cds-text-placeholder, #8d8d8d);
 }
 
 // Both panes (Files / Chat) stay mounted to make Notes <-> Chat switching
