@@ -1,4 +1,5 @@
 import type { WorkspaceAppliedChange } from "../../app/workspaceModel";
+import { basename } from "../../lib/workspace/displayPath";
 import { ChangePreview } from "../diff/ChangePreview";
 import { computeUnifiedDiff } from "../diff/lineDiff";
 
@@ -33,9 +34,10 @@ export function AppliedChanges({
             <button
               type="button"
               className="applied__path"
+              title={change.filePath}
               onClick={() => onOpenDocument(change.filePath)}
             >
-              {change.filePath}
+              {basename(change.filePath)}
             </button>
           </header>
           <ChangePreview {...changeSides(change)} />
