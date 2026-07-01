@@ -818,6 +818,34 @@ mod tests {
     }
 
     #[test]
+    fn document_inventory_skips_an_unreadable_file_but_keeps_the_rest() {
+        // A dataless iCloud placeholder (evicted / offline / removed from iCloud)
+        // fails `std::fs::read`; it must be reported as skipped, not sink the whole
+        // index build alongside its readable neighbours (#26).
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("present.md"), "# Present\n").expect("write present");
+
+        let mut entries = scan_markdown_files(dir.path()).expect("scan one readable markdown file");
+        // Splice in an entry whose backing file doesn't exist — the same read
+        // error a placeholder yields when iCloud can't materialize it on demand.
+        entries.push(WorkspaceFileEntry {
+            last_modified_ms: 0,
+            relative_path: "dataless.md".to_owned(),
+            size_bytes: 345,
+        });
+
+        let inventory = document_inventory_for_entries(dir.path(), &entries);
+        let indexed: Vec<&str> = inventory
+            .entries
+            .iter()
+            .map(|entry| entry.relative_path.as_str())
+            .collect();
+        assert!(indexed.contains(&"present.md"), "readable file still indexed; got {indexed:?}");
+        assert!(!indexed.contains(&"dataless.md"), "unreadable file skipped; got {indexed:?}");
+        assert_eq!(inventory.skipped, vec!["dataless.md".to_owned()]);
+    }
+
+    #[test]
     fn create_folder_makes_an_empty_dir_then_errors_if_it_exists() {
         let dir = tempdir().expect("tempdir");
         let (registry, workspace_id) = registry_with_workspace(dir.path());
