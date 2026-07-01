@@ -5844,21 +5844,19 @@ select {
   block-size: 1.75rem;
 }
 
+// Neutral hover — a plain gray overlay, never the Cool Gray blue-tinted layer
+// token (interaction spec §01).
 .file-row-wrapper:hover {
-  background: var(--cds-layer-hover-01, #e8e8e8);
+  background: rgba(141, 141, 141, 0.12);
 }
 
-// The selected/active row — a distinctly darker fill than the subtle hover
-// (#e8e8e8) so a hovered row never reads as selected (#53).
+// The selected row — the single "you are here" marker: a 3px blue left bar over
+// a neutral fill, sharp corners. The bar lives ONLY here (not on hover, not on
+// the new-note target), so it never competes (interaction spec §01).
 .file-row-wrapper--active {
-  background: var(--cds-layer-active-01, #c6c6c6);
-}
-
-// The folder a plain "New note" lands in (`newNoteDir`). A left accent bar
-// reads as "new notes go here", kept visually distinct from the gray
-// selected-file highlight (`--active`).
-.file-row-wrapper--target {
-  box-shadow: inset 2px 0 0 0 var(--cds-border-interactive, #0f62fe);
+  background: rgba(141, 141, 141, 0.2);
+  box-shadow: inset 3px 0 0 0 var(--cds-border-interactive, #0f62fe);
+  border-radius: 0;
 }
 
 // Drop target while dragging a file onto a folder (#28): a tinted fill + ring so
@@ -5927,6 +5925,22 @@ select {
   inset-inline-end: 0.25rem;
   inline-size: 1.75rem;
   block-size: 1.75rem;
+}
+
+// Context/kebab menu polish (interaction spec §02). Destructive Delete reads in
+// the error colour — Carbon's `isDelete` flag alone isn't colouring it under the
+// app's cherry-picked styles, so force it here (same selector, declared later
+// wins).
+.cds--overflow-menu-options__option--danger .cds--overflow-menu-options__btn {
+  color: var(--cds-text-error, #da1e28);
+}
+
+// Sharp Carbon focus on a menu option — a 2px inset outline, no thick rounded
+// ring.
+.cds--overflow-menu-options__btn:focus {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -3px;
+  border-radius: 0;
 }
 
 .file-tree--empty {
