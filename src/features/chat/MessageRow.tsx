@@ -8,6 +8,7 @@ import type {
   WorkspaceRunStats,
 } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
+import { basename } from "../../lib/workspace/displayPath";
 import { AgentTrace } from "./AgentTrace";
 import { AppliedChanges } from "./AppliedChanges";
 import { FileOpCard } from "./FileOpCard";
@@ -217,7 +218,7 @@ function ExcerptChip({ excerpt }: { excerpt: ChatExcerptRef }) {
       <div className="excerpt-chip__head">
         <Document size={14} aria-hidden />
         <span className="excerpt-chip__file" title={excerpt.filePath}>
-          {excerpt.filePath}
+          {basename(excerpt.filePath)}
         </span>
         <span className="excerpt-chip__loc">
           L{excerpt.line}:C{excerpt.column}

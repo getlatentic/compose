@@ -14,6 +14,7 @@ import {
   shouldSpillChatInput,
 } from "../../app/store/chatInputSpill";
 import { spillChatInput } from "../../lib/ipc/harnessClient";
+import { basename } from "../../lib/workspace/displayPath";
 import { ChatComposerFooter } from "./ChatComposerFooter";
 import { ChatErrorNotice } from "./ChatErrorNotice";
 import { useAutoGrowTextarea } from "./useAutoGrowTextarea";
@@ -249,7 +250,7 @@ export function MessageComposer({
           contextItems.map((item) => (
             <span className="chat-context-chip" key={item.id} title={item.label}>
               <Document size={14} />
-              <span>{item.kind === "comment" ? "Comment selection" : item.label}</span>
+              <span>{item.kind === "comment" ? "Comment selection" : basename(item.label)}</span>
               <button
                 type="button"
                 className="chat-context-chip__remove"
