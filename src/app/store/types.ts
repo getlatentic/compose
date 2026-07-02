@@ -113,7 +113,12 @@ export interface WorkspaceState {
    */
   regenerateLastTurn: () => Promise<void>;
   closeFileTab: (filePath: string) => void;
+  /** Drag-to-reorder: move an open tab to sit just before another (#29). */
+  reorderTab: (fromPath: string, toPath: string) => void;
   createNote: (seed?: { relativePath?: string; content?: string; dir?: string }) => Promise<void>;
+  createFolder: (relativePath: string) => Promise<void>;
+  /** Move a folder + its contents to trash and prune all state under it (#55). */
+  deleteFolder: (folderPath: string) => Promise<void>;
   /**
    * Directory a plain "New note" lands in — set by selecting a folder (or a
    * file → its parent) in the tree. `""` = workspace root. Both the sidebar
@@ -125,11 +130,15 @@ export interface WorkspaceState {
   deleteActiveFile: () => Promise<void>;
   dismissConflict: (relativePath: string) => void;
   handleFsEvent: (workspaceId: string, event: WorkspaceFsEvent) => Promise<void>;
+  /** One reconciling scan (storm-guarded, min-interval on repeats) — the
+   * consistency fallback behind watcher gaps and window-focus refreshes. */
+  refreshWorkspaceTree: (workspaceId?: string) => Promise<void>;
   hydrateWorkspaces: (workspaceList: WorkspaceListResult) => void;
   onboarding: OnboardingState;
   onboardingComplete: () => boolean;
   setOnboarding: (onboarding: OnboardingState) => void;
-  loadActiveWorkspaceFiles: () => Promise<void>;
+  /** `attempt` is internal to the boot-scan backoff retry; callers pass nothing. */
+  loadActiveWorkspaceFiles: (attempt?: number) => Promise<void>;
   newChat: () => Promise<void>;
   /**
    * Per-workspace conversation history, newest activity first, *including*
@@ -170,7 +179,15 @@ export interface WorkspaceState {
   removeWorkspace: (workspaceId: string) => void;
   renameActiveFile: (toRelativePath: string) => Promise<void>;
   saveActiveFile: () => Promise<void>;
+  /** Flush the active editor and write every dirty buffer (all workspaces, incl.
+   *  background tabs) — the flush-on-quit that keeps closing the app from
+   *  dropping unsaved edits (#43). */
+  saveAllDirtyBuffers: () => Promise<void>;
   selectFile: (path: string) => Promise<void>;
+  /** Read the active file's buffer if it isn't loaded — the invariant that keeps
+   *  the editor off a stuck "Loading file…" when the active file changes without
+   *  a read (closing/deleting a tab, restoring tabs). */
+  ensureActiveBuffer: () => Promise<void>;
   rejectSuggestedEdit: (suggestionId: string) => void;
   sendChatPrompt: (options?: { readOnly?: boolean }) => Promise<void>;
   sendCommentToChat: (commentId: string) => Promise<void>;

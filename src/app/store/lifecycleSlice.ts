@@ -28,6 +28,7 @@ import {
 } from "./navigation";
 import {
   readFile as readFileIpc,
+  scanFolders,
   scanWorkspace,
 } from "../../lib/ipc/filesClient";
 import {
@@ -138,7 +139,7 @@ export const createLifecycleSlice = (
       };
     });
   },
-  loadActiveWorkspaceFiles: async () => {
+  loadActiveWorkspaceFiles: async (attempt = 1) => {
     const workspaceId = get().activeWorkspaceId;
     if (!workspaceId) {
       return;
@@ -157,9 +158,15 @@ export const createLifecycleSlice = (
     try {
       // Independent IPC calls, run concurrently rather than awaited in series —
       // the load is a single round-trip instead of four.
-      const [entries, comments, conversation, knownBuffer] = await Promise.all([
+      const [entries, folders, comments, conversation, knownBuffer] = await Promise.all([
         scanWorkspace(workspaceId),
-        loadWorkspaceComments(workspaceId),
+        scanFolders(workspaceId).catch(() => [] as string[]),
+        // Guarded so only the SCAN owns the catch below — a comments hiccup must
+        // not read as "couldn't read your vault" or enter the scan retry. On
+        // failure fall back to the comments already in state (null marker), NOT
+        // an empty list: persistComments writes workspace.comments wholesale, so
+        // hydrating [] would wipe real comments on the next persist.
+        loadWorkspaceComments(workspaceId).catch(() => null),
         // Active conversation (most-recently-OPENED, non-archived) so the chat
         // survives reload. Best-effort — a failure mustn't block the scan.
         loadActiveConversation(workspaceId).catch(() => null),
@@ -169,7 +176,10 @@ export const createLifecycleSlice = (
       ]);
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => {
-          let scanned = applyScanResult({ ...item, comments }, entries);
+          let scanned = applyScanResult(
+            { ...item, comments: comments ?? item.comments, folders },
+            entries,
+          );
           // Apply the concurrently-read buffer if its file survived the scan.
           if (knownActiveFile && knownBuffer && scanned.activeFilePath === knownActiveFile) {
             scanned = applyFileBuffer(scanned, knownActiveFile, knownBuffer);
@@ -221,14 +231,26 @@ export const createLifecycleSlice = (
       // with first paint. Defer to idle — search shows "Indexing…" until it lands.
       whenIdle(() => void get().rebuildWorkspaceIndex(workspaceId));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Workspace scan failed";
-      set((state) => ({
-        workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
-          ...item,
-          scanError: message,
-          scanState: "failed",
-        })),
-      }));
+      // A scan/load failure at boot is usually transient — the iCloud vault not
+      // yet materialized, or a relaunch racing the previous instance's handles.
+      // Re-read after a backoff so it heals itself once the vault is readable,
+      // rather than stranding the tree on a false "no notes". Retry only while
+      // this workspace is still the active one, and only a few times before
+      // giving up to a retryable "failed" state (the tree shows a Retry button).
+      const MAX_ATTEMPTS = 4;
+      if (attempt < MAX_ATTEMPTS && get().activeWorkspaceId === workspaceId) {
+        const delayMs = [1000, 2500, 5000][attempt - 1] ?? 5000;
+        setTimeout(() => void get().loadActiveWorkspaceFiles(attempt + 1), delayMs);
+      } else {
+        const message = error instanceof Error ? error.message : "Workspace scan failed";
+        set((state) => ({
+          workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+            ...item,
+            scanError: message,
+            scanState: "failed",
+          })),
+        }));
+      }
     }
   },
   rebuildWorkspaceIndex: async (workspaceId?: string) => {

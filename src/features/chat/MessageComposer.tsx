@@ -5,7 +5,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { Close, Document, Send, StopFilledAlt } from "@carbon/react/icons";
+import { Add, Close, Document, Send, StopFilledAlt, WarningAltFilled } from "@carbon/react/icons";
 
 import type { WorkspaceContextItem } from "../../app/workspaceModel";
 import { useUiStore } from "../../app/store/uiStore";
@@ -14,6 +14,7 @@ import {
   shouldSpillChatInput,
 } from "../../app/store/chatInputSpill";
 import { spillChatInput } from "../../lib/ipc/harnessClient";
+import { basename } from "../../lib/workspace/displayPath";
 import { ChatComposerFooter } from "./ChatComposerFooter";
 import { ChatErrorNotice } from "./ChatErrorNotice";
 import { useAutoGrowTextarea } from "./useAutoGrowTextarea";
@@ -40,6 +41,8 @@ export function MessageComposer({
   assistantReady,
   canSend,
   contextItems,
+  missingContextPaths,
+  activeFilePath,
   harnessName,
   onAddFileContext,
   onHeightChange,
@@ -64,6 +67,12 @@ export function MessageComposer({
   assistantReady: AssistantReadiness;
   canSend: boolean;
   contextItems: WorkspaceContextItem[];
+  /** Context files no longer on disk (external delete / sync eviction). The
+   * chip marks rather than vanishes — the user pinned it and the file may
+   * return; sends degrade to a path reference the harness self-heals. */
+  missingContextPaths: ReadonlySet<string>;
+  /** The active file, offered as a one-click "add this file" to context. */
+  activeFilePath: string;
   /** The selected harness's display name, for the friendly error summary. */
   harnessName: string;
   /** Attach a spilled paste as a file context chip. */
@@ -241,23 +250,54 @@ export function MessageComposer({
 
       <div className="chat-context-row">
         {contextItems.length === 0 ? (
-          <span className="chat-context-chip chat-context-chip--empty">No note selected</span>
+          <span className="chat-context-chip chat-context-chip--empty">No note in context</span>
         ) : (
-          contextItems.map((item) => (
-            <span className="chat-context-chip" key={item.id} title={item.label}>
-              <Document size={14} />
-              <span>{item.kind === "comment" ? "Comment selection" : item.label}</span>
-              <button
-                type="button"
-                className="chat-context-chip__remove"
-                aria-label={`Remove ${item.label}`}
-                onClick={() => onRemoveContextItem(item.id)}
+          contextItems.map((item) => {
+            const missing = item.kind === "file" && missingContextPaths.has(item.path);
+            return (
+              <span
+                className={
+                  missing ? "chat-context-chip chat-context-chip--missing" : "chat-context-chip"
+                }
+                key={item.id}
+                title={
+                  missing
+                    ? `${item.label} isn't on disk right now — it may be syncing or deleted. It will be sent as a reference.`
+                    : item.label
+                }
               >
-                <Close size={12} />
-              </button>
-            </span>
-          ))
+                {missing ? <WarningAltFilled size={14} /> : <Document size={14} />}
+                <span>{item.kind === "comment" ? "Comment selection" : basename(item.label)}</span>
+                <button
+                  type="button"
+                  className="chat-context-chip__remove"
+                  aria-label={`Remove ${item.label}`}
+                  disabled={running}
+                  onClick={() => onRemoveContextItem(item.id)}
+                >
+                  <Close size={12} />
+                </button>
+              </span>
+            );
+          })
         )}
+        {activeFilePath &&
+        !contextItems.some((item) => item.kind === "file" && item.path === activeFilePath) ? (
+          <button
+            type="button"
+            className="chat-context-add"
+            disabled={running}
+            title={
+              running
+                ? "Finish the current response before changing context"
+                : `Add ${activeFilePath} to the chat context`
+            }
+            onClick={() => onAddFileContext({ label: activeFilePath, path: activeFilePath })}
+          >
+            <Add size={14} />
+            Add this file
+          </button>
+        ) : null}
         {tokenLabel ? <span className="chat-tokens">{tokenLabel}</span> : null}
       </div>
 

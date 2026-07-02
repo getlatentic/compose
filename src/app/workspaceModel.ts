@@ -316,6 +316,9 @@ export interface Workspace {
   comments: WorkspaceCommentThread[];
   fileContents: Record<string, WorkspaceFileBuffer>;
   files: WorkspaceFileEntry[];
+  /** Directory paths (incl. empty ones), so the tree shows folders with no
+   *  markdown file. Sourced from `scanFolders`; files derive their own. */
+  folders: string[];
   id: string;
   /**
    * `"real"` workspaces have a folder root at `path`; file entries hold
@@ -359,14 +362,21 @@ export interface WorkspaceListResult {
 }
 
 export interface WorkspaceFsEvent {
-  kind: "created" | "modified" | "removed";
+  kind: "created" | "modified" | "removed" | "rescan" | "watch-error";
   lastModifiedMs: number | null;
   relativePath: string;
+  /** Known for `created` (stat'd at emit time); absent for `removed`. */
+  isDir?: boolean | null;
+  /** File size at emit time, so a created note becomes a tree entry directly. */
+  sizeBytes?: number | null;
 }
 
 export type FsEventEffect =
   | { type: "reloadFile"; relativePath: string }
   | { type: "rescan" }
+  /** The tree structure changed in-place (entry added/removed) — persist tabs
+   * and refresh the search index, but no scan is needed. */
+  | { type: "treeChanged" }
   | { type: "noop" };
 
 export function isSetupComplete(
@@ -397,6 +407,7 @@ export function createWorkspaceFromPath(path: string): Workspace {
     comments: [],
     fileContents: {},
     files: [],
+    folders: [],
     id: createWorkspaceId(normalizedPath),
     kind: "real",
     lastSavedAt: null,
@@ -431,6 +442,7 @@ export function createLooseWorkspace(): Workspace {
     comments: [],
     fileContents: {},
     files: [],
+    folders: [],
     id: LOOSE_WORKSPACE_ID,
     kind: "loose",
     lastSavedAt: null,
@@ -500,15 +512,126 @@ export function setCurrentTabContext(
   };
 }
 
+/**
+ * File context items whose path is no longer in the tree — an external
+ * deletion or a sync eviction. Mark-not-remove: the chips stay (the user
+ * pinned them; the file may return), but render a "missing" state and the
+ * send surfaces a notice. Callers gate on `scanState === "ready"` so a
+ * mid-boot scan can't flash every chip missing. Derived from the file list,
+ * so it self-heals the moment the file reappears.
+ */
+export function missingFileContextPaths(
+  contextItems: WorkspaceContextItem[],
+  files: WorkspaceFileEntry[],
+): string[] {
+  const present = new Set(files.map((entry) => entry.relativePath));
+  return contextItems
+    .filter((item): item is WorkspaceFileContextItem => item.kind === "file")
+    .map((item) => item.path)
+    .filter((path) => !present.has(path));
+}
+
+/** Remove a file from the chat context by path (e.g. when it's deleted), leaving
+ *  any other attached context untouched. */
+export function removeFileContext(
+  chatThread: WorkspaceChatThread,
+  filePath: string,
+): WorkspaceChatThread {
+  return {
+    ...chatThread,
+    contextItems: chatThread.contextItems.filter(
+      (item) => !(item.kind === "file" && item.path === filePath),
+    ),
+  };
+}
+
+/** Re-point a file already in the chat context to its new path on rename, so a
+ *  pinned context survives the rename instead of dangling or being replaced. */
+export function renameContextItemPath(
+  chatThread: WorkspaceChatThread,
+  workspaceId: string,
+  from: string,
+  to: string,
+): WorkspaceChatThread {
+  return {
+    ...chatThread,
+    contextItems: chatThread.contextItems.map((item) => {
+      if (item.kind === "file" && item.path === from) {
+        return { ...item, id: createContextId(workspaceId, to), label: to, path: to };
+      }
+      // A comment excerpt in chat references its file by path too (the prompt
+      // emits `File: <filePath>`); re-point it so the agent never reads the old,
+      // now-missing path (#32).
+      if (item.kind === "comment" && item.filePath === from) {
+        return { ...item, filePath: to, path: item.path === from ? to : item.path };
+      }
+      return item;
+    }),
+  };
+}
+
+/** Move an open tab to sit just before another, preserving the rest of the
+ * order — drag-to-reorder (#29). The active file is untouched. */
+export function reorderOpenTabs(
+  openFilePaths: string[],
+  fromPath: string,
+  toPath: string,
+): string[] {
+  if (
+    fromPath === toPath ||
+    !openFilePaths.includes(fromPath) ||
+    !openFilePaths.includes(toPath)
+  ) {
+    return openFilePaths;
+  }
+  const without = openFilePaths.filter((path) => path !== fromPath);
+  without.splice(without.indexOf(toPath), 0, fromPath);
+  return without;
+}
+
+/** Remove a folder and everything under it from workspace state — files,
+ * folders, buffers, open tabs, chat context, and comments (#55). The IPC delete
+ * moves the folder to trash; this reconciles the in-memory state. */
+export function removeWorkspaceFolder(workspace: Workspace, folderPath: string): Workspace {
+  const prefix = `${folderPath}/`;
+  const underFolder = (path: string) => path === folderPath || path.startsWith(prefix);
+  const removedFiles = workspace.files
+    .filter((entry) => underFolder(entry.relativePath))
+    .map((entry) => entry.relativePath);
+
+  // Close each removed file's tab first (carries openFilePaths + the active-file
+  // fallback), then drop its buffer and any chat-context reference.
+  const next = removedFiles.reduce((ws, path) => closeWorkspaceFileTab(ws, path), workspace);
+  const fileContents = { ...next.fileContents };
+  for (const path of removedFiles) {
+    delete fileContents[path];
+  }
+  const chatThread = removedFiles.reduce(
+    (thread, path) => removeFileContext(thread, path),
+    next.chatThread,
+  );
+
+  return {
+    ...next,
+    files: next.files.filter((entry) => !underFolder(entry.relativePath)),
+    folders: next.folders.filter((path) => !underFolder(path)),
+    fileContents,
+    chatThread,
+    comments: next.comments.filter((comment) => !underFolder(comment.filePath)),
+  };
+}
+
 export function openWorkspaceFile(workspace: Workspace, filePath: string): Workspace {
   const openFilePaths = workspace.openFilePaths.includes(filePath)
     ? workspace.openFilePaths
     : [...workspace.openFilePaths, filePath];
 
+  // Opening / switching to a tab is navigation only — it must NOT repoint the
+  // chat context, which the user controls explicitly (#30). The context defaults
+  // to the active file at load and on a new chat, then stays pinned.
   return {
     ...workspace,
     activeFilePath: filePath,
-    chatThread: setCurrentTabContext(workspace.chatThread, workspace.id, filePath),
     openFilePaths,
   };
 }
@@ -528,10 +651,12 @@ export function closeWorkspaceFileTab(workspace: Workspace, filePath: string): W
   const remainingFileContents = { ...workspace.fileContents };
   delete remainingFileContents[filePath];
 
+  // Closing a tab is navigation too — leave the chat context as the user set it
+  // (#30). A still-existing file can stay in context even with no tab open; a
+  // deleted file is removed from context by deleteActiveFile.
   return {
     ...workspace,
     activeFilePath,
-    chatThread: setCurrentTabContext(workspace.chatThread, workspace.id, activeFilePath),
     fileContents: remainingFileContents,
     openFilePaths,
   };
@@ -989,17 +1114,20 @@ export function applyFsEvent(
    */
   agentEdit = false,
 ): { workspace: Workspace; effect: FsEventEffect } {
+  if (event.kind === "rescan") {
+    // The watcher lost sync (queue overflow, or a gap while re-establishing):
+    // events were missed, so only a full scan reconciles the tree.
+    return { workspace, effect: { type: "rescan" } };
+  }
+  if (event.kind === "watch-error") {
+    // Watching gave up (bounded restarts exhausted) — the slice surfaces it.
+    return { workspace, effect: { type: "noop" } };
+  }
   if (event.kind === "removed") {
-    // A confirmed deletion: close that file's tab + drop it from the list now,
-    // rather than letting a rescan's absence do it — a transient scan miss must
-    // not be mistaken for a deletion (see applyScanResult). Still rescan to
-    // reconcile the rest of the tree (e.g. a directory removal).
-    const closed = closeWorkspaceFileTab(workspace, event.relativePath);
-    const files = closed.files.filter((entry) => entry.relativePath !== event.relativePath);
-    return { workspace: { ...closed, files }, effect: { type: "rescan" } };
+    return applyRemovedPath(workspace, event.relativePath);
   }
   if (event.kind === "created") {
-    return { workspace, effect: { type: "rescan" } };
+    return applyCreatedPath(workspace, event);
   }
 
   const buffer = workspace.fileContents[event.relativePath];
@@ -1045,6 +1173,96 @@ export function applyFsEvent(
     workspace: { ...workspace, files: updatedFiles },
     effect: { type: "reloadFile", relativePath: event.relativePath },
   };
+}
+
+/** Every ancestor directory of a relative path, outermost first. */
+function ancestorDirs(relativePath: string): string[] {
+  const parts = relativePath.split("/");
+  const chain: string[] = [];
+  for (let index = 1; index < parts.length; index += 1) {
+    chain.push(parts.slice(0, index).join("/"));
+  }
+  return chain;
+}
+
+/**
+ * A `created` event patches the tree in place — no scan. The one exception is
+ * an UNKNOWN directory: it may have arrived with contents (a folder dragged in
+ * via Finder emits only the top-level event), and only a scan can see inside —
+ * so that case alone asks for one reconciling rescan. Echoes of our own
+ * creates (path already known) return the workspace untouched, so the
+ * unchanged-reference check upstream skips the store write entirely.
+ */
+function applyCreatedPath(
+  workspace: Workspace,
+  event: WorkspaceFsEvent,
+): { workspace: Workspace; effect: FsEventEffect } {
+  if (event.isDir) {
+    if (workspace.folders.includes(event.relativePath)) {
+      return { workspace, effect: { type: "noop" } };
+    }
+    return { workspace, effect: { type: "rescan" } };
+  }
+  if (workspace.files.some((entry) => entry.relativePath === event.relativePath)) {
+    return { workspace, effect: { type: "noop" } };
+  }
+  const entry: WorkspaceFileEntry = {
+    lastModifiedMs: event.lastModifiedMs ?? 0,
+    relativePath: event.relativePath,
+    sizeBytes: event.sizeBytes ?? 0,
+  };
+  const files = [...workspace.files, entry].sort((a, b) =>
+    a.relativePath.localeCompare(b.relativePath),
+  );
+  // The note may land in a folder we haven't materialized (its own dir event
+  // can be skipped or arrive later) — add the chain so the tree can place it.
+  const missing = ancestorDirs(event.relativePath).filter(
+    (dir) => !workspace.folders.includes(dir),
+  );
+  const folders = missing.length
+    ? [...workspace.folders, ...missing].sort((a, b) => a.localeCompare(b))
+    : workspace.folders;
+  return { workspace: { ...workspace, files, folders }, effect: { type: "treeChanged" } };
+}
+
+/**
+ * A `removed` event resolves against what the tree actually knows: a known
+ * file closes its tab and leaves the list; a known folder takes its whole
+ * subtree (tabs included) with it. An unknown path (a non-md file, a stale
+ * echo of our own delete) returns the workspace untouched. A transient scan
+ * miss can never delete anything here — only a real watcher removal reaches
+ * this point (see applyScanResult, which deliberately never prunes).
+ */
+function applyRemovedPath(
+  workspace: Workspace,
+  relativePath: string,
+): { workspace: Workspace; effect: FsEventEffect } {
+  // Known as a file OR as an open tab: a transient scan miss drops the entry
+  // from `files` while deliberately keeping the tab (see applyScanResult) —
+  // the confirmed deletion arriving later must still close that tab.
+  const isKnownFile =
+    workspace.files.some((entry) => entry.relativePath === relativePath) ||
+    workspace.openFilePaths.includes(relativePath);
+  if (isKnownFile) {
+    const closed = closeWorkspaceFileTab(workspace, relativePath);
+    const files = closed.files.filter((entry) => entry.relativePath !== relativePath);
+    return { workspace: { ...closed, files }, effect: { type: "treeChanged" } };
+  }
+  if (workspace.folders.includes(relativePath)) {
+    const prefix = `${relativePath}/`;
+    let updated = workspace;
+    for (const entry of workspace.files) {
+      if (entry.relativePath.startsWith(prefix)) {
+        updated = closeWorkspaceFileTab(updated, entry.relativePath);
+      }
+    }
+    const files = updated.files.filter((entry) => !entry.relativePath.startsWith(prefix));
+    const folders = updated.folders.filter(
+      (dir) => dir !== relativePath && !dir.startsWith(prefix),
+    );
+    return { workspace: { ...updated, files, folders }, effect: { type: "treeChanged" } };
+  }
+  return { workspace, effect: { type: "noop" } };
 }
 
 /** A globally-unique chat-message id. `conversation_messages.message_id` is a
@@ -1704,6 +1922,7 @@ export function serializeChatMessages(
         ...(message.trace?.length ? { traceJson: JSON.stringify(message.trace) } : {}),
         ...(message.stats ? { statsJson: JSON.stringify(message.stats) } : {}),
         ...(runStatus ? { runStatus } : {}),
+        ...(message.excerpt ? { excerptJson: JSON.stringify(message.excerpt) } : {}),
         createdAt: index,
       };
     });
@@ -1740,6 +1959,7 @@ export function hydrateChatThread(
     role: record.role,
     ...(record.traceJson ? { trace: safeParseJson<TraceEntry[]>(record.traceJson) } : {}),
     ...(record.statsJson ? { stats: safeParseJson<WorkspaceRunStats>(record.statsJson) } : {}),
+    ...(record.excerptJson ? { excerpt: safeParseJson<ChatExcerptRef>(record.excerptJson) } : {}),
     // A reply still marked streaming/interrupted on disk had its run cut short
     // (the app quit/crashed mid-stream) — there's no live run on load, so
     // surface it as interrupted with a Retry rather than a dead "thinking…".
@@ -1874,25 +2094,30 @@ export const CONVERSATION_REPLAY_LIMIT = 12;
 export const FILE_CONTEXT_INLINE_LIMIT = 4000;
 
 /**
- * Render the file-context block, budgeted for small windows: each item's
- * content (from `contentByPath`) is inlined as `### <path>\n<content>` when it's
- * small enough, otherwise reduced to a `- <path> (large; read it for details)`
- * pointer so a big attachment can't blow the prompt. A path absent from the map
- * (content not loaded) also degrades to the reference form. Pure — takes the
- * pre-fetched content map so it stays unit-testable without IO.
+ * Render the file-context block. With `inlineContent` (the openai-compatible /
+ * local path), each item's content is inlined as `### <path>\n<content>` when
+ * small enough, else reduced to a `- <path> (large; read it for details)`
+ * pointer so a big attachment can't blow a small window. Without it (tool-native
+ * CLI agents), every item is a bare `- <path>` reference the agent reads on
+ * demand — smaller, always-current, cache-stable. Pure — takes the pre-fetched
+ * content map so it stays unit-testable without IO.
  */
 export function buildFileContextBlock(
   fileItems: WorkspaceFileContextItem[],
   contentByPath: Map<string, string>,
   inlineLimit = FILE_CONTEXT_INLINE_LIMIT,
+  inlineContent = true,
 ): string {
   return fileItems
     .map((item) => {
-      const content = contentByPath.get(item.path);
-      if (content != null && content.length <= inlineLimit) {
-        return `### ${item.path}\n${content}`;
+      if (inlineContent) {
+        const content = contentByPath.get(item.path);
+        if (content != null && content.length <= inlineLimit) {
+          return `### ${item.path}\n${content}`;
+        }
+        return `- ${item.path} (large; read it for details)`;
       }
-      return `- ${item.path} (large; read it for details)`;
+      return `- ${item.path}`;
     })
     .join("\n\n");
 }
@@ -1920,6 +2145,7 @@ export function createPromptWithContext(
   contextItems: WorkspaceContextItem[],
   priorMessages: WorkspaceChatMessage[] = [],
   contentByPath: Map<string, string> = new Map(),
+  inlineContent = true,
 ) {
   const trimmedPrompt = prompt.trim();
 
@@ -1928,6 +2154,8 @@ export function createPromptWithContext(
   const fileContext = buildFileContextBlock(
     contextItems.filter((item): item is WorkspaceFileContextItem => item.kind === "file"),
     contentByPath,
+    FILE_CONTEXT_INLINE_LIMIT,
+    inlineContent,
   );
   const commentContext = contextItems
     .filter((item): item is WorkspaceCommentContextItem => item.kind === "comment")
@@ -1947,7 +2175,15 @@ export function createPromptWithContext(
 
   const blocks = [
     transcript ? `Conversation so far:\n${transcript}` : null,
-    fileContext ? `Context files:\n${fileContext}` : null,
+    fileContext
+      ? `Context files${inlineContent ? "" : " (read these as needed)"}:\n${fileContext}`
+      : null,
+    // Scope edits to the intended files so the agent doesn't write to files the
+    // user never asked it to touch (#31). A prompt guardrail, not a hard sandbox
+    // (clone mode is the hard version) — but it makes the intended target explicit.
+    fileContext
+      ? "When you edit files, only modify the Context files listed above. Do not create or change any other file unless I explicitly ask you to."
+      : null,
     commentContext ? `Comment context:\n${commentContext}` : null,
   ].filter(Boolean);
 

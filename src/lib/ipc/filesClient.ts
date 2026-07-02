@@ -74,6 +74,15 @@ export async function scanWorkspace(workspaceId: string): Promise<WorkspaceFileE
   return invokeFile<WorkspaceFileEntry[]>("workspace_scan", { workspaceId });
 }
 
+/** The workspace's directories, so the tree can show folders that hold no
+ *  markdown file yet. The browser preview has no real empty folders → []. */
+export async function scanFolders(workspaceId: string): Promise<string[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+  return invokeFile<string[]>("workspace_scan_folders", { workspaceId });
+}
+
 export async function readFile(
   workspaceId: string,
   relativePath: string,
@@ -119,6 +128,16 @@ export async function createFile(
     relativePath,
     content,
   });
+}
+
+/** Create a real empty directory (a proper "New folder"). No-op in the browser
+ *  preview, which has no real filesystem; the optimistic store update still
+ *  shows it for the session. */
+export async function createFolder(workspaceId: string, relativePath: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+  await invokeFile<null>("workspace_create_folder", { workspaceId, relativePath });
 }
 
 /**
@@ -178,6 +197,15 @@ export async function deleteFile(workspaceId: string, relativePath: string): Pro
     return vwDelete(workspaceId, relativePath);
   }
   await invokeFile<null>("workspace_delete_file", { workspaceId, relativePath });
+}
+
+/** Move a folder and its contents to the trash (recoverable). No-op in the
+ *  browser preview. */
+export async function deleteFolder(workspaceId: string, relativePath: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+  await invokeFile<null>("workspace_delete_folder", { workspaceId, relativePath });
 }
 
 export function _resetFallbackForTests() {

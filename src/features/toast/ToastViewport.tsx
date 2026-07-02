@@ -37,7 +37,7 @@ export function ToastViewport() {
           kind={toast.kind}
           lowContrast
           title={toast.title}
-          subtitle={toast.message}
+          subtitle={toast.count > 1 ? `${toast.message} (×${toast.count})` : toast.message}
           timeout={toast.timeoutMs || undefined}
           onClose={() => {
             dismiss(toast.id);

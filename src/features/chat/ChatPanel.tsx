@@ -6,11 +6,12 @@ import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessInstall, startOllama } from "../../lib/ipc/harnessClient";
 import { agentStatus } from "../settings/agentStatus";
-import { sumChatThreadStats } from "../../app/workspaceModel";
+import { missingFileContextPaths, sumChatThreadStats } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
 import { conversationToMarkdown } from "../../lib/export/conversationMarkdown";
 import { loadConversation } from "../../lib/ipc/conversationsClient";
+import { useConfirm } from "../dialogs/ConfirmProvider";
 import { ChatMessageList } from "./ChatMessageList";
 import type { MessageRowCallbacks } from "./MessageRow";
 import { MessageComposer } from "./MessageComposer";
@@ -50,6 +51,11 @@ function ChatPanelInner() {
   const dismissChatRunError = useWorkspaceStore((state) => state.dismissChatRunError);
   const addChatFileContext = useWorkspaceStore((state) => state.addChatFileContext);
   const removeChatContextItem = useWorkspaceStore((state) => state.removeChatContextItem);
+  // The active file, so the composer can offer "add this file" to context — the
+  // explicit way to set context now that switching tabs no longer does (#30).
+  const activeFilePath = useWorkspaceStore(
+    (state) => state.activeWorkspace()?.activeFilePath ?? "",
+  );
   // Narrow selector: the chat panel only needs the active workspace's
   // chat thread, NOT the whole `workspaces` array. The store preserves
   // `chatThread`'s reference when other workspace fields change (e.g. a
@@ -62,6 +68,22 @@ function ChatPanelInner() {
     const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
     return ws?.chatThread ?? null;
   });
+  // Context files that are gone from the tree (external delete / sync
+  // eviction) — the chips mark rather than vanish. Selected as a joined KEY
+  // string so this panel (which deliberately doesn't subscribe to `files`)
+  // only re-renders when the missing set actually changes; gated on a ready
+  // scan so a mid-boot load can't flash every chip missing.
+  const missingContextKey = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    if (!ws || ws.scanState !== "ready") {
+      return "";
+    }
+    return missingFileContextPaths(ws.chatThread.contextItems, ws.files).join("\n");
+  });
+  const missingContextPaths = useMemo(
+    () => new Set(missingContextKey ? missingContextKey.split("\n") : []),
+    [missingContextKey],
+  );
   const conversationsByWorkspace = useWorkspaceStore((state) => state.conversations);
   const renameConversation = useWorkspaceStore((state) => state.renameConversation);
   const archiveConversation = useWorkspaceStore((state) => state.archiveConversation);
@@ -71,6 +93,7 @@ function ChatPanelInner() {
   const newChat = useWorkspaceStore((state) => state.newChat);
   const toggleChat = useUiStore((state) => state.toggleChat);
   const deleteNotice = useWorkspaceStore((state) => state.conversationDeleteNotice);
+  const confirm = useConfirm();
 
   const [editingTitle, setEditingTitle] = useState(false);
   // Live height of the floating composer, measured by `MessageComposer`. The
@@ -216,7 +239,12 @@ function ChatPanelInner() {
   // Export the open conversation: prefer the live thread (it has the latest
   // in-flight turns), else fall back to the persisted snapshot.
   const exportConversation = async (conversationId: string, title: string) => {
-    if (!window.confirm(`Export “${title}” as a Markdown file?`)) {
+    const confirmed = await confirm({
+      title: "Export conversation",
+      message: `Export “${title}” as a Markdown file?`,
+      confirmLabel: "Export",
+    });
+    if (!confirmed) {
       return;
     }
     let messages: { role: "user" | "assistant"; content: string }[];
@@ -337,6 +365,8 @@ function ChatPanelInner() {
         assistantReady={assistantReady}
         canSend={canSend}
         contextItems={chatThread.contextItems}
+        missingContextPaths={missingContextPaths}
+        activeFilePath={activeFilePath}
         harnessName={selectedHarnessName}
         onAddFileContext={addChatFileContext}
         onHeightChange={setComposerHeight}

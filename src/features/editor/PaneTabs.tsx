@@ -1,10 +1,16 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { Close, Document } from "@carbon/react/icons";
 import { PanelLeft } from "lucide-react";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
 import { markTabSwitchStart } from "../../lib/perf";
+
+/** dataTransfer MIME for a tab dragged to reorder it (#29). */
+const TAB_DRAG_MIME = "application/x-compose-tab-path";
+/** The path of the tab being dragged, tracked out-of-band because WebKit hides
+ *  a custom dataTransfer type during `dragover` (see the file-tree drag notes). */
+let draggedTabPath: string | null = null;
 
 /** A file tab: just the workspace file entry. The dirty flag is deliberately
  * NOT here — it's read per-tab by {@link TabDirtyDot}, so a dirty flip (first
@@ -28,6 +34,118 @@ function TabDirtyDot({ path }: { path: string }) {
 }
 
 /**
+ * One editor tab, memoised. Draggable to reorder (#29): `data-no-drag` stops the
+ * strip's window-drag from stealing the mousedown, and the dragged path is
+ * tracked in a module variable (WebKit doesn't expose the custom dataTransfer
+ * type during `dragover`). The active tab registers its element so the strip can
+ * scroll it into view.
+ */
+const EditorTabItem = memo(function EditorTabItem({
+  path,
+  fileName,
+  active,
+  onSelect,
+  onClose,
+  onReorder,
+  registerActiveEl,
+}: {
+  path: string;
+  fileName: string;
+  active: boolean;
+  onSelect: (path: string) => void;
+  onClose: (path: string) => void;
+  onReorder: (fromPath: string, toPath: string) => void;
+  registerActiveEl: (el: HTMLDivElement | null) => void;
+}) {
+  const [dropTarget, setDropTarget] = useState(false);
+  const onDragStart = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      event.dataTransfer.setData(TAB_DRAG_MIME, path);
+      event.dataTransfer.effectAllowed = "move";
+      draggedTabPath = path;
+    },
+    [path],
+  );
+  const onDragEnd = useCallback(() => {
+    draggedTabPath = null;
+  }, []);
+  const onDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (draggedTabPath === null || draggedTabPath === path) {
+        return;
+      }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      setDropTarget(true);
+    },
+    [path],
+  );
+  const onDragLeave = useCallback(() => setDropTarget(false), []);
+  const onDrop = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setDropTarget(false);
+      const from = draggedTabPath ?? event.dataTransfer.getData(TAB_DRAG_MIME);
+      draggedTabPath = null;
+      if (from) {
+        onReorder(from, path);
+      }
+    },
+    [path, onReorder],
+  );
+  const onSelectClick = useCallback(() => {
+    markTabSwitchStart();
+    onSelect(path);
+  }, [onSelect, path]);
+  const onCloseClick = useCallback(() => onClose(path), [onClose, path]);
+
+  return (
+    <div
+      ref={active ? registerActiveEl : undefined}
+      className={[
+        "editor-tab",
+        active ? "editor-tab--active" : "",
+        dropTarget ? "editor-tab--drop" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      title={path}
+      data-tauri-drag-region="false"
+      data-no-drag
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={active}
+        className="tab-button"
+        data-tauri-drag-region="false"
+        onClick={onSelectClick}
+      >
+        <Document size={14} />
+        <span className="truncate">{fileName}</span>
+        <TabDirtyDot path={path} />
+      </button>
+      <button
+        type="button"
+        aria-label={`Close ${path}`}
+        title={`Close ${fileName}`}
+        className="tab-close"
+        data-tauri-drag-region="false"
+        onClick={onCloseClick}
+      >
+        <Close size={14} />
+      </button>
+    </div>
+  );
+});
+
+/**
  * The editor tab strip — a VSCode-style row of open file tabs. Exactly one tab
  * is active (the active file). Settings and other app surfaces are modals /
  * panels, not tabs, so this strip holds only files.
@@ -42,6 +160,7 @@ function PaneTabsInner({
   activeFilePath,
   onSelectFile,
   onCloseFile,
+  onReorderTab,
   leadingInsetPx,
   onShowSidebar,
 }: {
@@ -49,6 +168,7 @@ function PaneTabsInner({
   activeFilePath: string;
   onSelectFile: (path: string) => void;
   onCloseFile: (path: string) => void;
+  onReorderTab: (fromPath: string, toPath: string) => void;
   /** When set, prepend a non-interactive draggable spacer of this width — used
    * to clear the macOS traffic lights when the sidebar is collapsed. */
   leadingInsetPx?: number;
@@ -61,10 +181,13 @@ function PaneTabsInner({
 
   // Keep the active tab in view when it changes or a tab is added — opening a
   // file from search / the file tree appends a tab off-screen to the right, so
-  // the strip must scroll to reveal it. Keyed on the active path + tab count;
-  // the strip only re-renders on tab open/close/active-change (never per
+  // the strip must scroll to reveal it. The active tab registers its element
+  // here; the strip only re-renders on tab open/close/active-change (never per
   // keystroke), so the effect stays off the editing hot path.
   const activeTabRef = useRef<HTMLDivElement | null>(null);
+  const registerActiveEl = useCallback((el: HTMLDivElement | null) => {
+    activeTabRef.current = el;
+  }, []);
   useEffect(() => {
     activeTabRef.current?.scrollIntoView({ inline: "nearest", block: "nearest" });
   }, [activeFilePath, files.length]);
@@ -76,8 +199,8 @@ function PaneTabsInner({
   // The whole strip is a drag region so the empty space between tabs (and
   // the trailing area after the last tab) drags the window — matches the
   // macOS expectation of "any empty title-bar area drags the window". The
-  // `mousedown` handler calls `startDragging()`; it auto-ignores clicks on
-  // any descendant `<button>`, so the tab + close buttons keep working.
+  // `mousedown` handler calls `startDragging()`; it ignores `data-no-drag`
+  // descendants, so the tab buttons and the draggable tabs keep working.
   return (
     <div className="tab-strip" data-tauri-drag-region onMouseDown={onStripMouseDown}>
       {onShowSidebar ? (
@@ -117,41 +240,16 @@ function PaneTabsInner({
           const fileName = slash >= 0 ? entry.relativePath.slice(slash + 1) : entry.relativePath;
 
           return (
-            <div
+            <EditorTabItem
               key={`file:${entry.relativePath}`}
-              ref={active ? activeTabRef : undefined}
-              className={["editor-tab", active ? "editor-tab--active" : ""]
-                .filter(Boolean)
-                .join(" ")}
-              title={entry.relativePath}
-              data-tauri-drag-region="false"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className="tab-button"
-                data-tauri-drag-region="false"
-                onClick={() => {
-                  markTabSwitchStart();
-                  onSelectFile(entry.relativePath);
-                }}
-              >
-                <Document size={14} />
-                <span className="truncate">{fileName}</span>
-                <TabDirtyDot path={entry.relativePath} />
-              </button>
-              <button
-                type="button"
-                aria-label={`Close ${entry.relativePath}`}
-                title={`Close ${fileName}`}
-                className="tab-close"
-                data-tauri-drag-region="false"
-                onClick={() => onCloseFile(entry.relativePath)}
-              >
-                <Close size={14} />
-              </button>
-            </div>
+              path={entry.relativePath}
+              fileName={fileName}
+              active={active}
+              onSelect={onSelectFile}
+              onClose={onCloseFile}
+              onReorder={onReorderTab}
+              registerActiveEl={registerActiveEl}
+            />
           );
         })}
       </div>

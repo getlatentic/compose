@@ -4,7 +4,7 @@
 // into the bundle (50+ components: accordion, breadcrumb, calendar, data-
 // table, page-header, popover, progress-indicator, tile, …). Compose uses
 // 14 React components from @carbon/react; the rest of the bundle is dead
-// weight. The cool-gray palette override below and every `.*` rule in
+// weight. The neutral-gray palette override below and every `.*` rule in
 // this stylesheet already supply our own visual system, so the slim set
 // below is all the Carbon CSS we actually need.
 //
@@ -50,63 +50,59 @@
 // are overridden just below. Code/mono stacks are intentionally left alone.
 $ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
-// === Palette: Carbon Cool Gray (matches the design reference) ================
-// The reference mocks use Carbon's COOL GRAY scale (a cooler blue-tinted
-// neutral) instead of Compose's default warm neutral gray. Overriding the
-// underlying `--cds-*` tokens here propagates through every Carbon component
-// AND every rule in this stylesheet that already reads
-// `var(--cds-text-primary, …)` / `var(--cds-layer-01, …)` / etc. — the
-// per-rule hex fallbacks stay as last-resort safety (only fire if the
-// variable is unset, which it never is here).
-//
-// Visual effect: every grey gets a slight blue undertone, like macOS chrome
-// vs. document beige. Same hierarchy + contrast ratios. Interactive blue
-// (#0f62fe) and the support / link / focus tokens stay Carbon-standard —
-// only the neutral scale tilts cool.
+// === Palette: neutral gray, one blue accent ==================================
+// The interaction spec calls for neutral grays with a single blue accent, so
+// the `--cds-*` neutrals carry no undertone: white surfaces, plain grays, and
+// interactive blue (#0f62fe) reserved for the accent. Overriding the tokens
+// here propagates through every Carbon component AND every rule in this
+// stylesheet that reads `var(--cds-layer-01, …)` / etc. — the per-rule hex
+// fallbacks stay as last-resort safety (they only fire if a variable is unset,
+// which never happens here). Interactive / support / link / focus tokens are
+// Carbon-standard; the neutral scale is Carbon's default warm-neutral gray.
 :root {
-  // Backgrounds + layers (Cool Gray 10 / 20)
+  // Backgrounds + layers (gray-10 / 20)
   --cds-background: #ffffff;
   --cds-background-hover: rgba(141, 141, 141, 0.12);
   --cds-background-active: rgba(141, 141, 141, 0.5);
   --cds-background-selected: rgba(141, 141, 141, 0.2);
   --cds-background-selected-hover: rgba(141, 141, 141, 0.32);
-  --cds-background-inverse: #343a3f;            // cool-gray-80
-  --cds-background-inverse-hover: #4d5358;      // cool-gray-70
-  --cds-layer-01: #f2f4f8;                      // cool-gray-10
+  --cds-background-inverse: #393939;            // gray-80
+  --cds-background-inverse-hover: #525252;      // gray-70
+  --cds-layer-01: #f4f4f4;                      // gray-10
   --cds-layer-02: #ffffff;
-  --cds-layer-03: #f2f4f8;
-  --cds-layer-hover-01: #e4e9f1;
-  --cds-layer-hover-02: #e4e9f1;
-  --cds-layer-accent-01: #dde1e6;               // cool-gray-20
-  --cds-layer-accent-02: #dde1e6;
-  --cds-layer-selected-01: #dde1e6;
-  --cds-layer-selected-02: #dde1e6;
-  --cds-layer-selected-hover-01: #c1c7cd;       // cool-gray-30
-  --cds-field-01: #f2f4f8;
+  --cds-layer-03: #f4f4f4;
+  --cds-layer-hover-01: #e8e8e8;
+  --cds-layer-hover-02: #e8e8e8;
+  --cds-layer-accent-01: #e0e0e0;               // gray-20
+  --cds-layer-accent-02: #e0e0e0;
+  --cds-layer-selected-01: #e0e0e0;
+  --cds-layer-selected-02: #e0e0e0;
+  --cds-layer-selected-hover-01: #c6c6c6;       // gray-30
+  --cds-field-01: #f4f4f4;
   --cds-field-02: #ffffff;
-  --cds-field-hover-01: #e4e9f1;
-  --cds-field-hover-02: #e4e9f1;
-  // Borders (subtler — Cool Gray 20)
-  --cds-border-subtle-00: #dde1e6;
-  --cds-border-subtle-01: #dde1e6;
-  --cds-border-subtle-02: #dde1e6;
-  --cds-border-strong-01: #878d96;              // cool-gray-50
-  --cds-border-strong-02: #878d96;
-  --cds-border-tile-01: #c1c7cd;                // cool-gray-30
-  --cds-border-inverse: #121619;                // cool-gray-100
+  --cds-field-hover-01: #e8e8e8;
+  --cds-field-hover-02: #e8e8e8;
+  // Borders (subtler — gray-20)
+  --cds-border-subtle-00: #e0e0e0;
+  --cds-border-subtle-01: #e0e0e0;
+  --cds-border-subtle-02: #e0e0e0;
+  --cds-border-strong-01: #8d8d8d;              // gray-50
+  --cds-border-strong-02: #8d8d8d;
+  --cds-border-tile-01: #c6c6c6;                // gray-30
+  --cds-border-inverse: #161616;                // gray-100
   --cds-border-interactive: #0f62fe;            // interactive stays Carbon blue
-  // Text (Cool Gray 100 / 70 / 60)
-  --cds-text-primary: #121619;
-  --cds-text-secondary: #4d5358;
-  --cds-text-placeholder: rgba(18, 22, 25, 0.4);
+  // Text (gray-100 / 70 / 60)
+  --cds-text-primary: #161616;
+  --cds-text-secondary: #525252;
+  --cds-text-placeholder: rgba(22, 22, 22, 0.4);
   --cds-text-on-color: #ffffff;
-  --cds-text-helper: #697077;
-  --cds-text-disabled: rgba(18, 22, 25, 0.25);
+  --cds-text-helper: #6f6f6f;
+  --cds-text-disabled: rgba(22, 22, 22, 0.25);
   --cds-text-inverse: #ffffff;
   // Icons follow text
-  --cds-icon-primary: #121619;
-  --cds-icon-secondary: #4d5358;
-  --cds-icon-disabled: rgba(18, 22, 25, 0.25);
+  --cds-icon-primary: #161616;
+  --cds-icon-secondary: #525252;
+  --cds-icon-disabled: rgba(22, 22, 22, 0.25);
   --cds-icon-on-color: #ffffff;
   --cds-icon-on-color-disabled: rgba(255, 255, 255, 0.25);
   --cds-icon-interactive: #0f62fe;
@@ -122,7 +118,7 @@ $ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
 }
 
 :root {
-  color: var(--cds-text-primary, #121619);
+  color: var(--cds-text-primary, #161616);
   background: var(--cds-background, #ffffff);
   font-family: $ui-font;
   font-synthesis: none;
@@ -271,7 +267,7 @@ select {
   overflow: hidden;
   border-inline-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
   // White, same as the editor + chat panel — every primary pane reads as
-  // one document surface. The cool-gray-20 border at the right is what
+  // one document surface. The gray-20 border at the right is what
   // separates the sidebar visually; a tinted background was double-marking
   // the boundary and competing with the panes' own surfaces.
   background: var(--cds-layer-02, #ffffff);
@@ -509,57 +505,150 @@ select {
 .sidebar-tabs {
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
+  // A fixed height + stretched tabs put the tab labels and the "+ New" button on
+  // one vertical centre line, while each tab's underline still lands on the row's
+  // bottom border.
+  align-items: stretch;
   gap: 0.25rem;
-  padding: 0.5rem;
+  padding-inline: 0.5rem;
+  block-size: 2.75rem;
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
+// Underline tabs (interaction spec §03) — no fill; the active tab is marked by a
+// 2px blue bottom border that sits on the tab-row's own divider.
 .sidebar-tab {
+  display: inline-flex;
+  align-items: center;
   border: 0;
+  border-block-end: 2px solid transparent;
+  margin-block-end: -1px;
   background: transparent;
   cursor: pointer;
-  block-size: 1.75rem;
-  padding-inline: 0.625rem;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  border-radius: 2px;
+  padding-inline: 0.25rem;
+  // Inactive tab: a light gray-50 at regular weight, well below the active tab's
+  // dark semibold.
+  color: #8d8d8d;
+  font-size: 0.875rem;
+  font-weight: 400;
+  border-radius: 0;
 }
 
 .sidebar-tab:hover {
-  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
 }
 
 .sidebar-tab--active {
   color: var(--cds-text-primary, #161616);
-  background: var(--cds-layer-selected-01, #e0e0e0);
+  border-block-end-color: var(--cds-border-interactive, #0f62fe);
   font-weight: 600;
 }
 
-.sidebar-new {
+// The "+ New" create menu (interaction spec §03) — a custom dropdown pinned to
+// the end of the tab row.
+.new-menu {
+  position: relative;
+  // Centre the button on the row's mid-line — the same line the tab labels sit
+  // on — with symmetric breathing room from the fixed row height.
+  align-self: center;
+  margin-inline-start: auto;
+}
+
+// Trigger: a compact primary button — plus, label, then a bare caret (no boxed
+// divider section).
+.new-menu__trigger {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  margin-inline-start: auto;
+  gap: 7px;
+  block-size: 34px;
+  padding: 0 9px 0 12px;
+  border: 0;
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+  font-size: 14px;
+  // "New" is regular weight — the same as the leading "+" and the chevron.
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.new-menu__trigger:hover:not(:disabled) {
+  background: var(--cds-button-primary-hover, #0043ce);
+}
+
+.new-menu__trigger:disabled {
+  background: var(--cds-button-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
+.new-menu__plus {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.new-menu__caret {
+  flex: 0 0 auto;
+}
+
+// Panel: a 246px white surface anchored under the button's right edge. White +
+// a neutral #e0e0e0 border — the white layer-02, not the light-gray layer-01,
+// so the menu reads as a white surface (spec).
+.new-menu__panel {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-end: 0;
+  inline-size: 246px;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+}
+
+// A neutral divider between the file-system group and chat.
+.new-menu__group + .new-menu__group {
+  border-block-start: 1px solid #e0e0e0;
+}
+
+// Item: a 46px row — 16px icon, 12px gap, label, right-aligned mono shortcut.
+.new-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  inline-size: 100%;
+  block-size: 46px;
+  padding-inline: 16px;
   border: 0;
   background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font-size: 14px;
+  font-weight: 400;
+  text-align: start;
   cursor: pointer;
-  block-size: 1.75rem;
-  padding-inline: 0.5rem;
+}
+
+// Neutral hover — the spec background-hover overlay.
+.new-menu__item:hover {
+  background: #f4f4f4;
+}
+
+.new-menu__item-icon {
+  flex: 0 0 auto;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.new-menu__item:hover .new-menu__item-icon {
   color: var(--cds-link-primary, #0f62fe);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  border-radius: 2px;
 }
 
-.sidebar-new:hover:not(:disabled) {
-  background: var(--cds-layer-hover-01, #e8e8e8);
+.new-menu__item-label {
+  flex: 1 1 auto;
 }
 
-.sidebar-new:disabled {
-  color: var(--cds-text-disabled, #c6c6c6);
-  cursor: not-allowed;
+.new-menu__item-shortcut {
+  flex: 0 0 auto;
+  font-family: var(--cds-code-01-font-family, ui-monospace, "SF Mono", monospace);
+  font-size: 12px;
+  color: var(--cds-text-placeholder, #8d8d8d);
 }
 
 // Both panes (Files / Chat) stay mounted to make Notes <-> Chat switching
@@ -596,7 +685,10 @@ select {
   flex: 1 1 auto;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 0.75rem 0.5rem 0.5rem;
+  // No right padding: the file tree (and its scrollbar) reaches the sidebar's
+  // right border. The classic 8px scrollbar reserves its own space, so the rows
+  // and their kebab stay clear of it.
+  padding: 0.75rem 0 0.5rem 0.5rem;
 }
 
 // === Sidebar: footer (pinned bottom) ===
@@ -838,6 +930,11 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  // Cap the visible rows (~6) so a note with many frontmatter fields doesn't
+  // crowd out the file tree; the rest scroll. The header and "add field" stay
+  // fixed since only the list scrolls.
+  max-block-size: 12rem;
+  overflow-y: auto;
 }
 
 .property-row {
@@ -1070,8 +1167,7 @@ select {
   line-height: 1rem;
 }
 
-.search-results,
-.backlinks {
+.search-results {
   display: grid;
   gap: 1px;
   min-block-size: 0;
@@ -1082,8 +1178,7 @@ select {
   overflow: auto;
 }
 
-.search-result,
-.backlink {
+.search-result {
   display: grid;
   gap: 0.125rem;
   min-inline-size: 0;
@@ -1096,15 +1191,12 @@ select {
 }
 
 .search-result:hover,
-.search-result:focus-visible,
-.backlink:hover,
-.backlink:focus-visible {
+.search-result:focus-visible {
   background: var(--cds-layer-hover-01, #e8e8e8);
   outline: none;
 }
 
-.search-result__title,
-.backlink__path {
+.search-result__title {
   overflow: hidden;
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
@@ -1114,8 +1206,7 @@ select {
   white-space: nowrap;
 }
 
-.search-result__path,
-.backlink__label {
+.search-result__path {
   overflow: hidden;
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
@@ -1145,7 +1236,7 @@ select {
   // scrollbar gutter rather than reserving a whole column for the menu.
   padding-inline: 0.5rem 0.5rem;
   color: var(--cds-text-secondary, #525252);
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.75rem;
   text-align: start;
   // Rows are navigation, not prose — don't let a click/right-click select the
@@ -1406,6 +1497,12 @@ select {
 
 .editor-tab--active:hover {
   background: var(--cds-layer-01, #f4f4f4);
+}
+
+// Drop indicator while dragging a tab to reorder (#29): a left bar marks where
+// the dragged tab will land (just before this one).
+.editor-tab--drop {
+  box-shadow: inset 2px 0 0 0 var(--cds-border-interactive, #0f62fe);
 }
 
 .tab-button,
@@ -2379,14 +2476,14 @@ select {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--cds-icon-secondary, #4d5358);
+  color: var(--cds-icon-secondary, #525252);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .chat-header__btn:hover {
   background: var(--cds-background-hover, rgba(141, 141, 141, 0.12));
-  color: var(--cds-icon-primary, #121619);
+  color: var(--cds-icon-primary, #161616);
 }
 
 .chat-header__title-button:hover {
@@ -2411,7 +2508,7 @@ select {
   flex-direction: column;
   overflow: hidden;
   // White, like the editor — the chat is a document-like surface, not a
-  // platform panel. The user-turn bordered card (which IS cool-gray-10) is
+  // platform panel. The user-turn bordered card (which IS gray-10) is
   // what separates messages; the panel itself should fade into the chrome.
   background: var(--cds-layer-02, #ffffff);
 }
@@ -2609,13 +2706,13 @@ select {
 }
 
 // A commented passage sent to chat, rendered as a chip inside the user bubble.
-.excerpt-chip {
+.excerpt-card {
   display: grid;
   gap: 0.5rem;
   white-space: normal;
 }
 
-.excerpt-chip__head {
+.excerpt-card__head {
   display: flex;
   align-items: center;
   gap: 0.375rem;
@@ -2623,14 +2720,18 @@ select {
   font-size: 0.75rem;
 }
 
-.excerpt-chip__file {
+.excerpt-card__file {
+  // Shrink below content width so a long name ellipsizes instead of forcing a
+  // horizontal scroll (#33); the full path stays on hover (title).
+  flex: 1 1 auto;
+  min-inline-size: 0;
   overflow: hidden;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.excerpt-chip__loc {
+.excerpt-card__loc {
   flex: 0 0 auto;
   padding: 0.0625rem 0.375rem;
   border-radius: 999px;
@@ -2640,26 +2741,54 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-.excerpt-chip__text {
+.excerpt-card__excerpt {
+  font-size: 0.8125rem;
+}
+
+// The commented passage — a blue-barred block that reads as "the text you
+// commented on". Rendered via MarkdownMessage, so the `>` quote is a blockquote
+// inside `.markdown`. The extra `.markdown` in the selector out-specifies the
+// ambient `.markdown blockquote` (gray bar + 0.5rem block margin) so the excerpt
+// keeps its blue bar and the original tight spacing against the header.
+.excerpt-card__excerpt .markdown blockquote {
   margin: 0;
   padding: 0.375rem 0.625rem;
   border-inline-start: 3px solid var(--cds-button-primary, #0f62fe);
   background: var(--cds-highlight, #d0e2ff);
   color: var(--cds-text-primary, #161616);
-  font-size: 0.8125rem;
   line-height: 1.25rem;
-  // Keep a multi-line excerpt's structure (a table row/column lands here as a
-  // markdown fragment) instead of collapsing it onto one line; still wrap a long
-  // single line of prose.
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
-.excerpt-chip__note {
+// Only the EXCERPT clamps — the note stays outside it (below "Show more"), so a
+// long quote never hides the comment that goes with it. Collapses to a few
+// lines behind a fade; "Show more" drops the clamp.
+.excerpt-card__excerpt--clamped {
+  max-block-size: 9rem;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+
+// The user's comment on the excerpt — always shown, never clamped.
+.excerpt-card__note {
   margin: 0;
   color: var(--cds-text-primary, #161616);
   font-size: 0.8125rem;
   line-height: 1.25rem;
+}
+
+.excerpt-card__more {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cds-link-primary, #0f62fe);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.excerpt-card__more:hover {
+  text-decoration: underline;
 }
 
 
@@ -3270,10 +3399,15 @@ select {
   border: 0;
   background: none;
   padding: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
   color: var(--cds-link-primary, #0f62fe);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.75rem;
   text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -3307,11 +3441,16 @@ select {
 .suggestion__path {
   border: 0;
   padding: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
   color: var(--cds-link-primary, #0f62fe);
   background: transparent;
   font-size: 0.75rem;
   line-height: 1rem;
   text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -3613,6 +3752,17 @@ select {
   background: var(--cds-layer-active-01, #c6c6c6);
 }
 
+// A context file that's gone from disk (external delete / sync eviction):
+// mark, don't remove — the user pinned it and it may return. Amber glyph +
+// helper-toned label; the tooltip explains it will send as a reference.
+.chat-context-chip--missing {
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.chat-context-chip--missing svg {
+  color: var(--cds-support-warning, #f1c21b);
+}
+
 .chat-context-chip--empty {
   color: var(--cds-text-helper, #6f6f6f);
 }
@@ -3620,6 +3770,35 @@ select {
 // Nothing to reveal for the placeholder — keep it flat even on hover.
 .chat-context-chip--empty:hover {
   background: transparent;
+}
+
+// "Add this file" — the explicit way to put the current file in context now that
+// switching tabs doesn't (#30). A dashed chip-button; it and the chip removes are
+// disabled while a response streams, so context only changes when the chat is idle.
+.chat-context-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  align-self: center;
+  padding: 0.125rem 0.375rem;
+  border: 1px dashed var(--cds-border-strong-01, #8d8d8d);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.6875rem;
+  color: var(--cds-text-secondary, #525252);
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+
+.chat-context-add:hover:not(:disabled) {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  border-color: var(--cds-border-interactive, #0f62fe);
+}
+
+.chat-context-add:disabled,
+.chat-context-chip__remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 // Cumulative conversation token count, parked at the right end of the row
@@ -4343,7 +4522,7 @@ select {
   block-size: 4px;
   max-inline-size: 8rem;
   margin-inline-start: auto;
-  background: var(--cds-layer-accent-01, #dde1e6);
+  background: var(--cds-layer-accent-01, #e0e0e0);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -5716,19 +5895,26 @@ select {
   block-size: 1.75rem;
 }
 
+// Neutral hover — the spec background-hover overlay (interaction spec §01).
 .file-row-wrapper:hover {
-  background: var(--cds-layer-hover-01, #e8e8e8);
+  background: rgba(141, 141, 141, 0.12);
 }
 
+// The selected row — the single "you are here" marker: a 3px blue left bar over
+// a neutral fill, sharp corners. The bar lives ONLY here (not on hover, not on
+// the new-note target), so it never competes (interaction spec §01).
 .file-row-wrapper--active {
-  background: var(--cds-layer-selected-01, #e0e0e0);
+  background: rgba(141, 141, 141, 0.2);
+  box-shadow: inset 3px 0 0 0 var(--cds-border-interactive, #0f62fe);
+  border-radius: 0;
 }
 
-// The folder a plain "New note" lands in (`newNoteDir`). A left accent bar
-// reads as "new notes go here", kept visually distinct from the gray
-// selected-file highlight (`--active`).
-.file-row-wrapper--target {
-  box-shadow: inset 2px 0 0 0 var(--cds-border-interactive, #0f62fe);
+// Drop target while dragging a file onto a folder (#28): a tinted fill + ring so
+// the folder clearly reads as the destination.
+.file-row-wrapper--drop {
+  background: var(--cds-highlight, #d0e2ff);
+  box-shadow: inset 0 0 0 2px var(--cds-border-interactive, #0f62fe);
+  border-radius: 4px;
 }
 
 .file-row-wrapper .file-row {
@@ -5751,21 +5937,33 @@ select {
   transform: translateY(-50%);
 }
 
+// The kebab is just the ⋮ icon — no fill, no border, no shadow in any state, so
+// nothing but the glyph sits on the row. Carbon paints a background on
+// hover/focus and a shadow + border when the menu is open; the kebab IS the
+// `.cds--overflow-menu` button (no separate trigger element), so name every
+// interactive state here to beat Carbon's equal-specificity, later-loaded rules.
 .file-row-wrapper .cds--overflow-menu {
   position: static;
   transform: none;
   block-size: 1.75rem;
+  min-block-size: 1.75rem;
   inline-size: 1.75rem;
-  // Opaque so it masks the name's tail it sits over on hover.
-  background: var(--cds-layer-hover-01, #e8e8e8);
-  border-radius: 4px;
   opacity: 0;
   transition: opacity 80ms ease;
 }
 
+.file-row-wrapper .cds--overflow-menu,
+.file-row-wrapper .cds--overflow-menu:hover,
+.file-row-wrapper .cds--overflow-menu:focus,
+.file-row-wrapper .cds--overflow-menu:active,
+.file-row-wrapper .cds--overflow-menu--open {
+  background-color: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
 .file-row-wrapper:hover .cds--overflow-menu,
-.file-row-wrapper--active .cds--overflow-menu,
-.file-row-wrapper--target .cds--overflow-menu,
+.file-row-wrapper:focus-within .cds--overflow-menu,
 .file-row-wrapper .cds--overflow-menu--open {
   opacity: 1;
 }
@@ -5779,6 +5977,61 @@ select {
   block-size: 1.75rem;
 }
 
+// Context/kebab menu polish (interaction spec §02).
+// The menu is a WHITE surface with a neutral border — Carbon defaults it to the
+// light-gray layer-01, so pin it to the white layer.
+.cds--overflow-menu-options {
+  background-color: var(--cds-layer-02, #ffffff);
+  border: 1px solid #e0e0e0;
+}
+
+// Options match the "+ New" menu's type exactly: 14px regular gray-100 in
+// generous 46px rows (Carbon defaults them to gray-70 in cramped 32px rows).
+.cds--overflow-menu-options__option,
+.cds--overflow-menu-options__btn {
+  block-size: 2.875rem;
+  max-block-size: none;
+}
+
+.cds--overflow-menu-options__btn {
+  padding: 0 1rem;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+// Neutral hover on an option — the spec background-hover overlay.
+.cds--overflow-menu-options__btn:hover {
+  background-color: var(--cds-background-hover, rgba(141, 141, 141, 0.12));
+}
+
+// Destructive Delete reads in the error colour — Carbon's `isDelete` flag alone
+// isn't colouring it under the app's cherry-picked styles, so force it (same
+// selector, declared later wins).
+.cds--overflow-menu-options__option--danger .cds--overflow-menu-options__btn {
+  color: var(--cds-text-error, #da1e28);
+}
+
+// Carbon auto-focuses the first option when the menu opens, and WebKit paints
+// its focus ring on that programmatic focus — so a mouse-opened menu shows the
+// first item "selected", which the spec doesn't want. Drop the focus ring on the
+// options; the menu stays keyboard-operable and the neutral hover marks the
+// pointer target. (No CSS reliably tells open-focus from keyboard nav here.)
+.cds--overflow-menu-options__btn:focus,
+.cds--overflow-menu-options__btn:focus-visible,
+.cds--overflow-menu-options__option:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+// Carbon wraps the kebab trigger in an IconButton that pops an "Options" tooltip
+// on hover — suppress it. The button keeps its accessible name via
+// aria-labelledby (name-from-labelledby includes hidden content), so screen
+// readers are unaffected.
+.cds--overflow-menu__wrapper [role="tooltip"] {
+  display: none;
+}
+
 .file-tree--empty {
   padding: 0.75rem 0.5rem;
   color: var(--cds-text-helper, #6f6f6f);
@@ -5790,6 +6043,24 @@ select {
 
 .file-tree--empty p {
   margin: 0;
+}
+
+// Manual retry for a failed scan — the escape hatch once the boot auto-retry
+// gives up. A quiet inline button (the auto-retry is the primary recovery).
+.file-tree__retry {
+  justify-self: start;
+  margin-block-start: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 4px;
+  background: var(--cds-layer-02, #ffffff);
+  color: var(--cds-link-primary, #0f62fe);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.file-tree__retry:hover {
+  background: var(--cds-background-hover, rgba(141, 141, 141, 0.12));
 }
 
 .conflict-banner {
@@ -5987,4 +6258,37 @@ select {
 .no-workspace__recent-remove:hover {
   color: var(--cds-text-error, #da1e28);
   text-decoration: underline;
+}
+
+// Rename dialog: an editable base name with the extension pinned beside it as a
+// read-only box, and the file's folder shown beneath. The extension box
+// continues the input's bottom border so it reads as a fixed suffix.
+.rename-field__row {
+  display: flex;
+  align-items: stretch;
+}
+
+.rename-field__input {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.rename-field__ext {
+  display: flex;
+  align-items: center;
+  padding-inline: 0.75rem;
+  background: var(--cds-field, #f4f4f4);
+  border-block-end: 1px solid var(--cds-border-strong-01, #8d8d8d);
+  color: var(--cds-text-secondary, #525252);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.rename-field__location {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-block-start: 0.5rem;
+  color: var(--cds-text-secondary, #525252);
+  font-size: 0.75rem;
 }

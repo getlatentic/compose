@@ -1,15 +1,17 @@
 import { memo, useCallback, useMemo } from "react";
 import { InlineNotification } from "@carbon/react";
-import { AddAlt } from "@carbon/react/icons";
+import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { PanelLeft, Search, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
-import { useTextPrompt } from "../dialogs/TextPromptProvider";
+import { useRename } from "../dialogs/RenameProvider";
+import { useConfirm } from "../dialogs/ConfirmProvider";
 import { FileTree } from "../file-tree/FileTree";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { SidebarChatList } from "../chat/SidebarChatList";
-import { ActiveFileBacklinks, ActiveFileProperties } from "./ActiveFilePanels";
+import { ActiveFileProperties } from "./ActiveFilePanels";
+import { NewMenu } from "./NewMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
 /**
@@ -43,6 +45,9 @@ export const MAC_TRAFFIC_LIGHTS_INSET = 78;
  */
 export function WorkspaceSidebar() {
   const createNote = useWorkspaceStore((state) => state.createNote);
+  const createFolder = useWorkspaceStore((state) => state.createFolder);
+  const newNoteDir = useWorkspaceStore((state) => state.newNoteDir);
+  const promptText = useTextPrompt();
   const newChat = useWorkspaceStore((state) => state.newChat);
   const deleteActiveFile = useWorkspaceStore((state) => state.deleteActiveFile);
   const renameActiveFile = useWorkspaceStore((state) => state.renameActiveFile);
@@ -54,7 +59,8 @@ export function WorkspaceSidebar() {
   const openSettings = useUiStore((state) => state.openSettings);
   const openSearch = useUiStore((state) => state.openSearch);
   const onTitlebarMouseDown = useWindowDrag();
-  const promptText = useTextPrompt();
+  const requestRename = useRename();
+  const confirm = useConfirm();
   // Narrow, churn-free reads: a boolean for "is a workspace open" + the footer
   // note count. Both are primitives, so editing/saving (which churns the
   // workspace object on every flush) never re-renders the sidebar shell. The
@@ -73,29 +79,30 @@ export function WorkspaceSidebar() {
   const handleRename = useCallback(
     async (relativePath: string) => {
       await selectFile(relativePath);
-      const next = await promptText({
-        title: "Rename file",
-        label: "New name",
-        defaultValue: relativePath,
-        submitLabel: "Rename",
-      });
-      if (!next || next.trim() === relativePath) {
+      const target = await requestRename(relativePath);
+      if (!target || target === relativePath) {
         return;
       }
-      await renameActiveFile(next.trim());
+      await renameActiveFile(target);
     },
-    [selectFile, renameActiveFile, promptText],
+    [selectFile, renameActiveFile, requestRename],
   );
 
   const handleDelete = useCallback(
     async (relativePath: string) => {
-      if (!window.confirm(`Delete ${relativePath}? This cannot be undone.`)) {
+      const confirmed = await confirm({
+        title: "Delete file",
+        message: `Delete ${relativePath}? This cannot be undone.`,
+        confirmLabel: "Delete",
+        danger: true,
+      });
+      if (!confirmed) {
         return;
       }
       await selectFile(relativePath);
       await deleteActiveFile();
     },
-    [selectFile, deleteActiveFile],
+    [selectFile, deleteActiveFile, confirm],
   );
 
   // FileTree's callbacks pass through to store actions. The wrapping arrows
@@ -113,11 +120,47 @@ export function WorkspaceSidebar() {
     (relativePath: string) => void handleRename(relativePath),
     [handleRename],
   );
+  // Moving a file into a folder is a rename into that folder — which already
+  // carries the open tab, chat context, comments, and version history along
+  // (renameActiveFile). selectFile makes the dragged file the active target.
+  const handleMoveFile = useCallback(
+    (from: string, folderPath: string) => {
+      const slash = from.lastIndexOf("/");
+      const base = slash >= 0 ? from.slice(slash + 1) : from;
+      const dest = folderPath ? `${folderPath}/${base}` : base;
+      if (dest === from) {
+        return;
+      }
+      void (async () => {
+        await selectFile(from);
+        await renameActiveFile(dest);
+      })();
+    },
+    [selectFile, renameActiveFile],
+  );
 
-  // One context-aware "New" button: a note on the Notes tab, a chat on the
-  // Chat tab.
-  const newLabel = sidebarTab === "files" ? "New note" : "New chat";
-  const onNew = sidebarTab === "files" ? createNote : newChat;
+  // Stable menu-item handlers for the single "+ New" button. Not a hot-path row
+  // (the shell re-renders rarely), but kept off inline arrows for consistency.
+  const handleNewNote = useCallback(() => void createNote(), [createNote]);
+  const handleNewChat = useCallback(() => void newChat(), [newChat]);
+
+  // A "New folder" create action so the first/top-level folder can be created
+  // even in an empty workspace (the tree's "New folder here" needs an existing
+  // folder row). Lands in the selected folder (newNoteDir) or the root (#56).
+  const handleNewFolder = useCallback(() => {
+    void (async () => {
+      const name = await promptText({
+        title: "New folder",
+        label: "Folder name",
+        submitLabel: "Create",
+      });
+      const trimmed = name?.trim();
+      if (!trimmed) {
+        return;
+      }
+      await createFolder(newNoteDir ? `${newNoteDir}/${trimmed}` : trimmed);
+    })();
+  }, [promptText, createFolder, newNoteDir]);
 
   if (sidebarCollapsed) {
     return null;
@@ -179,17 +222,13 @@ export function WorkspaceSidebar() {
         >
           Chat
         </button>
-        <button
-          type="button"
-          className="sidebar-new"
-          onClick={() => void onNew()}
+        <NewMenu
+          tab={sidebarTab}
           disabled={!hasWorkspace}
-          aria-label={newLabel}
-          title={newLabel}
-        >
-          <AddAlt size={16} />
-          <span>{newLabel}</span>
-        </button>
+          onNewNote={handleNewNote}
+          onNewFolder={handleNewFolder}
+          onNewChat={handleNewChat}
+        />
       </div>
 
       {/* Both panes stay mounted; visibility flips via the `hidden` attribute.
@@ -200,6 +239,7 @@ export function WorkspaceSidebar() {
           onSelectFile={handleSelectFile}
           onRenameFile={handleRenameAdapter}
           onDeleteFile={handleDeleteAdapter}
+          onMoveFile={handleMoveFile}
         />
       </div>
       <div hidden={sidebarTab !== "chat"} className="sidebar-pane-wrap">
@@ -245,33 +285,36 @@ export function WorkspaceSidebar() {
 }
 
 /**
- * The Files tab body: the file tree, the active file's Properties (frontmatter)
- * editor, and the backlinks list. Search moved to the footer popover — the
- * INDEX section is gone from here.
+ * The Files tab body: the file tree and the active file's Properties
+ * (frontmatter) editor. Search moved to the footer popover — the INDEX section
+ * is gone from here.
  */
 /**
  * Memoised on FILE-ONLY props (`files`, `activeFilePath`, callbacks) — all
  * stable across content edits and the autosave index rebuild. So a keystroke no
  * longer re-renders the files pane. The unsaved-dot is NOT read here — each row
  * self-subscribes via `FileRowDirtyDot`, so a dirty flip re-renders only that
- * one dot, not this pane or the file tree. The active file's frontmatter and
- * backlinks render via their own self-subscribing components
- * (ActiveFileProperties / ActiveFileBacklinks), isolated from the file list.
+ * one dot, not this pane or the file tree. The active file's frontmatter
+ * renders via its own self-subscribing component (ActiveFileProperties),
+ * isolated from the file list.
  */
 const FilesTab = memo(function FilesTab({
   onSelectFile,
   onRenameFile,
   onDeleteFile,
+  onMoveFile,
 }: {
   onSelectFile: (path: string) => void;
   onRenameFile: (path: string) => void;
   onDeleteFile: (path: string) => void;
+  onMoveFile: (fromPath: string, folderPath: string) => void;
 }) {
   // Self-subscribing leaf: the file list and active path are read here via
   // NARROW selectors, so a structural change re-renders this pane WITHOUT
   // re-rendering the sidebar shell. The dirty set is deliberately NOT read here
   // (it flipped this pane on every edit/save) — each row owns its own dot.
   const files = useStableFileList();
+  const folders = useFolderList();
   const activeFilePath = useWorkspaceStore((state) => {
     const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
     return ws?.activeFilePath ?? "";
@@ -296,14 +339,15 @@ const FilesTab = memo(function FilesTab({
         <FileTree
           activePath={activeFilePath}
           files={files}
+          folders={folders}
           onDelete={onDeleteFile}
           onRename={onRenameFile}
+          onMoveFile={onMoveFile}
           onSelectFile={onSelectFile}
         />
       </div>
 
       <ActiveFileProperties />
-      <ActiveFileBacklinks />
     </div>
   );
 });
@@ -329,5 +373,17 @@ function useStableFileList(): WorkspaceFileEntry[] | null {
     const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
     return ws?.files ?? null;
   }, [key]);
+}
+
+const EMPTY_FOLDERS: string[] = [];
+
+/** The active workspace's folder paths. They change only on a scan or a
+ *  create/delete — not on a save — so the stored array reference is already
+ *  stable to pass straight to the memoised tree. */
+function useFolderList(): string[] {
+  return useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
+    return ws?.folders ?? EMPTY_FOLDERS;
+  });
 }
 

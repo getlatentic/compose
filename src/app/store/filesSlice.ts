@@ -3,7 +3,9 @@ import { showErrorToast } from "../../features/toast/toastStore";
 import {
   FileConflictError,
   createFile as createFileIpc,
+  createFolder as createFolderIpc,
   deleteFile as deleteFileIpc,
+  deleteFolder as deleteFolderIpc,
   readFile as readFileIpc,
   renameFile as renameFileIpc,
   writeFile as writeFileIpc,
@@ -17,7 +19,10 @@ import {
   markBufferSaved,
   moveWorkspaceComments,
   openWorkspaceFile,
-  setCurrentTabContext,
+  removeFileContext,
+  removeWorkspaceFolder,
+  renameContextItemPath,
+  reorderOpenTabs,
   type DocumentTextChange,
   type WorkspaceFileEntry,
 } from "../workspaceModel";
@@ -33,13 +38,56 @@ import {
   persistTabs,
 } from "./persistence";
 import {
+  pruneNavHistory,
   pushNavEntry,
 } from "./navigation";
+
+/** Files whose buffer is being read, keyed `${workspaceId}\n${path}`, so the
+ *  editor's load-if-missing effect never races `selectFile` into a duplicate
+ *  read of the same file. */
+const loadingBuffers = new Set<string>();
+
+/** The single buffer loader: read a file's content into its buffer if it isn't
+ *  loaded yet. `selectFile` uses it on a tab click; an editor effect uses it for
+ *  every other path that points `activeFilePath` at an unread file — closing or
+ *  deleting a tab, restoring tabs on open — which used to strand the editor on
+ *  "Loading file…" because only `selectFile` ever read (#50). */
+async function loadBufferIfMissing(
+  set: WorkspaceStoreSet,
+  get: WorkspaceStoreGet,
+  workspaceId: string,
+  path: string,
+): Promise<void> {
+  if (!path) {
+    return;
+  }
+  const workspace = get().workspaces.find((item) => item.id === workspaceId);
+  if (!workspace || workspace.fileContents[path]) {
+    return;
+  }
+  const key = `${workspaceId}\n${path}`;
+  if (loadingBuffers.has(key)) {
+    return;
+  }
+  loadingBuffers.add(key);
+  try {
+    const buffer = await readFileIpc(workspaceId, path);
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
+        applyFileBuffer(item, path, buffer),
+      ),
+    }));
+  } catch (error) {
+    showErrorToast(error instanceof Error ? error.message : "Could not open file");
+  } finally {
+    loadingBuffers.delete(key);
+  }
+}
 
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "closeFileTab" | "createNote" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "updateActiveContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -68,11 +116,12 @@ export const createFilesSlice = (
     // flushes the live editor + captures the current file path synchronously
     // before its first await, so firing it un-awaited here saves the
     // outgoing file in the background without slowing the switch.
-    if (path !== workspace.activeFilePath) {
-      const outgoing = workspace.activeFilePath
-        ? workspace.fileContents[workspace.activeFilePath]
-        : null;
-      if (outgoing?.dirty) {
+    if (path !== workspace.activeFilePath && workspace.activeFilePath) {
+      // Flush the outgoing editor FIRST (its buffer write is 500ms debounced),
+      // then save it if dirty — otherwise a fast switch strands the keystrokes
+      // typed in that window off-disk (#43).
+      flushActiveEditor();
+      if (get().activeWorkspace()?.fileContents[workspace.activeFilePath]?.dirty) {
         void get().saveActiveFile();
       }
     }
@@ -90,20 +139,12 @@ export const createFilesSlice = (
     });
     persistTabs(get().workspaces, workspace.id);
 
-    const current = get().workspaces.find((item) => item.id === workspace.id);
-    if (current && current.fileContents[path]) {
-      return;
-    }
-
-    try {
-      const buffer = await readFileIpc(workspace.id, path);
-      set((state) => ({
-        workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
-          applyFileBuffer(item, path, buffer),
-        ),
-      }));
-    } catch (error) {
-      showErrorToast(error instanceof Error ? error.message : "Could not open file");
+    await loadBufferIfMissing(set, get, workspace.id, path);
+  },
+  ensureActiveBuffer: async () => {
+    const workspace = get().activeWorkspace();
+    if (workspace?.activeFilePath) {
+      await loadBufferIfMissing(set, get, workspace.id, workspace.activeFilePath);
     }
   },
   closeFileTab: (filePath: string) => {
@@ -116,6 +157,19 @@ export const createFilesSlice = (
       workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
         closeWorkspaceFileTab(item, filePath),
       ),
+    }));
+    persistTabs(get().workspaces, workspace.id);
+  },
+  reorderTab: (fromPath, toPath) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    set((state) => ({
+      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
+        ...item,
+        openFilePaths: reorderOpenTabs(item.openFilePaths, fromPath, toPath),
+      })),
     }));
     persistTabs(get().workspaces, workspace.id);
   },
@@ -161,12 +215,77 @@ export const createFilesSlice = (
       showErrorToast(error instanceof Error ? error.message : "Could not create note");
     }
   },
+  createFolder: async (relativePath) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    try {
+      await createFolderIpc(workspace.id, relativePath);
+      set((state) => ({
+        workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
+          item.folders.includes(relativePath)
+            ? item
+            : {
+                ...item,
+                folders: [...item.folders, relativePath].sort((a, b) => a.localeCompare(b)),
+              },
+        ),
+      }));
+      // New notes now default into the folder just created.
+      get().setNewNoteDir(relativePath);
+    } catch (error) {
+      showErrorToast(error instanceof Error ? error.message : "Could not create folder");
+    }
+  },
+  deleteFolder: async (folderPath) => {
+    const workspace = get().activeWorkspace();
+    if (!workspace) {
+      return;
+    }
+    try {
+      await deleteFolderIpc(workspace.id, folderPath);
+      const prefix = `${folderPath}/`;
+      set((state) => ({
+        workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
+          removeWorkspaceFolder(item, folderPath),
+        ),
+        // Prune the folder's files from nav history so Back/Forward can't
+        // resurrect them (#45).
+        ...pruneNavHistory(
+          state,
+          (entry) =>
+            !(
+              entry.kind === "file" &&
+              entry.workspaceId === workspace.id &&
+              (entry.id === folderPath || entry.id.startsWith(prefix))
+            ),
+        ),
+      }));
+      persistTabs(get().workspaces, workspace.id);
+      persistComments(get().workspaces, workspace.id, showErrorToast);
+      void get().rebuildWorkspaceIndex(workspace.id);
+    } catch (error) {
+      showErrorToast(error instanceof Error ? error.message : "Could not delete folder");
+    }
+  },
   deleteActiveFile: async () => {
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
       return;
     }
     const filePath = workspace.activeFilePath;
+
+    // Persist any unsaved edits before deleting, so the trashed copy — and the
+    // history snapshot the backend takes on soft-delete — hold the user's latest
+    // work. Otherwise deleting drops the in-memory buffer and the edits are gone
+    // with no way back (#44). flushActiveEditor pulls the editor's live content
+    // into the buffer first (the 500ms debounce may not have fired), matching
+    // saveActiveFile's flush-first guarantee.
+    flushActiveEditor();
+    if (get().activeWorkspace()?.fileContents[filePath]?.dirty) {
+      await get().saveActiveFile();
+    }
 
     try {
       await deleteFileIpc(workspace.id, filePath);
@@ -175,10 +294,18 @@ export const createFilesSlice = (
           const withoutTab = closeWorkspaceFileTab(item, filePath);
           return {
             ...withoutTab,
+            chatThread: removeFileContext(withoutTab.chatThread, filePath),
             comments: withoutTab.comments.filter((comment) => comment.filePath !== filePath),
             files: withoutTab.files.filter((entry) => entry.relativePath !== filePath),
           };
         }),
+        // Drop the deleted file from nav history so Back/Forward can't resurrect
+        // it as a dangling error tab (#45).
+        ...pruneNavHistory(
+          state,
+          (entry) =>
+            !(entry.kind === "file" && entry.workspaceId === workspace.id && entry.id === filePath),
+        ),
       }));
       persistTabs(get().workspaces, workspace.id);
       persistComments(get().workspaces, workspace.id, showErrorToast);
@@ -220,7 +347,7 @@ export const createFilesSlice = (
           const renamed = {
             ...item,
             activeFilePath,
-            chatThread: setCurrentTabContext(item.chatThread, item.id, activeFilePath),
+            chatThread: renameContextItemPath(item.chatThread, item.id, from, trimmed),
             fileContents: remainingContents,
             files,
             openFilePaths,
@@ -296,6 +423,40 @@ export const createFilesSlice = (
       }
       showErrorToast(error instanceof Error ? error.message : "Save failed");
     }
+  },
+  saveAllDirtyBuffers: async () => {
+    // Flush the active editor (its buffer write is 500ms debounced), then write
+    // EVERY dirty buffer across all workspaces — including background tabs that
+    // never autosave on their own. This is the flush-on-quit so closing the app
+    // doesn't drop unsaved edits (#43). Best-effort per file: one failure (e.g.
+    // a disk conflict) must not block the others or trap the user's quit.
+    flushActiveEditor();
+    const writes: Promise<unknown>[] = [];
+    for (const workspace of get().workspaces) {
+      for (const [filePath, buffer] of Object.entries(workspace.fileContents)) {
+        if (!buffer.dirty || buffer.conflict) {
+          continue;
+        }
+        writes.push(
+          writeFileIpc(
+            workspace.id,
+            filePath,
+            buffer.content,
+            buffer.lastModifiedMs,
+            buffer.pendingChanges,
+          )
+            .then((result) => {
+              set((state) => ({
+                workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
+                  markBufferSaved(item, filePath, result.lastModifiedMs),
+                ),
+              }));
+            })
+            .catch(() => {}),
+        );
+      }
+    }
+    await Promise.all(writes);
   },
   updateActiveContent: (markdown: string, changes: DocumentTextChange[] = []) => {
     const workspace = get().activeWorkspace();

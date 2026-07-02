@@ -7,6 +7,8 @@ import { UpdateBanner } from "../features/updater/UpdateBanner";
 import { useUpdaterStore } from "./store/updaterStore";
 import { TextPromptProvider, useTextPrompt } from "../features/dialogs/TextPromptProvider";
 import { LinkInsertProvider } from "../features/dialogs/LinkInsertProvider";
+import { ConfirmProvider } from "../features/dialogs/ConfirmProvider";
+import { RenameProvider } from "../features/dialogs/RenameProvider";
 import {
   IMAGE_EDIT_ALT_EVENT,
   type ImageEditAltEventDetail,
@@ -21,12 +23,16 @@ export function App() {
   return (
     <TextPromptProvider>
       <LinkInsertProvider>
-        <ImageEditAltListener />
-        <ExternalFileOpenListener />
-        <UpdateChecker />
-        <ToastViewport />
-        <UpdateBanner />
-        <AppRouter />
+        <ConfirmProvider>
+          <RenameProvider>
+            <ImageEditAltListener />
+            <ExternalFileOpenListener />
+            <UpdateChecker />
+            <ToastViewport />
+            <UpdateBanner />
+            <AppRouter />
+          </RenameProvider>
+        </ConfirmProvider>
       </LinkInsertProvider>
     </TextPromptProvider>
   );

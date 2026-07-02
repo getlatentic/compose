@@ -16,6 +16,7 @@ import {
   Code,
   Image as ImageIcon,
   ListBulleted,
+  ListChecked,
   ListNumbered,
   Quotes,
   Table,
@@ -26,6 +27,7 @@ import {
 import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
 import { syntaxTree } from "@codemirror/language";
+import { StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { blockCommands, formatCommands } from "ai-editor";
@@ -52,6 +54,7 @@ interface CaretContext {
   heading: 1 | 2 | 3 | 4 | 5 | 6 | 0;
   bulletList: boolean;
   orderedList: boolean;
+  taskList: boolean;
   blockquote: boolean;
 }
 
@@ -63,6 +66,7 @@ const EMPTY_CONTEXT: CaretContext = {
   heading: 0,
   bulletList: false,
   orderedList: false,
+  taskList: false,
   blockquote: false,
 };
 
@@ -82,6 +86,7 @@ function caretContext(view: EditorView): CaretContext {
     else if (n === "Link") ctx.link = true;
     else if (n === "BulletList") ctx.bulletList = true;
     else if (n === "OrderedList") ctx.orderedList = true;
+    else if (n === "Task") ctx.taskList = true;
     else if (n === "Blockquote") ctx.blockquote = true;
     else if (n.startsWith("ATXHeading")) {
       const lvl = Number(n.slice("ATXHeading".length));
@@ -89,6 +94,8 @@ function caretContext(view: EditorView): CaretContext {
     }
     node = node.parent;
   }
+  // A task item lives inside a BulletList; surface it as a task, not a bullet.
+  if (ctx.taskList) ctx.bulletList = false;
   return ctx;
 }
 
@@ -101,6 +108,7 @@ function caretContextsEqual(a: CaretContext, b: CaretContext): boolean {
     a.heading === b.heading &&
     a.bulletList === b.bulletList &&
     a.orderedList === b.orderedList &&
+    a.taskList === b.taskList &&
     a.blockquote === b.blockquote
   );
 }
@@ -120,34 +128,39 @@ function caretContextsEqual(a: CaretContext, b: CaretContext): boolean {
  */
 function useCaretContext(view: EditorView | null): CaretContext {
   const [ctx, setCtx] = useState<CaretContext>(EMPTY_CONTEXT);
-  useEffect(function pollCaretForToolbarPressedState() {
-    if (!view) {
-      setCtx(EMPTY_CONTEXT);
-      return;
-    }
-    let lastSelHead = -1;
-    let lastDocLen = -1;
-    let current = EMPTY_CONTEXT;
-    let raf = 0;
-    function poll() {
-      const head = view!.state.selection.main.head;
-      const docLen = view!.state.doc.length;
-      if (head !== lastSelHead || docLen !== lastDocLen) {
-        lastSelHead = head;
-        lastDocLen = docLen;
-        const next = caretContext(view!);
+  useEffect(
+    function trackCaretForToolbarPressedState() {
+      if (!view) {
+        setCtx(EMPTY_CONTEXT);
+        return;
+      }
+      let current = EMPTY_CONTEXT;
+      let disposed = false;
+      const refresh = () => {
+        const next = caretContext(view);
         if (!caretContextsEqual(next, current)) {
           current = next;
           setCtx(next);
         }
-      }
-      raf = requestAnimationFrame(poll);
-    }
-    raf = requestAnimationFrame(poll);
-    return function stopPolling() {
-      cancelAnimationFrame(raf);
-    };
-  }, [view]);
+      };
+      refresh();
+      // Recompute on CM's update cycle (selection / doc changes) rather than
+      // polling every animation frame — no idle wakeups (#42).
+      view.dispatch({
+        effects: StateEffect.appendConfig.of(
+          EditorView.updateListener.of((update) => {
+            if (!disposed && (update.docChanged || update.selectionSet)) {
+              refresh();
+            }
+          }),
+        ),
+      });
+      return () => {
+        disposed = true;
+      };
+    },
+    [view],
+  );
   return ctx;
 }
 
@@ -230,6 +243,12 @@ function FormattingButtons({
         active={ctx.orderedList}
         onClick={() => run(blockCommands.toggleOrderedList)}
         icon={<ListNumbered size={16} />}
+      />
+      <Button
+        label="Task list"
+        active={ctx.taskList}
+        onClick={() => run(blockCommands.toggleTaskList)}
+        icon={<ListChecked size={16} />}
       />
       <Button
         label="Quote"

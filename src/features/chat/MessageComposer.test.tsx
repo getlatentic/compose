@@ -34,6 +34,8 @@ const baseProps = {
   assistantReady: { ready: true, message: null },
   canSend: false,
   contextItems: [],
+  missingContextPaths: new Set<string>(),
+  activeFilePath: "",
   harnessName: "Bob",
   onAddFileContext: () => {},
   onOpenSettings: () => {},
@@ -102,5 +104,50 @@ describe("MessageComposer height reporting", () => {
     act(() => observerCallback?.([], {} as ResizeObserver));
     expect(onHeightChange).toHaveBeenLastCalledWith(300);
     expect(panel.style.getPropertyValue("--chat-composer-block")).toBe("300px");
+  });
+});
+
+describe("MessageComposer context chips", () => {
+  const fileItem = {
+    id: "ctx-1",
+    kind: "file" as const,
+    label: "Others/Writing/note.md",
+    path: "Others/Writing/note.md",
+    workspaceId: "workspace-1",
+  };
+
+  it("marks a missing context file instead of hiding it (mark-not-remove)", () => {
+    act(() => {
+      root.render(
+        <MessageComposer
+          {...baseProps}
+          contextItems={[fileItem]}
+          missingContextPaths={new Set([fileItem.path])}
+          onHeightChange={() => {}}
+        />,
+      );
+    });
+    const chip = panel.querySelector(".chat-context-chip--missing");
+    expect(chip).not.toBeNull();
+    // The tooltip explains the state; the label stays the file name.
+    expect(chip?.getAttribute("title")).toContain("isn't on disk right now");
+    expect(chip?.textContent).toContain("note.md");
+    // Still deliberately removable — marking never takes the choice away.
+    expect(chip?.querySelector(".chat-context-chip__remove")).not.toBeNull();
+  });
+
+  it("renders a plain chip while the file exists on disk", () => {
+    act(() => {
+      root.render(
+        <MessageComposer
+          {...baseProps}
+          contextItems={[fileItem]}
+          missingContextPaths={new Set<string>()}
+          onHeightChange={() => {}}
+        />,
+      );
+    });
+    expect(panel.querySelector(".chat-context-chip--missing")).toBeNull();
+    expect(panel.querySelector(".chat-context-chip")?.getAttribute("title")).toBe(fileItem.label);
   });
 });

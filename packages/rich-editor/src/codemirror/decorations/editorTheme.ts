@@ -151,12 +151,54 @@ export const editorBaseTheme = EditorView.theme({
     fontWeight: "700",
   },
 
-  // Task list checkbox — inline so it sits naturally next to the
-  // task text. Cursor remains a pointer on hover for clarity.
+  // Ordered-list number (`1.`) — wider than a bullet's fixed 1em so multi-digit
+  // markers fit, with a small gap before the item text. Normal weight: a bold
+  // number reads as heavier than the body text it labels.
+  ".cm-ordered-marker": {
+    width: "auto",
+    minWidth: "1.2em",
+    marginRight: "0.3em",
+    fontWeight: "normal",
+  },
+
+  // Task list checkbox — drawn as a Carbon checkbox, not the native control: a
+  // 1rem square that fills with the icon token and shows a white tick when
+  // checked. `appearance: none` is what replaces WebKit's small rounded default;
+  // the box then matches the design system rather than approximating it with an
+  // accent colour over the native shape.
   ".cm-task-checkbox": {
+    appearance: "none",
+    WebkitAppearance: "none",
+    boxSizing: "border-box",
+    position: "relative",
+    width: "1rem",
+    height: "1rem",
     margin: "0 0.4em 0 0",
     cursor: "pointer",
-    verticalAlign: "middle",
+    verticalAlign: "-0.15em",
+    border: "1px solid var(--cds-icon-primary, #161616)",
+    borderRadius: "1px",
+    background: "transparent",
+  },
+  ".cm-task-checkbox:checked": {
+    background: "var(--cds-icon-primary, #161616)",
+    borderColor: "var(--cds-icon-primary, #161616)",
+  },
+  // The tick: an L (right + bottom border) rotated 45° into a check.
+  ".cm-task-checkbox:checked::after": {
+    content: "''",
+    position: "absolute",
+    left: "5px",
+    top: "1px",
+    width: "4px",
+    height: "8px",
+    border: "solid var(--cds-icon-on-color, #ffffff)",
+    borderWidth: "0 2px 2px 0",
+    transform: "rotate(45deg)",
+  },
+  ".cm-task-checkbox:focus-visible": {
+    outline: "2px solid var(--cds-focus, #0f62fe)",
+    outlineOffset: "1px",
   },
 
   // Inline image widget. Constrained max-width so a single large
@@ -242,13 +284,12 @@ export const editorBaseTheme = EditorView.theme({
   // Two-step delete (tableArmed.ts). The first Backspace/Delete next to a table
   // parks the caret at its edge and arms it: the table gets a blue "selected"
   // outline, and a green line is drawn at the armed edge — Zettlr's "green line
-  // cursor behind the table" cue, signalling the next press removes it. The real
+  // cursor behind the table" cue, signalling the next press removes it. The
   // caret is hidden while arming (it renders on the blank line just past the
-  // table, which reads as "the cursor never moved"). This editor draws no
-  // selection layer — the caret is the native contentEditable one — so it's
-  // hidden with `caret-color`, not by hiding a `.cm-cursorLayer`.
-  "&.cm-table-arming .cm-content": {
-    caretColor: "transparent",
+  // table, which reads as "the cursor never moved") by hiding the drawn cursor
+  // layer.
+  "&.cm-table-arming .cm-cursorLayer": {
+    display: "none",
   },
   ".cm-table-armed .cm-table-widget": {
     outline: "2px solid var(--cds-border-interactive, #0f62fe)",

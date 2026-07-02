@@ -8,6 +8,7 @@ use walkdir::WalkDir;
 
 pub mod clone;
 pub mod diff;
+pub(crate) mod icloud;
 pub mod starter;
 pub mod trash;
 pub mod trash_sweep;
@@ -15,6 +16,8 @@ pub mod watcher;
 
 #[cfg(test)]
 mod ipc_tests;
+#[cfg(test)]
+mod watcher_fs_tests;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -130,6 +133,27 @@ pub fn workspace_scan(
         });
     }
     Ok(entries)
+}
+
+/// The workspace's directories (relative paths), so the tree can show folders
+/// that hold no markdown file yet — `workspace_scan` only surfaces `.md` files.
+#[tauri::command(async)]
+pub fn workspace_scan_folders(
+    workspace_id: String,
+    registry: State<'_, WorkspaceRegistry>,
+) -> Result<Vec<String>, FileError> {
+    let root = registry.workspace_root(&workspace_id)?;
+    scan_folders(&root)
+}
+
+/// Create an empty directory in the workspace (a real "New folder").
+#[tauri::command(async)]
+pub fn workspace_create_folder(
+    workspace_id: String,
+    relative_path: String,
+    registry: State<'_, WorkspaceRegistry>,
+) -> Result<(), FileError> {
+    create_folder(&registry, &workspace_id, &relative_path)
 }
 
 #[tauri::command(async)]
@@ -276,6 +300,38 @@ pub fn workspace_delete_file(
     soft_delete(&registry, &metadata, &workspace_id, &relative_path)
 }
 
+/// Move a folder (and everything under it) to the trash. Free-function core of
+/// [`workspace_delete_folder`] — unit-testable without Tauri `State`, mirroring
+/// how [`soft_delete`] backs `workspace_delete_file`.
+fn delete_folder(
+    registry: &WorkspaceRegistry,
+    trash_root: &Path,
+    workspace_id: &str,
+    relative_path: &str,
+) -> Result<(), FileError> {
+    let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
+    if !absolute.is_dir() {
+        return Err(FileError::NotFound {
+            message: format!("{relative_path} is not a folder"),
+        });
+    }
+    trash::move_to_trash(trash_root, workspace_id, &absolute)?;
+    Ok(())
+}
+
+/// Move a folder and its contents to the trash — recoverable, like file delete.
+/// The frontend prunes the tree/tabs/context/nav for every removed path.
+#[tauri::command(async)]
+pub fn workspace_delete_folder(
+    workspace_id: String,
+    relative_path: String,
+    registry: State<'_, WorkspaceRegistry>,
+    metadata: State<'_, MetadataStore>,
+) -> Result<(), FileError> {
+    let trash_root = metadata.trash_root()?;
+    delete_folder(&registry, &trash_root, &workspace_id, &relative_path)
+}
+
 /// Recent restorable versions of a file (newest first). The live file's
 /// content hash is computed here so the UI can flag which version is current.
 #[tauri::command(async)]
@@ -334,7 +390,16 @@ pub(crate) fn read_file(
     relative_path: &str,
 ) -> Result<WorkspaceFileContent, FileError> {
     let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
-    let content = std::fs::read_to_string(&absolute)?;
+    let content = match std::fs::read_to_string(&absolute) {
+        Ok(content) => content,
+        Err(error) => {
+            // A dataless iCloud file (evicted locally) can fail to read; kick its
+            // download so a reopen materializes it instead of leaving it stuck
+            // blank (#26). Best-effort — a no-op for non-iCloud files.
+            icloud::start_download(&absolute);
+            return Err(error.into());
+        }
+    };
     let metadata = std::fs::metadata(&absolute)?;
     Ok(WorkspaceFileContent {
         content,
@@ -408,6 +473,21 @@ pub(crate) fn create_file(
     })
 }
 
+pub(crate) fn create_folder(
+    registry: &WorkspaceRegistry,
+    workspace_id: &str,
+    relative_path: &str,
+) -> Result<(), FileError> {
+    let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
+    if absolute.exists() {
+        return Err(FileError::AlreadyExists {
+            message: format!("{relative_path} already exists"),
+        });
+    }
+    std::fs::create_dir_all(&absolute)?;
+    Ok(())
+}
+
 pub(crate) fn rename_file(
     registry: &WorkspaceRegistry,
     workspace_id: &str,
@@ -449,7 +529,21 @@ pub(crate) fn scan_markdown_files(root: &Path) -> Result<Vec<WorkspaceFileEntry>
     for entry in walker {
         let entry = match entry {
             Ok(value) => value,
-            Err(_) => continue,
+            Err(error) => {
+                // A read failure at the ROOT (depth 0) means the vault itself is
+                // unreadable right now — an iCloud folder not yet materialized, a
+                // permission hiccup, a relaunch racing the previous instance.
+                // Surface it so the caller can retry, instead of returning an
+                // empty list that reads as "no notes". A failure deeper in the
+                // tree is one bad file: skip it so a single unreadable note can't
+                // abort the whole scan.
+                if error.depth() == 0 {
+                    return Err(FileError::Message {
+                        message: format!("could not read workspace root: {error}"),
+                    });
+                }
+                continue;
+            }
         };
         if !entry.file_type().is_file() {
             continue;
@@ -477,6 +571,45 @@ pub(crate) fn scan_markdown_files(root: &Path) -> Result<Vec<WorkspaceFileEntry>
 
     entries.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     Ok(entries)
+}
+
+/// Every directory under `root` (relative paths), so empty folders show in the
+/// tree and persist when their last file is removed. Mirrors the file walk's
+/// ignore rules; the root itself is excluded.
+pub(crate) fn scan_folders(root: &Path) -> Result<Vec<String>, FileError> {
+    let mut folders = Vec::new();
+    let walker = WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| {
+            if entry.depth() == 0 {
+                return true;
+            }
+            let name = entry.file_name().to_string_lossy();
+            !is_ignored_segment(&name)
+        });
+
+    for entry in walker {
+        let entry = match entry {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if entry.depth() == 0 || !entry.file_type().is_dir() {
+            continue;
+        }
+        let relative_path = entry
+            .path()
+            .strip_prefix(root)
+            .map_err(|error| FileError::Message {
+                message: error.to_string(),
+            })?
+            .to_string_lossy()
+            .replace('\\', "/");
+        folders.push(relative_path);
+    }
+
+    folders.sort();
+    Ok(folders)
 }
 
 pub(crate) fn ensure_vault_metadata(
@@ -535,8 +668,17 @@ fn workspace_name_for_root(root: &Path) -> String {
         .unwrap_or_else(|| root.to_string_lossy().to_string())
 }
 
+/// Directory names hidden from the workspace scan (both the file tree and the
+/// folder list): dotfiles/dotdirs (`.git`, `.obsidian`, `.trash`, …) plus common
+/// tool/build/cache dirs a notes vault never wants to see. Kept conservative —
+/// only names a user is very unlikely to give a real notes folder (so no
+/// `build`/`out`/`vendor`, which double as ordinary words).
 pub(crate) fn is_ignored_segment(name: &str) -> bool {
-    name.starts_with('.') || matches!(name, "node_modules" | "target" | "dist")
+    name.starts_with('.')
+        || matches!(
+            name,
+            "node_modules" | "target" | "dist" | "__pycache__" | "venv" | "__MACOSX"
+        )
 }
 
 pub(crate) fn mtime_ms(metadata: &std::fs::Metadata) -> Result<i64, FileError> {
@@ -673,6 +815,75 @@ mod tests {
         let entries = scan_markdown_files(dir.path()).expect("scan");
         let paths: Vec<_> = entries.iter().map(|e| e.relative_path.clone()).collect();
         assert_eq!(paths, vec!["README.md", "notes/launch.md"]);
+    }
+
+    #[test]
+    fn scan_of_an_unreadable_root_surfaces_an_error() {
+        // A vault root we can't read (iCloud not materialized, gone) must surface
+        // an error, not an empty list — so the caller retries instead of
+        // rendering the vault as "no notes". A single unreadable file deeper in
+        // the tree is still skipped; only a root-level failure aborts.
+        let dir = tempdir().expect("tempdir");
+        let missing = dir.path().join("not-mounted-yet");
+        assert!(scan_markdown_files(&missing).is_err());
+    }
+
+    #[test]
+    fn scan_folders_returns_every_dir_including_empty_and_ignores_tool_dirs() {
+        let dir = tempdir().expect("tempdir");
+        fs::create_dir_all(dir.path().join("Talks")).unwrap(); // empty — has no .md
+        fs::create_dir_all(dir.path().join("Projects/sub")).unwrap();
+        fs::write(dir.path().join("Projects/a.md"), "x").unwrap();
+        fs::create_dir_all(dir.path().join(".git")).unwrap();
+        fs::create_dir_all(dir.path().join(".obsidian")).unwrap();
+        fs::create_dir_all(dir.path().join("node_modules")).unwrap();
+        fs::create_dir_all(dir.path().join("__pycache__")).unwrap();
+        fs::create_dir_all(dir.path().join("venv")).unwrap();
+
+        let folders = scan_folders(dir.path()).expect("scan_folders");
+        assert_eq!(folders, vec!["Projects", "Projects/sub", "Talks"]);
+    }
+
+    #[test]
+    fn document_inventory_skips_an_unreadable_file_but_keeps_the_rest() {
+        // A dataless iCloud placeholder (evicted / offline / removed from iCloud)
+        // fails `std::fs::read`; it must be reported as skipped, not sink the whole
+        // index build alongside its readable neighbours (#26).
+        let dir = tempdir().expect("tempdir");
+        fs::write(dir.path().join("present.md"), "# Present\n").expect("write present");
+
+        let mut entries = scan_markdown_files(dir.path()).expect("scan one readable markdown file");
+        // Splice in an entry whose backing file doesn't exist — the same read
+        // error a placeholder yields when iCloud can't materialize it on demand.
+        entries.push(WorkspaceFileEntry {
+            last_modified_ms: 0,
+            relative_path: "dataless.md".to_owned(),
+            size_bytes: 345,
+        });
+
+        let inventory = document_inventory_for_entries(dir.path(), &entries);
+        let indexed: Vec<&str> = inventory
+            .entries
+            .iter()
+            .map(|entry| entry.relative_path.as_str())
+            .collect();
+        assert!(indexed.contains(&"present.md"), "readable file still indexed; got {indexed:?}");
+        assert!(!indexed.contains(&"dataless.md"), "unreadable file skipped; got {indexed:?}");
+        assert_eq!(inventory.skipped, vec!["dataless.md".to_owned()]);
+    }
+
+    #[test]
+    fn create_folder_makes_an_empty_dir_then_errors_if_it_exists() {
+        let dir = tempdir().expect("tempdir");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+
+        create_folder(&registry, &workspace_id, "Talks").expect("create");
+        assert!(dir.path().join("Talks").is_dir());
+        assert_eq!(fs::read_dir(dir.path().join("Talks")).unwrap().count(), 0);
+        assert!(scan_folders(dir.path()).unwrap().contains(&"Talks".to_string()));
+
+        let again = create_folder(&registry, &workspace_id, "Talks");
+        assert!(matches!(again, Err(FileError::AlreadyExists { .. })));
     }
 
     #[test]
@@ -818,12 +1029,56 @@ mod tests {
     }
 
     #[test]
+    fn delete_folder_moves_the_whole_subtree_to_trash() {
+        let data = tempdir().expect("data");
+        let dir = tempdir().expect("workspace");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+        let metadata = MetadataStore::default();
+        metadata.init_from_dir(data.path()).expect("init metadata");
+        let trash_root = metadata.trash_root().expect("trash root");
+        fs::create_dir_all(dir.path().join("Talks/sub")).unwrap();
+        fs::write(dir.path().join("Talks/a.md"), "one").unwrap();
+        fs::write(dir.path().join("Talks/sub/b.md"), "two").unwrap();
+
+        delete_folder(&registry, &trash_root, &workspace_id, "Talks").expect("delete folder");
+
+        // The whole subtree left the workspace...
+        assert!(!dir.path().join("Talks").exists());
+        // ...and landed in the vault's trash intact (nested file included).
+        let vault_trash = trash_root.join(&workspace_id);
+        let moved: Vec<_> = fs::read_dir(&vault_trash)
+            .expect("read trash")
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(moved.len(), 1);
+        assert!(moved[0].is_dir());
+        assert_eq!(fs::read_to_string(moved[0].join("a.md")).unwrap(), "one");
+        assert_eq!(fs::read_to_string(moved[0].join("sub/b.md")).unwrap(), "two");
+    }
+
+    #[test]
+    fn delete_folder_rejects_a_file_path() {
+        let data = tempdir().expect("data");
+        let dir = tempdir().expect("workspace");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+        let metadata = MetadataStore::default();
+        metadata.init_from_dir(data.path()).expect("init metadata");
+        let trash_root = metadata.trash_root().expect("trash root");
+        fs::write(dir.path().join("note.md"), "x").unwrap();
+
+        let result = delete_folder(&registry, &trash_root, &workspace_id, "note.md");
+        assert!(matches!(result, Err(FileError::NotFound { .. })));
+        assert!(dir.path().join("note.md").exists()); // the file is untouched
+    }
+
+    #[test]
     fn commands_reject_path_traversal() {
         let data = tempdir().expect("data");
         let dir = tempdir().expect("tempdir");
         let (registry, workspace_id) = registry_with_workspace(dir.path());
         let metadata = MetadataStore::default();
         metadata.init_from_dir(data.path()).expect("init metadata");
+        let trash_root = metadata.trash_root().expect("trash root");
 
         assert!(read_file(&registry, &workspace_id, "../escape.md").is_err());
         assert!(write_file(&registry, &workspace_id, "../escape.md", "x", None).is_err());
@@ -831,5 +1086,6 @@ mod tests {
         assert!(create_file(&registry, &workspace_id, "../escape.md", "x").is_err());
         assert!(rename_file(&registry, &workspace_id, "a.md", "../escape.md").is_err());
         assert!(soft_delete(&registry, &metadata, &workspace_id, "../escape.md").is_err());
+        assert!(delete_folder(&registry, &trash_root, &workspace_id, "../escape").is_err());
     }
 }

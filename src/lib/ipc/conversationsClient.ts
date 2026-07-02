@@ -29,6 +29,11 @@ export interface ConversationMessageRecord {
    * it settles. A reply still `"streaming"` on load means its run never
    * finished (quit/crash mid-stream) — read as interrupted. */
   runStatus?: string | null;
+  /** The commented excerpt (file, line:col, quoted text, note) as JSON, on
+   * comment-to-chat messages — so the chat rebuilds its excerpt card after a
+   * reload instead of falling back to the raw prompt text. Mirrors
+   * `excerpt_json`. */
+  excerptJson?: string | null;
   createdAt: number;
 }
 

@@ -40,8 +40,8 @@ import {
 } from "react";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
-import { EditorSelection, EditorState, type Extension } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorSelection, EditorState, StateEffect, type Extension } from "@codemirror/state";
+import { drawSelection, EditorView, keymap } from "@codemirror/view";
 
 import { parseFrontmatter, serializeMarkdown, type Frontmatter } from "../frontmatter";
 import type { DocumentTextChange, SourceRange } from "../types";
@@ -52,6 +52,7 @@ import { cursorModelKeymap } from "./decorations/cursorModel";
 import { clickModel } from "./decorations/clickModel";
 import { deleteNormalizerKeymap } from "./decorations/deleteNormalizer";
 import { tightListKeymap } from "./decorations/listContinuation";
+import { listIndentKeymap } from "./decorations/listIndent";
 import { formatCommandsKeymap } from "./decorations/formatCommands";
 import { blockCommandsKeymap } from "./decorations/blockCommands";
 import { imageContextFacet } from "./decorations/imageWidget";
@@ -284,10 +285,20 @@ function CodeMirrorMarkdownEditorInner({
   function buildExtensions(): Extension[] {
     const base: Extension[] = [
       history(),
+      // Draw the caret from the editor's own selection state instead of the
+      // native contentEditable one. WKWebView paints the native caret on both
+      // sides of an atomic marker widget when the caret sits at that boundary
+      // (#62) — a CM-drawn caret is one rectangle from EditorState.selection, so
+      // the boundary stops mattering. Table cells run their own subview without
+      // this, keeping their native caret.
+      drawSelection(),
       // Tight list continuation — Enter drops the next bullet directly below,
       // never with a blank-line gap (overrides the stock markdown Enter for
       // non-empty list items; see listContinuation.ts).
       tightListKeymap,
+      // Tab / Shift-Tab nest / promote a list item by the parent marker width
+      // (list-aware; falls through to normal Tab outside a list — listIndent.ts).
+      listIndentKeymap,
       keymap.of([...defaultKeymap, ...historyKeymap, ...markdownKeymap]),
       // markdownLanguage = CommonMark + GFM (tables, task lists,
       // strikethrough). Without `base`, `markdown()` uses bare
@@ -584,33 +595,40 @@ function CodeMirrorMarkdownEditorInner({
     };
   }, []);
 
-  useEffect(function pollSelectionForCommentBubble() {
-    const view = viewForToolbar;
-    if (!view) return;
-    let lastFrom = -1;
-    let lastTo = -1;
-    let raf = 0;
-    function poll() {
-      const main = view!.state.selection.main;
-      if (main.from !== lastFrom || main.to !== lastTo) {
-        lastFrom = main.from;
-        lastTo = main.to;
+  useEffect(
+    function trackSelectionForCommentBubble() {
+      const view = viewForToolbar;
+      if (!view) return;
+      let disposed = false;
+      const refresh = () => {
+        const main = view.state.selection.main;
         if (main.empty) {
           setBubbleSelection(null);
         } else {
           setBubbleSelection({
-            range: byteRangeOf(view!.state, main.from, main.to),
-            text: view!.state.sliceDoc(main.from, main.to),
+            range: byteRangeOf(view.state, main.from, main.to),
+            text: view.state.sliceDoc(main.from, main.to),
           });
         }
-      }
-      raf = requestAnimationFrame(poll);
-    }
-    raf = requestAnimationFrame(poll);
-    return function stopPolling() {
-      cancelAnimationFrame(raf);
-    };
-  }, [viewForToolbar]);
+      };
+      refresh();
+      // Update on CM's selection changes rather than polling every animation
+      // frame — no idle wakeups (#42).
+      view.dispatch({
+        effects: StateEffect.appendConfig.of(
+          EditorView.updateListener.of((update) => {
+            if (!disposed && (update.docChanged || update.selectionSet)) {
+              refresh();
+            }
+          }),
+        ),
+      });
+      return () => {
+        disposed = true;
+      };
+    },
+    [viewForToolbar],
+  );
 
   // Collapse the selection back to a caret — handed to the selection-actions
   // slot so a host can dismiss its bubble after an action lands. Stable (reads

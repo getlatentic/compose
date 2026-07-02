@@ -49,6 +49,13 @@ pub struct ConversationMessageRecord {
     /// and every user message.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_status: Option<String>,
+    /// The commented excerpt this message is about — file, line:col, the quoted
+    /// text, and the note — as JSON owned by the TS layer. Present on
+    /// comment-to-chat user messages so the chat rebuilds its excerpt card after
+    /// a reload; a point-in-time record, independent of how the note later
+    /// changes. `None` for ordinary turns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub excerpt_json: Option<String>,
     pub created_at: i64,
 }
 
@@ -265,8 +272,8 @@ impl MetadataStore {
             transaction
                 .execute(
                     "insert into conversation_messages
-                       (message_id, conversation_id, seq, role, content, trace_json, stats_json, run_status, created_at)
-                     values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                       (message_id, conversation_id, seq, role, content, trace_json, stats_json, run_status, excerpt_json, created_at)
+                     values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                     params![
                         message.message_id,
                         conversation_id,
@@ -276,6 +283,7 @@ impl MetadataStore {
                         message.trace_json,
                         message.stats_json,
                         message.run_status,
+                        message.excerpt_json,
                         message.created_at,
                     ],
                 )
@@ -455,7 +463,7 @@ impl MetadataStore {
         let source_messages = {
             let mut statement = transaction
                 .prepare(
-                    "select seq, role, content, trace_json, stats_json, created_at
+                    "select seq, role, content, trace_json, stats_json, excerpt_json, created_at
                      from conversation_messages
                      where conversation_id = ?1
                      order by seq asc",
@@ -469,7 +477,8 @@ impl MetadataStore {
                         row.get::<_, String>(2)?,
                         row.get::<_, Option<String>>(3)?,
                         row.get::<_, Option<String>>(4)?,
-                        row.get::<_, i64>(5)?,
+                        row.get::<_, Option<String>>(5)?,
+                        row.get::<_, i64>(6)?,
                     ))
                 })
                 .map_err(|error| format!("could not query source messages: {error}"))?;
@@ -477,12 +486,12 @@ impl MetadataStore {
                 .map_err(|error| format!("could not read source messages: {error}"))?
         };
 
-        for (seq, role, content, trace_json, stats_json, created) in source_messages {
+        for (seq, role, content, trace_json, stats_json, excerpt_json, created) in source_messages {
             transaction
                 .execute(
                     "insert into conversation_messages
-                       (message_id, conversation_id, seq, role, content, trace_json, stats_json, created_at)
-                     values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                       (message_id, conversation_id, seq, role, content, trace_json, stats_json, excerpt_json, created_at)
+                     values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
                         Uuid::new_v4().to_string(),
                         new_id,
@@ -491,6 +500,7 @@ impl MetadataStore {
                         content,
                         trace_json,
                         stats_json,
+                        excerpt_json,
                         created,
                     ],
                 )
@@ -558,7 +568,7 @@ fn load_conversation_messages(
 ) -> Result<Vec<ConversationMessageRecord>, String> {
     let mut statement = connection
         .prepare(
-            "select message_id, role, content, trace_json, stats_json, run_status, created_at
+            "select message_id, role, content, trace_json, stats_json, run_status, excerpt_json, created_at
              from conversation_messages
              where conversation_id = ?1
              order by seq asc",
@@ -573,7 +583,8 @@ fn load_conversation_messages(
                 trace_json: row.get(3)?,
                 stats_json: row.get(4)?,
                 run_status: row.get(5)?,
-                created_at: row.get(6)?,
+                excerpt_json: row.get(6)?,
+                created_at: row.get(7)?,
             })
         })
         .map_err(|error| format!("could not query conversation messages: {error}"))?
@@ -675,12 +686,16 @@ pub(super) fn ensure_conversation_columns(connection: &Connection) -> Result<(),
             ("context_files_json", "alter table conversations add column context_files_json text"),
         ],
     )?;
-    // conversation_messages gained run_status for interrupted-run detection:
-    // a reply left "streaming" on disk means its run never finished.
+    // conversation_messages gained run_status for interrupted-run detection (a
+    // reply left "streaming" on disk means its run never finished) and
+    // excerpt_json so a comment's excerpt card survives a reload.
     add_missing_columns(
         connection,
         "conversation_messages",
-        &[("run_status", "alter table conversation_messages add column run_status text")],
+        &[
+            ("run_status", "alter table conversation_messages add column run_status text"),
+            ("excerpt_json", "alter table conversation_messages add column excerpt_json text"),
+        ],
     )?;
 
     connection
@@ -824,16 +839,23 @@ mod tests {
             trace_json: None,
             stats_json: None,
             run_status: None,
+            excerpt_json: None,
             created_at: 10,
         }
     }
 
     #[test]
-    fn save_and_load_round_trips_trace_stats_and_context() {
+    fn save_and_load_round_trips_trace_stats_excerpt_and_context() {
         let (_dir, store, vault) = store();
         let id = store.new_conversation(vault, "bob").expect("new conversation");
 
-        let user = message("m1", "user", "what is this about?");
+        let user = ConversationMessageRecord {
+            excerpt_json: Some(
+                r#"{"filePath":"notes/plan.md","line":39,"column":1,"text":"the plan","note":"relevant?"}"#
+                    .to_owned(),
+            ),
+            ..message("m1", "user", "what is this about?")
+        };
         let assistant = ConversationMessageRecord {
             trace_json: Some(r#"[{"kind":"tool","tool":{"id":"t1","name":"read_file","status":"done"}}]"#.to_owned()),
             stats_json: Some(r#"{"totalTokens":21956,"coins":0.05}"#.to_owned()),
@@ -858,6 +880,10 @@ mod tests {
         assert_eq!(loaded.context_files, vec!["notes/plan.md".to_owned()]);
         assert_eq!(loaded.messages.len(), 2);
         assert_eq!(loaded.messages[0].content, "what is this about?");
+        assert_eq!(
+            loaded.messages[0].excerpt_json.as_deref(),
+            Some(r#"{"filePath":"notes/plan.md","line":39,"column":1,"text":"the plan","note":"relevant?"}"#)
+        );
         assert_eq!(loaded.messages[1].role, "assistant");
         assert!(loaded.messages[1].trace_json.as_deref().unwrap().contains("read_file"));
         assert_eq!(

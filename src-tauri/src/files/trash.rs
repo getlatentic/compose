@@ -60,13 +60,31 @@ pub fn move_to_trash_as(
         Ok(()) => Ok(destination),
         Err(error) if error.raw_os_error() == Some(libc_exdev()) => {
             // Trash sits on a different volume than the workspace — rename
-            // can't cross devices, so copy then remove the original.
-            std::fs::copy(source, &destination)?;
-            std::fs::remove_file(source)?;
+            // can't cross devices, so copy then remove the original. Handles
+            // both files and folders (a deleted folder trashes its whole tree).
+            copy_across_devices(source, &destination)?;
             Ok(destination)
         }
         Err(error) => Err(error.into()),
     }
+}
+
+/// Recursively copy `source` to `destination` then remove `source` — the
+/// cross-volume fallback for [`move_to_trash_as`], where `fs::rename` can't
+/// reach. `fs::copy` is file-only, so directories are walked by hand.
+fn copy_across_devices(source: &Path, destination: &Path) -> Result<(), FileError> {
+    if source.is_dir() {
+        std::fs::create_dir_all(destination)?;
+        for entry in std::fs::read_dir(source)? {
+            let entry = entry?;
+            copy_across_devices(&entry.path(), &destination.join(entry.file_name()))?;
+        }
+        std::fs::remove_dir_all(source)?;
+    } else {
+        std::fs::copy(source, destination)?;
+        std::fs::remove_file(source)?;
+    }
+    Ok(())
 }
 
 /// Move `source` into the trash under a freshly generated name. Convenience for

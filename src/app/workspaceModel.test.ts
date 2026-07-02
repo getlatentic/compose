@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  reorderOpenTabs,
+  removeWorkspaceFolder,
+  renameContextItemPath,
+  type WorkspaceChatThread,
   acceptWorkspaceSuggestion,
   appendAssistantText,
   appendAssistantNotice,
@@ -19,7 +23,9 @@ import {
   createPromptWithContext,
   FILE_CONTEXT_INLINE_LIMIT,
   hydrateChatThread,
+  missingFileContextPaths,
   removeContextItem,
+  type WorkspaceContextItem,
   resetChatThread,
   serializeChatMessages,
   CONVERSATION_REPLAY_LIMIT,
@@ -117,7 +123,7 @@ describe("workspace model", () => {
     expect(firstChat.contextItems[0].id).not.toBe(secondChat.contextItems[0].id);
   });
 
-  it("opens multiple editor tabs and keeps Bob context on the active tab", () => {
+  it("opens tabs as navigation only — it does not bind chat context to the active tab", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md", "c.md"]);
     const first = workspace.files[0].relativePath;
     const second = workspace.files[1].relativePath;
@@ -126,7 +132,20 @@ describe("workspace model", () => {
 
     expect(secondOpen.openFilePaths).toEqual([first, second]);
     expect(secondOpen.activeFilePath).toBe(second);
-    expect(secondOpen.chatThread.contextItems.map((item) => item.path)).toEqual([second]);
+    // Opening / switching tabs must NOT repoint the chat context (#30); the
+    // user controls it explicitly, and it's seeded at load / new chat instead.
+    expect(secondOpen.chatThread.contextItems).toHaveLength(0);
+  });
+
+  it("keeps the chat context pinned when switching tabs", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md"]);
+    const pinned = {
+      ...workspace,
+      chatThread: setCurrentTabContext(workspace.chatThread, workspace.id, "a.md"),
+    };
+    const switched = openWorkspaceFile(pinned, "b.md");
+    expect(switched.activeFilePath).toBe("b.md");
+    expect(switched.chatThread.contextItems.map((item) => item.path)).toEqual(["a.md"]);
   });
 
   it("builds auditable LLM context snapshots from file and comment context", () => {
@@ -171,7 +190,7 @@ describe("workspace model", () => {
     ]);
   });
 
-  it("closes the active tab, moves Bob context, and drops its buffer", () => {
+  it("closes the active tab and drops its buffer, leaving the chat context untouched", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md", "c.md"]);
     const [a, b, c] = workspace.files.map((entry) => entry.relativePath);
     const withTabs = [a, b, c].reduce(
@@ -182,13 +201,18 @@ describe("workspace model", () => {
         }),
       workspace,
     );
+    const pinned = {
+      ...withTabs,
+      chatThread: setCurrentTabContext(withTabs.chatThread, withTabs.id, a),
+    };
 
-    expect(Object.keys(withTabs.fileContents)).toHaveLength(3);
+    expect(Object.keys(pinned.fileContents)).toHaveLength(3);
 
-    const closed = closeWorkspaceFileTab(withTabs, c);
+    const closed = closeWorkspaceFileTab(pinned, c);
     expect(closed.openFilePaths).toEqual([a, b]);
     expect(closed.activeFilePath).toBe(b);
-    expect(closed.chatThread.contextItems.map((item) => item.path)).toEqual([b]);
+    // Closing a tab is navigation only — the pinned chat context is untouched (#30).
+    expect(closed.chatThread.contextItems.map((item) => item.path)).toEqual([a]);
     expect(Object.keys(closed.fileContents).sort()).toEqual([a, b]);
   });
 
@@ -322,10 +346,106 @@ describe("workspace model", () => {
       relativePath: "b.md",
     });
 
-    expect(effect.type).toBe("rescan");
+    // In-place removal: persist tabs + refresh the index, but no full scan.
+    expect(effect.type).toBe("treeChanged");
     expect(next.openFilePaths).toEqual(["a.md"]);
     expect(next.activeFilePath).toBe("a.md");
     expect(next.files.map((entry) => entry.relativePath)).toEqual(["a.md"]);
+  });
+
+  it("applyFsEvent patches a created note into the tree without a rescan", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["b.md"]);
+
+    const { workspace: next, effect } = applyFsEvent(workspace, {
+      kind: "created",
+      lastModifiedMs: 42,
+      relativePath: "Notes/a.md",
+      isDir: false,
+      sizeBytes: 7,
+    });
+
+    expect(effect.type).toBe("treeChanged");
+    expect(next.files.map((entry) => entry.relativePath)).toEqual(["b.md", "Notes/a.md"]);
+    expect(next.files.find((entry) => entry.relativePath === "Notes/a.md")).toMatchObject({
+      lastModifiedMs: 42,
+      sizeBytes: 7,
+    });
+    // The containing folder materializes with the note, so the tree can place it.
+    expect(next.folders).toContain("Notes");
+  });
+
+  it("applyFsEvent treats echoes of our own create/delete as no-ops (same reference)", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+
+    // createNote already inserted the entry — the watcher echo changes nothing.
+    const created = applyFsEvent(workspace, {
+      kind: "created",
+      lastModifiedMs: 1,
+      relativePath: "a.md",
+      isDir: false,
+    });
+    expect(created.workspace).toBe(workspace);
+    expect(created.effect.type).toBe("noop");
+
+    // deleteActiveFile already dropped the path — the echo finds nothing.
+    const removed = applyFsEvent(workspace, {
+      kind: "removed",
+      lastModifiedMs: null,
+      relativePath: "gone-already.md",
+    });
+    expect(removed.workspace).toBe(workspace);
+    expect(removed.effect.type).toBe("noop");
+  });
+
+  it("applyFsEvent on a removed folder takes its subtree and tabs with it", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["Notes/a.md", "Notes/Deep/b.md", "c.md"]);
+    const withFolders = { ...workspace, folders: ["Notes", "Notes/Deep"] };
+    const opened = openWorkspaceFile(withFolders, "Notes/Deep/b.md");
+
+    const { workspace: next, effect } = applyFsEvent(opened, {
+      kind: "removed",
+      lastModifiedMs: null,
+      relativePath: "Notes",
+    });
+
+    expect(effect.type).toBe("treeChanged");
+    expect(next.files.map((entry) => entry.relativePath)).toEqual(["c.md"]);
+    expect(next.folders).toEqual([]);
+    expect(next.openFilePaths).toEqual([]);
+  });
+
+  it("applyFsEvent asks for one rescan for an unknown directory (it may have contents)", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+
+    // A folder dragged in via Finder emits only the top-level event — only a
+    // scan can see inside it.
+    const unknownDir = applyFsEvent(workspace, {
+      kind: "created",
+      lastModifiedMs: null,
+      relativePath: "Imported",
+      isDir: true,
+    });
+    expect(unknownDir.effect.type).toBe("rescan");
+
+    // Our own createFolder echo: the folder is already known — nothing to do.
+    const known = applyFsEvent({ ...workspace, folders: ["Imported"] }, {
+      kind: "created",
+      lastModifiedMs: null,
+      relativePath: "Imported",
+      isDir: true,
+    });
+    expect(known.effect.type).toBe("noop");
+  });
+
+  it("applyFsEvent maps the watcher's lost-sync signal to a full rescan", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+    const { workspace: next, effect } = applyFsEvent(workspace, {
+      kind: "rescan",
+      lastModifiedMs: null,
+      relativePath: "",
+    });
+    expect(next).toBe(workspace);
+    expect(effect.type).toBe("rescan");
   });
 
   it("applyFsEvent on a dirty buffer marks it as conflicted", () => {
@@ -400,16 +520,19 @@ describe("workspace model", () => {
     expect(effect.type).toBe("noop");
   });
 
-  it("applyFsEvent on create/remove triggers a rescan", () => {
-    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+  it("missingFileContextPaths flags context files gone from the tree, nothing else", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["kept.md"]);
+    const items = [
+      { id: "1", kind: "file" as const, label: "kept.md", path: "kept.md", workspaceId: "w" },
+      { id: "2", kind: "file" as const, label: "gone.md", path: "gone.md", workspaceId: "w" },
+      // Only `kind` matters to the helper — the anchor internals are noise here.
+      { id: "3", kind: "comment", filePath: "gone.md" } as unknown as WorkspaceContextItem,
+    ];
 
-    expect(
-      applyFsEvent(workspace, { kind: "created", lastModifiedMs: 5, relativePath: "b.md" }).effect,
-    ).toEqual({ type: "rescan" });
-    expect(
-      applyFsEvent(workspace, { kind: "removed", lastModifiedMs: null, relativePath: "a.md" })
-        .effect,
-    ).toEqual({ type: "rescan" });
+    // Only the FILE item whose path left the tree — comment items are anchored
+    // history, not attachments to re-read.
+    expect(missingFileContextPaths(items, workspace.files)).toEqual(["gone.md"]);
+    expect(missingFileContextPaths(items.slice(0, 1), workspace.files)).toEqual([]);
   });
 
   it("markBufferSaved clears dirty and bumps lastModifiedMs", () => {
@@ -998,6 +1121,37 @@ describe("workspace model", () => {
     expect(answer.stats).toEqual({ totalTokens: 21956, coins: 0.05 });
   });
 
+  it("serialize → hydrate round-trips a comment's excerpt card", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const excerpt = {
+      filePath: "Others/Writing/data-science-nigeria-video.md",
+      line: 39,
+      column: 1,
+      text: "Hi, I'm Tosin Amuda.",
+      note: "is this relevant?",
+    };
+    const thread = {
+      ...appendUserChatMessage(workspace.chatThread, "About this excerpt…", null, null, excerpt),
+      conversationId: "conv-x",
+    };
+
+    const records = serializeChatMessages(thread);
+    // The excerpt is serialized onto the persisted record...
+    expect(records[0].excerptJson).toBe(JSON.stringify(excerpt));
+
+    const restored = hydrateChatThread(createWorkspaceFromPath("/tmp/alpha").chatThread, {
+      conversationId: "conv-x",
+      title: null,
+      harnessId: "bob",
+      contextFiles: [],
+      messages: records,
+      createdAt: 0,
+      updatedAt: 1,
+    });
+    // ...and rebuilt on load, so the chat renders the card, not the raw prompt text.
+    expect(restored.messages[0].excerpt).toEqual(excerpt);
+  });
+
   it("persists a live reply as streaming; loads a stale one as interrupted", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-2";
@@ -1146,6 +1300,42 @@ describe("workspace model", () => {
     expect(block).toContain("- missing.md (large; read it for details)");
   });
 
+  it("buildFileContextBlock references every file (no inlined content) when inlineContent is off", () => {
+    const fileItem = (path: string): WorkspaceFileContextItem => ({
+      id: path,
+      kind: "file",
+      label: path,
+      path,
+      workspaceId: "w1",
+    });
+    // Tool-native CLI agent: even a small file is a bare path reference it reads.
+    const block = buildFileContextBlock(
+      [fileItem("a.md"), fileItem("b.md")],
+      new Map([
+        ["a.md", "hello world"],
+        ["b.md", "more"],
+      ]),
+      FILE_CONTEXT_INLINE_LIMIT,
+      false,
+    );
+    expect(block).toBe("- a.md\n\n- b.md");
+    expect(block).not.toContain("hello world");
+    expect(block).not.toContain("###");
+  });
+
+  it("createPromptWithContext labels the references for read-on-demand when not inlining", () => {
+    const fileItem = (path: string): WorkspaceFileContextItem => ({
+      id: path,
+      kind: "file",
+      label: path,
+      path,
+      workspaceId: "w1",
+    });
+    const prompt = createPromptWithContext("do the thing", [fileItem("a.md")], [], new Map(), false);
+    expect(prompt).toContain("Context files (read these as needed):");
+    expect(prompt).toContain("- a.md");
+  });
+
   it("addFileContextItem adds a labelled chip and dedupes by path", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const added = addFileContextItem(
@@ -1191,6 +1381,91 @@ describe("workspace model", () => {
     );
     expect(prompt).toContain("Context files:");
     expect(prompt).toContain("### notes/a.md\nthe file body");
+    // Edit-scope guardrail so the agent only touches the intended files (#31).
+    expect(prompt).toContain("only modify the Context files listed above");
     expect(prompt.endsWith("summarize this")).toBe(true);
+  });
+});
+
+describe("renameContextItemPath comment items (#32)", () => {
+  it("re-points a comment context item's filePath so the agent reads the new path", () => {
+    const thread = {
+      activeLlmThreadId: null,
+      activeRunId: null,
+      conversationId: null,
+      contextItems: [
+        {
+          kind: "comment",
+          filePath: "old.md",
+          path: "old.md",
+          id: "c1",
+          label: "excerpt",
+          workspaceId: "w",
+          commentBody: "",
+          selectedText: "",
+          surroundingContext: "",
+          anchor: { from: 0, to: 0 },
+          range: { start: 0, end: 0 },
+        },
+      ],
+      messages: [],
+      preparedCommand: null,
+      prompt: "",
+      runError: null,
+      runState: "idle",
+    } as unknown as WorkspaceChatThread;
+
+    const result = renameContextItemPath(thread, "w", "old.md", "new.md");
+    const item = result.contextItems[0] as { kind: string; filePath: string; path: string };
+    expect(item.kind).toBe("comment");
+    expect(item.filePath).toBe("new.md");
+    expect(item.path).toBe("new.md");
+  });
+});
+
+describe("removeWorkspaceFolder (#55)", () => {
+  it("prunes files, folders, buffers, tabs, context, and comments under the path", () => {
+    const buffer = { content: "", lastModifiedMs: 0, dirty: false, conflict: false, pendingChanges: [] };
+    const workspace = {
+      activeFilePath: "Talks/a.md",
+      openFilePaths: ["Talks/a.md", "Other/c.md"],
+      files: [
+        { relativePath: "Talks/a.md", lastModifiedMs: 0, sizeBytes: 0 },
+        { relativePath: "Talks/sub/b.md", lastModifiedMs: 0, sizeBytes: 0 },
+        { relativePath: "Other/c.md", lastModifiedMs: 0, sizeBytes: 0 },
+      ],
+      folders: ["Talks", "Talks/sub", "Other"],
+      fileContents: { "Talks/a.md": buffer, "Other/c.md": buffer },
+      chatThread: {
+        contextItems: [
+          { kind: "file", path: "Talks/a.md", id: "x", label: "Talks/a.md", workspaceId: "w" },
+        ],
+        messages: [],
+      },
+      comments: [{ filePath: "Talks/a.md" }, { filePath: "Other/c.md" }],
+    } as unknown as Workspace;
+
+    const result = removeWorkspaceFolder(workspace, "Talks");
+
+    expect(result.files.map((entry) => entry.relativePath)).toEqual(["Other/c.md"]);
+    expect(result.folders).toEqual(["Other"]);
+    expect(result.fileContents["Talks/a.md"]).toBeUndefined();
+    expect(result.openFilePaths).toEqual(["Other/c.md"]);
+    expect(result.activeFilePath).toBe("Other/c.md"); // moved off the deleted active file
+    expect(result.chatThread.contextItems).toHaveLength(0);
+    expect(result.comments.map((comment) => comment.filePath)).toEqual(["Other/c.md"]);
+  });
+});
+
+describe("reorderOpenTabs (#29)", () => {
+  it("moves a tab to sit just before the drop target", () => {
+    expect(reorderOpenTabs(["a", "b", "c"], "a", "c")).toEqual(["b", "a", "c"]);
+    expect(reorderOpenTabs(["a", "b", "c"], "c", "a")).toEqual(["c", "a", "b"]);
+  });
+
+  it("is a no-op for the same tab or an unknown path", () => {
+    expect(reorderOpenTabs(["a", "b"], "a", "a")).toEqual(["a", "b"]);
+    expect(reorderOpenTabs(["a", "b"], "a", "z")).toEqual(["a", "b"]);
+    expect(reorderOpenTabs(["a", "b"], "z", "a")).toEqual(["a", "b"]);
   });
 });

@@ -22,7 +22,7 @@
  *     "decorations out of order" runtime error.
  */
 
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { RangeSetBuilder, type Range } from "@codemirror/state";
 import {
   Decoration,
@@ -34,7 +34,7 @@ import {
 } from "@codemirror/view";
 
 import { lookupDecoration, type RegistryEntry } from "./registry";
-import { BulletWidget } from "./bulletWidget";
+import { BulletWidget, OrderedMarkerWidget } from "./bulletWidget";
 import { TaskCheckboxWidget } from "./taskCheckboxWidget";
 import { ImageWidget, imageContextFacet } from "./imageWidget";
 import { HorizontalRuleWidget } from "./hrWidget";
@@ -109,7 +109,11 @@ function buildDecorations(view: EditorView): BuildResult {
   const lineDecs: Range<Decoration>[] = [];
   const markDecs: Range<Decoration>[] = [];
   const atomicBuilder = new RangeSetBuilder<Decoration>();
-  const tree = syntaxTree(view.state);
+  // Force-parse through the viewport so a list/task marker stays rendered while
+  // typing: the incremental tree can lag for the just-edited line on a large
+  // doc, briefly dropping the widget back to raw source (#37). Bounded to the
+  // viewport + a timeout, so a large note doesn't pay a full re-parse per key.
+  const tree = ensureSyntaxTree(view.state, view.viewport.to, 100) ?? syntaxTree(view.state);
 
   // Stamp a Decoration.line on every line overlapping the given
   // range. CM6 requires `Decoration.line` to be anchored at a line
@@ -181,7 +185,35 @@ function buildDecorations(view: EditorView): BuildResult {
                 if (view.state.doc.sliceString(node.to, node.to + 1) !== " ") {
                   return;
                 }
-                replace = BULLET_REPLACE;
+                const listItem = node.node.parent;
+                // A task item's checkbox IS its marker (`ListItem` → `ListMark` +
+                // `Task`), so hide the list mark rather than drawing a bullet next
+                // to the checkbox.
+                if (listItem?.getChild("Task")) {
+                  markDecs.push(HIDE_MARKER.range(node.from, hideEnd));
+                  atomicBuilder.add(node.from, hideEnd, HIDE_MARKER);
+                  return;
+                }
+                // An ordered item renders its number, never a `•`. Renumber on
+                // display (CommonMark): start at the first item's number and
+                // increment by position, so `1. 1. 1.` shows as `1. 2. 3.`. The
+                // source delimiter (`.` / `)`) is preserved.
+                const list = listItem?.parent;
+                if (list?.name === "OrderedList") {
+                  const delimiter = view.state.sliceDoc(node.from, node.to).replace(/^\d+/, "") || ".";
+                  const firstMark = list.firstChild?.getChild("ListMark");
+                  const start = firstMark
+                    ? Number.parseInt(view.state.sliceDoc(firstMark.from, firstMark.to), 10)
+                    : 1;
+                  let offset = 0;
+                  for (let sib = listItem?.prevSibling; sib; sib = sib.prevSibling) {
+                    if (sib.name === "ListItem") offset += 1;
+                  }
+                  const ordinal = (Number.isNaN(start) ? 1 : start) + offset;
+                  replace = Decoration.replace({ widget: new OrderedMarkerWidget(`${ordinal}${delimiter}`) });
+                } else {
+                  replace = BULLET_REPLACE;
+                }
                 break;
               }
               case "task-checkbox": {
