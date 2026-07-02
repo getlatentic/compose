@@ -125,6 +125,30 @@ describe("workspace store", () => {
     expect(ws?.files.map((entry) => entry.relativePath)).toContain("note.md");
   });
 
+  it("a comments-load failure neither fails the scan nor wipes existing comments", async () => {
+    // Failure domains stay separate: the catch (and the retry/"couldn't read
+    // your vault" state) belongs to the SCAN alone. And the fallback keeps the
+    // comments already in state — hydrating [] would get persisted wholesale by
+    // the next persistComments and wipe them.
+    vi.mocked(scanWorkspace).mockResolvedValue([
+      { relativePath: "note.md", lastModifiedMs: 1, sizeBytes: 1 },
+    ]);
+    vi.mocked(loadWorkspaceComments).mockRejectedValue(new Error("comments db locked"));
+    vi.mocked(readFile).mockResolvedValue({ content: "hi", lastModifiedMs: 1 });
+
+    useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+    const existing = [{ id: "c1" }] as never;
+    useWorkspaceStore.setState((state) => ({
+      workspaces: state.workspaces.map((ws) => ({ ...ws, comments: existing })),
+    }));
+
+    await useWorkspaceStore.getState().loadActiveWorkspaceFiles();
+
+    const ws = useWorkspaceStore.getState().activeWorkspace();
+    expect(ws?.scanState).toBe("ready");
+    expect(ws?.comments).toBe(existing);
+  });
+
   it("gives a persistently failing scan a retryable 'failed', not an endless loop", async () => {
     vi.useFakeTimers();
     vi.mocked(scanWorkspace).mockRejectedValue(new Error("root unreadable"));

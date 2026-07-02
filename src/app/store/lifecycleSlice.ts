@@ -161,7 +161,12 @@ export const createLifecycleSlice = (
       const [entries, folders, comments, conversation, knownBuffer] = await Promise.all([
         scanWorkspace(workspaceId),
         scanFolders(workspaceId).catch(() => [] as string[]),
-        loadWorkspaceComments(workspaceId),
+        // Guarded so only the SCAN owns the catch below — a comments hiccup must
+        // not read as "couldn't read your vault" or enter the scan retry. On
+        // failure fall back to the comments already in state (null marker), NOT
+        // an empty list: persistComments writes workspace.comments wholesale, so
+        // hydrating [] would wipe real comments on the next persist.
+        loadWorkspaceComments(workspaceId).catch(() => null),
         // Active conversation (most-recently-OPENED, non-archived) so the chat
         // survives reload. Best-effort — a failure mustn't block the scan.
         loadActiveConversation(workspaceId).catch(() => null),
@@ -171,7 +176,10 @@ export const createLifecycleSlice = (
       ]);
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => {
-          let scanned = applyScanResult({ ...item, comments, folders }, entries);
+          let scanned = applyScanResult(
+            { ...item, comments: comments ?? item.comments, folders },
+            entries,
+          );
           // Apply the concurrently-read buffer if its file survived the scan.
           if (knownActiveFile && knownBuffer && scanned.activeFilePath === knownActiveFile) {
             scanned = applyFileBuffer(scanned, knownActiveFile, knownBuffer);
