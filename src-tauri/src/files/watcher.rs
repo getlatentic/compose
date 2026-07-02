@@ -12,25 +12,47 @@ use tauri::{AppHandle, Emitter};
 use super::is_ignored_segment;
 
 pub const WORKSPACE_FS_EVENT: &str = "workspace_fs";
-const DEBOUNCE_WINDOW: Duration = Duration::from_millis(150);
-const RECV_TIMEOUT: Duration = Duration::from_millis(50);
-/// Backoff between attempts to (re)establish a broken watcher. Bounded: after
-/// the last slot the workspace gives up and emits `watch-error` (the UI tells
-/// the user watching stopped) rather than spinning forever.
-const ESTABLISH_BACKOFF: [Duration; 5] = [
+/// Granularity for stop-flag checks while sleeping, so `stop_watcher` (and app
+/// quit) never waits out a full backoff interval.
+const SLEEP_SLICE: Duration = Duration::from_millis(200);
+
+/// The watcher's time constants, injectable so the real-filesystem tests
+/// (`watcher_fs_tests`) can run the identical code paths in milliseconds
+/// instead of seconds. Production always uses `default()`.
+#[derive(Clone, Copy)]
+pub(crate) struct WatcherTiming {
+    /// Quiet period after the last raw event before the batch flushes.
+    pub debounce: Duration,
+    /// Poll granularity of the event loop (also bounds stop-flag latency).
+    pub recv_timeout: Duration,
+    /// While the workspace ROOT itself is missing (iCloud eviction, unmounted
+    /// volume), poll for its return indefinitely at this cadence — cheap stat,
+    /// and the vault coming back must resume watching without user action.
+    pub monitor_interval: Duration,
+    /// Backoff between attempts to (re)establish a broken watcher. Bounded:
+    /// after the last slot the workspace gives up and emits `watch-error` (the
+    /// UI tells the user watching stopped) rather than spinning forever.
+    pub establish_backoff: &'static [Duration],
+}
+
+const DEFAULT_ESTABLISH_BACKOFF: [Duration; 5] = [
     Duration::from_secs(1),
     Duration::from_millis(2500),
     Duration::from_secs(5),
     Duration::from_secs(5),
     Duration::from_secs(5),
 ];
-/// While the workspace ROOT itself is missing (iCloud eviction, unmounted
-/// volume), poll for its return indefinitely at this cadence — cheap stat,
-/// and the vault coming back must resume watching without user action.
-const ROOT_MONITOR_INTERVAL: Duration = Duration::from_secs(5);
-/// Granularity for stop-flag checks while sleeping, so `stop_watcher` (and app
-/// quit) never waits out a full backoff interval.
-const SLEEP_SLICE: Duration = Duration::from_millis(200);
+
+impl Default for WatcherTiming {
+    fn default() -> Self {
+        Self {
+            debounce: Duration::from_millis(150),
+            recv_timeout: Duration::from_millis(50),
+            monitor_interval: Duration::from_secs(5),
+            establish_backoff: &DEFAULT_ESTABLISH_BACKOFF,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,7 +135,13 @@ impl WatcherManager {
         // → re-establish), so a dead event stream or a vanished root recovers
         // in place instead of going silently stale.
         let join = thread::spawn(move || {
-            watch_workspace(workspace_id_owned, root_owned, app, thread_stop);
+            watch_workspace(
+                workspace_id_owned,
+                root_owned,
+                app,
+                thread_stop,
+                WatcherTiming::default(),
+            );
         });
 
         inner.handles.insert(
@@ -135,7 +163,15 @@ impl WatcherManager {
 /// pump its events, and on any break (stream error, dead channel, vanished
 /// root) re-establish with bounded backoff — emitting a synthetic `rescan`
 /// after every gap so changes we missed while blind get reconciled.
-fn watch_workspace(workspace_id: String, root: PathBuf, app: AppHandle, stop: Arc<AtomicBool>) {
+/// Generic over the Tauri runtime so the real-filesystem tests can drive it
+/// on `MockRuntime`.
+pub(crate) fn watch_workspace<R: tauri::Runtime>(
+    workspace_id: String,
+    root: PathBuf,
+    app: AppHandle<R>,
+    stop: Arc<AtomicBool>,
+    timing: WatcherTiming,
+) {
     let mut establish_attempt: usize = 0;
     // The boot scan already reflects disk at subscribe time, so the first
     // successful watch needs no reconcile; every RE-establish does.
@@ -147,26 +183,32 @@ fn watch_workspace(workspace_id: String, root: PathBuf, app: AppHandle, stop: Ar
         }
         // A missing root isn't an error to back off from — it's the vault being
         // away (iCloud eviction, unmount). Monitor cheaply until it returns.
-        if !root.exists() {
-            if !sleep_unless_stopped(&stop, ROOT_MONITOR_INTERVAL) {
+        // Canonicalize what we watch: the native watcher reports canonical
+        // paths (macOS `/var` → `/private/var`, or a symlinked vault), and
+        // stripping them against a non-canonical root would silently drop
+        // every event. Canonicalization failing ≈ the root being away.
+        let Ok(watch_root) = root.canonicalize() else {
+            if !sleep_unless_stopped(&stop, timing.monitor_interval) {
                 return;
             }
             continue;
-        }
+        };
 
         let (event_tx, event_rx) = channel::<notify::Result<Event>>();
         let watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
             let _ = event_tx.send(event);
         })
         .and_then(|mut watcher| {
-            watcher.watch(&root, RecursiveMode::Recursive).map(|()| watcher)
+            watcher
+                .watch(&watch_root, RecursiveMode::Recursive)
+                .map(|()| watcher)
         });
 
         let watcher = match watcher {
             Ok(watcher) => watcher,
             Err(error) => {
                 eprintln!("watcher establish failed for {workspace_id}: {error}");
-                let Some(backoff) = ESTABLISH_BACKOFF.get(establish_attempt) else {
+                let Some(backoff) = timing.establish_backoff.get(establish_attempt) else {
                     let _ = app.emit(
                         WORKSPACE_FS_EVENT,
                         WatcherEventPayload::control("watch-error", &workspace_id),
@@ -189,7 +231,7 @@ fn watch_workspace(workspace_id: String, root: PathBuf, app: AppHandle, stop: Ar
         }
         watched_before = true;
 
-        let outcome = run_watcher_loop(&workspace_id, &root, &app, &stop, event_rx);
+        let outcome = run_watcher_loop(&workspace_id, &watch_root, &app, &stop, event_rx, timing);
         // Dropping the watcher before re-establishing releases its native
         // resources (FSEvents stream / inotify descriptors).
         drop(watcher);
@@ -210,12 +252,13 @@ enum LoopOutcome {
     StreamBroken,
 }
 
-fn run_watcher_loop(
+fn run_watcher_loop<R: tauri::Runtime>(
     workspace_id: &str,
     root: &Path,
-    app: &AppHandle,
+    app: &AppHandle<R>,
     stop: &AtomicBool,
     event_rx: Receiver<notify::Result<Event>>,
+    timing: WatcherTiming,
 ) -> LoopOutcome {
     let mut pending: HashMap<PathBuf, &'static str> = HashMap::new();
     let mut last_event_at: Option<Instant> = None;
@@ -224,7 +267,7 @@ fn run_watcher_loop(
         if stop.load(Ordering::Relaxed) {
             return LoopOutcome::Stopped;
         }
-        match event_rx.recv_timeout(RECV_TIMEOUT) {
+        match event_rx.recv_timeout(timing.recv_timeout) {
             Ok(Ok(event)) => {
                 // notify raises this flag when its event queue overflowed —
                 // events were LOST and the tree may have silently diverged.
@@ -274,7 +317,7 @@ fn run_watcher_loop(
         }
 
         if let Some(at) = last_event_at {
-            if at.elapsed() >= DEBOUNCE_WINDOW && !pending.is_empty() {
+            if at.elapsed() >= timing.debounce && !pending.is_empty() {
                 flush_pending(workspace_id, root, app, &mut pending);
                 last_event_at = None;
             }
@@ -335,10 +378,10 @@ fn should_emit(kind: &str, path: &Path, is_dir: Option<bool>) -> bool {
     }
 }
 
-fn flush_pending(
+fn flush_pending<R: tauri::Runtime>(
     workspace_id: &str,
     root: &Path,
-    app: &AppHandle,
+    app: &AppHandle<R>,
     pending: &mut HashMap<PathBuf, &'static str>,
 ) {
     let drained: Vec<(PathBuf, &'static str)> = pending.drain().collect();

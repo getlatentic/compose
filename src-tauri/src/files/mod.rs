@@ -16,6 +16,8 @@ pub mod watcher;
 
 #[cfg(test)]
 mod ipc_tests;
+#[cfg(test)]
+mod watcher_fs_tests;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
