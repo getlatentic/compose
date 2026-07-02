@@ -3,7 +3,14 @@ import { Button, Link } from "@carbon/react";
 import { Launch } from "@carbon/react/icons";
 
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
+import { openExternalUrl } from "../../lib/links/openExternal";
 import { useUpdaterStore } from "../../app/store/updaterStore";
+
+const RELEASE_NOTES_URL = "https://github.com/getlatentic/compose/releases";
+
+function handleOpenReleaseNotes() {
+  void openExternalUrl(RELEASE_NOTES_URL);
+}
 
 /** The "About" pane: identity + the manual update check. The version is read at
  *  runtime (it must match what the updater compares against) rather than
@@ -34,9 +41,11 @@ export function AboutSettings() {
         </div>
       ) : null}
       <div className="about-links">
-        <Link renderIcon={Launch}>Release notes</Link>
-        <Link renderIcon={Launch}>Licenses</Link>
-        <Link renderIcon={Launch}>Privacy</Link>
+        {/* Licenses/Privacy were href-less stubs — removed until they have real
+            destinations; a dead link reads worse than no link. */}
+        <Link renderIcon={Launch} onClick={handleOpenReleaseNotes}>
+          Release notes
+        </Link>
       </div>
     </div>
   );
