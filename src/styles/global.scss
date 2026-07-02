@@ -2741,14 +2741,16 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-.excerpt-card__body {
+.excerpt-card__excerpt {
   font-size: 0.8125rem;
 }
 
 // The commented passage — a blue-barred block that reads as "the text you
-// commented on". The body is markdown, so the `>` quote becomes this
-// blockquote; the note follows as a plain paragraph.
-.excerpt-card__body blockquote {
+// commented on". Rendered via MarkdownMessage, so the `>` quote is a blockquote
+// inside `.markdown`. The extra `.markdown` in the selector out-specifies the
+// ambient `.markdown blockquote` (gray bar + 0.5rem block margin) so the excerpt
+// keeps its blue bar and the original tight spacing against the header.
+.excerpt-card__excerpt .markdown blockquote {
   margin: 0;
   padding: 0.375rem 0.625rem;
   border-inline-start: 3px solid var(--cds-button-primary, #0f62fe);
@@ -2757,19 +2759,22 @@ select {
   line-height: 1.25rem;
 }
 
-.excerpt-card__body p {
-  margin: 0.5rem 0 0;
-  color: var(--cds-text-primary, #161616);
-  line-height: 1.25rem;
-}
-
-// A long excerpt collapses to a few lines behind a fade so it can't dominate
-// the thread; "Show more" drops the clamp.
-.excerpt-card__body--clamped {
+// Only the EXCERPT clamps — the note stays outside it (below "Show more"), so a
+// long quote never hides the comment that goes with it. Collapses to a few
+// lines behind a fade; "Show more" drops the clamp.
+.excerpt-card__excerpt--clamped {
   max-block-size: 9rem;
   overflow: hidden;
   -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
   mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+
+// The user's comment on the excerpt — always shown, never clamped.
+.excerpt-card__note {
+  margin: 0;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
 }
 
 .excerpt-card__more {

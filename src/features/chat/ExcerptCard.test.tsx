@@ -33,18 +33,21 @@ describe("ExcerptCard", () => {
     expect(noLine).not.toContain("excerpt-card__loc");
   });
 
-  it("clamps a long excerpt behind Show more; leaves a short one alone", () => {
+  it("clamps a long excerpt behind Show more but always keeps the note visible", () => {
     const longContent = formatExcerptPreamble({
       filePath: "a.md",
       text: Array.from({ length: 12 }, (_, i) => `line ${i}`).join("\n"),
-      note: "?",
+      note: "still relevant?",
     });
     const longHtml = renderToStaticMarkup(<ExcerptCard content={longContent} />);
-    expect(longHtml).toContain("excerpt-card__body--clamped");
+    expect(longHtml).toContain("excerpt-card__excerpt--clamped");
     expect(longHtml).toContain("Show more");
+    // The note lives outside the clamp — never hidden behind "Show more".
+    expect(longHtml).toContain("excerpt-card__note");
+    expect(longHtml).toContain("still relevant?");
 
     const shortHtml = renderToStaticMarkup(<ExcerptCard content={shortContent} />);
-    expect(shortHtml).not.toContain("excerpt-card__body--clamped");
+    expect(shortHtml).not.toContain("excerpt-card__excerpt--clamped");
     expect(shortHtml).not.toContain("Show more");
   });
 });
