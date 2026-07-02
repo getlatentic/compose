@@ -9,10 +9,15 @@ import type { NavEntry, WorkspaceStoreGet } from "./types";
  */
 let suppressNavPush = false;
 
+/** Back/Forward depth. Browsers keep ~50; beyond this the oldest entries are
+ * dropped — without a cap the stack grows one entry per tab switch for the
+ * whole session (measured as unbounded live-heap growth in the #70 session). */
+export const NAV_HISTORY_LIMIT = 100;
+
 /** Push a new nav entry, truncating any "forward" entries past the current
  * position — same behavior a browser exhibits when you navigate after going
  * back. Coalesces consecutive duplicates so repeated selects of the same file
- * don't bloat the stack. */
+ * don't bloat the stack, and caps total depth at {@link NAV_HISTORY_LIMIT}. */
 export function pushNavEntry(
   state: { navHistory: NavEntry[]; navIndex: number },
   entry: NavEntry,
@@ -31,7 +36,9 @@ export function pushNavEntry(
   }
   const truncated = state.navHistory.slice(0, state.navIndex + 1);
   truncated.push(entry);
-  return { navHistory: truncated, navIndex: truncated.length - 1 };
+  const overflow = truncated.length - NAV_HISTORY_LIMIT;
+  const navHistory = overflow > 0 ? truncated.slice(overflow) : truncated;
+  return { navHistory, navIndex: navHistory.length - 1 };
 }
 
 /** Drop every history entry a file's removal invalidates, keeping `navIndex`
