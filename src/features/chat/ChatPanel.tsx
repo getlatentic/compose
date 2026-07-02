@@ -6,7 +6,7 @@ import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessInstall, startOllama } from "../../lib/ipc/harnessClient";
 import { agentStatus } from "../settings/agentStatus";
-import { sumChatThreadStats } from "../../app/workspaceModel";
+import { missingFileContextPaths, sumChatThreadStats } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
 import { conversationToMarkdown } from "../../lib/export/conversationMarkdown";
@@ -68,6 +68,22 @@ function ChatPanelInner() {
     const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
     return ws?.chatThread ?? null;
   });
+  // Context files that are gone from the tree (external delete / sync
+  // eviction) — the chips mark rather than vanish. Selected as a joined KEY
+  // string so this panel (which deliberately doesn't subscribe to `files`)
+  // only re-renders when the missing set actually changes; gated on a ready
+  // scan so a mid-boot load can't flash every chip missing.
+  const missingContextKey = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    if (!ws || ws.scanState !== "ready") {
+      return "";
+    }
+    return missingFileContextPaths(ws.chatThread.contextItems, ws.files).join("\n");
+  });
+  const missingContextPaths = useMemo(
+    () => new Set(missingContextKey ? missingContextKey.split("\n") : []),
+    [missingContextKey],
+  );
   const conversationsByWorkspace = useWorkspaceStore((state) => state.conversations);
   const renameConversation = useWorkspaceStore((state) => state.renameConversation);
   const archiveConversation = useWorkspaceStore((state) => state.archiveConversation);
@@ -349,6 +365,7 @@ function ChatPanelInner() {
         assistantReady={assistantReady}
         canSend={canSend}
         contextItems={chatThread.contextItems}
+        missingContextPaths={missingContextPaths}
         activeFilePath={activeFilePath}
         harnessName={selectedHarnessName}
         onAddFileContext={addChatFileContext}

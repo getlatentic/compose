@@ -512,6 +512,25 @@ export function setCurrentTabContext(
   };
 }
 
+/**
+ * File context items whose path is no longer in the tree — an external
+ * deletion or a sync eviction. Mark-not-remove: the chips stay (the user
+ * pinned them; the file may return), but render a "missing" state and the
+ * send surfaces a notice. Callers gate on `scanState === "ready"` so a
+ * mid-boot scan can't flash every chip missing. Derived from the file list,
+ * so it self-heals the moment the file reappears.
+ */
+export function missingFileContextPaths(
+  contextItems: WorkspaceContextItem[],
+  files: WorkspaceFileEntry[],
+): string[] {
+  const present = new Set(files.map((entry) => entry.relativePath));
+  return contextItems
+    .filter((item): item is WorkspaceFileContextItem => item.kind === "file")
+    .map((item) => item.path)
+    .filter((path) => !present.has(path));
+}
+
 /** Remove a file from the chat context by path (e.g. when it's deleted), leaving
  *  any other attached context untouched. */
 export function removeFileContext(

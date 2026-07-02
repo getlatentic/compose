@@ -23,7 +23,9 @@ import {
   createPromptWithContext,
   FILE_CONTEXT_INLINE_LIMIT,
   hydrateChatThread,
+  missingFileContextPaths,
   removeContextItem,
+  type WorkspaceContextItem,
   resetChatThread,
   serializeChatMessages,
   CONVERSATION_REPLAY_LIMIT,
@@ -516,6 +518,21 @@ describe("workspace model", () => {
     });
 
     expect(effect.type).toBe("noop");
+  });
+
+  it("missingFileContextPaths flags context files gone from the tree, nothing else", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["kept.md"]);
+    const items = [
+      { id: "1", kind: "file" as const, label: "kept.md", path: "kept.md", workspaceId: "w" },
+      { id: "2", kind: "file" as const, label: "gone.md", path: "gone.md", workspaceId: "w" },
+      // Only `kind` matters to the helper — the anchor internals are noise here.
+      { id: "3", kind: "comment", filePath: "gone.md" } as unknown as WorkspaceContextItem,
+    ];
+
+    // Only the FILE item whose path left the tree — comment items are anchored
+    // history, not attachments to re-read.
+    expect(missingFileContextPaths(items, workspace.files)).toEqual(["gone.md"]);
+    expect(missingFileContextPaths(items.slice(0, 1), workspace.files)).toEqual([]);
   });
 
   it("markBufferSaved clears dirty and bumps lastModifiedMs", () => {

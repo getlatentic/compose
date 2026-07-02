@@ -3752,6 +3752,17 @@ select {
   background: var(--cds-layer-active-01, #c6c6c6);
 }
 
+// A context file that's gone from disk (external delete / sync eviction):
+// mark, don't remove — the user pinned it and it may return. Amber glyph +
+// helper-toned label; the tooltip explains it will send as a reference.
+.chat-context-chip--missing {
+  color: var(--cds-text-helper, #6f6f6f);
+}
+
+.chat-context-chip--missing svg {
+  color: var(--cds-support-warning, #f1c21b);
+}
+
 .chat-context-chip--empty {
   color: var(--cds-text-helper, #6f6f6f);
 }
