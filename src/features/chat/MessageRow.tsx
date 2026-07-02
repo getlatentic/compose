@@ -1,16 +1,13 @@
 import { useState } from "react";
-import { ChevronDown, Document } from "@carbon/react/icons";
+import { ChevronDown } from "@carbon/react/icons";
 import { Check, Copy, RefreshCw } from "lucide-react";
 
-import type {
-  ChatExcerptRef,
-  WorkspaceChatMessage,
-  WorkspaceRunStats,
-} from "../../app/workspaceModel";
+import type { WorkspaceChatMessage, WorkspaceRunStats } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
-import { basename } from "../../lib/workspace/displayPath";
 import { AgentTrace } from "./AgentTrace";
 import { AppliedChanges } from "./AppliedChanges";
+import { ExcerptCard } from "./ExcerptCard";
+import { parseExcerptPreamble } from "./excerptPreamble";
 import { FileOpCard } from "./FileOpCard";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { SuggestionList } from "./SuggestionList";
@@ -54,6 +51,11 @@ export function MessageRow({
   message: WorkspaceChatMessage;
 }) {
   const isAssistant = message.role === "assistant";
+  // A comment-to-chat turn renders as an excerpt card: new ones carry the
+  // excerpt struct (with the line), legacy ones are recognizable from the
+  // message text. Everything else the card needs is in `message.content`.
+  const isComment =
+    !isAssistant && (message.excerpt != null || parseExcerptPreamble(message.content) != null);
   const trace = message.trace;
   // The action row (copy / regenerate / show-work + stats) appears only once
   // the run has ended — never mid-stream, even though `message.content` fills
@@ -113,9 +115,13 @@ export function MessageRow({
           <div className="message-body">
             <MarkdownMessage content={message.content} />
           </div>
-        ) : message.excerpt ? (
+        ) : isComment ? (
           <div className="message-body message-body--user">
-            <ExcerptChip excerpt={message.excerpt} />
+            <ExcerptCard
+              content={message.content}
+              line={message.excerpt?.line}
+              column={message.excerpt?.column}
+            />
           </div>
         ) : (
           <div className="message-body message-body--user">{message.content}</div>
@@ -208,25 +214,6 @@ export function MessageRow({
 
       {showMeta && hasTrace && traceOpen ? <AgentTrace trace={trace ?? []} /> : null}
     </article>
-  );
-}
-
-/** A commented passage sent to chat — file + line:col + the excerpt + the note. */
-function ExcerptChip({ excerpt }: { excerpt: ChatExcerptRef }) {
-  return (
-    <div className="excerpt-chip">
-      <div className="excerpt-chip__head">
-        <Document size={14} aria-hidden />
-        <span className="excerpt-chip__file" title={excerpt.filePath}>
-          {basename(excerpt.filePath)}
-        </span>
-        <span className="excerpt-chip__loc">
-          L{excerpt.line}:C{excerpt.column}
-        </span>
-      </div>
-      <blockquote className="excerpt-chip__text">{excerpt.text}</blockquote>
-      {excerpt.note ? <p className="excerpt-chip__note">{excerpt.note}</p> : null}
-    </div>
   );
 }
 

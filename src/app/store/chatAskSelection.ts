@@ -22,6 +22,7 @@ import {
 import {
   byteOffsetToLineColumn,
 } from "../../features/text/positionMapper";
+import { formatExcerptPreamble } from "../../features/chat/excerptPreamble";
 import {
   editGuardFor,
   harnessCapabilitiesOf,
@@ -112,17 +113,17 @@ export async function runAskAboutSelection(
 
   // Build the user-visible chat message: quoted selection + question. This is
   // also what the harness sees inline (no side-channel context packet), unless
-  // the selection is large enough to spill (see `sentUserMessage` below).
+  // the selection is large enough to spill (see `sentUserMessage` below). The
+  // excerpt card parses this same text back for display (excerptPreamble.ts).
   const filePath = workspace.activeFilePath || "the current note";
-  const quotedSelection = selection.text
-    .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n");
-  const userMessage =
-    `About this excerpt from \`${filePath}\`:\n\n${quotedSelection}\n\n${trimmedQuestion}`;
+  const userMessage = formatExcerptPreamble({
+    filePath,
+    text: selection.text,
+    note: trimmedQuestion,
+  });
 
-  // The chat renders this message as a chip (file + line:col + excerpt + note)
-  // via the `excerpt` metadata.
+  // The chat also carries the selection's line:col as `excerpt` metadata — the
+  // one part of the card not recoverable from the message text.
   const fileContent = workspace.activeFilePath
     ? (workspace.fileContents[workspace.activeFilePath]?.content ?? "")
     : "";
