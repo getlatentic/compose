@@ -27,10 +27,9 @@ import {
 import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
 import { syntaxTree } from "@codemirror/language";
-import { StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import { blockCommands, formatCommands } from "ai-editor";
+import { blockCommands, formatCommands, onEditorUpdate } from "ai-editor";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { useLinkPrompt } from "../dialogs/LinkInsertProvider";
 
@@ -114,17 +113,15 @@ function caretContextsEqual(a: CaretContext, b: CaretContext): boolean {
 }
 
 /**
- * Keep the toolbar's pressed states in sync with the caret. We poll via
- * rAF, but only re-render when the *computed* caret context actually
- * changes — not on every caret move or keystroke.
+ * Keep the toolbar's pressed states in sync with the caret, re-rendering
+ * only when the *computed* caret context actually changes — typing inside
+ * a paragraph produces an unchanged context, so React never re-renders
+ * (react-scan-tuned; recomputing on CM's update cycle avoids rAF idle
+ * wakeups, #42).
  *
- * The earlier version bumped a tick whenever the caret head or doc
- * length changed, which is EVERY keystroke — so the toolbar (and its ~13
- * icon buttons) re-rendered on every keypress even though bold/italic/
- * heading state hadn't flipped (react-scan caught this: `mi ×10` after
- * 10 chars). Now we compute the context in the poll and shallow-compare
- * the eight fields; typing inside a paragraph produces an unchanged
- * context, so React never re-renders.
+ * Subscribes via the editor's update bus, which survives `setState` — an
+ * appended updateListener died on the first tab switch, freezing the
+ * pressed states at the previous document's context (B stuck active).
  */
 function useCaretContext(view: EditorView | null): CaretContext {
   const [ctx, setCtx] = useState<CaretContext>(EMPTY_CONTEXT);
@@ -135,7 +132,6 @@ function useCaretContext(view: EditorView | null): CaretContext {
         return;
       }
       let current = EMPTY_CONTEXT;
-      let disposed = false;
       const refresh = () => {
         const next = caretContext(view);
         if (!caretContextsEqual(next, current)) {
@@ -144,20 +140,9 @@ function useCaretContext(view: EditorView | null): CaretContext {
         }
       };
       refresh();
-      // Recompute on CM's update cycle (selection / doc changes) rather than
-      // polling every animation frame — no idle wakeups (#42).
-      view.dispatch({
-        effects: StateEffect.appendConfig.of(
-          EditorView.updateListener.of((update) => {
-            if (!disposed && (update.docChanged || update.selectionSet)) {
-              refresh();
-            }
-          }),
-        ),
+      return onEditorUpdate(view, (update) => {
+        if (update.docChanged || update.selectionSet) refresh();
       });
-      return () => {
-        disposed = true;
-      };
     },
     [view],
   );
