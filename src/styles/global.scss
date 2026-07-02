@@ -5909,6 +5909,31 @@ select {
   border-radius: 0;
 }
 
+// The creation TARGET (newNoteDir) — the folder "+ New" note/folder lands in.
+// A persistent neutral fill, deliberately without the blue bar: the bar marks
+// the active DOCUMENT (tab-bound); the target marks creation context. Both can
+// show at once — a selected note plus its (or another) folder as target.
+.file-row-wrapper--target {
+  background: rgba(141, 141, 141, 0.16);
+}
+
+// The custom drag ghost (a name chip) — appended offscreen for setDragImage;
+// the virtualizer's translateY rows make the default drag snapshot capture the
+// wrong region entirely.
+.file-drag-ghost {
+  position: fixed;
+  inset-block-start: -100px;
+  inset-inline-start: 0;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 6px;
+  background: var(--cds-layer-02, #ffffff);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
 // Drop target while dragging a file onto a folder (#28): a tinted fill + ring so
 // the folder clearly reads as the destination.
 .file-row-wrapper--drop {
