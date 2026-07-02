@@ -238,10 +238,12 @@ fn run_watcher_loop(
                 if let Some(kind) = classify_event_kind(&event.kind) {
                     for path in event.paths {
                         if path == root {
-                            // The root itself changed shape (removed/renamed):
-                            // the recursive watch is now dubious — re-establish
-                            // (the monitor loop waits out a missing root).
-                            if kind == "removed" {
+                            // An event on the root itself: a removal is fatal,
+                            // and a rename-away arrives as a mere Modify(Name) —
+                            // so verify the root is still there at its watched
+                            // path. Gone either way → re-establish (the monitor
+                            // loop waits out a missing root).
+                            if kind == "removed" || !root.exists() {
                                 flush_pending(workspace_id, root, app, &mut pending);
                                 return LoopOutcome::StreamBroken;
                             }
