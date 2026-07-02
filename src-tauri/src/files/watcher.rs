@@ -247,7 +247,10 @@ fn run_watcher_loop(
                             }
                             continue;
                         }
-                        pending.insert(path, kind);
+                        pending
+                            .entry(path)
+                            .and_modify(|existing| *existing = merge_pending_kind(existing, kind))
+                            .or_insert(kind);
                     }
                     last_event_at = Some(Instant::now());
                 }
@@ -287,6 +290,22 @@ fn sleep_unless_stopped(stop: &AtomicBool, duration: Duration) -> bool {
         thread::sleep(SLEEP_SLICE.min(deadline.saturating_duration_since(Instant::now())));
     }
     !stop.load(Ordering::Relaxed)
+}
+
+/// Merge a path's queued kind with a newer event inside one debounce window.
+/// FSEvents interleaves content/metadata modifications with the structural
+/// event for the same path — a brand-new file arrives as Create+Modify, and an
+/// unlink can arrive as Remove+Modify(metadata) — so "modified" never demotes
+/// a structural kind (both were caught live as notes that never appeared /
+/// never disappeared). Structural successions take the newest kind: remove-
+/// then-recreate is a creation; create-then-remove is a removal (a harmless
+/// no-op for a path never shown).
+fn merge_pending_kind(existing: &'static str, incoming: &'static str) -> &'static str {
+    if incoming == "modified" && existing != "modified" {
+        existing
+    } else {
+        incoming
+    }
 }
 
 fn classify_event_kind(kind: &EventKind) -> Option<&'static str> {
@@ -424,6 +443,20 @@ mod tests {
         assert!(!should_emit("created", stray, Some(false)));
         assert!(!should_emit("modified", stray, Some(false)));
         assert!(!should_emit("removed", stray, None));
+    }
+
+    #[test]
+    fn a_modify_never_demotes_a_structural_kind() {
+        // Both caught live: `> file.md` is Create+Modify (the note never
+        // appeared), and an unlink can be Remove+Modify(metadata) (the note
+        // never disappeared). The structural kind must survive the window.
+        assert_eq!(merge_pending_kind("created", "modified"), "created");
+        assert_eq!(merge_pending_kind("removed", "modified"), "removed");
+        // Structural successions take the newest kind.
+        assert_eq!(merge_pending_kind("removed", "created"), "created");
+        assert_eq!(merge_pending_kind("created", "removed"), "removed");
+        assert_eq!(merge_pending_kind("modified", "removed"), "removed");
+        assert_eq!(merge_pending_kind("modified", "modified"), "modified");
     }
 
     #[test]
