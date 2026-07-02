@@ -29,7 +29,16 @@ export function useSaveOnExit() {
           try {
             await useWorkspaceStore.getState().saveAllDirtyBuffers();
           } finally {
-            await win.destroy();
+            try {
+              // Requires `core:window:allow-destroy` in the capability — without
+              // it this rejects and the red button silently does nothing.
+              await win.destroy();
+            } catch {
+              // Destroy failed (e.g. a missing permission): re-arm so the next
+              // close click retries the whole path instead of stranding the
+              // window behind the spent guard.
+              closing = false;
+            }
           }
         })
         .then((fn) => {
