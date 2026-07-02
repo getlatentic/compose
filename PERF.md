@@ -12,7 +12,7 @@ iCloud vault**, 2026-07-02. Low-end hardware validation is still open (#70).
 | 3 | Open/switch tab (100KB note) | ≤ 100ms | ~100ms at boot (`doc @ 203ms` minus shell); per-open not yet isolated | — (open) |
 | 4 | Vault walk (1k notes) | ≤ 300ms | **7.8ms** (1,000 notes / 50 dirs) | `cargo test walks_a_thousand_note_vault -- --nocapture` |
 | 5 | External change → tree | ≤ 300ms | ~1s observed end-to-end incl. FSEvents latency; tree patch itself O(entry) | live: create/rm a note, watch the tree |
-| 6 | Search query (1k notes) | ≤ 100ms | not yet measured | — (open) |
+| 6 | Search query (1k notes) | ≤ 100ms | **1.1–1.7ms** release (common/rare/phrase; snapshot build 719ms, idle-deferred) | `cargo test -p workspace-index --release --test search_bench -- --nocapture` |
 | 7 | Memory, 1k-note vault open | ≤ 400MB total | **219MB** total (main 71 + WebContent 125 + GPU 17 + Networking 6) | `scripts/measure-memory.sh <label>` |
 | 8 | UI while chat streams | 60fps sustained | rAF-batched by design; not yet instrumented | — (open) |
 
@@ -33,6 +33,24 @@ iCloud vault**, 2026-07-02. Low-end hardware validation is still open (#70).
   in the debug build's devtools across one switch cycle to attribute it.
   Not user-visible at current magnitudes (hours of constant switching ≈ tens
   of MB, and macOS applies memory pressure long before it matters).
+
+## Memory-pressure simulation (4GB-machine proxy)
+
+`memory_pressure -p 12 -y 1800` squeezes the 32GB dev machine until ~12% is
+free, and the app's own boot then pushed the system to **critical** pressure
+(`kern.memorystatus_vm_pressure_level` 4 — jetsam territory). Under that:
+
+- **Cold boot completed fully** — tree (1,263 notes), restored tabs, chat, and
+  editor all rendered; the process was not jetsam'd.
+- **Footprint stayed put:** 222MB total at critical vs 219MB unpressured — the
+  app doesn't balloon under pressure.
+- **Tab churn stayed responsive** — 10 switches, every click landed.
+
+Caveat: RAM starvation doesn't slow the CPU, so this validates memory
+*behavior* (pressure survival, no ballooning), not old-hardware latency.
+A CPU-throttled pass (`taskpolicy -c background`, E-cores only — note: WKWebView
+helpers won't inherit the QoS) or a real 4GB VM (VMware Fusion / Tart) remains
+the honest low-end latency check.
 
 ## Method notes
 
