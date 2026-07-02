@@ -1089,3 +1089,36 @@ mod tests {
         assert!(delete_folder(&registry, &trash_root, &workspace_id, "../escape").is_err());
     }
 }
+
+#[cfg(test)]
+mod scan_bench {
+    use super::scan_markdown_files;
+    use std::fs;
+    use std::time::Instant;
+    use tempfile::tempdir;
+
+    /// Report-only baseline for the #70 budget (1k-note walk ≤ 300ms): builds a
+    /// 1,000-note vault across 50 folders and times the production walk. The
+    /// assert is a generous ceiling so CI noise can't flake it; the printed
+    /// number is what PERF.md cites.
+    #[test]
+    fn walks_a_thousand_note_vault_within_budget() {
+        let dir = tempdir().expect("tempdir");
+        for folder in 0..50 {
+            let sub = dir.path().join(format!("folder-{folder:02}"));
+            fs::create_dir(&sub).expect("mkdir");
+            for note in 0..20 {
+                fs::write(sub.join(format!("note-{note:02}.md")), "# note\n\nbody\n")
+                    .expect("write note");
+            }
+        }
+
+        let started = Instant::now();
+        let entries = scan_markdown_files(dir.path()).expect("scan");
+        let elapsed = started.elapsed();
+
+        assert_eq!(entries.len(), 1000);
+        eprintln!("scan_bench: 1000 notes / 50 dirs in {:?}", elapsed);
+        assert!(elapsed.as_millis() < 2000, "walk took {elapsed:?} — investigate");
+    }
+}

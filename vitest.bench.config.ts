@@ -27,6 +27,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "decode-named-character-reference": require.resolve("decode-named-character-reference"),
+      // Same source-resolution as vite.config.ts: the CM benchmarks import the
+      // in-repo editor package, whose package.json points at built output that
+      // doesn't exist in dev.
+      "ai-editor": new URL("./packages/rich-editor/src/index.ts", import.meta.url).pathname,
     },
   },
   test: {
