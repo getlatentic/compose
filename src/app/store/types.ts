@@ -134,7 +134,8 @@ export interface WorkspaceState {
   onboarding: OnboardingState;
   onboardingComplete: () => boolean;
   setOnboarding: (onboarding: OnboardingState) => void;
-  loadActiveWorkspaceFiles: () => Promise<void>;
+  /** `attempt` is internal to the boot-scan backoff retry; callers pass nothing. */
+  loadActiveWorkspaceFiles: (attempt?: number) => Promise<void>;
   newChat: () => Promise<void>;
   /**
    * Per-workspace conversation history, newest activity first, *including*

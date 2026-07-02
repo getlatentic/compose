@@ -456,6 +456,17 @@ function FileTreeInner({
     const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
     return ws ? ws.scanState !== "ready" && ws.scanState !== "failed" : false;
   });
+  // A scan that FAILED (root unreadable — e.g. iCloud not materialized yet) is
+  // distinct from an empty vault: the tree offers a Retry instead of the
+  // misleading "No notes yet". Boot auto-retries with backoff; this is the
+  // manual escape hatch once that gives up.
+  const scanFailed = useWorkspaceStore((state) => {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    return ws?.scanState === "failed";
+  });
+  const retryScan = useWorkspaceStore((state) => state.loadActiveWorkspaceFiles);
+  // Call with no args so the click event isn't passed as the retry `attempt`.
+  const handleRetry = useCallback(() => void retryScan(), [retryScan]);
   const workspaceRoot = useWorkspaceStore((state) => {
     const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
     return ws?.path ?? "";
@@ -639,6 +650,14 @@ function FileTreeInner({
       <div className="file-tree file-tree--empty">
         {scanning ? (
           <p>Loading notes…</p>
+        ) : scanFailed ? (
+          <>
+            <p>Couldn't read your vault</p>
+            <p>It may still be syncing (iCloud) — your notes are safe.</p>
+            <button type="button" className="file-tree__retry" onClick={handleRetry}>
+              Retry
+            </button>
+          </>
         ) : (
           <>
             <p>No notes yet</p>

@@ -139,7 +139,7 @@ export const createLifecycleSlice = (
       };
     });
   },
-  loadActiveWorkspaceFiles: async () => {
+  loadActiveWorkspaceFiles: async (attempt = 1) => {
     const workspaceId = get().activeWorkspaceId;
     if (!workspaceId) {
       return;
@@ -223,14 +223,26 @@ export const createLifecycleSlice = (
       // with first paint. Defer to idle — search shows "Indexing…" until it lands.
       whenIdle(() => void get().rebuildWorkspaceIndex(workspaceId));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Workspace scan failed";
-      set((state) => ({
-        workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
-          ...item,
-          scanError: message,
-          scanState: "failed",
-        })),
-      }));
+      // A scan/load failure at boot is usually transient — the iCloud vault not
+      // yet materialized, or a relaunch racing the previous instance's handles.
+      // Re-read after a backoff so it heals itself once the vault is readable,
+      // rather than stranding the tree on a false "no notes". Retry only while
+      // this workspace is still the active one, and only a few times before
+      // giving up to a retryable "failed" state (the tree shows a Retry button).
+      const MAX_ATTEMPTS = 4;
+      if (attempt < MAX_ATTEMPTS && get().activeWorkspaceId === workspaceId) {
+        const delayMs = [1000, 2500, 5000][attempt - 1] ?? 5000;
+        setTimeout(() => void get().loadActiveWorkspaceFiles(attempt + 1), delayMs);
+      } else {
+        const message = error instanceof Error ? error.message : "Workspace scan failed";
+        set((state) => ({
+          workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+            ...item,
+            scanError: message,
+            scanState: "failed",
+          })),
+        }));
+      }
     }
   },
   rebuildWorkspaceIndex: async (workspaceId?: string) => {

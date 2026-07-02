@@ -18,7 +18,14 @@ import { useHarnessStore } from "./store/harnessStore";
 import { useUiStore } from "./store/uiStore";
 import { useToastStore } from "../features/toast/toastStore";
 import type { HarnessCapabilities, HarnessInfo, HarnessReadiness } from "../lib/ipc/harnessClient";
-import { deleteFile, FileConflictError, readFile, writeFile } from "../lib/ipc/filesClient";
+import {
+  deleteFile,
+  FileConflictError,
+  readFile,
+  scanWorkspace,
+  writeFile,
+} from "../lib/ipc/filesClient";
+import { loadWorkspaceComments } from "../lib/ipc/commentsClient";
 import { switchWorkspace as switchWorkspaceIpc } from "../lib/ipc/workspaceClient";
 
 vi.mock("../lib/ipc/filesClient", () => ({
@@ -93,6 +100,42 @@ describe("workspace store", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("self-heals a transient boot-scan failure by retrying with backoff", async () => {
+    vi.useFakeTimers();
+    // The vault root is unreadable on the first attempt (iCloud not materialized
+    // yet), then readable — the scan must recover on its own, not strand the
+    // tree on a false "no notes".
+    vi.mocked(scanWorkspace)
+      .mockRejectedValueOnce(new Error("could not read workspace root"))
+      .mockResolvedValue([{ relativePath: "note.md", lastModifiedMs: 1, sizeBytes: 1 }]);
+    vi.mocked(loadWorkspaceComments).mockResolvedValue([]);
+    vi.mocked(readFile).mockResolvedValue({ content: "hi", lastModifiedMs: 1 });
+
+    useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+    // Attempt 1 fails and schedules a retry — the workspace stays "loading"
+    // (recovering), never a false "failed" or empty "ready".
+    await useWorkspaceStore.getState().loadActiveWorkspaceFiles();
+    expect(useWorkspaceStore.getState().activeWorkspace()?.scanState).toBe("loading");
+
+    await vi.runAllTimersAsync(); // the backoff retry fires and succeeds
+    const ws = useWorkspaceStore.getState().activeWorkspace();
+    expect(ws?.scanState).toBe("ready");
+    expect(ws?.files.map((entry) => entry.relativePath)).toContain("note.md");
+  });
+
+  it("gives a persistently failing scan a retryable 'failed', not an endless loop", async () => {
+    vi.useFakeTimers();
+    vi.mocked(scanWorkspace).mockRejectedValue(new Error("root unreadable"));
+
+    useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+    await useWorkspaceStore.getState().loadActiveWorkspaceFiles();
+    await vi.runAllTimersAsync();
+
+    expect(useWorkspaceStore.getState().activeWorkspace()?.scanState).toBe("failed");
+    // Bounded: the initial attempt plus three backoff retries, then it stops.
+    expect(vi.mocked(scanWorkspace).mock.calls.length).toBe(4);
   });
 
   it("does not spawn a Bob run before its key is configured", async () => {

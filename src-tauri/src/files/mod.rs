@@ -527,7 +527,21 @@ pub(crate) fn scan_markdown_files(root: &Path) -> Result<Vec<WorkspaceFileEntry>
     for entry in walker {
         let entry = match entry {
             Ok(value) => value,
-            Err(_) => continue,
+            Err(error) => {
+                // A read failure at the ROOT (depth 0) means the vault itself is
+                // unreadable right now — an iCloud folder not yet materialized, a
+                // permission hiccup, a relaunch racing the previous instance.
+                // Surface it so the caller can retry, instead of returning an
+                // empty list that reads as "no notes". A failure deeper in the
+                // tree is one bad file: skip it so a single unreadable note can't
+                // abort the whole scan.
+                if error.depth() == 0 {
+                    return Err(FileError::Message {
+                        message: format!("could not read workspace root: {error}"),
+                    });
+                }
+                continue;
+            }
         };
         if !entry.file_type().is_file() {
             continue;
@@ -799,6 +813,17 @@ mod tests {
         let entries = scan_markdown_files(dir.path()).expect("scan");
         let paths: Vec<_> = entries.iter().map(|e| e.relative_path.clone()).collect();
         assert_eq!(paths, vec!["README.md", "notes/launch.md"]);
+    }
+
+    #[test]
+    fn scan_of_an_unreadable_root_surfaces_an_error() {
+        // A vault root we can't read (iCloud not materialized, gone) must surface
+        // an error, not an empty list — so the caller retries instead of
+        // rendering the vault as "no notes". A single unreadable file deeper in
+        // the tree is still skipped; only a root-level failure aborts.
+        let dir = tempdir().expect("tempdir");
+        let missing = dir.path().join("not-mounted-yet");
+        assert!(scan_markdown_files(&missing).is_err());
     }
 
     #[test]
