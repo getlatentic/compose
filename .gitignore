@@ -41,5 +41,7 @@ artifacts
 # Agent tooling + internal dev docs — not part of the public repo.
 .claude/
 docs/
+# …but the editor package's spec is public package documentation.
+!packages/rich-editor/docs/
 AGENTS.md
 CLAUDE.md
