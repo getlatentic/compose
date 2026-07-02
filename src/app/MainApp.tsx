@@ -16,6 +16,7 @@ export function MainApp() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const handleFsEvent = useWorkspaceStore((state) => state.handleFsEvent);
   const loadActiveWorkspaceFiles = useWorkspaceStore((state) => state.loadActiveWorkspaceFiles);
+  const refreshWorkspaceTree = useWorkspaceStore((state) => state.refreshWorkspaceTree);
   const saveActiveFile = useWorkspaceStore((state) => state.saveActiveFile);
   const openSearch = useUiStore((state) => state.openSearch);
 
@@ -56,6 +57,21 @@ export function MainApp() {
       }
     };
   }, [activeWorkspaceId, handleFsEvent]);
+
+  // Compensating refresh on window focus (VS Code does the same): whatever a
+  // watcher gap missed while the app was in the background gets reconciled the
+  // moment the user comes back. Storm-guarded + min-interval in the store, so
+  // cmd-tabbing around doesn't re-walk the vault.
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      return;
+    }
+    function onFocus() {
+      void refreshWorkspaceTree(activeWorkspaceId ?? undefined);
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [activeWorkspaceId, refreshWorkspaceTree]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

@@ -149,6 +149,34 @@ describe("workspace store", () => {
     expect(ws?.comments).toBe(existing);
   });
 
+  it("collapses a burst of rescan signals into one walk plus one trailing walk", async () => {
+    // Deferred scans, so the burst arrives while the first walk is in flight.
+    const resolvers: Array<(value: never[]) => void> = [];
+    vi.mocked(scanWorkspace).mockImplementation(
+      () => new Promise((resolve) => resolvers.push(resolve as (value: never[]) => void)),
+    );
+
+    const id = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+    const rescan = { kind: "rescan", lastModifiedMs: null, relativePath: "" } as const;
+
+    const first = useWorkspaceStore.getState().handleFsEvent(id, rescan);
+    const second = useWorkspaceStore.getState().handleFsEvent(id, rescan);
+    const third = useWorkspaceStore.getState().handleFsEvent(id, rescan);
+
+    // Three signals, one walk started — the rest collapsed into ONE queued rerun.
+    expect(vi.mocked(scanWorkspace).mock.calls.length).toBe(1);
+
+    // Queued handlers returned immediately; the first drives the whole loop.
+    await Promise.all([second, third]);
+    resolvers.shift()?.([]);
+    // The guard's loop starts exactly one trailing walk for the queued burst...
+    await vi.waitFor(() => expect(vi.mocked(scanWorkspace).mock.calls.length).toBe(2));
+    resolvers.shift()?.([]);
+    await first;
+    // ...and nothing further once the queue is drained.
+    expect(vi.mocked(scanWorkspace).mock.calls.length).toBe(2);
+  });
+
   it("gives a persistently failing scan a retryable 'failed', not an endless loop", async () => {
     vi.useFakeTimers();
     vi.mocked(scanWorkspace).mockRejectedValue(new Error("root unreadable"));

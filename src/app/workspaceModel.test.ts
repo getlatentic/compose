@@ -344,10 +344,106 @@ describe("workspace model", () => {
       relativePath: "b.md",
     });
 
-    expect(effect.type).toBe("rescan");
+    // In-place removal: persist tabs + refresh the index, but no full scan.
+    expect(effect.type).toBe("treeChanged");
     expect(next.openFilePaths).toEqual(["a.md"]);
     expect(next.activeFilePath).toBe("a.md");
     expect(next.files.map((entry) => entry.relativePath)).toEqual(["a.md"]);
+  });
+
+  it("applyFsEvent patches a created note into the tree without a rescan", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["b.md"]);
+
+    const { workspace: next, effect } = applyFsEvent(workspace, {
+      kind: "created",
+      lastModifiedMs: 42,
+      relativePath: "Notes/a.md",
+      isDir: false,
+      sizeBytes: 7,
+    });
+
+    expect(effect.type).toBe("treeChanged");
+    expect(next.files.map((entry) => entry.relativePath)).toEqual(["b.md", "Notes/a.md"]);
+    expect(next.files.find((entry) => entry.relativePath === "Notes/a.md")).toMatchObject({
+      lastModifiedMs: 42,
+      sizeBytes: 7,
+    });
+    // The containing folder materializes with the note, so the tree can place it.
+    expect(next.folders).toContain("Notes");
+  });
+
+  it("applyFsEvent treats echoes of our own create/delete as no-ops (same reference)", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+
+    // createNote already inserted the entry — the watcher echo changes nothing.
+    const created = applyFsEvent(workspace, {
+      kind: "created",
+      lastModifiedMs: 1,
+      relativePath: "a.md",
+      isDir: false,
+    });
+    expect(created.workspace).toBe(workspace);
+    expect(created.effect.type).toBe("noop");
+
+    // deleteActiveFile already dropped the path — the echo finds nothing.
+    const removed = applyFsEvent(workspace, {
+      kind: "removed",
+      lastModifiedMs: null,
+      relativePath: "gone-already.md",
+    });
+    expect(removed.workspace).toBe(workspace);
+    expect(removed.effect.type).toBe("noop");
+  });
+
+  it("applyFsEvent on a removed folder takes its subtree and tabs with it", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["Notes/a.md", "Notes/Deep/b.md", "c.md"]);
+    const withFolders = { ...workspace, folders: ["Notes", "Notes/Deep"] };
+    const opened = openWorkspaceFile(withFolders, "Notes/Deep/b.md");
+
+    const { workspace: next, effect } = applyFsEvent(opened, {
+      kind: "removed",
+      lastModifiedMs: null,
+      relativePath: "Notes",
+    });
+
+    expect(effect.type).toBe("treeChanged");
+    expect(next.files.map((entry) => entry.relativePath)).toEqual(["c.md"]);
+    expect(next.folders).toEqual([]);
+    expect(next.openFilePaths).toEqual([]);
+  });
+
+  it("applyFsEvent asks for one rescan for an unknown directory (it may have contents)", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+
+    // A folder dragged in via Finder emits only the top-level event — only a
+    // scan can see inside it.
+    const unknownDir = applyFsEvent(workspace, {
+      kind: "created",
+      lastModifiedMs: null,
+      relativePath: "Imported",
+      isDir: true,
+    });
+    expect(unknownDir.effect.type).toBe("rescan");
+
+    // Our own createFolder echo: the folder is already known — nothing to do.
+    const known = applyFsEvent({ ...workspace, folders: ["Imported"] }, {
+      kind: "created",
+      lastModifiedMs: null,
+      relativePath: "Imported",
+      isDir: true,
+    });
+    expect(known.effect.type).toBe("noop");
+  });
+
+  it("applyFsEvent maps the watcher's lost-sync signal to a full rescan", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
+    const { workspace: next, effect } = applyFsEvent(workspace, {
+      kind: "rescan",
+      lastModifiedMs: null,
+      relativePath: "",
+    });
+    expect(next).toBe(workspace);
+    expect(effect.type).toBe("rescan");
   });
 
   it("applyFsEvent on a dirty buffer marks it as conflicted", () => {
@@ -420,18 +516,6 @@ describe("workspace model", () => {
     });
 
     expect(effect.type).toBe("noop");
-  });
-
-  it("applyFsEvent on create/remove triggers a rescan", () => {
-    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
-
-    expect(
-      applyFsEvent(workspace, { kind: "created", lastModifiedMs: 5, relativePath: "b.md" }).effect,
-    ).toEqual({ type: "rescan" });
-    expect(
-      applyFsEvent(workspace, { kind: "removed", lastModifiedMs: null, relativePath: "a.md" })
-        .effect,
-    ).toEqual({ type: "rescan" });
   });
 
   it("markBufferSaved clears dirty and bumps lastModifiedMs", () => {

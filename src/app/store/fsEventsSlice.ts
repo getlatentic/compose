@@ -23,13 +23,75 @@ import {
   updateWorkspace,
 } from "./internals";
 
+// Rescan storm guard: one full scan in flight per workspace, and at most ONE
+// queued follow-up — a burst of rescan-worthy events (iCloud sync catching up,
+// a folder dragged in) collapses to "the scan running now + one trailing scan
+// that sees the final state", never N walks. Module state, keyed by workspace.
+const rescanInFlight = new Set<string>();
+const rescanQueued = new Set<string>();
+// Focus refreshes are a cheap belt-and-braces reconcile (VS Code does the
+// same) — but cmd-tabbing around shouldn't walk the vault every time.
+const FOCUS_REFRESH_MIN_INTERVAL_MS = 5_000;
+const lastRefreshAt = new Map<string, number>();
+
+async function runGuardedRescan(
+  workspaceId: string,
+  set: WorkspaceStoreSet,
+  get: WorkspaceStoreGet,
+): Promise<void> {
+  if (rescanInFlight.has(workspaceId)) {
+    rescanQueued.add(workspaceId);
+    return;
+  }
+  rescanInFlight.add(workspaceId);
+  try {
+    do {
+      rescanQueued.delete(workspaceId);
+      try {
+        const [entries, folders] = await Promise.all([
+          scanWorkspace(workspaceId),
+          scanFolders(workspaceId).catch(() => [] as string[]),
+        ]);
+        lastRefreshAt.set(workspaceId, Date.now());
+        set((state) => ({
+          workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
+            applyScanResult({ ...item, folders }, entries),
+          ),
+        }));
+        persistTabs(get().workspaces, workspaceId);
+        persistComments(get().workspaces, workspaceId, showErrorToast);
+        void get().rebuildWorkspaceIndex(workspaceId);
+      } catch {
+        set((state) => ({
+          workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
+            ...item,
+            scanError: "Workspace rescan failed after filesystem event",
+            scanState: "failed",
+          })),
+        }));
+      }
+    } while (rescanQueued.has(workspaceId));
+  } finally {
+    rescanInFlight.delete(workspaceId);
+  }
+}
+
 export const createFsEventsSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "handleFsEvent"> => ({
+): Pick<WorkspaceState, "handleFsEvent" | "refreshWorkspaceTree"> => ({
   handleFsEvent: async (workspaceId: string, event: WorkspaceFsEvent) => {
     const workspace = get().workspaces.find((item) => item.id === workspaceId);
     if (!workspace) {
+      return;
+    }
+
+    if (event.kind === "watch-error") {
+      // Watching gave up (bounded restarts exhausted). Don't go silently
+      // stale — tell the user how to recover.
+      showErrorToast(
+        "Stopped watching this folder for external changes — reopen it to resume.",
+      );
       return;
     }
 
@@ -42,9 +104,9 @@ export const createFsEventsSlice = (
       isAgentEditActive(workspaceId),
     );
     // Skip the store write when nothing changed (e.g. an echo of our own
-    // autosave — applyFsEvent returns the workspace unchanged). Writing
-    // it anyway would create a fresh `workspaces` array reference and
-    // re-render AppShell + the file tree for nothing.
+    // autosave or create/delete — applyFsEvent returns the workspace
+    // unchanged). Writing it anyway would create a fresh `workspaces` array
+    // reference and re-render AppShell + the file tree for nothing.
     if (updated !== workspace) {
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspaceId, () => updated),
@@ -80,29 +142,24 @@ export const createFsEventsSlice = (
           ),
         }));
       }
+    } else if (effect.type === "treeChanged") {
+      // The tree was patched in place (one entry added/removed) — persist the
+      // (possibly closed) tabs and refresh the search index; no scan needed.
+      persistTabs(get().workspaces, workspaceId);
+      void get().rebuildWorkspaceIndex(workspaceId);
     } else if (effect.type === "rescan") {
-      try {
-        const [entries, folders] = await Promise.all([
-          scanWorkspace(workspaceId),
-          scanFolders(workspaceId).catch(() => [] as string[]),
-        ]);
-        set((state) => ({
-          workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
-            applyScanResult({ ...item, folders }, entries),
-          ),
-        }));
-        persistTabs(get().workspaces, workspaceId);
-        persistComments(get().workspaces, workspaceId, showErrorToast);
-        void get().rebuildWorkspaceIndex(workspaceId);
-      } catch {
-        set((state) => ({
-          workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
-            ...item,
-            scanError: "Workspace rescan failed after filesystem event",
-            scanState: "failed",
-          })),
-        }));
-      }
+      await runGuardedRescan(workspaceId, set, get);
     }
+  },
+  refreshWorkspaceTree: async (workspaceId?: string) => {
+    const targetId = workspaceId ?? get().activeWorkspaceId;
+    if (!targetId) {
+      return;
+    }
+    const last = lastRefreshAt.get(targetId) ?? 0;
+    if (Date.now() - last < FOCUS_REFRESH_MIN_INTERVAL_MS) {
+      return;
+    }
+    await runGuardedRescan(targetId, set, get);
   },
 });

@@ -130,6 +130,9 @@ export interface WorkspaceState {
   deleteActiveFile: () => Promise<void>;
   dismissConflict: (relativePath: string) => void;
   handleFsEvent: (workspaceId: string, event: WorkspaceFsEvent) => Promise<void>;
+  /** One reconciling scan (storm-guarded, min-interval on repeats) — the
+   * consistency fallback behind watcher gaps and window-focus refreshes. */
+  refreshWorkspaceTree: (workspaceId?: string) => Promise<void>;
   hydrateWorkspaces: (workspaceList: WorkspaceListResult) => void;
   onboarding: OnboardingState;
   onboardingComplete: () => boolean;

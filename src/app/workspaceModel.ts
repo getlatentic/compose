@@ -362,14 +362,21 @@ export interface WorkspaceListResult {
 }
 
 export interface WorkspaceFsEvent {
-  kind: "created" | "modified" | "removed";
+  kind: "created" | "modified" | "removed" | "rescan" | "watch-error";
   lastModifiedMs: number | null;
   relativePath: string;
+  /** Known for `created` (stat'd at emit time); absent for `removed`. */
+  isDir?: boolean | null;
+  /** File size at emit time, so a created note becomes a tree entry directly. */
+  sizeBytes?: number | null;
 }
 
 export type FsEventEffect =
   | { type: "reloadFile"; relativePath: string }
   | { type: "rescan" }
+  /** The tree structure changed in-place (entry added/removed) — persist tabs
+   * and refresh the search index, but no scan is needed. */
+  | { type: "treeChanged" }
   | { type: "noop" };
 
 export function isSetupComplete(
@@ -1088,17 +1095,20 @@ export function applyFsEvent(
    */
   agentEdit = false,
 ): { workspace: Workspace; effect: FsEventEffect } {
+  if (event.kind === "rescan") {
+    // The watcher lost sync (queue overflow, or a gap while re-establishing):
+    // events were missed, so only a full scan reconciles the tree.
+    return { workspace, effect: { type: "rescan" } };
+  }
+  if (event.kind === "watch-error") {
+    // Watching gave up (bounded restarts exhausted) — the slice surfaces it.
+    return { workspace, effect: { type: "noop" } };
+  }
   if (event.kind === "removed") {
-    // A confirmed deletion: close that file's tab + drop it from the list now,
-    // rather than letting a rescan's absence do it — a transient scan miss must
-    // not be mistaken for a deletion (see applyScanResult). Still rescan to
-    // reconcile the rest of the tree (e.g. a directory removal).
-    const closed = closeWorkspaceFileTab(workspace, event.relativePath);
-    const files = closed.files.filter((entry) => entry.relativePath !== event.relativePath);
-    return { workspace: { ...closed, files }, effect: { type: "rescan" } };
+    return applyRemovedPath(workspace, event.relativePath);
   }
   if (event.kind === "created") {
-    return { workspace, effect: { type: "rescan" } };
+    return applyCreatedPath(workspace, event);
   }
 
   const buffer = workspace.fileContents[event.relativePath];
@@ -1144,6 +1154,96 @@ export function applyFsEvent(
     workspace: { ...workspace, files: updatedFiles },
     effect: { type: "reloadFile", relativePath: event.relativePath },
   };
+}
+
+/** Every ancestor directory of a relative path, outermost first. */
+function ancestorDirs(relativePath: string): string[] {
+  const parts = relativePath.split("/");
+  const chain: string[] = [];
+  for (let index = 1; index < parts.length; index += 1) {
+    chain.push(parts.slice(0, index).join("/"));
+  }
+  return chain;
+}
+
+/**
+ * A `created` event patches the tree in place — no scan. The one exception is
+ * an UNKNOWN directory: it may have arrived with contents (a folder dragged in
+ * via Finder emits only the top-level event), and only a scan can see inside —
+ * so that case alone asks for one reconciling rescan. Echoes of our own
+ * creates (path already known) return the workspace untouched, so the
+ * unchanged-reference check upstream skips the store write entirely.
+ */
+function applyCreatedPath(
+  workspace: Workspace,
+  event: WorkspaceFsEvent,
+): { workspace: Workspace; effect: FsEventEffect } {
+  if (event.isDir) {
+    if (workspace.folders.includes(event.relativePath)) {
+      return { workspace, effect: { type: "noop" } };
+    }
+    return { workspace, effect: { type: "rescan" } };
+  }
+  if (workspace.files.some((entry) => entry.relativePath === event.relativePath)) {
+    return { workspace, effect: { type: "noop" } };
+  }
+  const entry: WorkspaceFileEntry = {
+    lastModifiedMs: event.lastModifiedMs ?? 0,
+    relativePath: event.relativePath,
+    sizeBytes: event.sizeBytes ?? 0,
+  };
+  const files = [...workspace.files, entry].sort((a, b) =>
+    a.relativePath.localeCompare(b.relativePath),
+  );
+  // The note may land in a folder we haven't materialized (its own dir event
+  // can be skipped or arrive later) — add the chain so the tree can place it.
+  const missing = ancestorDirs(event.relativePath).filter(
+    (dir) => !workspace.folders.includes(dir),
+  );
+  const folders = missing.length
+    ? [...workspace.folders, ...missing].sort((a, b) => a.localeCompare(b))
+    : workspace.folders;
+  return { workspace: { ...workspace, files, folders }, effect: { type: "treeChanged" } };
+}
+
+/**
+ * A `removed` event resolves against what the tree actually knows: a known
+ * file closes its tab and leaves the list; a known folder takes its whole
+ * subtree (tabs included) with it. An unknown path (a non-md file, a stale
+ * echo of our own delete) returns the workspace untouched. A transient scan
+ * miss can never delete anything here — only a real watcher removal reaches
+ * this point (see applyScanResult, which deliberately never prunes).
+ */
+function applyRemovedPath(
+  workspace: Workspace,
+  relativePath: string,
+): { workspace: Workspace; effect: FsEventEffect } {
+  // Known as a file OR as an open tab: a transient scan miss drops the entry
+  // from `files` while deliberately keeping the tab (see applyScanResult) —
+  // the confirmed deletion arriving later must still close that tab.
+  const isKnownFile =
+    workspace.files.some((entry) => entry.relativePath === relativePath) ||
+    workspace.openFilePaths.includes(relativePath);
+  if (isKnownFile) {
+    const closed = closeWorkspaceFileTab(workspace, relativePath);
+    const files = closed.files.filter((entry) => entry.relativePath !== relativePath);
+    return { workspace: { ...closed, files }, effect: { type: "treeChanged" } };
+  }
+  if (workspace.folders.includes(relativePath)) {
+    const prefix = `${relativePath}/`;
+    let updated = workspace;
+    for (const entry of workspace.files) {
+      if (entry.relativePath.startsWith(prefix)) {
+        updated = closeWorkspaceFileTab(updated, entry.relativePath);
+      }
+    }
+    const files = updated.files.filter((entry) => !entry.relativePath.startsWith(prefix));
+    const folders = updated.folders.filter(
+      (dir) => dir !== relativePath && !dir.startsWith(prefix),
+    );
+    return { workspace: { ...updated, files, folders }, effect: { type: "treeChanged" } };
+  }
+  return { workspace, effect: { type: "noop" } };
 }
 
 /** A globally-unique chat-message id. `conversation_messages.message_id` is a
