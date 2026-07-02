@@ -183,8 +183,19 @@ const FileRow = memo(function FileRow({
       event.dataTransfer.setData(DRAG_FILE_MIME, path);
       event.dataTransfer.effectAllowed = "move";
       draggedFilePath = path;
+      // Explicit drag image: the rows sit inside a virtualizer that positions
+      // them with translateY, and WebKit's default drag snapshot captures the
+      // UNTRANSFORMED origin region — the ghost showed whichever row paints
+      // first in the tree, not the one being dragged. A tiny name chip is
+      // deterministic (and reads better than a full row snapshot).
+      const ghost = document.createElement("div");
+      ghost.className = "file-drag-ghost";
+      ghost.textContent = name;
+      document.body.appendChild(ghost);
+      event.dataTransfer.setDragImage(ghost, 12, 12);
+      setTimeout(() => ghost.remove(), 0);
     },
-    [path],
+    [path, name],
   );
   // Clears the tracked path when a drag ends anywhere (dropped outside a folder,
   // or cancelled) so a later dragover doesn't see a stale drag.
@@ -644,6 +655,35 @@ function FileTreeInner({
       pendingReveal.current = null;
     }
   }, [activePath, rows, virtualizer]);
+
+  // Keep the creation TARGET revealed, same two-step dance as the active file:
+  // expand its ancestor chain now, scroll once the rows include it. Covers a
+  // freshly created folder (createFolder sets newNoteDir), from the sidebar's
+  // "New folder" and the tree's "New folder here" alike; for a plain folder
+  // click everything is already visible, so this no-ops.
+  const pendingFolderReveal = useRef<string | null>(null);
+  useEffect(() => {
+    if (!newNoteDir) return;
+    pendingFolderReveal.current = newNoteDir;
+    setExpanded((previous) => {
+      // `ancestorFolders` of a path INSIDE the dir yields the chain up to and
+      // including the dir itself.
+      const chain = ancestorFolders(`${newNoteDir}/_`);
+      if (chain.every((dir) => previous.has(dir))) return previous;
+      const next = new Set(previous);
+      for (const dir of chain) next.add(dir);
+      return next;
+    });
+  }, [newNoteDir]);
+  useEffect(() => {
+    const target = pendingFolderReveal.current;
+    if (!target) return;
+    const index = rows.findIndex((node) => node.type === "folder" && node.path === target);
+    if (index >= 0) {
+      virtualizer.scrollToIndex(index, { align: "auto" });
+      pendingFolderReveal.current = null;
+    }
+  }, [newNoteDir, rows, virtualizer]);
 
   if (files.length === 0) {
     return (
