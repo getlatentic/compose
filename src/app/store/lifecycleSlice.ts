@@ -258,17 +258,43 @@ export const createLifecycleSlice = (
     if (!targetWorkspaceId) {
       return;
     }
-
-    // The index lives in its own store (useIndexStore) — NOT on the workspace —
-    // so a rebuild on every save doesn't churn the workspace object and
-    // re-render the file tree / tabs / sidebar.
-    useIndexStore.getState().setIndexing(targetWorkspaceId);
-    try {
-      const snapshot = await rebuildWorkspaceIndexIpc(targetWorkspaceId);
-      useIndexStore.getState().setSnapshot(targetWorkspaceId, snapshot);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Workspace index failed";
-      useIndexStore.getState().setFailed(targetWorkspaceId, message);
+    const inFlight = indexRebuildFlights.get(targetWorkspaceId);
+    if (inFlight) {
+      // A crawl is running: remember that the workspace changed again and let
+      // ONE trailing run pick everything up — a burst of saves must not queue
+      // a burst of full crawls (#106).
+      inFlight.trailing = true;
+      return inFlight.current;
     }
+
+    const flight = { current: Promise.resolve(), trailing: false };
+    flight.current = (async () => {
+      // The index lives in its own store (useIndexStore) — NOT on the workspace —
+      // so a rebuild on every save doesn't churn the workspace object and
+      // re-render the file tree / tabs / sidebar.
+      do {
+        flight.trailing = false;
+        useIndexStore.getState().setIndexing(targetWorkspaceId);
+        try {
+          const snapshot = await rebuildWorkspaceIndexIpc(targetWorkspaceId);
+          useIndexStore.getState().setSnapshot(targetWorkspaceId, snapshot);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Workspace index failed";
+          // The backend's own single-flight guard declined us — another invoke
+          // is already crawling and will publish its snapshot; stay "indexing".
+          if (!message.includes("already in progress")) {
+            useIndexStore.getState().setFailed(targetWorkspaceId, message);
+          }
+        }
+      } while (flight.trailing);
+      indexRebuildFlights.delete(targetWorkspaceId);
+    })();
+    indexRebuildFlights.set(targetWorkspaceId, flight);
+    return flight.current;
   },
 });
+
+/** One in-flight index crawl per workspace plus at most one coalesced
+ * trailing run — rebuilds are requested on every save/rename/delete, watcher
+ * event, and search open, and each is a full-vault crawl (#106). */
+const indexRebuildFlights = new Map<string, { current: Promise<void>; trailing: boolean }>();

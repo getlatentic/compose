@@ -11,9 +11,11 @@ use crate::db::{
     self, MetadataStore, SearchBacklinkRecord, SearchFrontmatterRecord, SearchGraphEdgeRecord,
     SearchIndexRecords, SearchTagRecord,
 };
-use crate::files::{document_inventory_for_entries, ensure_vault_metadata, scan_markdown_files};
+use crate::files::{
+    document_inventory_for_entries, ensure_vault_metadata, icloud, scan_markdown_files,
+};
 use crate::workspace::WorkspaceRegistry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::Instant;
 use tauri::State;
@@ -26,9 +28,30 @@ pub use workspace_index::{
     TagKind, TagRecord, WorkspaceIndexSnapshot,
 };
 
+/// Stable error string for a rebuild declined because one is already running.
+/// The frontend matches on it to keep showing "indexing" rather than "failed".
+pub const INDEX_BUILD_IN_PROGRESS: &str = "workspace index build already in progress";
+
 #[derive(Default)]
 pub struct WorkspaceIndexStore {
     snapshots: Mutex<HashMap<String, WorkspaceIndexSnapshot>>,
+    building: Mutex<HashSet<String>>,
+}
+
+/// Releases a workspace's build slot when the rebuild leaves scope — success,
+/// error, or panic all free the slot, so a failed build can't lock a
+/// workspace out of indexing until restart.
+struct BuildSlot<'store> {
+    store: &'store WorkspaceIndexStore,
+    workspace_id: String,
+}
+
+impl Drop for BuildSlot<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut building) = self.store.building.lock() {
+            building.remove(&self.workspace_id);
+        }
+    }
 }
 
 #[tauri::command(async)]
@@ -38,6 +61,11 @@ pub fn workspace_rebuild_index(
     metadata: State<'_, MetadataStore>,
     store: State<'_, WorkspaceIndexStore>,
 ) -> Result<WorkspaceIndexSnapshot, String> {
+    // Single-flight per workspace (#106): rebuilds are triggered from many
+    // places (every save/rename/delete, watcher events, opening search) and a
+    // crawl over a big vault takes real time — concurrent rebuilds multiply
+    // the I/O and contend on the metadata store that history and saves need.
+    let _slot = store.begin_build(&workspace_id)?;
     let started = Instant::now();
     let root = registry.workspace_root(&workspace_id)?;
     let entries = scan_markdown_files(&root).map_err(file_error_message)?;
@@ -56,6 +84,15 @@ pub fn workspace_rebuild_index(
 
     for entry in entries {
         let absolute = root.join(&entry.relative_path);
+        // Never read a dataless iCloud placeholder: the read BLOCKS while the
+        // bytes download (it does not fail fast), turning the rebuild into a
+        // network crawl (#106). Skip it, nudge the download, and let a later
+        // rebuild index it once local.
+        if icloud::is_dataless(&absolute) {
+            icloud::start_download(&absolute);
+            skipped += 1;
+            continue;
+        }
         // A single unreadable or non-UTF-8 file (a binary mis-named `.md`, a
         // permission glitch), or a doc with no metadata row yet, must not sink
         // the whole index — skip it and keep going. Aborting here left search
@@ -129,6 +166,22 @@ pub fn workspace_search_index(
 }
 
 impl WorkspaceIndexStore {
+    /// Claim the workspace's build slot, or decline with
+    /// [`INDEX_BUILD_IN_PROGRESS`] when a build already holds it.
+    fn begin_build(&self, workspace_id: &str) -> Result<BuildSlot<'_>, String> {
+        let mut building = self
+            .building
+            .lock()
+            .map_err(|_| "workspace index lock was poisoned".to_owned())?;
+        if !building.insert(workspace_id.to_owned()) {
+            return Err(INDEX_BUILD_IN_PROGRESS.to_owned());
+        }
+        Ok(BuildSlot {
+            store: self,
+            workspace_id: workspace_id.to_owned(),
+        })
+    }
+
     fn insert(&self, snapshot: WorkspaceIndexSnapshot) -> Result<(), String> {
         self.snapshots
             .lock()
@@ -232,4 +285,47 @@ fn now_ms() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn second_build_is_declined_while_the_first_holds_the_slot() {
+        let store = WorkspaceIndexStore::default();
+        let slot = store.begin_build("ws-1").expect("first build claims");
+        let declined = match store.begin_build("ws-1") {
+            Ok(_) => panic!("second concurrent build must be declined"),
+            Err(message) => message,
+        };
+        assert_eq!(declined, INDEX_BUILD_IN_PROGRESS);
+        drop(slot);
+        store
+            .begin_build("ws-1")
+            .expect("slot frees when the build ends");
+    }
+
+    #[test]
+    fn workspaces_build_independently() {
+        let store = WorkspaceIndexStore::default();
+        let _one = store.begin_build("ws-1").expect("ws-1 claims");
+        store
+            .begin_build("ws-2")
+            .expect("another workspace is unaffected");
+    }
+
+    #[test]
+    fn a_panicking_build_frees_its_slot() {
+        let store = std::sync::Arc::new(WorkspaceIndexStore::default());
+        let for_thread = store.clone();
+        let _ = std::thread::spawn(move || {
+            let _slot = for_thread.begin_build("ws-1").expect("claims");
+            panic!("build blew up");
+        })
+        .join();
+        store
+            .begin_build("ws-1")
+            .expect("slot released despite the panic");
+    }
 }
