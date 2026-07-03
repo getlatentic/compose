@@ -27,6 +27,8 @@ import {
 } from "../lib/ipc/filesClient";
 import { loadWorkspaceComments } from "../lib/ipc/commentsClient";
 import { switchWorkspace as switchWorkspaceIpc } from "../lib/ipc/workspaceClient";
+import { rebuildWorkspaceIndex as rebuildWorkspaceIndexIpc } from "../lib/ipc/indexClient";
+import { useIndexStore } from "./store/indexStore";
 
 vi.mock("../lib/ipc/filesClient", () => ({
   createFile: vi.fn(),
@@ -1013,5 +1015,74 @@ describe("workspace store", () => {
       await useHarnessStore.getState().refreshHarnessStatuses();
       expect(harnessReadiness).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("index rebuild coalescing (#106)", () => {
+  const WS = "ws-index";
+
+  function deferredSnapshot() {
+    let resolve!: (value: unknown) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  function snapshotFor(id: string) {
+    return { workspaceId: id, documents: [] } as never;
+  }
+
+  beforeEach(() => {
+    // Sibling of the main describe — the outer clearAllMocks doesn't cover us.
+    vi.clearAllMocks();
+    useIndexStore.setState({ byWorkspace: {} });
+  });
+
+  it("a burst of rebuild requests runs one crawl plus one trailing crawl", async () => {
+    const first = deferredSnapshot();
+    const trailing = deferredSnapshot();
+    vi.mocked(rebuildWorkspaceIndexIpc)
+      .mockReturnValueOnce(first.promise as never)
+      .mockReturnValueOnce(trailing.promise as never);
+
+    const store = useWorkspaceStore.getState();
+    const a = store.rebuildWorkspaceIndex(WS);
+    const b = store.rebuildWorkspaceIndex(WS);
+    const c = store.rebuildWorkspaceIndex(WS);
+    expect(rebuildWorkspaceIndexIpc).toHaveBeenCalledTimes(1);
+
+    first.resolve(snapshotFor(WS));
+    trailing.resolve(snapshotFor(WS));
+    await Promise.all([a, b, c]);
+
+    // Three requests → the in-flight crawl + exactly one coalesced trailing run.
+    expect(rebuildWorkspaceIndexIpc).toHaveBeenCalledTimes(2);
+    expect(useIndexStore.getState().byWorkspace[WS]?.state).toBe("ready");
+  });
+
+  it("a lone request runs exactly one crawl", async () => {
+    vi.mocked(rebuildWorkspaceIndexIpc).mockResolvedValueOnce(snapshotFor(WS) as never);
+    await useWorkspaceStore.getState().rebuildWorkspaceIndex(WS);
+    expect(rebuildWorkspaceIndexIpc).toHaveBeenCalledTimes(1);
+    expect(useIndexStore.getState().byWorkspace[WS]?.state).toBe("ready");
+  });
+
+  it("the backend's already-in-progress decline keeps the indexing state, not failed", async () => {
+    vi.mocked(rebuildWorkspaceIndexIpc).mockRejectedValueOnce(
+      new Error("workspace index build already in progress"),
+    );
+    await useWorkspaceStore.getState().rebuildWorkspaceIndex(WS);
+    expect(useIndexStore.getState().byWorkspace[WS]?.state).toBe("indexing");
+  });
+
+  it("a real failure still surfaces as failed", async () => {
+    vi.mocked(rebuildWorkspaceIndexIpc).mockRejectedValueOnce(new Error("disk on fire"));
+    await useWorkspaceStore.getState().rebuildWorkspaceIndex(WS);
+    const entry = useIndexStore.getState().byWorkspace[WS];
+    expect(entry?.state).toBe("failed");
+    expect(entry?.error).toBe("disk on fire");
   });
 });

@@ -640,10 +640,20 @@ pub(crate) fn document_inventory_for_entries(
     let mut inventory = Vec::with_capacity(entries.len());
     let mut skipped = Vec::new();
     for entry in entries {
-        // One unreadable file (dataless iCloud placeholder, permission glitch,
-        // a path that vanished mid-scan) must not abort the whole build — skip
-        // it and carry on, mirroring the rebuild's content loop.
-        let Ok(bytes) = std::fs::read(root.join(&entry.relative_path)) else {
+        let absolute = root.join(&entry.relative_path);
+        // A dataless iCloud placeholder must be skipped BEFORE the read: with a
+        // network available the read doesn't fail, it BLOCKS while macOS
+        // downloads the file — a bulk crawl over a big vault wedges for minutes
+        // (#106). Nudge the download so a later pass picks the file up.
+        if icloud::is_dataless(&absolute) {
+            icloud::start_download(&absolute);
+            skipped.push(entry.relative_path.clone());
+            continue;
+        }
+        // One unreadable file (a permission glitch, a path that vanished
+        // mid-scan, an unmaterializable placeholder) must not abort the whole
+        // build — skip it and carry on, mirroring the rebuild's content loop.
+        let Ok(bytes) = std::fs::read(&absolute) else {
             skipped.push(entry.relative_path.clone());
             continue;
         };
