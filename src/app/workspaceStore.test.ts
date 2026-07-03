@@ -573,13 +573,93 @@ describe("workspace store", () => {
       expect(readFile).toHaveBeenCalledTimes(1);
     });
 
-    it("selectFile surfaces a read failure as saveError", async () => {
+    it("selectFile surfaces a read failure for a listed file (transient hiccup)", async () => {
       vi.mocked(readFile).mockRejectedValue(new Error("disk gone"));
-      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      useWorkspaceStore.setState((state) => ({
+        workspaces: state.workspaces.map((workspace) =>
+          workspace.id === workspaceId
+            ? {
+                ...workspace,
+                files: [{ lastModifiedMs: 1, relativePath: "missing.md", sizeBytes: 1 }],
+              }
+            : workspace,
+        ),
+      }));
 
       await useWorkspaceStore.getState().selectFile("missing.md");
 
       expect(useToastStore.getState().toasts.slice(-1)[0]?.message).toBe("disk gone");
+      // The tab survives a transient failure — the file is still on disk.
+      expect(useWorkspaceStore.getState().activeWorkspace()?.openFilePaths).toContain(
+        "missing.md",
+      );
+    });
+
+    it("a tab whose file is GONE closes instead of stranding on a blank editor (#105)", async () => {
+      vi.mocked(readFile).mockRejectedValue(new Error("no such file"));
+      useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+
+      // Not in `files` (the scan agrees it is gone) — e.g. a restored tab for
+      // an externally deleted note.
+      await useWorkspaceStore.getState().selectFile("ghost.md");
+
+      const workspace = useWorkspaceStore.getState().activeWorkspace();
+      expect(workspace?.openFilePaths).not.toContain("ghost.md");
+      // No error toast: closing the corpse IS the resolution.
+      expect(useToastStore.getState().toasts).toHaveLength(0);
+    });
+
+    it("saveAllDirtyBuffers never resurrects a deleted file (#105)", async () => {
+      vi.mocked(writeFile).mockResolvedValue({ lastModifiedMs: 500 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      useWorkspaceStore.setState((state) => ({
+        workspaces: state.workspaces.map((workspace) =>
+          workspace.id === workspaceId
+            ? {
+                ...workspace,
+                activeFilePath: "kept.md",
+                openFilePaths: ["kept.md", "deleted.md"],
+                files: [{ lastModifiedMs: 1, relativePath: "kept.md", sizeBytes: 1 }],
+                fileContents: {
+                  "kept.md": { content: "K", lastModifiedMs: 1, dirty: true, conflict: false, pendingChanges: [] },
+                  "deleted.md": { content: "D", lastModifiedMs: 2, dirty: true, conflict: false, pendingChanges: [] },
+                },
+              }
+            : workspace,
+        ),
+      }));
+
+      await useWorkspaceStore.getState().saveAllDirtyBuffers();
+
+      expect(writeFile).toHaveBeenCalledTimes(1);
+      expect(writeFile).toHaveBeenCalledWith(workspaceId, "kept.md", "K", 1, []);
+    });
+
+    it("an implicit save skips a deleted path; an explicit save re-creates it", async () => {
+      vi.mocked(writeFile).mockResolvedValue({ lastModifiedMs: 500 });
+      const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
+      useWorkspaceStore.setState((state) => ({
+        workspaces: state.workspaces.map((workspace) =>
+          workspace.id === workspaceId
+            ? {
+                ...workspace,
+                activeFilePath: "deleted.md",
+                openFilePaths: ["deleted.md"],
+                files: [],
+                fileContents: {
+                  "deleted.md": { content: "D", lastModifiedMs: 2, dirty: true, conflict: false, pendingChanges: [] },
+                },
+              }
+            : workspace,
+        ),
+      }));
+
+      await useWorkspaceStore.getState().saveActiveFile({ implicit: true });
+      expect(writeFile).not.toHaveBeenCalled();
+
+      await useWorkspaceStore.getState().saveActiveFile();
+      expect(writeFile).toHaveBeenCalledTimes(1);
     });
 
     it("ensureActiveBuffer loads the active file's buffer when it is missing (#50)", async () => {
@@ -646,6 +726,11 @@ describe("workspace store", () => {
                 ...workspace,
                 activeFilePath: "a.md",
                 openFilePaths: ["a.md", "b.md", "c.md", "d.md"],
+                files: ["a.md", "b.md", "c.md", "d.md"].map((relativePath) => ({
+                  lastModifiedMs: 1,
+                  relativePath,
+                  sizeBytes: 1,
+                })),
                 fileContents: {
                   // active dirty + background dirty → both written; clean +
                   // conflicted → skipped (a conflicted write would clobber disk).

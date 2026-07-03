@@ -12,6 +12,7 @@ import {
 } from "../../lib/ipc/filesClient";
 import {
   applyFileBuffer,
+  removeDeletedFile,
   applyWorkspaceDocumentChanges,
   closeWorkspaceFileTab,
   dismissBufferConflict,
@@ -19,7 +20,6 @@ import {
   markBufferSaved,
   moveWorkspaceComments,
   openWorkspaceFile,
-  removeFileContext,
   removeWorkspaceFolder,
   renameContextItemPath,
   reorderOpenTabs,
@@ -78,6 +78,21 @@ async function loadBufferIfMissing(
       ),
     }));
   } catch (error) {
+    // A tab whose file is GONE (deleted externally, stale restored tab) must
+    // not strand on a forever-blank editor: when the scan agrees the file no
+    // longer exists, close the tab; otherwise (transient read hiccup) keep it
+    // and surface the error (#105).
+    const current = get().workspaces.find((item) => item.id === workspaceId);
+    const stillListed = current?.files.some((entry) => entry.relativePath === path) ?? false;
+    if (!stillListed) {
+      set((state) => ({
+        workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
+          closeWorkspaceFileTab(item, path),
+        ),
+      }));
+      persistTabs(get().workspaces, workspaceId);
+      return;
+    }
     showErrorToast(error instanceof Error ? error.message : "Could not open file");
   } finally {
     loadingBuffers.delete(key);
@@ -87,7 +102,7 @@ async function loadBufferIfMissing(
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "deleteFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -270,41 +285,58 @@ export const createFilesSlice = (
     }
   },
   deleteActiveFile: async () => {
+    const filePath = get().activeWorkspace()?.activeFilePath;
+    if (filePath) {
+      await get().deleteFile(filePath);
+    }
+  },
+  deleteFile: async (relativePath: string) => {
     const workspace = get().activeWorkspace();
-    if (!workspace || !workspace.activeFilePath) {
+    if (!workspace) {
       return;
     }
-    const filePath = workspace.activeFilePath;
 
-    // Persist any unsaved edits before deleting, so the trashed copy — and the
-    // history snapshot the backend takes on soft-delete — hold the user's latest
-    // work. Otherwise deleting drops the in-memory buffer and the edits are gone
-    // with no way back (#44). flushActiveEditor pulls the editor's live content
-    // into the buffer first (the 500ms debounce may not have fired), matching
-    // saveActiveFile's flush-first guarantee.
-    flushActiveEditor();
-    if (get().activeWorkspace()?.fileContents[filePath]?.dirty) {
-      await get().saveActiveFile();
+    // Persist any unsaved edits first, so the trashed copy — and the history
+    // snapshot the backend takes on soft-delete — hold the user's latest work
+    // (#44). The active file's buffer lags the editor by the 500ms debounce, so
+    // flush it; a background tab's buffer is already current. Best-effort: a
+    // write failure must not block the deletion the user asked for.
+    if (workspace.activeFilePath === relativePath) {
+      flushActiveEditor();
+    }
+    const buffer = get().activeWorkspace()?.fileContents[relativePath];
+    if (buffer?.dirty) {
+      try {
+        await writeFileIpc(
+          workspace.id,
+          relativePath,
+          buffer.content,
+          buffer.conflict ? null : buffer.lastModifiedMs,
+          buffer.pendingChanges,
+        );
+      } catch {
+        // The soft-delete still snapshots the on-disk content to history.
+      }
     }
 
     try {
-      await deleteFileIpc(workspace.id, filePath);
+      await deleteFileIpc(workspace.id, relativePath);
       set((state) => ({
-        workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => {
-          const withoutTab = closeWorkspaceFileTab(item, filePath);
-          return {
-            ...withoutTab,
-            chatThread: removeFileContext(withoutTab.chatThread, filePath),
-            comments: withoutTab.comments.filter((comment) => comment.filePath !== filePath),
-            files: withoutTab.files.filter((entry) => entry.relativePath !== filePath),
-          };
-        }),
-        // Drop the deleted file from nav history so Back/Forward can't resurrect
-        // it as a dangling error tab (#45).
+        // Deleting a BACKGROUND file never steals focus: the tab (if any)
+        // closes in place and the active tab stays put (#105).
+        workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
+          removeDeletedFile(item, relativePath),
+        ),
+        // Drop the deleted file from nav history so Back/Forward can't
+        // resurrect it as a dangling error tab (#45).
         ...pruneNavHistory(
           state,
           (entry) =>
-            !(entry.kind === "file" && entry.workspaceId === workspace.id && entry.id === filePath),
+            !(
+              entry.kind === "file" &&
+              entry.workspaceId === workspace.id &&
+              entry.id === relativePath
+            ),
         ),
       }));
       persistTabs(get().workspaces, workspace.id);
@@ -380,7 +412,7 @@ export const createFilesSlice = (
       showErrorToast(error instanceof Error ? error.message : "Could not reload file");
     }
   },
-  saveActiveFile: async () => {
+  saveActiveFile: async (options?: { implicit?: boolean }) => {
     // Pull the editor's live content into the buffer FIRST. The editor's
     // buffer update is debounced 500ms, so without this a Cmd+S (or
     // autosave) within that window would persist stale text — confirmed
@@ -394,6 +426,16 @@ export const createFilesSlice = (
     const filePath = workspace.activeFilePath;
     const buffer = workspace.fileContents[filePath];
     if (!buffer) {
+      return;
+    }
+    // An IMPLICIT save (autosave, quit flush) must never re-create a file that
+    // was deleted under the tab — that resurrection made deletes look like
+    // no-ops (#105). An explicit Cmd+S on a kept dirty tab still writes: that
+    // is the user deliberately bringing the note back.
+    if (
+      options?.implicit &&
+      !workspace.files.some((entry) => entry.relativePath === filePath)
+    ) {
       return;
     }
 
@@ -435,6 +477,11 @@ export const createFilesSlice = (
     for (const workspace of get().workspaces) {
       for (const [filePath, buffer] of Object.entries(workspace.fileContents)) {
         if (!buffer.dirty || buffer.conflict) {
+          continue;
+        }
+        // Quit-flush is an implicit save: a buffer whose file was deleted
+        // (externally or by us) must not resurrect it on exit (#105).
+        if (!workspace.files.some((entry) => entry.relativePath === filePath)) {
           continue;
         }
         writes.push(
