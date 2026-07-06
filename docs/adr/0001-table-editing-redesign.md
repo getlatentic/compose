@@ -1,6 +1,7 @@
-# ADR 0001 — Table editing: block widget with `contenteditable` cells
+# ADR 0001 — Table editing: block widget, native cell editing, pure model
 
-**Status:** Accepted (design). Implementation pending.
+**Status:** Accepted (design). Editing surface pending a two-way spike (§Editing
+surface). Implementation pending.
 
 ## Context
 
@@ -48,6 +49,42 @@ source of truth in the CM6 document. Partition every interaction into:
    own undo stack.
 4. **Source-mode (RAW) fallback** stays for tables the widget can't handle.
 
+## Editing surface: two candidates behind one seam
+
+The model, bridge rules, commands, selection overlay, and menu are identical
+either way; only *where typing physically happens* differs. That is a swappable
+interface (`CellEditingSurface`), and the choice is made on evidence, not taste.
+
+**B — `contenteditable="plaintext-only"` cells in the widget.** Most "inline"
+feel; Obsidian 1.5's table editor is this pattern. Its two standing risks are
+disciplines, not one-time fixes: widget redraw must never destroy the focused
+cell (`eq()`/`updateDOM()` + selection restore), and the cell's DOM selection
+lives inside CM's content DOM next to CM's MutationObserver.
+
+**C — floating overlay editor (the spreadsheet model: Excel/Sheets/Notion).**
+The widget is pure render; clicking a cell positions one shared editor over the
+cell rect, **portaled outside CM's DOM**. Both B-risks vanish by construction:
+a redraw just repositions the overlay, and CM's observer never sees the edit.
+External doc changes mid-edit (AI auto-apply, iCloud sync, autosave reload —
+all real in Compose) cannot kill the editing surface. Cost: an "editor appears
+over the cell" seam (invisible when styled identically) and rect tracking on
+scroll/resize.
+
+**Also considered:** styled-source tables (decorate pipes + measured padding;
+the only one-selection-model design, but caps WYSIWYG fidelity and can't wrap
+long cells — held as fallback, not pick) and per-table raw reveal (exists as
+the RAW fallback). Rejected as traps: CSS-grid on CM lines (breaks height
+measurement), embedding ProseMirror for tables (two worlds again), windowing
+libraries (already litigated).
+
+**Decision gate:** spike B and C behind `CellEditingSurface` (~a day each) and
+pick in real WebKit on: (1) survive a widget redraw mid-edit, (2) survive an
+external doc change mid-edit, (3) no selection/focus casualty across 20
+scripted edit-navigate-edit rounds. B wins ties (more inline); any casualty →
+C. Either way, **commit on boundaries** (blur/Tab/Enter/structure op), never
+per keystroke — the doc must not churn (nor the widget redraw) mid-typing, and
+a cell edit stays one undo step.
+
 ## Interaction matrix
 
 | # | Interaction | Lane |
@@ -88,7 +125,9 @@ places, not scattered through focus transitions.
 
 1. Harden pure model + ops tests in Node (mostly done — foundation proven).
 2. Stand up Vitest browser mode (WebKit) + a real-caret smoke test — retires jsdom.
-3. Build the `<table>` + `plaintext-only` + stable-lifecycle widget + bridge, growing
-   it to green the `@browser` scenarios.
-4. **Delete** `tableCellSubview.ts` and the nested-editor machinery. The redesign is
+3. Spike surfaces B and C behind `CellEditingSurface`; run the decision gate in
+   WebKit; record the outcome here.
+4. Build the winning surface + bridge, growing it to green the `@browser`
+   scenarios.
+5. **Delete** `tableCellSubview.ts` and the nested-editor machinery. The redesign is
    largely subtraction.
