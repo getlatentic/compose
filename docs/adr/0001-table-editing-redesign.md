@@ -85,6 +85,39 @@ C. Either way, **commit on boundaries** (blur/Tab/Enter/structure op), never
 per keystroke — the doc must not churn (nor the widget redraw) mid-typing, and
 a cell edit stays one undo step.
 
+### Spike results (2026-07-07) — B selected, C retained as fallback
+
+Both surfaces were implemented behind the seam (`tablev2/`) and ran the full
+gate in real WebKit (`surfaceGate.browser.test.ts`), with lifecycle **path
+proofs** (patch = cell element identity preserved; recreate = element
+replaced):
+
+| Condition | B inline | C overlay |
+|---|---|---|
+| G1 widget PATCH mid-edit (text/caret/focus + live typing after) | pass | pass |
+| G1b full widget RECREATE mid-edit (external add-row) | pass | pass |
+| G2 external edit to another cell merges on commit | pass | pass |
+| G3 20 begin→type→commit rounds, zero casualties | pass | pass |
+
+Per the pre-agreed rule (both clean → B wins ties), **B — inline
+`plaintext-only` cells — is the production surface.** Findings that must carry
+into the build:
+
+- B passes **only with the state-mirror discipline**: live text + caret are
+  mirrored into surface state on every input/selection change, and `reanchor`
+  (called after every doc change) restores text/attr/focus/caret onto whatever
+  element currently renders the cell. The gate observed updateDOM clobbering
+  the edited cell and the restore recovering it — naive B (state in the DOM
+  only) would have failed G1/G1b.
+- The feared CM MutationObserver/selection fight **did not materialise** in
+  WebKit: real keystrokes into an editable cell inside a block widget ran 20+
+  rounds and mid-edit churn with zero focus casualties.
+- Cell source ranges are resolved **at commit time** from the fresh model
+  (never cached), which is what makes G2's concurrent-edit merge clean.
+- C stays implemented behind the same seam as the drop-in fallback; if deeper
+  integration (drawn-caret interplay, IME, scroll) surfaces B casualties,
+  swapping is a one-line change.
+
 ## Interaction matrix
 
 | # | Interaction | Lane |
