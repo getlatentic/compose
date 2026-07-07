@@ -156,11 +156,19 @@ places, not scattered through focus transitions.
 
 ## Plan / what gets deleted
 
-1. Harden pure model + ops tests in Node (mostly done — foundation proven).
-2. Stand up Vitest browser mode (WebKit) + a real-caret smoke test — retires jsdom.
-3. Spike surfaces B and C behind `CellEditingSurface`; run the decision gate in
-   WebKit; record the outcome here.
-4. Build the winning surface + bridge, growing it to green the `@browser`
-   scenarios.
-5. **Delete** `tableCellSubview.ts` and the nested-editor machinery. The redesign is
-   largely subtraction.
+1. ~~Harden pure model + ops tests in Node~~ — done (tableModelGfm 8/8).
+2. ~~Vitest browser mode (WebKit) + real-caret smoke~~ — done (`pnpm test:browser`).
+3. ~~Spike surfaces B and C; run the gate~~ — done; B selected (see Spike results).
+4. ~~Build the surface + bridge to green the scenarios~~ — done: bridge rules
+   (27 pure tests), click-to-edit at point, entry/exit, whole-cell selection +
+   TSV copy, structure menu, hover inserters, CM-owned undo, focusout commit —
+   32 real-WebKit tests.
+5. ~~Delete the nested-editor machinery~~ — done: tableCellSubview, V1
+   tableWidget, tableSelection, tableEntry, tableHoverControls removed;
+   `tableField` now builds V2 widgets so atomicRanges/armed-delete/
+   deleteNormalizer/visiblePosition were untouched; `tableExtension` is a
+   per-composition factory (one surface per editor).
+
+Remaining follow-ups: wire `planned/table-editing.feature` scenarios to step
+definitions (coverage exists as plain tests today); row/column/table-select UI
+triggers (math + copy are built); Chromium browser-tier when Windows ships.
