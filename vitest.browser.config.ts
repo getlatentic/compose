@@ -10,6 +10,7 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  optimizeDeps: { include: ["@amiceli/vitest-cucumber"] },
   test: {
     include: ["**/*.browser.test.ts"],
     exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/**"],
