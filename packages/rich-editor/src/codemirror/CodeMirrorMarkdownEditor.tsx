@@ -40,6 +40,7 @@ import {
 } from "react";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
+import { languages } from "@codemirror/language-data";
 import { Annotation, EditorSelection, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 
@@ -47,6 +48,8 @@ import { parseFrontmatter, serializeMarkdown, type Frontmatter } from "../frontm
 import type { DocumentTextChange, SourceRange } from "../types";
 import { byteRangeOf } from "./byteOffset";
 import { drawnCaret } from "./caretLayer";
+import { codeHighlight } from "./decorations/codeHighlight";
+import { codeLanguageUI } from "./decorations/codeLangAffordance";
 import { onEditorUpdate, updateBus } from "./updateBus";
 import { markdownDecorationsPlugin } from "./decorations/plugin";
 import { editorBaseTheme } from "./decorations/editorTheme";
@@ -324,6 +327,9 @@ function CodeMirrorMarkdownEditorInner({
       // The caret never parks on a fence's marker rows: clicks land on the
       // nearest content edge, arrow motion crosses out of the block (§12.9).
       fenceCaretGuard,
+      // Opener-row language pill (+ "plain" placeholder) opens the chooser;
+      // right-click a block for set-language / copy-code (ADR 0002).
+      codeLanguageUI,
       // Tab / Shift-Tab nest / promote a list item by the parent marker width
       // (list-aware; falls through to normal Tab outside a list — listIndent.ts).
       listIndentKeymap,
@@ -339,7 +345,15 @@ function CodeMirrorMarkdownEditorInner({
       // when you type `-` under a paragraph, which is surprising in a rich
       // editor (and fought our "lone `-` is literal until a space" bullet
       // rule). ATX `#` headings are unaffected.
-      markdown({ base: markdownLanguage, extensions: [{ remove: ["SetextHeading"] }] }),
+      // `codeLanguages` gives fenced blocks a real nested parse (lazily
+      // loaded per info string) — actual syntax highlighting via
+      // codeHighlight, which styles only code-emitted tags (ADR 0002).
+      markdown({
+        base: markdownLanguage,
+        codeLanguages: languages,
+        extensions: [{ remove: ["SetextHeading"] }],
+      }),
+      codeHighlight,
       EditorView.lineWrapping,
       // Editor-internal styling (font, line-height, heading sizes,
       // marker widget styling) lives in `editorBaseTheme` so it
@@ -439,7 +453,7 @@ function CodeMirrorMarkdownEditorInner({
         highlightExtension,
         footnoteExtension,
         mathExtension,
-        tableExtension,
+        tableExtension(),
       ]);
       base.push(...composed.extensions);
     }
