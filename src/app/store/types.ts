@@ -128,6 +128,7 @@ export interface WorkspaceState {
   newNoteDir: string;
   setNewNoteDir: (dir: string) => void;
   deleteActiveFile: () => Promise<void>;
+  deleteFile: (relativePath: string) => Promise<void>;
   dismissConflict: (relativePath: string) => void;
   handleFsEvent: (workspaceId: string, event: WorkspaceFsEvent) => Promise<void>;
   /** One reconciling scan (storm-guarded, min-interval on repeats) — the
@@ -178,7 +179,7 @@ export interface WorkspaceState {
   rebuildWorkspaceIndex: (workspaceId?: string) => Promise<void>;
   removeWorkspace: (workspaceId: string) => void;
   renameActiveFile: (toRelativePath: string) => Promise<void>;
-  saveActiveFile: () => Promise<void>;
+  saveActiveFile: (options?: { implicit?: boolean }) => Promise<void>;
   /** Flush the active editor and write every dirty buffer (all workspaces, incl.
    *  background tabs) — the flush-on-quit that keeps closing the app from
    *  dropping unsaved edits (#43). */

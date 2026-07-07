@@ -621,6 +621,19 @@ export function removeWorkspaceFolder(workspace: Workspace, folderPath: string):
   };
 }
 
+/** User-initiated deletion: close the tab and drop the buffer, and — unlike an
+ * external removal (mark-not-remove, #69) — also clear the file's chat context
+ * and comments: the user chose to remove the note. */
+export function removeDeletedFile(workspace: Workspace, filePath: string): Workspace {
+  const withoutTab = closeWorkspaceFileTab(workspace, filePath);
+  return {
+    ...withoutTab,
+    chatThread: removeFileContext(withoutTab.chatThread, filePath),
+    comments: withoutTab.comments.filter((comment) => comment.filePath !== filePath),
+    files: withoutTab.files.filter((entry) => entry.relativePath !== filePath),
+  };
+}
+
 export function openWorkspaceFile(workspace: Workspace, filePath: string): Workspace {
   const openFilePaths = workspace.openFilePaths.includes(filePath)
     ? workspace.openFilePaths
@@ -1244,6 +1257,16 @@ function applyRemovedPath(
     workspace.files.some((entry) => entry.relativePath === relativePath) ||
     workspace.openFilePaths.includes(relativePath);
   if (isKnownFile) {
+    // An EXTERNAL removal of a file with unsaved edits keeps the tab and its
+    // buffer — the user's work outlives the file, and an explicit save
+    // re-creates it deliberately. Only the tree row goes. (Implicit saves
+    // never write a path that is missing from `files`, so keeping the buffer
+    // cannot silently resurrect the file — #105.)
+    const buffer = workspace.fileContents[relativePath];
+    if (buffer?.dirty) {
+      const files = workspace.files.filter((entry) => entry.relativePath !== relativePath);
+      return { workspace: { ...workspace, files }, effect: { type: "treeChanged" } };
+    }
     const closed = closeWorkspaceFileTab(workspace, relativePath);
     const files = closed.files.filter((entry) => entry.relativePath !== relativePath);
     return { workspace: { ...closed, files }, effect: { type: "treeChanged" } };

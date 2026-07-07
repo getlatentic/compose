@@ -6317,3 +6317,25 @@ select {
   color: var(--cds-text-secondary, #525252);
   font-size: 0.75rem;
 }
+
+/* Blank loading panel (#105): nothing paints for fast reads; the hint fades in
+   only when a read runs genuinely long (iCloud download, cold disk). */
+.editor-body__loading {
+  align-items: center;
+  block-size: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.editor-body__loading-hint {
+  animation: editor-loading-hint-reveal 0.3s ease 0.8s forwards;
+  color: var(--cds-text-secondary, #6f6f6f);
+  font-size: 0.875rem;
+  opacity: 0;
+}
+
+@keyframes editor-loading-hint-reveal {
+  to {
+    opacity: 1;
+  }
+}

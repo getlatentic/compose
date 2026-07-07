@@ -49,7 +49,7 @@ export function WorkspaceSidebar() {
   const newNoteDir = useWorkspaceStore((state) => state.newNoteDir);
   const promptText = useTextPrompt();
   const newChat = useWorkspaceStore((state) => state.newChat);
-  const deleteActiveFile = useWorkspaceStore((state) => state.deleteActiveFile);
+  const deleteFile = useWorkspaceStore((state) => state.deleteFile);
   const renameActiveFile = useWorkspaceStore((state) => state.renameActiveFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const sidebarTab = useUiStore((state) => state.sidebarTab);
@@ -99,10 +99,9 @@ export function WorkspaceSidebar() {
       if (!confirmed) {
         return;
       }
-      await selectFile(relativePath);
-      await deleteActiveFile();
+      await deleteFile(relativePath);
     },
-    [selectFile, deleteActiveFile, confirm],
+    [deleteFile, confirm],
   );
 
   // FileTree's callbacks pass through to store actions. The wrapping arrows

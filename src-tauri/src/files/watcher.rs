@@ -398,6 +398,17 @@ fn flush_pending<R: tauri::Runtime>(
 
         let metadata = std::fs::metadata(&path).ok();
         let is_dir = metadata.as_ref().map(|metadata| metadata.is_dir());
+        // A rename OUT of the tree (Finder move, trash-move) never arrives as
+        // Remove: the old path gets Modify(Name) — or even "created", because
+        // FSEvents coalesces a path's recent flags (create + rename in one
+        // event). The debounce has settled by now, so EXISTENCE is the ground
+        // truth: any kind for a path that is gone is a removal — otherwise the
+        // tree keeps (or even grows) a row for a nonexistent file (#105).
+        let kind = if kind != "removed" && metadata.is_none() {
+            "removed"
+        } else {
+            kind
+        };
         if !should_emit(kind, &path, is_dir) {
             continue;
         }
