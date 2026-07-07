@@ -248,6 +248,26 @@ fn an_unlink_arrives_as_removed_despite_metadata_noise() {
 }
 
 #[test]
+fn a_rename_out_of_the_tree_arrives_as_removed() {
+    // Moving a note OUT of the vault (Finder move, the app's own trash-move)
+    // surfaces as Modify(Name) on the old path — not Remove. Classifying by
+    // event kind alone reported "modified" for a file that no longer exists,
+    // and the tree kept the row (#105).
+    let outside = tempfile::tempdir().expect("outside dir");
+    let dir = WatchedDir::start();
+    fs::write(dir.root.join("Moved.md"), "x").expect("write");
+    dir.expect_event("created Moved.md", |event| {
+        kind_of(event) == "created" && path_of(event) == "Moved.md"
+    });
+    dir.settle();
+
+    fs::rename(dir.root.join("Moved.md"), outside.path().join("Moved.md")).expect("rename out");
+    dir.expect_event("removed Moved.md", |event| {
+        kind_of(event) == "removed" && path_of(event) == "Moved.md"
+    });
+}
+
+#[test]
 fn a_folder_and_its_rm_rf_reach_the_frontend() {
     let dir = WatchedDir::start();
 

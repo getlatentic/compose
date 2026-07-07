@@ -31,6 +31,7 @@ import {
   CONVERSATION_REPLAY_LIMIT,
   applyFileBuffer,
   applyFsEvent,
+  removeDeletedFile,
   applyScanResult,
   closeWorkspaceFileTab,
   isActiveFilePresent,
@@ -351,6 +352,60 @@ describe("workspace model", () => {
     expect(next.openFilePaths).toEqual(["a.md"]);
     expect(next.activeFilePath).toBe("a.md");
     expect(next.files.map((entry) => entry.relativePath)).toEqual(["a.md"]);
+  });
+
+  it("applyFsEvent on a removed file KEEPS a dirty tab — unsaved work outlives the file", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md"]);
+    const opened = openWorkspaceFile(openWorkspaceFile(workspace, "a.md"), "b.md");
+    const dirty: Workspace = {
+      ...opened,
+      fileContents: {
+        ...opened.fileContents,
+        "b.md": {
+          conflict: false,
+          content: "# unsaved",
+          dirty: true,
+          lastModifiedMs: 1_000,
+          pendingChanges: [],
+        },
+      },
+    };
+
+    const { workspace: next, effect } = applyFsEvent(dirty, {
+      kind: "removed",
+      lastModifiedMs: null,
+      relativePath: "b.md",
+    });
+
+    expect(effect.type).toBe("treeChanged");
+    // Row gone, tab + buffer intact.
+    expect(next.files.map((entry) => entry.relativePath)).toEqual(["a.md"]);
+    expect(next.openFilePaths).toEqual(["a.md", "b.md"]);
+    expect(next.activeFilePath).toBe("b.md");
+    expect(next.fileContents["b.md"].content).toBe("# unsaved");
+  });
+
+  it("removeDeletedFile closes the tab and clears the file's context and comments", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md", "c.md"]);
+    const opened = openWorkspaceFile(openWorkspaceFile(workspace, "a.md"), "b.md");
+
+    const next = removeDeletedFile(opened, "b.md");
+
+    expect(next.files.map((entry) => entry.relativePath)).toEqual(["a.md", "c.md"]);
+    expect(next.openFilePaths).toEqual(["a.md"]);
+    // Nearest-tab activation lands on a file that still exists.
+    expect(next.activeFilePath).toBe("a.md");
+    expect(next.fileContents["b.md"]).toBeUndefined();
+  });
+
+  it("removeDeletedFile on a background file leaves the active tab alone", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["a.md", "b.md"]);
+    const opened = openWorkspaceFile(openWorkspaceFile(workspace, "b.md"), "a.md");
+
+    const next = removeDeletedFile(opened, "b.md");
+
+    expect(next.activeFilePath).toBe("a.md");
+    expect(next.openFilePaths).toEqual(["a.md"]);
   });
 
   it("applyFsEvent patches a created note into the tree without a rescan", () => {

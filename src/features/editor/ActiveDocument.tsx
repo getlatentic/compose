@@ -121,7 +121,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
         return;
       }
       const timer = window.setTimeout(() => {
-        void saveActiveFile();
+        void saveActiveFile({ implicit: true });
       }, AUTOSAVE_TO_DISK_MS);
       return () => window.clearTimeout(timer);
     },
@@ -426,11 +426,14 @@ export function ActiveDocument() {
   // being read). EditorRegion already confirmed the file exists. The text is
   // invisible until ~150ms in (a CSS-delayed reveal), so a warm read swaps in
   // the editor before anything paints and only a slow read ever shows it.
+  // Blank panel while the buffer loads (VS Code-style) — no flash of chrome
+  // for the common fast read. A hint fades in only past 800ms, so genuinely
+  // slow paths (an iCloud download) are still honest rather than a dead void.
   if (!bufferLoaded) {
     return (
       <div className="editor-body">
-        <div className="empty-state empty-state--loading" aria-busy="true">
-          <p className="empty-state__title">Loading file…</p>
+        <div className="editor-body__loading" aria-busy="true">
+          <p className="editor-body__loading-hint">Still opening…</p>
         </div>
       </div>
     );
