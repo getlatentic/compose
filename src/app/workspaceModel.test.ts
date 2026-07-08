@@ -1482,7 +1482,7 @@ describe("workspace model", () => {
       [],
       new Map([["notes/a.md", "the file body"]]),
     );
-    expect(prompt).toContain("Context files:");
+    expect(prompt).toContain("Context files (attached for reference");
     expect(prompt).toContain("### notes/a.md\nthe file body");
     // Edit-scope guardrail so the agent only touches the intended files (#31).
     expect(prompt).toContain("only modify the Context files listed above");
