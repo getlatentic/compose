@@ -1770,6 +1770,33 @@ fn validate_relative_metadata_path(relative_path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// LLM context snapshots record the path as an AUDIT IDENTIFIER — never
+/// resolved against a workspace root (doc linkage is a best-effort lookup) —
+/// so absolute paths are legal here: external files (#113) and spilled-paste
+/// attachments live outside the workspace by design. Still rejects blank,
+/// backslashes, and traversal so the stored identifier stays canonical.
+fn validate_llm_context_path(path: &str) -> Result<(), String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("document path cannot be blank".to_owned());
+    }
+    if trimmed.contains('\\') {
+        return Err("document path must use forward slashes".to_owned());
+    }
+    let absolute = trimmed.starts_with('/');
+    let segments = trimmed.split('/').enumerate();
+    for (index, segment) in segments {
+        if segment == "." || segment == ".." {
+            return Err("document path must not traverse".to_owned());
+        }
+        // The only legal empty segment is the leading one of an absolute path.
+        if segment.is_empty() && !(absolute && index == 0) {
+            return Err("document path must not contain empty segments".to_owned());
+        }
+    }
+    Ok(())
+}
+
 fn validate_source_range(range: &SourceRange, label: &str) -> Result<(), String> {
     if range.start < 0 || range.end < 0 || range.start >= range.end {
         return Err(format!("{label} range must not be empty"));
@@ -1778,7 +1805,7 @@ fn validate_source_range(range: &SourceRange, label: &str) -> Result<(), String>
 }
 
 fn validate_llm_context_item(item: &LlmContextSnapshotRequest) -> Result<(), String> {
-    validate_relative_metadata_path(&item.file_path)?;
+    validate_llm_context_path(&item.file_path)?;
     match item.kind.as_str() {
         "file" => Ok(()),
         "comment" => {
