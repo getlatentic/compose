@@ -2255,14 +2255,9 @@ export function createPromptWithContext(
 
   const blocks = [
     transcript ? `Conversation so far:\n${transcript}` : null,
-    // The inline framing heads off a small-model tic: without it, the model
-    // treats inlined content as text the user pasted and narrates that back
-    // ("the text you provided is actually from…") before answering.
     fileContext
       ? `Context files${
-          inlineContent
-            ? " (attached for reference — answer from them directly, without commenting on how they were provided)"
-            : " (read these as needed)"
+          inlineContent ? " (attached for reference)" : " (read these as needed)"
         }:\n${fileContext}`
       : null,
     // Scope edits to the intended files so the agent doesn't write to files the
