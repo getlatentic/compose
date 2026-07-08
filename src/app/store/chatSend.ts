@@ -163,7 +163,9 @@ export async function runSendChatPrompt(
   // but the degradation shouldn't be silent. Gated on a ready scan so a
   // mid-boot load can't false-alarm.
   if (workspace.scanState === "ready") {
-    const missing = missingFileContextPaths(thread.contextItems, workspace.files);
+    const looseFiles =
+      get().workspaces.find((item) => item.kind === "loose")?.files ?? [];
+    const missing = missingFileContextPaths(thread.contextItems, workspace.files, looseFiles);
     if (missing.length > 0) {
       const names = missing.map(basename).join(", ");
       showToast({
@@ -181,7 +183,11 @@ export async function runSendChatPrompt(
   // reliably read on its own. Only that path needs the IO.
   const inlineContext = harnessCapabilitiesOf(harnessCatalog, harnessId).supportsCustomInstructions;
   const fileContextContent = inlineContext
-    ? await collectFileContextContent(workspace, contextFilePaths)
+    ? await collectFileContextContent(
+        workspace,
+        contextFilePaths,
+        get().workspaces.find((item) => item.kind === "loose") ?? null,
+      )
     : new Map<string, string>();
   // `thread` is the pre-append snapshot, so `thread.messages` are the
   // *prior* turns — replay them into the prompt for harness-neutral

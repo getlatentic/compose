@@ -76,7 +76,7 @@ export function MessageComposer({
   /** The selected harness's display name, for the friendly error summary. */
   harnessName: string;
   /** Attach a spilled paste as a file context chip. */
-  onAddFileContext: (input: { label: string; path: string }) => void;
+  onAddFileContext: (input: { label: string; path: string; origin?: "external" }) => void;
   /** Live composer height (px), reported on mount and every resize so the
    * transcript can reserve matching bottom space and re-pin to bottom. */
   onHeightChange: (height: number) => void;
@@ -292,7 +292,16 @@ export function MessageComposer({
                 ? "Finish the current response before changing context"
                 : `Add ${activeFilePath} to the chat context`
             }
-            onClick={() => onAddFileContext({ label: activeFilePath, path: activeFilePath })}
+            onClick={() =>
+              // An absolute path = an external file (#113): the chip shows its
+              // name (the full path stays on this button's tooltip) and is
+              // marked so presence/content resolve against the external list.
+              onAddFileContext(
+                activeFilePath.startsWith("/")
+                  ? { label: basename(activeFilePath), path: activeFilePath, origin: "external" }
+                  : { label: activeFilePath, path: activeFilePath },
+              )
+            }
           >
             <Add size={14} />
             Add this file

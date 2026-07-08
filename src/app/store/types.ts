@@ -225,8 +225,10 @@ export interface WorkspaceState {
   /** Clear a stale run-error banner after the agent recovers (Start Ollama / Retry). */
   dismissChatRunError: () => void;
   /** Attach a file as chat context (a chip in the context row). Used by the
-   * large-paste handler, which spills the text to a file and adds its path. */
-  addChatFileContext: (input: { label: string; path: string }) => void;
+   * large-paste handler (spills the text to a scratch file and adds its path)
+   * and by the composer's "Add this file" — with `origin: "external"` for a
+   * #113 external file (absolute path, resolved from the loose buffer). */
+  addChatFileContext: (input: { label: string; path: string; origin?: "external" }) => void;
   /** Remove a chat context item by id (the chip's ✕). */
   removeChatContextItem: (id: string) => void;
   switchWorkspace: (workspaceId: string) => void;

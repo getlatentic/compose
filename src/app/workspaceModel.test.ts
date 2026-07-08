@@ -590,6 +590,36 @@ describe("workspace model", () => {
     expect(missingFileContextPaths(items.slice(0, 1), workspace.files)).toEqual([]);
   });
 
+  it("missingFileContextPaths judges external chips by the external list, spills by nothing", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["kept.md"]);
+    const looseFiles = [{ lastModifiedMs: 0, relativePath: "/Users/x/listed.md", sizeBytes: 0 }];
+    const items: WorkspaceContextItem[] = [
+      {
+        id: "1",
+        kind: "file",
+        label: "listed.md",
+        path: "/Users/x/listed.md",
+        workspaceId: "w",
+        origin: "external",
+      },
+      {
+        id: "2",
+        kind: "file",
+        label: "removed.md",
+        path: "/Users/x/removed.md",
+        workspaceId: "w",
+        origin: "external",
+      },
+      // A spilled paste: absolute path in app scratch, no origin — outside
+      // every tree by design, never "missing".
+      { id: "3", kind: "file", label: "42 KB paste", path: "/tmp/spill/x.md", workspaceId: "w" },
+    ];
+
+    expect(missingFileContextPaths(items, workspace.files, looseFiles)).toEqual([
+      "/Users/x/removed.md",
+    ]);
+  });
+
   it("markBufferSaved clears dirty and bumps lastModifiedMs", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
     const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {

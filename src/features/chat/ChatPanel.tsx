@@ -2,6 +2,10 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { Add, Close } from "@carbon/react/icons";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import {
+  selectFocusedWorkspace,
+  selectLooseWorkspace,
+} from "../../app/store/activeWorkspace";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessInstall, startOllama } from "../../lib/ipc/harnessClient";
@@ -51,13 +55,13 @@ function ChatPanelInner() {
   const dismissChatRunError = useWorkspaceStore((state) => state.dismissChatRunError);
   const addChatFileContext = useWorkspaceStore((state) => state.addChatFileContext);
   const removeChatContextItem = useWorkspaceStore((state) => state.removeChatContextItem);
-  // The active file, so the composer can offer "add this file" to context — the
-  // explicit way to set context now that switching tabs no longer does (#30).
-  // While the editor shows an EXTERNAL file (#113), "this file" would name a
-  // workspace file the user isn't looking at — offer nothing instead (agent
-  // context is workspace-scoped in v1).
-  const activeFilePath = useWorkspaceStore((state) =>
-    state.focusedArea === "workspace" ? state.activeWorkspace()?.activeFilePath ?? "" : "",
+  // The file the EDITOR is showing, so the composer can offer "add this file"
+  // to context — the explicit way to set context now that switching tabs no
+  // longer does (#30). Follows the focused container (#113): an external
+  // file's chip carries its absolute path — tool-native agents read it on
+  // demand; the inline path resolves it from the loose buffer.
+  const activeFilePath = useWorkspaceStore(
+    (state) => selectFocusedWorkspace(state)?.activeFilePath ?? "",
   );
   // Narrow selector: the chat panel only needs the active workspace's
   // chat thread, NOT the whole `workspaces` array. The store preserves
@@ -81,7 +85,8 @@ function ChatPanelInner() {
     if (!ws || ws.scanState !== "ready") {
       return "";
     }
-    return missingFileContextPaths(ws.chatThread.contextItems, ws.files).join("\n");
+    const looseFiles = selectLooseWorkspace(state)?.files ?? [];
+    return missingFileContextPaths(ws.chatThread.contextItems, ws.files, looseFiles).join("\n");
   });
   const missingContextPaths = useMemo(
     () => new Set(missingContextKey ? missingContextKey.split("\n") : []),

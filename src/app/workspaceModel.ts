@@ -28,6 +28,11 @@ export interface WorkspaceFileContextItem {
   label: string;
   path: string;
   workspaceId: string;
+  /** `"external"` = a #113 external file: `path` is absolute, presence is
+   *  judged against the external-files list, and content resolves from the
+   *  loose buffer. Absent = a workspace file (relative path) or a spilled
+   *  attachment (absolute, app scratch). */
+  origin?: "external";
 }
 
 export interface WorkspaceCommentContextItem {
@@ -551,12 +556,25 @@ export function setCurrentTabContext(
 export function missingFileContextPaths(
   contextItems: WorkspaceContextItem[],
   files: WorkspaceFileEntry[],
+  looseFiles: WorkspaceFileEntry[] = [],
 ): string[] {
   const present = new Set(files.map((entry) => entry.relativePath));
+  const loosePresent = new Set(looseFiles.map((entry) => entry.relativePath));
   return contextItems
     .filter((item): item is WorkspaceFileContextItem => item.kind === "file")
-    .map((item) => item.path)
-    .filter((path) => !present.has(path));
+    .filter((item) => {
+      // External chips (#113) are judged against the external-files list.
+      if (item.origin === "external") {
+        return !loosePresent.has(item.path);
+      }
+      // Other absolute paths are spilled attachments in app scratch — outside
+      // any tree by design, never "missing".
+      if (item.path.startsWith("/")) {
+        return false;
+      }
+      return !present.has(item.path);
+    })
+    .map((item) => item.path);
 }
 
 /** Remove a file from the chat context by path (e.g. when it's deleted), leaving
@@ -959,8 +977,13 @@ export function addFileContextItem(
   workspaceId: string,
   filePath: string,
   label: string,
+  origin?: "external",
 ): WorkspaceChatThread {
-  const item: WorkspaceFileContextItem = { ...fileContextItem(workspaceId, filePath), label };
+  const item: WorkspaceFileContextItem = {
+    ...fileContextItem(workspaceId, filePath),
+    label,
+    ...(origin ? { origin } : {}),
+  };
   const withoutDup = chatThread.contextItems.filter((existing) => existing.id !== item.id);
   return { ...chatThread, contextItems: [...withoutDup, item] };
 }

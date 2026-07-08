@@ -192,7 +192,7 @@ export const createChatSlice = (
       })),
     }));
   },
-  addChatFileContext: ({ label, path }) => {
+  addChatFileContext: ({ label, path, origin }) => {
     const workspace = get().activeWorkspace();
     if (!workspace) {
       return;
@@ -200,7 +200,7 @@ export const createChatSlice = (
     set((state) => ({
       workspaces: updateWorkspace(state.workspaces, workspace.id, (item) => ({
         ...item,
-        chatThread: addFileContextItem(item.chatThread, item.id, path, label),
+        chatThread: addFileContextItem(item.chatThread, item.id, path, label, origin),
       })),
     }));
   },
