@@ -40,8 +40,11 @@ pub struct WorkspaceWriteResult {
     pub last_modified_ms: i64,
 }
 
+// `rename_all` covers only the VARIANT names; `rename_all_fields` makes the
+// variant fields reach the TS client as camelCase too (normalizeFileError
+// reads `latestLastModifiedMs`).
 #[derive(Debug, Serialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum FileError {
     Conflict { latest_last_modified_ms: i64 },
     NotFound { message: String },
@@ -390,17 +393,24 @@ pub(crate) fn read_file(
     relative_path: &str,
 ) -> Result<WorkspaceFileContent, FileError> {
     let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
-    let content = match std::fs::read_to_string(&absolute) {
+    read_at(&absolute)
+}
+
+/// Read a document at a RESOLVED absolute path — the shared core under both
+/// workspace files and external files, so behavior (the iCloud kick, the
+/// mtime read) can never drift between the two.
+pub(crate) fn read_at(absolute: &Path) -> Result<WorkspaceFileContent, FileError> {
+    let content = match std::fs::read_to_string(absolute) {
         Ok(content) => content,
         Err(error) => {
             // A dataless iCloud file (evicted locally) can fail to read; kick its
             // download so a reopen materializes it instead of leaving it stuck
             // blank (#26). Best-effort — a no-op for non-iCloud files.
-            icloud::start_download(&absolute);
+            icloud::start_download(absolute);
             return Err(error.into());
         }
     };
-    let metadata = std::fs::metadata(&absolute)?;
+    let metadata = std::fs::metadata(absolute)?;
     Ok(WorkspaceFileContent {
         content,
         last_modified_ms: mtime_ms(&metadata)?,
@@ -415,9 +425,19 @@ pub(crate) fn write_file(
     expected_last_modified_ms: Option<i64>,
 ) -> Result<WorkspaceWriteResult, FileError> {
     let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
+    write_at(&absolute, content, expected_last_modified_ms)
+}
 
+/// Write a document at a RESOLVED absolute path, with the optimistic-locking
+/// mtime check — the single home of the conflict semantics for workspace AND
+/// external files.
+pub(crate) fn write_at(
+    absolute: &Path,
+    content: &str,
+    expected_last_modified_ms: Option<i64>,
+) -> Result<WorkspaceWriteResult, FileError> {
     if let Some(expected) = expected_last_modified_ms {
-        if let Ok(metadata) = std::fs::metadata(&absolute) {
+        if let Ok(metadata) = std::fs::metadata(absolute) {
             let actual = mtime_ms(&metadata)?;
             if actual > expected {
                 return Err(FileError::Conflict {
@@ -427,8 +447,8 @@ pub(crate) fn write_file(
         }
     }
 
-    write_file_atomic(&absolute, content)?;
-    let metadata = std::fs::metadata(&absolute)?;
+    write_file_atomic(absolute, content)?;
+    let metadata = std::fs::metadata(absolute)?;
     Ok(WorkspaceWriteResult {
         last_modified_ms: mtime_ms(&metadata)?,
     })

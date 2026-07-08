@@ -1121,6 +1121,89 @@ select {
   inline-size: 100%;
 }
 
+// ── External files (#113) — the sidebar group above the tree ───────────────
+// Files opened from outside any workspace. Rows echo `.file-row`'s metrics
+// (28px, same hover/active layers) but are NOT tree rows — no folder
+// indentation, no kebab; a hover-revealed ✕ removes the entry instead.
+.external-files {
+  padding-block-end: 0.25rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+.external-files__heading {
+  padding: 0.375rem 0.5rem 0.25rem;
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.external-files__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  block-size: 1.75rem;
+
+  &:hover {
+    background: var(--cds-layer-hover-01, #e8e8e8);
+  }
+
+  &--active {
+    color: var(--cds-text-primary, #161616);
+    background: var(--cds-layer-selected-01, #e0e0e0);
+    font-weight: 600;
+
+    svg {
+      color: var(--cds-icon-primary, #161616);
+    }
+  }
+}
+
+.external-files__open {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-inline-size: 0;
+  block-size: 100%;
+  padding-inline: 0.5rem 0.25rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  svg {
+    flex: none;
+    color: var(--cds-icon-secondary, #525252);
+  }
+}
+
+.external-files__remove {
+  display: grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  margin-inline-end: 0.25rem;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  cursor: pointer;
+  opacity: 0;
+
+  .external-files__row:hover &,
+  &:focus-visible {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: var(--cds-layer-selected-01, #e0e0e0);
+    color: var(--cds-icon-primary, #161616);
+  }
+}
+
 .sidebar-index {
   display: grid;
   gap: 0.5rem;
@@ -4884,6 +4967,22 @@ select {
   font-size: 0.75rem;
   line-height: 1.125rem;
   color: var(--cds-text-secondary, #525252);
+
+  // Status variants (default Markdown app, #113).
+  &--ok {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+
+    svg {
+      flex: none;
+      color: var(--cds-support-success, #24a148);
+    }
+  }
+
+  &--error {
+    color: var(--cds-text-error, #da1e28);
+  }
 }
 
 // The About pane's informational links — a small wrapped row.

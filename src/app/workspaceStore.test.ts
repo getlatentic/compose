@@ -21,6 +21,7 @@ import type { HarnessCapabilities, HarnessInfo, HarnessReadiness } from "../lib/
 import {
   deleteFile,
   FileConflictError,
+  FileNotFoundError,
   readFile,
   scanWorkspace,
   writeFile,
@@ -35,6 +36,7 @@ vi.mock("../lib/ipc/filesClient", () => ({
   createFolder: vi.fn(() => Promise.resolve()),
   deleteFile: vi.fn(),
   FileConflictError: class FileConflictError extends Error {},
+  FileNotFoundError: class FileNotFoundError extends Error {},
   readFile: vi.fn(),
   renameFile: vi.fn(),
   scanWorkspace: vi.fn(),
@@ -597,7 +599,9 @@ describe("workspace store", () => {
     });
 
     it("a tab whose file is GONE closes instead of stranding on a blank editor (#105)", async () => {
-      vi.mocked(readFile).mockRejectedValue(new Error("no such file"));
+      // The backend reports a gone file as NotFound — authoritative, unlike a
+      // transient read failure.
+      vi.mocked(readFile).mockRejectedValue(new FileNotFoundError("no such file"));
       useWorkspaceStore.getState().addWorkspace("/tmp/vault");
 
       // Not in `files` (the scan agrees it is gone) — e.g. a restored tab for

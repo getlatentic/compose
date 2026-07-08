@@ -3,21 +3,30 @@ import { Close, Document } from "@carbon/react/icons";
 import { PanelLeft } from "lucide-react";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { selectLooseWorkspace } from "../../app/store/activeWorkspace";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
 import { markTabSwitchStart } from "../../lib/perf";
 
 /** dataTransfer MIME for a tab dragged to reorder it (#29). */
 const TAB_DRAG_MIME = "application/x-compose-tab-path";
-/** The path of the tab being dragged, tracked out-of-band because WebKit hides
- *  a custom dataTransfer type during `dragover` (see the file-tree drag notes). */
+/** The path + area of the tab being dragged, tracked out-of-band because WebKit
+ *  hides a custom dataTransfer type during `dragover` (see the file-tree drag
+ *  notes). Reordering stays within one area — workspace tabs and external tabs
+ *  don't interleave. */
 let draggedTabPath: string | null = null;
+let draggedTabArea: TabArea | null = null;
 
-/** A file tab: just the workspace file entry. The dirty flag is deliberately
+/** Which container a tab's file lives in: the active workspace, or the loose
+ *  pseudo-workspace of external files (#113). */
+export type TabArea = "workspace" | "loose";
+
+/** A file tab: the file entry plus its container. The dirty flag is deliberately
  * NOT here — it's read per-tab by {@link TabDirtyDot}, so a dirty flip (first
  * edit / autosave) re-renders only that one dot, not the whole strip. That
  * keeps the `files` array reference stable across edits and saves. */
 export interface EditorTab {
   entry: WorkspaceFileEntry;
+  area: TabArea;
 }
 
 /**
@@ -25,9 +34,12 @@ export interface EditorTab {
  * flag (a boolean), so the dirty flip on first-edit / autosave re-renders ONLY
  * this dot — never the tab strip.
  */
-function TabDirtyDot({ path }: { path: string }) {
+function TabDirtyDot({ path, area }: { path: string; area: TabArea }) {
   const dirty = useWorkspaceStore((state) => {
-    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    const ws =
+      area === "loose"
+        ? selectLooseWorkspace(state)
+        : state.workspaces.find((w) => w.id === state.activeWorkspaceId);
     return Boolean(ws?.fileContents[path]?.dirty);
   });
   return dirty ? <span className="dirty-dot" aria-label="Unsaved" /> : null;
@@ -42,6 +54,7 @@ function TabDirtyDot({ path }: { path: string }) {
  */
 const EditorTabItem = memo(function EditorTabItem({
   path,
+  area,
   fileName,
   active,
   onSelect,
@@ -50,11 +63,12 @@ const EditorTabItem = memo(function EditorTabItem({
   registerActiveEl,
 }: {
   path: string;
+  area: TabArea;
   fileName: string;
   active: boolean;
-  onSelect: (path: string) => void;
-  onClose: (path: string) => void;
-  onReorder: (fromPath: string, toPath: string) => void;
+  onSelect: (path: string, area: TabArea) => void;
+  onClose: (path: string, area: TabArea) => void;
+  onReorder: (fromPath: string, toPath: string, area: TabArea) => void;
   registerActiveEl: (el: HTMLDivElement | null) => void;
 }) {
   const [dropTarget, setDropTarget] = useState(false);
@@ -63,22 +77,24 @@ const EditorTabItem = memo(function EditorTabItem({
       event.dataTransfer.setData(TAB_DRAG_MIME, path);
       event.dataTransfer.effectAllowed = "move";
       draggedTabPath = path;
+      draggedTabArea = area;
     },
-    [path],
+    [path, area],
   );
   const onDragEnd = useCallback(() => {
     draggedTabPath = null;
+    draggedTabArea = null;
   }, []);
   const onDragOver = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
-      if (draggedTabPath === null || draggedTabPath === path) {
+      if (draggedTabPath === null || draggedTabPath === path || draggedTabArea !== area) {
         return;
       }
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
       setDropTarget(true);
     },
-    [path],
+    [path, area],
   );
   const onDragLeave = useCallback(() => setDropTarget(false), []);
   const onDrop = useCallback(
@@ -86,18 +102,20 @@ const EditorTabItem = memo(function EditorTabItem({
       event.preventDefault();
       setDropTarget(false);
       const from = draggedTabPath ?? event.dataTransfer.getData(TAB_DRAG_MIME);
+      const fromArea = draggedTabArea;
       draggedTabPath = null;
-      if (from) {
-        onReorder(from, path);
+      draggedTabArea = null;
+      if (from && fromArea === area) {
+        onReorder(from, path, area);
       }
     },
-    [path, onReorder],
+    [path, area, onReorder],
   );
   const onSelectClick = useCallback(() => {
     markTabSwitchStart();
-    onSelect(path);
-  }, [onSelect, path]);
-  const onCloseClick = useCallback(() => onClose(path), [onClose, path]);
+    onSelect(path, area);
+  }, [onSelect, path, area]);
+  const onCloseClick = useCallback(() => onClose(path, area), [onClose, path, area]);
 
   return (
     <div
@@ -129,7 +147,7 @@ const EditorTabItem = memo(function EditorTabItem({
       >
         <Document size={14} />
         <span className="truncate">{fileName}</span>
-        <TabDirtyDot path={path} />
+        <TabDirtyDot path={path} area={area} />
       </button>
       <button
         type="button"
@@ -158,6 +176,7 @@ const EditorTabItem = memo(function EditorTabItem({
 function PaneTabsInner({
   files,
   activeFilePath,
+  activeArea,
   onSelectFile,
   onCloseFile,
   onReorderTab,
@@ -166,9 +185,12 @@ function PaneTabsInner({
 }: {
   files: EditorTab[];
   activeFilePath: string;
-  onSelectFile: (path: string) => void;
-  onCloseFile: (path: string) => void;
-  onReorderTab: (fromPath: string, toPath: string) => void;
+  /** Which container the active path belongs to — an external file and a
+   *  workspace file could otherwise never disambiguate. */
+  activeArea: TabArea;
+  onSelectFile: (path: string, area: TabArea) => void;
+  onCloseFile: (path: string, area: TabArea) => void;
+  onReorderTab: (fromPath: string, toPath: string, area: TabArea) => void;
   /** When set, prepend a non-interactive draggable spacer of this width — used
    * to clear the macOS traffic lights when the sidebar is collapsed. */
   leadingInsetPx?: number;
@@ -190,7 +212,7 @@ function PaneTabsInner({
   }, []);
   useEffect(() => {
     activeTabRef.current?.scrollIntoView({ inline: "nearest", block: "nearest" });
-  }, [activeFilePath, files.length]);
+  }, [activeFilePath, activeArea, files.length]);
 
   if (files.length === 0 && !hasShow) {
     return null;
@@ -234,15 +256,16 @@ function PaneTabsInner({
         aria-label="Open tabs"
         data-tauri-drag-region
       >
-        {files.map(({ entry }) => {
-          const active = entry.relativePath === activeFilePath;
+        {files.map(({ entry, area }) => {
+          const active = area === activeArea && entry.relativePath === activeFilePath;
           const slash = entry.relativePath.lastIndexOf("/");
           const fileName = slash >= 0 ? entry.relativePath.slice(slash + 1) : entry.relativePath;
 
           return (
             <EditorTabItem
-              key={`file:${entry.relativePath}`}
+              key={`${area}:${entry.relativePath}`}
               path={entry.relativePath}
+              area={area}
               fileName={fileName}
               active={active}
               onSelect={onSelectFile}

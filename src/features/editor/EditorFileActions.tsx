@@ -33,10 +33,12 @@ const ICON_SIZE = 16;
 
 export interface EditorFileActionsProps {
   onSave: () => void;
-  onShowVersionHistory: () => void;
+  /** Absent for documents without version history (external files, #113). */
+  onShowVersionHistory?: () => void;
   onExport: (format: DocumentExportFormat) => void;
-  /** Toggle the per-file comments side panel. */
-  onToggleComments: () => void;
+  /** Toggle the per-file comments side panel. Absent for documents without
+   *  comments (external files). */
+  onToggleComments?: () => void;
   /** Whether the comments panel is currently open (drives the pressed state). */
   commentsOpen: boolean;
   /** Open-comment count for the active file, shown as a badge. */
@@ -75,11 +77,13 @@ export function EditorFileActions({
         onClick={onSave}
         icon={<Save size={ICON_SIZE} />}
       />
-      <FileButton
-        label="Previous versions"
-        onClick={onShowVersionHistory}
-        icon={<History size={ICON_SIZE} />}
-      />
+      {onShowVersionHistory ? (
+        <FileButton
+          label="Previous versions"
+          onClick={onShowVersionHistory}
+          icon={<History size={ICON_SIZE} />}
+        />
+      ) : null}
       <OverflowMenu
         aria-label="Export"
         size="sm"
@@ -98,21 +102,23 @@ export function EditorFileActions({
         <OverflowMenuItem itemText="HTML (.html)" onClick={() => onExport("html")} />
         <OverflowMenuItem itemText="PDF (.pdf)" onClick={() => onExport("pdf")} />
       </OverflowMenu>
-      <FileButton
-        label={commentsLabel}
-        active={commentsOpen}
-        onClick={onToggleComments}
-        icon={
-          <span className="tiptap-toolbar__comments-icon">
-            <MessageSquareText size={ICON_SIZE} />
-            {commentCount > 0 ? (
-              <span className="tiptap-toolbar__comments-badge" aria-hidden="true">
-                {commentCount > 99 ? "99+" : commentCount}
-              </span>
-            ) : null}
-          </span>
-        }
-      />
+      {onToggleComments ? (
+        <FileButton
+          label={commentsLabel}
+          active={commentsOpen}
+          onClick={onToggleComments}
+          icon={
+            <span className="tiptap-toolbar__comments-icon">
+              <MessageSquareText size={ICON_SIZE} />
+              {commentCount > 0 ? (
+                <span className="tiptap-toolbar__comments-badge" aria-hidden="true">
+                  {commentCount > 99 ? "99+" : commentCount}
+                </span>
+              ) : null}
+            </span>
+          }
+        />
+      ) : null}
       {onToggleChat ? (
         <FileButton
           label={chatOpen ? "Hide chat" : "Show chat"}

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { type WorkspaceState } from "./store/types";
 import { createLifecycleSlice } from "./store/lifecycleSlice";
 import { createFilesSlice } from "./store/filesSlice";
+import { createLooseFilesSlice } from "./store/looseFilesSlice";
 import { createFsEventsSlice } from "./store/fsEventsSlice";
 import { createCommentsSlice } from "./store/commentsSlice";
 import { createChatSlice } from "./store/chatSlice";
@@ -28,6 +29,7 @@ export { reviewChangeToDraft } from "./store/reviewFlow";
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   ...createLifecycleSlice(set, get),
   ...createFilesSlice(set, get),
+  ...createLooseFilesSlice(set, get),
   ...createFsEventsSlice(set, get),
   ...createCommentsSlice(set, get),
   ...createChatSlice(set, get),

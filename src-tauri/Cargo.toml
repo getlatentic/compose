@@ -53,7 +53,7 @@ objc2-foundation = { version = "0.3", features = [
   "NSError",
   "NSFileManager",
 ] }
-objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
+objc2-core-foundation = { version = "0.3", features = ["CFCGTypes", "CFString"] }
 block2 = "0.6"
 objc2-web-kit = { version = "0.3", features = [
   "WKWebView",

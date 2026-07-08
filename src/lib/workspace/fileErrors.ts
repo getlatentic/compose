@@ -10,3 +10,12 @@ export class FileConflictError extends Error {
     this.name = "FileConflictError";
   }
 }
+
+/** The file does not exist — an authoritative "gone", as opposed to a
+ *  transient read failure (permissions, an evicted iCloud copy, a hiccup). */
+export class FileNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FileNotFoundError";
+  }
+}

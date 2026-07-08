@@ -49,7 +49,11 @@ function useActiveFileFrontmatter(): Frontmatter | null {
 export function ActiveFileProperties() {
   const frontmatter = useActiveFileFrontmatter();
   const hasActiveFile = useWorkspaceStore((state) => Boolean(activeWorkspace(state)?.activeFilePath));
-  if (!hasActiveFile) {
+  // While an external file is focused (#113) the editor shows a DIFFERENT
+  // document than this workspace-scoped panel — and `updateActiveContent`
+  // writes to the focused one, so a commit here would cross-write into it.
+  const editorElsewhere = useWorkspaceStore((state) => state.focusedArea === "loose");
+  if (!hasActiveFile || editorElsewhere) {
     return null;
   }
   const commit = (next: Frontmatter | null) => {

@@ -61,6 +61,34 @@ export interface WorkspaceState {
   activeFileEntry: () => WorkspaceFileEntry | null;
   activeWorkspace: () => Workspace | null;
   activeWorkspaceId: string | null;
+  /**
+   * Which container's active file the EDITOR is showing: the active (real)
+   * workspace, or the loose pseudo-workspace of external files (#113). The
+   * sidebar tree, chat, and workspace switcher always follow the real
+   * workspace; only the editor surface (tabs, document, status bar) follows
+   * this discriminator.
+   */
+  focusedArea: "workspace" | "loose";
+  /** The container the editor is showing — the loose workspace when an
+   *  external file is focused, else {@link activeWorkspace}. */
+  focusedWorkspace: () => Workspace | null;
+  /** Register an external file (Finder Open-With) and focus it — the OS-open
+   *  entry point. Adds to the persisted list, opens its tab, loads the buffer. */
+  openLooseFile: (absolutePath: string) => Promise<void>;
+  /** Focus an already-listed external file (sidebar row / tab click). */
+  selectLooseFile: (absolutePath: string) => Promise<void>;
+  closeLooseTab: (absolutePath: string) => void;
+  /** Drag-to-reorder within the external tabs. */
+  reorderLooseTab: (fromPath: string, toPath: string) => void;
+  /** Stop tracking an external file (sidebar ✕). Saves pending edits
+   *  best-effort first — the file itself stays on disk untouched. */
+  removeLooseFile: (absolutePath: string) => Promise<void>;
+  /** Boot hydration of the persisted external-files list + its tabs. */
+  hydrateExternalFiles: (list: {
+    files: { path: string; addedAtMs: number }[];
+    openPaths: string[];
+    activePath: string;
+  }) => void;
   addWorkspace: (path: string) => string;
   addCommentToActiveFile: (input: {
     body: string;

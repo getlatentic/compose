@@ -68,13 +68,17 @@ export function useWorkspaceActions(): WorkspaceActions {
   // don't hold a content-coupled subscription.
   const recentKey = useWorkspaceStore((state) =>
     state.workspaces
+      .filter((w) => w.kind === "real")
       .map((w) => `${w.id}\u0000${w.name}\u0000${w.path}\u0000${w.lastOpenedAt ?? ""}`)
       .join("\u0001"),
   );
   const recent = useMemo<WorkspaceRecord[]>(() => {
     return useWorkspaceStore
       .getState()
-      .workspaces.map((workspace) => ({
+      // The loose pseudo-workspace (external files) is not a folder the
+      // switcher can offer.
+      .workspaces.filter((workspace) => workspace.kind === "real")
+      .map((workspace) => ({
         id: workspace.id,
         name: workspace.name,
         path: workspace.path,

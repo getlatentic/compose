@@ -29,9 +29,13 @@ const EditorRegion = lazy(() =>
 export function AppShell() {
   // Boolean selector: reads `workspaces` but returns a primitive, so it only
   // re-renders the shell when the active-workspace existence flips, not when a
-  // workspace object changes (e.g. on every edit).
-  const hasActiveWorkspace = useWorkspaceStore((state) =>
-    state.workspaces.some((workspace) => workspace.id === state.activeWorkspaceId),
+  // workspace object changes (e.g. on every edit). A focused external file
+  // (#113) also earns the shell — with zero workspaces, an OS-opened file must
+  // still get an editor, not vanish behind the welcome card.
+  const hasActiveWorkspace = useWorkspaceStore(
+    (state) =>
+      state.workspaces.some((workspace) => workspace.id === state.activeWorkspaceId) ||
+      state.focusedArea === "loose",
   );
   const editorOpen = useUiStore((state) => state.editorOpen);
   const chatOpen = useUiStore((state) => state.chatOpen);

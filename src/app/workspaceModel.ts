@@ -325,8 +325,10 @@ export interface Workspace {
    * paths relative to that root. `"loose"` is a singleton pseudo-workspace
    * for files opened individually (Finder Open-With, `compose <file>`,
    * etc.) — `path` is `""` and file entries' `relativePath` field stores
-   * the **absolute** path. The chat / comments / conversation surfaces
-   * work identically on both.
+   * the **absolute** path. Loose files are plain documents: buffers, tabs,
+   * and saves reuse the workspace machinery, while the workspace-scoped
+   * surfaces (comments, history, index, agent context) don't apply — see
+   * {@link documentCapabilities}.
    */
   kind: WorkspaceKind;
   lastOpenedAt?: number;
@@ -379,13 +381,39 @@ export type FsEventEffect =
   | { type: "treeChanged" }
   | { type: "noop" };
 
+/** The real (folder-rooted) workspaces — every list surface (switcher,
+ *  counters, setup checks) reads through this so the loose pseudo-workspace
+ *  can never leak into it. */
+export function realWorkspaces(workspaces: Workspace[]): Workspace[] {
+  return workspaces.filter((workspace) => workspace.kind === "real");
+}
+
+/**
+ * What a document in this container supports (#113). Loose (external) files
+ * are plain documents — the workspace-scoped machinery doesn't apply in v1 —
+ * and the editor surface branches on THESE flags, not on `kind`, so the next
+ * doc type (canvas, HTML) extends here instead of adding another ad-hoc check.
+ */
+export function documentCapabilities(workspace: Pick<Workspace, "kind"> | null) {
+  const scoped = workspace?.kind === "real";
+  return {
+    comments: scoped,
+    versionHistory: scoped,
+    /** HTML/PDF export + print — the renderer resolves images against a
+     *  registered workspace root. Markdown export works everywhere. */
+    richExport: scoped,
+    /** Pasted/dropped images persist into the workspace's `images/` dir. */
+    imageInsert: scoped,
+  };
+}
+
 export function isSetupComplete(
   selectedHarnessReadiness: HarnessReadiness | null,
   workspaces: Workspace[],
 ) {
-  // "Set up" = the selected harness is installed and a workspace exists; the
-  // key is checked at send.
-  return Boolean(selectedHarnessReadiness?.installed) && workspaces.length > 0;
+  // "Set up" = the selected harness is installed and a REAL workspace exists
+  // (the loose pseudo-workspace doesn't count); the key is checked at send.
+  return Boolean(selectedHarnessReadiness?.installed) && realWorkspaces(workspaces).length > 0;
 }
 
 export function createWorkspaceFromPath(path: string): Workspace {
