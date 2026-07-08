@@ -3085,6 +3085,13 @@ select {
   padding: 0.25rem 0.5rem;
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   text-align: start;
+  // Cells opt out of the bubble's `anywhere` wrapping: under table
+  // auto-layout it makes a cell's minimum width ONE CHARACTER, so a narrow
+  // panel crushes a short column into a letters-down-the-page strip. With
+  // word wrapping, columns keep readable minimums and a genuinely wide
+  // table scrolls inside the block instead.
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .markdown hr {
