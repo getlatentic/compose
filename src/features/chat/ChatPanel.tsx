@@ -53,8 +53,11 @@ function ChatPanelInner() {
   const removeChatContextItem = useWorkspaceStore((state) => state.removeChatContextItem);
   // The active file, so the composer can offer "add this file" to context — the
   // explicit way to set context now that switching tabs no longer does (#30).
-  const activeFilePath = useWorkspaceStore(
-    (state) => state.activeWorkspace()?.activeFilePath ?? "",
+  // While the editor shows an EXTERNAL file (#113), "this file" would name a
+  // workspace file the user isn't looking at — offer nothing instead (agent
+  // context is workspace-scoped in v1).
+  const activeFilePath = useWorkspaceStore((state) =>
+    state.focusedArea === "workspace" ? state.activeWorkspace()?.activeFilePath ?? "" : "",
   );
   // Narrow selector: the chat panel only needs the active workspace's
   // chat thread, NOT the whole `workspaces` array. The store preserves
