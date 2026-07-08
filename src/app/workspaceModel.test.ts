@@ -1385,6 +1385,24 @@ describe("workspace model", () => {
     expect(block).toContain("- missing.md (large; read it for details)");
   });
 
+  it("buildFileContextBlock inlines a large EXTERNAL file's head — its path is unreadable by the sandboxed tools", () => {
+    const external: WorkspaceFileContextItem = {
+      id: "/Users/x/big.md",
+      kind: "file",
+      label: "big.md",
+      path: "/Users/x/big.md",
+      workspaceId: "w1",
+      origin: "external",
+    };
+    const big = "y".repeat(FILE_CONTEXT_INLINE_LIMIT * 2);
+    const block = buildFileContextBlock([external], new Map([["/Users/x/big.md", big]]));
+
+    expect(block).toContain("### /Users/x/big.md (beginning of the file");
+    expect(block).toContain("y".repeat(FILE_CONTEXT_INLINE_LIMIT));
+    expect(block).not.toContain(big);
+    expect(block).not.toContain("read it for details");
+  });
+
   it("buildFileContextBlock references every file (no inlined content) when inlineContent is off", () => {
     const fileItem = (path: string): WorkspaceFileContextItem => ({
       id: path,

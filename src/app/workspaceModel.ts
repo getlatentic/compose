@@ -2189,6 +2189,12 @@ export function buildFileContextBlock(
         if (content != null && content.length <= inlineLimit) {
           return `### ${item.path}\n${content}`;
         }
+        // An external file (#113) sits OUTSIDE the run's cwd, and the local
+        // agent's sandboxed read tool refuses absolute paths — a bare
+        // reference would be a dead end. Inline the head instead.
+        if (item.origin === "external" && content != null) {
+          return `### ${item.path} (beginning of the file — it continues beyond this excerpt)\n${content.slice(0, inlineLimit)}`;
+        }
         return `- ${item.path} (large; read it for details)`;
       }
       return `- ${item.path}`;
