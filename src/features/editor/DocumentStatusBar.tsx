@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useMarkdownPreview } from "./useMarkdownPreview";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
-import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
+import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
 import { isActiveFilePresent } from "../../app/workspaceModel";
 
 /**
@@ -16,17 +16,17 @@ import { isActiveFilePresent } from "../../app/workspaceModel";
  */
 export function DocumentStatusBar() {
   const activeFileExists = useWorkspaceStore((state) => {
-    const workspace = selectActiveWorkspace(state);
+    const workspace = selectFocusedWorkspace(state);
     return workspace ? isActiveFilePresent(workspace) : false;
   });
   const content = useWorkspaceStore((state) => {
-    const workspace = selectActiveWorkspace(state);
+    const workspace = selectFocusedWorkspace(state);
     return workspace?.activeFilePath
       ? workspace.fileContents[workspace.activeFilePath]?.content ?? ""
       : "";
   });
   const dirty = useWorkspaceStore((state) => {
-    const workspace = selectActiveWorkspace(state);
+    const workspace = selectFocusedWorkspace(state);
     return Boolean(
       workspace?.activeFilePath && workspace.fileContents[workspace.activeFilePath]?.dirty,
     );

@@ -28,6 +28,11 @@ export interface WorkspaceFileContextItem {
   label: string;
   path: string;
   workspaceId: string;
+  /** `"external"` = a #113 external file: `path` is absolute, presence is
+   *  judged against the external-files list, and content resolves from the
+   *  loose buffer. Absent = a workspace file (relative path) or a spilled
+   *  attachment (absolute, app scratch). */
+  origin?: "external";
 }
 
 export interface WorkspaceCommentContextItem {
@@ -325,8 +330,10 @@ export interface Workspace {
    * paths relative to that root. `"loose"` is a singleton pseudo-workspace
    * for files opened individually (Finder Open-With, `compose <file>`,
    * etc.) — `path` is `""` and file entries' `relativePath` field stores
-   * the **absolute** path. The chat / comments / conversation surfaces
-   * work identically on both.
+   * the **absolute** path. Loose files are plain documents: buffers, tabs,
+   * and saves reuse the workspace machinery, while the workspace-scoped
+   * surfaces (comments, history, index, agent context) don't apply — see
+   * {@link documentCapabilities}.
    */
   kind: WorkspaceKind;
   lastOpenedAt?: number;
@@ -379,13 +386,39 @@ export type FsEventEffect =
   | { type: "treeChanged" }
   | { type: "noop" };
 
+/** The real (folder-rooted) workspaces — every list surface (switcher,
+ *  counters, setup checks) reads through this so the loose pseudo-workspace
+ *  can never leak into it. */
+export function realWorkspaces(workspaces: Workspace[]): Workspace[] {
+  return workspaces.filter((workspace) => workspace.kind === "real");
+}
+
+/**
+ * What a document in this container supports (#113). Loose (external) files
+ * are plain documents — the workspace-scoped machinery doesn't apply in v1 —
+ * and the editor surface branches on THESE flags, not on `kind`, so the next
+ * doc type (canvas, HTML) extends here instead of adding another ad-hoc check.
+ */
+export function documentCapabilities(workspace: Pick<Workspace, "kind"> | null) {
+  const scoped = workspace?.kind === "real";
+  return {
+    comments: scoped,
+    versionHistory: scoped,
+    /** HTML/PDF export + print — the renderer resolves images against a
+     *  registered workspace root. Markdown export works everywhere. */
+    richExport: scoped,
+    /** Pasted/dropped images persist into the workspace's `images/` dir. */
+    imageInsert: scoped,
+  };
+}
+
 export function isSetupComplete(
   selectedHarnessReadiness: HarnessReadiness | null,
   workspaces: Workspace[],
 ) {
-  // "Set up" = the selected harness is installed and a workspace exists; the
-  // key is checked at send.
-  return Boolean(selectedHarnessReadiness?.installed) && workspaces.length > 0;
+  // "Set up" = the selected harness is installed and a REAL workspace exists
+  // (the loose pseudo-workspace doesn't count); the key is checked at send.
+  return Boolean(selectedHarnessReadiness?.installed) && realWorkspaces(workspaces).length > 0;
 }
 
 export function createWorkspaceFromPath(path: string): Workspace {
@@ -523,12 +556,25 @@ export function setCurrentTabContext(
 export function missingFileContextPaths(
   contextItems: WorkspaceContextItem[],
   files: WorkspaceFileEntry[],
+  looseFiles: WorkspaceFileEntry[] = [],
 ): string[] {
   const present = new Set(files.map((entry) => entry.relativePath));
+  const loosePresent = new Set(looseFiles.map((entry) => entry.relativePath));
   return contextItems
     .filter((item): item is WorkspaceFileContextItem => item.kind === "file")
-    .map((item) => item.path)
-    .filter((path) => !present.has(path));
+    .filter((item) => {
+      // External chips (#113) are judged against the external-files list.
+      if (item.origin === "external") {
+        return !loosePresent.has(item.path);
+      }
+      // Other absolute paths are spilled attachments in app scratch — outside
+      // any tree by design, never "missing".
+      if (item.path.startsWith("/")) {
+        return false;
+      }
+      return !present.has(item.path);
+    })
+    .map((item) => item.path);
 }
 
 /** Remove a file from the chat context by path (e.g. when it's deleted), leaving
@@ -931,8 +977,13 @@ export function addFileContextItem(
   workspaceId: string,
   filePath: string,
   label: string,
+  origin?: "external",
 ): WorkspaceChatThread {
-  const item: WorkspaceFileContextItem = { ...fileContextItem(workspaceId, filePath), label };
+  const item: WorkspaceFileContextItem = {
+    ...fileContextItem(workspaceId, filePath),
+    label,
+    ...(origin ? { origin } : {}),
+  };
   const withoutDup = chatThread.contextItems.filter((existing) => existing.id !== item.id);
   return { ...chatThread, contextItems: [...withoutDup, item] };
 }
@@ -2138,6 +2189,12 @@ export function buildFileContextBlock(
         if (content != null && content.length <= inlineLimit) {
           return `### ${item.path}\n${content}`;
         }
+        // An external file (#113) sits OUTSIDE the run's cwd, and the local
+        // agent's sandboxed read tool refuses absolute paths — a bare
+        // reference would be a dead end. Inline the head instead.
+        if (item.origin === "external" && content != null) {
+          return `### ${item.path} (beginning of the file — it continues beyond this excerpt)\n${content.slice(0, inlineLimit)}`;
+        }
         return `- ${item.path} (large; read it for details)`;
       }
       return `- ${item.path}`;
@@ -2199,7 +2256,9 @@ export function createPromptWithContext(
   const blocks = [
     transcript ? `Conversation so far:\n${transcript}` : null,
     fileContext
-      ? `Context files${inlineContent ? "" : " (read these as needed)"}:\n${fileContext}`
+      ? `Context files${
+          inlineContent ? " (attached for reference)" : " (read these as needed)"
+        }:\n${fileContext}`
       : null,
     // Scope edits to the intended files so the agent doesn't write to files the
     // user never asked it to touch (#31). A prompt guardrail, not a hard sandbox

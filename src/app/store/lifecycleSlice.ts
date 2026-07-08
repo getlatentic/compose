@@ -2,12 +2,15 @@ import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./typ
 import { showErrorToast } from "../../features/toast/toastStore";
 import { useUiStore } from "./uiStore";
 import {
+  LOOSE_WORKSPACE_ID,
   applyFileBuffer,
   applyScanResult,
+  createLooseWorkspace,
   createWorkspaceFromPath,
   hydrateChatThread,
   hydrateWorkspaceRecords,
   openWorkspaceFile,
+  realWorkspaces,
   type WorkspaceListResult,
 } from "../workspaceModel";
 import { useIndexStore } from "./indexStore";
@@ -61,7 +64,10 @@ export const createLifecycleSlice = (
     return workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
   },
   activeWorkspaceId: null,
-  workspaces: [],
+  // The loose pseudo-workspace (external files, #113) is always present and
+  // always LAST; `activeWorkspaceId` never points at it — `focusedArea` says
+  // whether the editor is showing one of its files.
+  workspaces: [createLooseWorkspace()],
   addWorkspace: (path: string) => {
     const workspace = createWorkspaceFromPath(path);
 
@@ -73,20 +79,25 @@ export const createLifecycleSlice = (
         };
       }
 
+      // Insert before the loose pseudo-workspace so it stays last.
+      const loose = state.workspaces.filter((item) => item.kind === "loose");
       return {
         activeWorkspaceId: workspace.id,
-        workspaces: [...state.workspaces, workspace],
+        workspaces: [...realWorkspaces(state.workspaces), workspace, ...loose],
       };
     });
 
     return workspace.id;
   },
   removeWorkspace: (workspaceId: string) => {
+    if (workspaceId === LOOSE_WORKSPACE_ID) {
+      return;
+    }
     set((state) => {
       const workspaces = state.workspaces.filter((workspace) => workspace.id !== workspaceId);
       const activeWorkspaceId =
         state.activeWorkspaceId === workspaceId
-          ? workspaces[0]?.id ?? null
+          ? realWorkspaces(workspaces)[0]?.id ?? null
           : state.activeWorkspaceId;
 
       return {
@@ -100,7 +111,7 @@ export const createLifecycleSlice = (
   },
   switchWorkspace: (workspaceId: string) => {
     const workspace = get().workspaces.find((item) => item.id === workspaceId);
-    if (!workspace) {
+    if (!workspace || workspace.kind === "loose") {
       return;
     }
 
@@ -117,9 +128,13 @@ export const createLifecycleSlice = (
       const navPatch = target
         ? pushNavEntry(state, { kind: "file", id: target, workspaceId })
         : null;
-      return navPatch
-        ? { activeWorkspaceId: workspace.id, workspaces: updated, ...navPatch }
-        : { activeWorkspaceId: workspace.id, workspaces: updated };
+      // Switching workspaces hands the editor to that workspace's document.
+      return {
+        activeWorkspaceId: workspace.id,
+        workspaces: updated,
+        focusedArea: "workspace" as const,
+        ...(navPatch ?? {}),
+      };
     });
     // Persist the active workspace AND its open timestamp on the backend so the
     // next launch restores this workspace (workspace_switch is the only command
@@ -128,14 +143,22 @@ export const createLifecycleSlice = (
   },
   hydrateWorkspaces: (workspaceList: WorkspaceListResult) => {
     set((state) => {
-      const workspaces = hydrateWorkspaceRecords(state.workspaces, workspaceList.workspaces);
+      // Records cover only REAL workspaces — carry the loose pseudo-workspace
+      // (and its open external files) across every hydrate, kept last.
+      const loose =
+        state.workspaces.find((workspace) => workspace.kind === "loose") ??
+        createLooseWorkspace();
+      const real = hydrateWorkspaceRecords(
+        realWorkspaces(state.workspaces),
+        workspaceList.workspaces,
+      );
       const activeWorkspaceId =
-        workspaceList.activeWorkspaceId ?? workspaces[0]?.id ?? state.activeWorkspaceId;
+        workspaceList.activeWorkspaceId ?? real[0]?.id ?? state.activeWorkspaceId;
 
       return {
         activeWorkspaceId,
         onboarding: workspaceList.onboarding,
-        workspaces,
+        workspaces: [...real, loose],
       };
     });
   },
@@ -255,7 +278,8 @@ export const createLifecycleSlice = (
   },
   rebuildWorkspaceIndex: async (workspaceId?: string) => {
     const targetWorkspaceId = workspaceId ?? get().activeWorkspaceId;
-    if (!targetWorkspaceId) {
+    // External files are plain documents — no search index (#113 v1).
+    if (!targetWorkspaceId || targetWorkspaceId === LOOSE_WORKSPACE_ID) {
       return;
     }
     const inFlight = indexRebuildFlights.get(targetWorkspaceId);

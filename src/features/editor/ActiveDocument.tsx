@@ -26,9 +26,9 @@ import { showToast } from "../toast/toastStore";
 import { useConfirm } from "../dialogs/ConfirmProvider";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
-import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
+import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
 import { useWorkspaceLinkTargets } from "../../app/useWorkspaceLinkTargets";
-import type { Workspace } from "../../app/workspaceModel";
+import { documentCapabilities, type Workspace } from "../../app/workspaceModel";
 
 /**
  * How long after the last edit the active file is auto-written to disk. Stacks
@@ -54,26 +54,45 @@ const EMPTY_COMMENTS: Workspace["comments"] = [];
  * (`value` is the live content), and CodeMirror's own loop-guard no-ops the
  * resulting sync when the change originated in the editor.
  */
-function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => void }) {
+function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () => void }) {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
-  const activeFilePath = useWorkspaceStore(
-    (state) => selectActiveWorkspace(state)?.activeFilePath ?? "",
+  // What this document supports (#113): an external file is a plain document,
+  // so the workspace-scoped affordances below read these flags (primitives —
+  // stable across store ticks), never `kind` directly.
+  const commentsEnabled = useWorkspaceStore(
+    (state) => documentCapabilities(selectFocusedWorkspace(state)).comments,
   );
-  const workspacePath = useWorkspaceStore((state) => selectActiveWorkspace(state)?.path);
+  const imageInsertEnabled = useWorkspaceStore(
+    (state) => documentCapabilities(selectFocusedWorkspace(state)).imageInsert,
+  );
+  const activeFilePath = useWorkspaceStore(
+    (state) => selectFocusedWorkspace(state)?.activeFilePath ?? "",
+  );
+  // Relative links/images in an external file resolve against ITS directory —
+  // the loose pseudo-workspace has no root of its own.
+  const workspacePath = useWorkspaceStore((state) => {
+    const workspace = selectFocusedWorkspace(state);
+    if (workspace?.kind === "loose") {
+      const path = workspace.activeFilePath;
+      const slash = path.lastIndexOf("/");
+      return slash > 0 ? path.slice(0, slash) : undefined;
+    }
+    return workspace?.path;
+  });
   const content = useWorkspaceStore((state) => {
-    const workspace = selectActiveWorkspace(state);
+    const workspace = selectFocusedWorkspace(state);
     return workspace?.activeFilePath
       ? workspace.fileContents[workspace.activeFilePath]?.content ?? ""
       : "";
   });
   const dirty = useWorkspaceStore((state) => {
-    const workspace = selectActiveWorkspace(state);
+    const workspace = selectFocusedWorkspace(state);
     return Boolean(
       workspace?.activeFilePath && workspace.fileContents[workspace.activeFilePath]?.dirty,
     );
   });
   const comments = useWorkspaceStore(
-    (state) => selectActiveWorkspace(state)?.comments ?? EMPTY_COMMENTS,
+    (state) => selectFocusedWorkspace(state)?.comments ?? EMPTY_COMMENTS,
   );
 
   const addCommentToActiveFile = useWorkspaceStore((state) => state.addCommentToActiveFile);
@@ -132,11 +151,21 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
   // Persist a pasted/dropped image to the workspace's `images/` dir via the
   // Tauri file API. Closes over the active workspace id so the editor stays
   // workspace-agnostic (it only knows "save these bytes at this relative path").
+  // An external file has no workspace to receive the bytes — the write would
+  // land in the REAL workspace and the inserted link would dangle.
   const saveImageBytes = useCallback(
     async (relPath: string, bytes: Uint8Array) => {
+      if (!imageInsertEnabled) {
+        showToast({
+          kind: "error",
+          title: "Not available",
+          message: "Images can't be inserted into external files yet.",
+        });
+        throw new Error("image insert unavailable for external files");
+      }
       await writeBinaryFile(activeWorkspaceId ?? "preview", relPath, bytes);
     },
-    [activeWorkspaceId],
+    [activeWorkspaceId, imageInsertEnabled],
   );
   // Stabilize the editor's Ask callback so React.memo on the editor can
   // short-circuit re-renders.
@@ -152,9 +181,12 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
   // and selection→chat paths (below), so a table comment is just a comment.
   const handleCommentOnExcerpt = useCallback(
     (excerpt: { range: SourceRange; text: string }, anchor: { x: number; y: number }) => {
+      if (!commentsEnabled) {
+        return;
+      }
       setTableComment({ excerpt, anchor });
     },
-    [],
+    [commentsEnabled],
   );
   // Close the composer and drop the persistent tint the menu left on the
   // commented row/column (a theme class the editor set; cleared by class here).
@@ -179,7 +211,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
   // File-action callbacks read live state via the store rather than closing
   // over the per-keystroke buffer, so they stay referentially stable.
   const handleExport = useCallback(async (format: DocumentExportFormat) => {
-    const workspace = useWorkspaceStore.getState().activeWorkspace();
+    const workspace = useWorkspaceStore.getState().focusedWorkspace();
     const relativePath = workspace?.activeFilePath;
     const buffer = relativePath ? workspace.fileContents[relativePath] : undefined;
     if (!workspace || !relativePath || !buffer) {
@@ -187,6 +219,16 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
     }
     if (format === "markdown") {
       exportMarkdownFile({ filePath: relativePath, markdown: buffer.content });
+      return;
+    }
+    // The HTML/PDF renderer resolves the document (and its images) against a
+    // registered workspace root — external files have none (#113 v1).
+    if (!documentCapabilities(workspace).richExport) {
+      showToast({
+        kind: "error",
+        title: "Not available",
+        message: "HTML/PDF export isn't available for external files yet — use Markdown.",
+      });
       return;
     }
     const exporter = format === "html" ? exportDocumentToHtml : exportDocumentToPdf;
@@ -205,10 +247,18 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
   // from the store (not the per-keystroke buffer prop), so it stays referentially
   // stable like handleExport.
   const handlePrint = useCallback(async () => {
-    const workspace = useWorkspaceStore.getState().activeWorkspace();
+    const workspace = useWorkspaceStore.getState().focusedWorkspace();
     const relativePath = workspace?.activeFilePath;
     const buffer = relativePath ? workspace.fileContents[relativePath] : undefined;
     if (!workspace || !relativePath || !buffer) {
+      return;
+    }
+    if (!documentCapabilities(workspace).richExport) {
+      showToast({
+        kind: "error",
+        title: "Not available",
+        message: "Printing isn't available for external files yet.",
+      });
       return;
     }
     try {
@@ -240,7 +290,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
         onSave={saveActiveFile}
         onShowVersionHistory={onShowVersionHistory}
         onExport={handleExport}
-        onToggleComments={toggleComments}
+        onToggleComments={commentsEnabled ? toggleComments : undefined}
         commentsOpen={commentsOpen}
         commentCount={activeFileComments.length}
         onToggleChat={toggleChat}
@@ -256,6 +306,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
       activeFileComments.length,
       toggleChat,
       chatOpen,
+      commentsEnabled,
     ],
   );
 
@@ -277,7 +328,9 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
   );
 
   // The selection comment bubble, handed to the editor as a slot. The editor
-  // supplies the live selection + a `dismiss` that collapses it.
+  // supplies the live selection + a `dismiss` that collapses it. External
+  // files get no bubble — comments and agent context are workspace-scoped
+  // (#113 v1).
   const selectionActions = useCallback(
     ({
       selection,
@@ -285,16 +338,17 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory: () => 
     }: {
       selection: EditorSelectionSnapshot | null;
       dismiss: () => void;
-    }) => (
-      <CommentBubble
-        hasEditor
-        selection={selection}
-        dismissSelection={dismiss}
-        onSendToChat={handleAskAboutSelection}
-        onQueueComment={handleQueueComment}
-      />
-    ),
-    [handleAskAboutSelection, handleQueueComment],
+    }) =>
+      commentsEnabled ? (
+        <CommentBubble
+          hasEditor
+          selection={selection}
+          dismissSelection={dismiss}
+          onSendToChat={handleAskAboutSelection}
+          onQueueComment={handleQueueComment}
+        />
+      ) : null,
+    [handleAskAboutSelection, handleQueueComment, commentsEnabled],
   );
 
   return (
@@ -356,21 +410,27 @@ function tableComposerStyle(anchor: { x: number; y: number }): CSSProperties {
  */
 export function ActiveDocument() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
+  const commentsEnabled = useWorkspaceStore(
+    (state) => documentCapabilities(selectFocusedWorkspace(state)).comments,
+  );
+  const historyEnabled = useWorkspaceStore(
+    (state) => documentCapabilities(selectFocusedWorkspace(state)).versionHistory,
+  );
   const activeFilePath = useWorkspaceStore(
-    (state) => selectActiveWorkspace(state)?.activeFilePath ?? "",
+    (state) => selectFocusedWorkspace(state)?.activeFilePath ?? "",
   );
   const bufferLoaded = useWorkspaceStore((state) => {
-    const workspace = selectActiveWorkspace(state);
+    const workspace = selectFocusedWorkspace(state);
     return Boolean(workspace?.activeFilePath && workspace.fileContents[workspace.activeFilePath]);
   });
   const inConflict = useWorkspaceStore((state) => {
-    const workspace = selectActiveWorkspace(state);
+    const workspace = selectFocusedWorkspace(state);
     return Boolean(
       workspace?.activeFilePath && workspace.fileContents[workspace.activeFilePath]?.conflict,
     );
   });
   const allComments = useWorkspaceStore(
-    (state) => selectActiveWorkspace(state)?.comments ?? EMPTY_COMMENTS,
+    (state) => selectFocusedWorkspace(state)?.comments ?? EMPTY_COMMENTS,
   );
   const commentsOpen = useUiStore((state) => state.commentsOpen);
 
@@ -466,13 +526,15 @@ export function ActiveDocument() {
         <div
           className={[
             "document-workspace",
-            commentsOpen ? "document-workspace--comments-open" : "",
+            commentsOpen && commentsEnabled ? "document-workspace--comments-open" : "",
           ]
             .filter(Boolean)
             .join(" ")}
         >
-          <DocumentEditor onShowVersionHistory={handleShowVersionHistory} />
-          {commentsOpen ? (
+          <DocumentEditor
+            onShowVersionHistory={historyEnabled ? handleShowVersionHistory : undefined}
+          />
+          {commentsOpen && commentsEnabled ? (
             <CommentsPanel
               comments={activeFileAllComments}
               filePath={activeFilePath}

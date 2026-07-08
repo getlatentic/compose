@@ -1,8 +1,10 @@
 mod bundled_runtime;
 mod data_reset;
 pub mod db;
+mod default_handler;
 pub mod events;
 pub mod export;
+pub mod external;
 pub mod files;
 mod harness;
 pub mod index;
@@ -67,6 +69,7 @@ pub fn run() {
         .manage(harness::model_manager::ModelPullState::default())
         .manage(review::ReviewSessionStore::default())
         .manage(index::WorkspaceIndexStore::default())
+        .manage(external::ExternalFilesRegistry::default())
         .manage(PendingOpenUrls::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -145,6 +148,10 @@ pub fn run() {
             let registry = app_handle.state::<workspace::WorkspaceRegistry>();
             if let Err(error) = registry.init_from_app(&app_handle) {
                 eprintln!("workspace registry init failed: {error}");
+            }
+            let externals = app_handle.state::<external::ExternalFilesRegistry>();
+            if let Err(error) = externals.init_from_app(&app_handle) {
+                eprintln!("external files registry init failed: {error}");
             }
             // Load user-registered custom agents before export_all (below) reads
             // their keys. A plain JSON read, so safe inline (unlike the keychain).
@@ -323,6 +330,15 @@ pub fn run() {
             logging::report_client_error,
             logging::open_error_log,
             open_with::drain_pending_open_urls,
+            external::external_list,
+            external::external_add,
+            external::external_remove,
+            external::external_save_tabs,
+            external::external_read_file,
+            external::external_write_file,
+            external::resolve_open_path,
+            default_handler::markdown_handler_status,
+            default_handler::set_default_markdown_handler,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

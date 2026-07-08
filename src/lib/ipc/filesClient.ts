@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { DocumentTextChange } from "../../features/comments/commentModel";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
-import { FileConflictError } from "../workspace/fileErrors";
+import { FileConflictError, FileNotFoundError } from "../workspace/fileErrors";
 import {
   _resetVirtualWorkspaceForTests,
   vwCreate,
@@ -13,8 +13,8 @@ import {
 } from "../workspace/virtualWorkspace";
 
 // Re-exported so existing importers (incl. filesClient.test.ts) keep
-// getting it from here; the class now lives in ../workspace/fileErrors.
-export { FileConflictError };
+// getting it from here; the classes live in ../workspace/fileErrors.
+export { FileConflictError, FileNotFoundError };
 
 export interface WorkspaceFileEntry {
   lastModifiedMs: number;
@@ -43,6 +43,9 @@ function normalizeFileError(raw: unknown): Error {
     if (error.kind === "conflict") {
       return new FileConflictError(error.latestLastModifiedMs ?? 0);
     }
+    if (error.kind === "notFound") {
+      return new FileNotFoundError(error.message ?? error.kind);
+    }
     return new Error(error.message ?? error.kind);
   }
   if (raw instanceof Error) {
@@ -54,7 +57,9 @@ function normalizeFileError(raw: unknown): Error {
   return new Error("File operation failed");
 }
 
-async function invokeFile<T>(command: string, args: Record<string, unknown>): Promise<T> {
+/** Invoke a file-shaped Tauri command, mapping its wire `FileError` (incl.
+ *  conflicts) to typed errors. Shared with the external-files client. */
+export async function invokeFile<T>(command: string, args: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(command, args);
   } catch (raw) {

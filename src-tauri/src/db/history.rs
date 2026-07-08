@@ -516,6 +516,46 @@ mod tests {
     }
 
     #[test]
+    fn llm_thread_records_absolute_context_paths() {
+        let (_dir, store, vault_id) = store_with_doc();
+
+        // External files (#113) and spilled-paste attachments carry absolute
+        // paths — the audit snapshot records them as identifiers (doc linkage
+        // is best-effort), it must not reject the send.
+        store
+            .record_llm_thread(LlmThreadRecordRequest {
+                context_items: vec![LlmContextSnapshotRequest {
+                    anchor: None,
+                    file_path: "/Users/someone/Downloads/notes.md".to_owned(),
+                    kind: "file".to_owned(),
+                    selected_text_snapshot: None,
+                    source_comment_id: None,
+                    source_range: None,
+                    surrounding_context_snapshot: None,
+                }],
+                prompt: "Summarize this note".to_owned(),
+                workspace_id: vault_id.to_owned(),
+            })
+            .expect("absolute context path records");
+
+        // Traversal stays rejected — the identifier must be canonical.
+        let result = store.record_llm_thread(LlmThreadRecordRequest {
+            context_items: vec![LlmContextSnapshotRequest {
+                anchor: None,
+                file_path: "/Users/../etc/passwd.md".to_owned(),
+                kind: "file".to_owned(),
+                selected_text_snapshot: None,
+                source_comment_id: None,
+                source_range: None,
+                surrounding_context_snapshot: None,
+            }],
+            prompt: "nope".to_owned(),
+            workspace_id: vault_id.to_owned(),
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn prunes_old_versions_but_keeps_latest_and_llm_referenced() {
         let (_dir, store, vault_id) = store_with_doc();
 

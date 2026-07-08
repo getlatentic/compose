@@ -1,4 +1,5 @@
 import type { NavEntry, WorkspaceStoreGet } from "./types";
+import { LOOSE_WORKSPACE_ID } from "../workspaceModel";
 
 /**
  * When true, `pushNavEntry` short-circuits — used by `navigateBack` /
@@ -70,6 +71,13 @@ export function pruneNavHistory(
 export function applyNavEntry(get: WorkspaceStoreGet, entry: NavEntry) {
   suppressNavPush = true;
   try {
+    // External-file entries refocus the loose tab — the real workspace (tree,
+    // chat) stays put, exactly as when the file was first opened. Removal
+    // prunes these entries, so a surviving one is always selectable.
+    if (entry.workspaceId === LOOSE_WORKSPACE_ID) {
+      void get().selectLooseFile(entry.id);
+      return;
+    }
     if (get().activeWorkspaceId !== entry.workspaceId) {
       get().switchWorkspace(entry.workspaceId);
     }

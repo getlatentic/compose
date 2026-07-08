@@ -13,7 +13,6 @@ import {
   IMAGE_EDIT_ALT_EVENT,
   type ImageEditAltEventDetail,
 } from "ai-editor";
-import { useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
 import { markBoot } from "../lib/perf";
 
 export function App() {
@@ -26,7 +25,6 @@ export function App() {
         <ConfirmProvider>
           <RenameProvider>
             <ImageEditAltListener />
-            <ExternalFileOpenListener />
             <UpdateChecker />
             <ToastViewport />
             <UpdateBanner />
@@ -36,11 +34,6 @@ export function App() {
       </LinkInsertProvider>
     </TextPromptProvider>
   );
-}
-
-function ExternalFileOpenListener() {
-  useExternalFileOpen();
-  return null;
 }
 
 /** Quietly check for an update shortly after launch — off the launch path so it

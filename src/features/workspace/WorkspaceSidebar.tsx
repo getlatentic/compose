@@ -11,6 +11,7 @@ import { FileTree } from "../file-tree/FileTree";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { SidebarChatList } from "../chat/SidebarChatList";
 import { ActiveFileProperties } from "./ActiveFilePanels";
+import { ExternalFilesSection } from "./ExternalFilesSection";
 import { NewMenu } from "./NewMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
@@ -314,13 +315,20 @@ const FilesTab = memo(function FilesTab({
   // (it flipped this pane on every edit/save) — each row owns its own dot.
   const files = useStableFileList();
   const folders = useFolderList();
+  // While an external file is focused the editor shows THAT document — the
+  // tree drops its highlight so exactly one row ever reads as "open" (#113).
   const activeFilePath = useWorkspaceStore((state) => {
+    if (state.focusedArea === "loose") {
+      return "";
+    }
     const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
     return ws?.activeFilePath ?? "";
   });
-  if (!files) {
-    return (
-      <div className="sidebar-pane sidebar-pane--files">
+
+  return (
+    <div className="sidebar-pane sidebar-pane--files">
+      <ExternalFilesSection />
+      {!files ? (
         <InlineNotification
           hideCloseButton
           kind="info"
@@ -328,25 +336,23 @@ const FilesTab = memo(function FilesTab({
           subtitle="Open a folder to browse its files."
           title="No folder open"
         />
-      </div>
-    );
-  }
+      ) : (
+        <>
+          <div className="sidebar-files">
+            <FileTree
+              activePath={activeFilePath}
+              files={files}
+              folders={folders}
+              onDelete={onDeleteFile}
+              onRename={onRenameFile}
+              onMoveFile={onMoveFile}
+              onSelectFile={onSelectFile}
+            />
+          </div>
 
-  return (
-    <div className="sidebar-pane sidebar-pane--files">
-      <div className="sidebar-files">
-        <FileTree
-          activePath={activeFilePath}
-          files={files}
-          folders={folders}
-          onDelete={onDeleteFile}
-          onRename={onRenameFile}
-          onMoveFile={onMoveFile}
-          onSelectFile={onSelectFile}
-        />
-      </div>
-
-      <ActiveFileProperties />
+          <ActiveFileProperties />
+        </>
+      )}
     </div>
   );
 });

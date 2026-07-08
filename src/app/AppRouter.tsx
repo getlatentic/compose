@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { harnessReadiness } from "../lib/ipc/harnessClient";
+import { externalList } from "../lib/ipc/externalFilesClient";
 import { getOnboarding, listWorkspaces } from "../lib/ipc/workspaceClient";
 import { SetupScreen } from "../features/setup/SetupScreen";
 import { SplashScreen } from "./SplashScreen";
@@ -33,6 +34,7 @@ export function AppRouter() {
   // cleanly when it doesn't change.
   const onboardingComplete = useWorkspaceStore((state) => Boolean(state.onboarding.completedAt));
   const hydrateWorkspaces = useWorkspaceStore((state) => state.hydrateWorkspaces);
+  const hydrateExternalFiles = useWorkspaceStore((state) => state.hydrateExternalFiles);
   const setOnboarding = useWorkspaceStore((state) => state.setOnboarding);
   const selectedHarnessId = useHarnessStore((state) => state.selectedHarnessId);
   const setSelectedHarnessReadiness = useHarnessStore((state) => state.setSelectedHarnessReadiness);
@@ -46,15 +48,20 @@ export function AppRouter() {
         // [selectedHarnessId] effect below already runs it on mount, and the
         // editor doesn't need it to render. Gate only on the fast local reads
         // (workspaces + onboarding, both from app-support JSON).
-        const [workspaceList, onboarding] = await Promise.all([
+        const [workspaceList, onboarding, externals] = await Promise.all([
           listWorkspaces(),
           getOnboarding(),
+          // Best-effort — a hiccup here must not hold the splash or drop boot.
+          externalList().catch(() => null),
         ]);
         if (cancelled) {
           return;
         }
 
         hydrateWorkspaces(workspaceList);
+        if (externals) {
+          hydrateExternalFiles(externals);
+        }
         setOnboarding(onboarding);
         // Flip the boot gate LAST, after every store hydration above has
         // committed — React batches the setters into one commit, then this
@@ -84,7 +91,7 @@ export function AppRouter() {
     return () => {
       cancelled = true;
     };
-  }, [hydrateWorkspaces, setOnboarding, setSelectedHarnessReadiness]);
+  }, [hydrateWorkspaces, hydrateExternalFiles, setOnboarding, setSelectedHarnessReadiness]);
 
   // Re-probe when the selected harness changes, so the send gate + setup state
   // track the new selection after a switch. The boot effect seeds the first

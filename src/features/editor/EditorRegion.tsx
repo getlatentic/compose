@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo } from "react";
-import { PaneTabs, type EditorTab } from "./PaneTabs";
+import { PaneTabs, type EditorTab, type TabArea } from "./PaneTabs";
 import { ActiveDocument } from "./ActiveDocument";
 import { DocumentStatusBar } from "./DocumentStatusBar";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_NAME } from "./welcomeNote";
@@ -10,8 +10,13 @@ import { useConfirm } from "../dialogs/ConfirmProvider";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import { selectActiveWorkspace } from "../../app/store/activeWorkspace";
+import {
+  selectActiveWorkspace,
+  selectFocusedWorkspace,
+  selectLooseWorkspace,
+} from "../../app/store/activeWorkspace";
 import { isActiveFilePresent, resolveOpenTabs } from "../../app/workspaceModel";
+import { flushActiveEditor } from "../../lib/editor/editorFlush";
 import { markBoot } from "../../lib/perf";
 
 /**
@@ -32,15 +37,18 @@ export function EditorRegion() {
   useEffect(() => {
     markBoot("editor");
   }, []);
+  // The editor surface follows the FOCUSED container — the loose
+  // pseudo-workspace while an external file is showing (#113).
+  const focusedArea = useWorkspaceStore((state) => state.focusedArea);
   const activeFilePath = useWorkspaceStore(
-    (state) => selectActiveWorkspace(state)?.activeFilePath ?? "",
+    (state) => selectFocusedWorkspace(state)?.activeFilePath ?? "",
   );
   // Whether the active file should render its document (vs still loading, vs no
   // file open). True when it's an open tab / has a loaded buffer / is in the
   // scan — so a transient scan miss on a large vault can't blank an open
   // document. A boolean — stable across a save's mtime/size churn on the entry.
   const activeFileExists = useWorkspaceStore((state) => {
-    const workspace = selectActiveWorkspace(state);
+    const workspace = selectFocusedWorkspace(state);
     return workspace ? isActiveFilePresent(workspace) : false;
   });
   const fileCount = useWorkspaceStore((state) => selectActiveWorkspace(state)?.files.length ?? 0);
@@ -52,17 +60,22 @@ export function EditorRegion() {
     const scanState = selectActiveWorkspace(state)?.scanState;
     return scanState === "idle" || scanState === "loading";
   });
-  // Open paths as a string KEY — stable across edits/saves so the memoised
-  // PaneTabs re-renders only when a tab opens/closes (dirty is read per-tab by
-  // TabDirtyDot).
-  const openTabsKey = useWorkspaceStore(
-    (state) => selectActiveWorkspace(state)?.openFilePaths.join("\n") ?? "",
-  );
+  // Open paths (workspace + loose) as one string KEY — stable across
+  // edits/saves so the memoised PaneTabs re-renders only when a tab
+  // opens/closes (dirty is read per-tab by TabDirtyDot).
+  const openTabsKey = useWorkspaceStore((state) => {
+    const workspacePaths = selectActiveWorkspace(state)?.openFilePaths.join("\n") ?? "";
+    const loosePaths = selectLooseWorkspace(state)?.openFilePaths.join("\n") ?? "";
+    return `${workspacePaths}\u0000${loosePaths}`;
+  });
 
   const closeFileTab = useWorkspaceStore((state) => state.closeFileTab);
+  const closeLooseTab = useWorkspaceStore((state) => state.closeLooseTab);
   const reorderTab = useWorkspaceStore((state) => state.reorderTab);
+  const reorderLooseTab = useWorkspaceStore((state) => state.reorderLooseTab);
   const createNote = useWorkspaceStore((state) => state.createNote);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
+  const selectLooseFile = useWorkspaceStore((state) => state.selectLooseFile);
   const setChatPrompt = useWorkspaceStore((state) => state.setChatPrompt);
   const sendChatPrompt = useWorkspaceStore((state) => state.sendChatPrompt);
   const chatOpen = useUiStore((state) => state.chatOpen);
@@ -74,12 +87,17 @@ export function EditorRegion() {
   const confirm = useConfirm();
 
   const openTabs = useMemo<EditorTab[]>(() => {
-    const ws = useWorkspaceStore.getState().activeWorkspace();
-    if (!ws) return [];
+    const state = useWorkspaceStore.getState();
+    const ws = state.activeWorkspace();
+    const loose = selectLooseWorkspace(state);
     // One tab per open path — a path whose file is transiently missing from the
     // scan keeps a synthesized entry, so a partial/racing scan never drops a
-    // tab (resolveOpenTabs). Only closing the tab removes it.
-    return resolveOpenTabs(ws).map((entry) => ({ entry }));
+    // tab (resolveOpenTabs). Only closing the tab removes it. External tabs
+    // ride after the workspace's, in their own reorder group.
+    return [
+      ...(ws ? resolveOpenTabs(ws).map((entry) => ({ entry, area: "workspace" as const })) : []),
+      ...(loose ? resolveOpenTabs(loose).map((entry) => ({ entry, area: "loose" as const })) : []),
+    ];
     // openTabsKey captures the open paths; getState reads the live entries when
     // those change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,17 +105,28 @@ export function EditorRegion() {
 
   // Stable so the memoised PaneTabs isn't re-rendered by a fresh callback
   // identity on every render.
-  const handleSelectTab = useCallback((path: string) => void selectFile(path), [selectFile]);
+  const handleSelectTab = useCallback(
+    (path: string, area: TabArea) =>
+      void (area === "loose" ? selectLooseFile(path) : selectFile(path)),
+    [selectFile, selectLooseFile],
+  );
   const handleReorderTab = useCallback(
-    (fromPath: string, toPath: string) => reorderTab(fromPath, toPath),
-    [reorderTab],
+    (fromPath: string, toPath: string, area: TabArea) =>
+      area === "loose" ? reorderLooseTab(fromPath, toPath) : reorderTab(fromPath, toPath),
+    [reorderTab, reorderLooseTab],
   );
   const handleCloseTab = useCallback(
-    (filePath: string) => {
-      const workspace = useWorkspaceStore.getState().activeWorkspace();
-      const buffer = workspace?.fileContents[filePath];
+    (filePath: string, area: TabArea) => {
+      // Pull the editor's live content into the buffer first — keystrokes
+      // still inside the 500ms editor debounce must reach the dirty check, or
+      // closing right after typing skips the confirm and drops them (#43).
+      flushActiveEditor();
+      const state = useWorkspaceStore.getState();
+      const container = area === "loose" ? selectLooseWorkspace(state) : state.activeWorkspace();
+      const close = area === "loose" ? closeLooseTab : closeFileTab;
+      const buffer = container?.fileContents[filePath];
       if (!buffer?.dirty) {
-        closeFileTab(filePath);
+        close(filePath);
         return;
       }
       void (async () => {
@@ -108,11 +137,11 @@ export function EditorRegion() {
           danger: true,
         });
         if (confirmed) {
-          closeFileTab(filePath);
+          close(filePath);
         }
       })();
     },
-    [closeFileTab, confirm],
+    [closeFileTab, closeLooseTab, confirm],
   );
 
   // Empty-state "Ask the assistant": open the chat, pre-fill a first-note starter,
@@ -136,6 +165,7 @@ export function EditorRegion() {
       <PaneTabs
         files={openTabs}
         activeFilePath={activeFilePath}
+        activeArea={focusedArea}
         onSelectFile={handleSelectTab}
         onCloseFile={handleCloseTab}
         onReorderTab={handleReorderTab}

@@ -3,6 +3,7 @@ import { subscribeToWorkspaceFs } from "../lib/ipc/fileWatcherClient";
 import { AppShell } from "./AppShell";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useUiStore } from "./store/uiStore";
+import { useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
 import { useSaveOnExit } from "./useSaveOnExit";
 
 /**
@@ -21,6 +22,10 @@ export function MainApp() {
   const openSearch = useUiStore((state) => state.openSearch);
 
   useSaveOnExit();
+  // OS-opened files (Finder Open-With). Mounted HERE — after boot hydration —
+  // so the cold-start drain routes against the real workspace list; earlier
+  // arrivals stay buffered on the Rust side until this mounts.
+  useExternalFileOpen();
 
   useEffect(() => {
     if (!activeWorkspaceId) {

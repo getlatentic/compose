@@ -590,6 +590,36 @@ describe("workspace model", () => {
     expect(missingFileContextPaths(items.slice(0, 1), workspace.files)).toEqual([]);
   });
 
+  it("missingFileContextPaths judges external chips by the external list, spills by nothing", () => {
+    const workspace = workspaceWithFiles("/tmp/alpha", ["kept.md"]);
+    const looseFiles = [{ lastModifiedMs: 0, relativePath: "/Users/x/listed.md", sizeBytes: 0 }];
+    const items: WorkspaceContextItem[] = [
+      {
+        id: "1",
+        kind: "file",
+        label: "listed.md",
+        path: "/Users/x/listed.md",
+        workspaceId: "w",
+        origin: "external",
+      },
+      {
+        id: "2",
+        kind: "file",
+        label: "removed.md",
+        path: "/Users/x/removed.md",
+        workspaceId: "w",
+        origin: "external",
+      },
+      // A spilled paste: absolute path in app scratch, no origin — outside
+      // every tree by design, never "missing".
+      { id: "3", kind: "file", label: "42 KB paste", path: "/tmp/spill/x.md", workspaceId: "w" },
+    ];
+
+    expect(missingFileContextPaths(items, workspace.files, looseFiles)).toEqual([
+      "/Users/x/removed.md",
+    ]);
+  });
+
   it("markBufferSaved clears dirty and bumps lastModifiedMs", () => {
     const workspace = workspaceWithFiles("/tmp/alpha", ["a.md"]);
     const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {
@@ -1355,6 +1385,24 @@ describe("workspace model", () => {
     expect(block).toContain("- missing.md (large; read it for details)");
   });
 
+  it("buildFileContextBlock inlines a large EXTERNAL file's head — its path is unreadable by the sandboxed tools", () => {
+    const external: WorkspaceFileContextItem = {
+      id: "/Users/x/big.md",
+      kind: "file",
+      label: "big.md",
+      path: "/Users/x/big.md",
+      workspaceId: "w1",
+      origin: "external",
+    };
+    const big = "y".repeat(FILE_CONTEXT_INLINE_LIMIT * 2);
+    const block = buildFileContextBlock([external], new Map([["/Users/x/big.md", big]]));
+
+    expect(block).toContain("### /Users/x/big.md (beginning of the file");
+    expect(block).toContain("y".repeat(FILE_CONTEXT_INLINE_LIMIT));
+    expect(block).not.toContain(big);
+    expect(block).not.toContain("read it for details");
+  });
+
   it("buildFileContextBlock references every file (no inlined content) when inlineContent is off", () => {
     const fileItem = (path: string): WorkspaceFileContextItem => ({
       id: path,
@@ -1434,7 +1482,7 @@ describe("workspace model", () => {
       [],
       new Map([["notes/a.md", "the file body"]]),
     );
-    expect(prompt).toContain("Context files:");
+    expect(prompt).toContain("Context files (attached for reference");
     expect(prompt).toContain("### notes/a.md\nthe file body");
     // Edit-scope guardrail so the agent only touches the intended files (#31).
     expect(prompt).toContain("only modify the Context files listed above");

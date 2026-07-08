@@ -1,5 +1,6 @@
 import { saveWorkspaceComments } from "../../lib/ipc/commentsClient";
 import { saveConversation } from "../../lib/ipc/conversationsClient";
+import { externalSaveTabs } from "../../lib/ipc/externalFilesClient";
 import { saveWorkspaceTabs } from "../../lib/ipc/workspaceClient";
 import {
   chatThreadContextFileLabels,
@@ -15,11 +16,14 @@ export function persistTabs(workspaces: Workspace[], workspaceId: string) {
   if (!workspace) {
     return;
   }
-  void saveWorkspaceTabs(workspaceId, workspace.activeFilePath, workspace.openFilePaths).catch(
-    () => {
-      // best-effort — tab state isn't critical
-    },
-  );
+  // Loose tabs persist in the external-files registry, not workspaces.json.
+  const save =
+    workspace.kind === "loose"
+      ? externalSaveTabs(workspace.openFilePaths, workspace.activeFilePath)
+      : saveWorkspaceTabs(workspaceId, workspace.activeFilePath, workspace.openFilePaths);
+  void save.catch(() => {
+    // best-effort — tab state isn't critical
+  });
 }
 
 /**
@@ -70,7 +74,9 @@ export function persistComments(
   onError: (message: string) => void,
 ) {
   const workspace = workspaces.find((item) => item.id === workspaceId);
-  if (!workspace) {
+  // External files carry no comments (#113 v1) — and the backend has no
+  // comment store for the loose pseudo-workspace to write into.
+  if (!workspace || workspace.kind === "loose") {
     return;
   }
   void saveWorkspaceComments(workspaceId, workspace.comments).catch((error) =>

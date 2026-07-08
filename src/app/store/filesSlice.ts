@@ -2,6 +2,7 @@ import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./typ
 import { showErrorToast } from "../../features/toast/toastStore";
 import {
   FileConflictError,
+  FileNotFoundError,
   createFile as createFileIpc,
   createFolder as createFolderIpc,
   deleteFile as deleteFileIpc,
@@ -10,6 +11,11 @@ import {
   renameFile as renameFileIpc,
   writeFile as writeFileIpc,
 } from "../../lib/ipc/filesClient";
+import {
+  externalReadFile,
+  externalWriteFile,
+} from "../../lib/ipc/externalFilesClient";
+import type { Workspace, WorkspaceFileBuffer } from "../workspaceModel";
 import {
   applyFileBuffer,
   removeDeletedFile,
@@ -47,12 +53,58 @@ import {
  *  read of the same file. */
 const loadingBuffers = new Set<string>();
 
+/** Read a file's content, routed by its container: external files (the loose
+ *  workspace) read by absolute path; workspace files by `(id, relative)`. */
+function readFileFor(workspace: Workspace, path: string) {
+  return workspace.kind === "loose" ? externalReadFile(path) : readFileIpc(workspace.id, path);
+}
+
+/** Write a buffer, routed the same way. External writes carry the same
+ *  conflict expectation; comment position changes are workspace-only. */
+export function writeBufferFor(workspace: Workspace, path: string, buffer: WorkspaceFileBuffer) {
+  const expected = buffer.conflict ? null : buffer.lastModifiedMs;
+  return workspace.kind === "loose"
+    ? externalWriteFile(path, buffer.content, expected)
+    : writeFileIpc(workspace.id, path, buffer.content, expected, buffer.pendingChanges);
+}
+
+/** Save the outgoing focused file before the editor swaps documents — the
+ *  no-data-loss dance of #43 (flush the 500ms editor debounce, then write if
+ *  dirty), shared by workspace and loose selects so the two switch paths can
+ *  never drift. `saveActiveFile` captures the focused path synchronously
+ *  before its first await, so firing it un-awaited saves the outgoing file in
+ *  the background without slowing the switch. */
+export function commitOutgoingFile(get: WorkspaceStoreGet, next: { id: string; path: string }) {
+  const outgoing = get().focusedWorkspace();
+  if (!outgoing?.activeFilePath) {
+    return;
+  }
+  if (outgoing.id === next.id && outgoing.activeFilePath === next.path) {
+    return;
+  }
+  flushActiveEditor();
+  if (get().focusedWorkspace()?.fileContents[outgoing.activeFilePath]?.dirty) {
+    void get().saveActiveFile();
+  }
+}
+
+/** After a loose tab closes: if the loose area lost its active file while
+ *  focused, hand the editor back to the workspace. */
+export function settleLooseFocus(set: WorkspaceStoreSet, get: WorkspaceStoreGet) {
+  if (
+    get().focusedArea === "loose" &&
+    !get().workspaces.find((item) => item.kind === "loose")?.activeFilePath
+  ) {
+    set({ focusedArea: "workspace" });
+  }
+}
+
 /** The single buffer loader: read a file's content into its buffer if it isn't
  *  loaded yet. `selectFile` uses it on a tab click; an editor effect uses it for
  *  every other path that points `activeFilePath` at an unread file — closing or
  *  deleting a tab, restoring tabs on open — which used to strand the editor on
  *  "Loading file…" because only `selectFile` ever read (#50). */
-async function loadBufferIfMissing(
+export async function loadBufferIfMissing(
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
   workspaceId: string,
@@ -71,7 +123,7 @@ async function loadBufferIfMissing(
   }
   loadingBuffers.add(key);
   try {
-    const buffer = await readFileIpc(workspaceId, path);
+    const buffer = await readFileFor(workspace, path);
     set((state) => ({
       workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
         applyFileBuffer(item, path, buffer),
@@ -79,17 +131,23 @@ async function loadBufferIfMissing(
     }));
   } catch (error) {
     // A tab whose file is GONE (deleted externally, stale restored tab) must
-    // not strand on a forever-blank editor: when the scan agrees the file no
-    // longer exists, close the tab; otherwise (transient read hiccup) keep it
-    // and surface the error (#105).
+    // not strand on a forever-blank editor: when the file list agrees the file
+    // no longer exists — or the read itself says NotFound, which is
+    // authoritative — close the tab; otherwise (transient read hiccup) keep it
+    // and surface the error (#105). The workspace list is only trustworthy
+    // once its scan has SETTLED: an OS-open racing the boot scan of a large
+    // vault must not get its tab silently closed by a still-empty list. The
+    // loose list is the registry itself, current by construction.
     const current = get().workspaces.find((item) => item.id === workspaceId);
     const stillListed = current?.files.some((entry) => entry.relativePath === path) ?? false;
-    if (!stillListed) {
+    const listSettled = current?.kind === "loose" || current?.scanState === "ready";
+    if (!stillListed && (listSettled || error instanceof FileNotFoundError)) {
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
           closeWorkspaceFileTab(item, path),
         ),
       }));
+      settleLooseFocus(set, get);
       persistTabs(get().workspaces, workspaceId);
       return;
     }
@@ -104,14 +162,14 @@ export const createFilesSlice = (
   get: WorkspaceStoreGet,
 ): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "deleteFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
-    const workspace = get().activeWorkspace();
+    const workspace = get().focusedWorkspace();
     if (!workspace || !workspace.activeFilePath) {
       return null;
     }
     return workspace.fileContents[workspace.activeFilePath] ?? null;
   },
   activeFileEntry: () => {
-    const workspace = get().activeWorkspace();
+    const workspace = get().focusedWorkspace();
     if (!workspace || !workspace.activeFilePath) {
       return null;
     }
@@ -125,21 +183,10 @@ export const createFilesSlice = (
       return;
     }
 
-    // Persist the OUTGOING file before switching, so a quick tab switch
-    // (before the ~1s autosave fires) never strands its edits off-disk —
-    // the only data-loss window a crash could otherwise hit. `saveActiveFile`
-    // flushes the live editor + captures the current file path synchronously
-    // before its first await, so firing it un-awaited here saves the
-    // outgoing file in the background without slowing the switch.
-    if (path !== workspace.activeFilePath && workspace.activeFilePath) {
-      // Flush the outgoing editor FIRST (its buffer write is 500ms debounced),
-      // then save it if dirty — otherwise a fast switch strands the keystrokes
-      // typed in that window off-disk (#43).
-      flushActiveEditor();
-      if (get().activeWorkspace()?.fileContents[workspace.activeFilePath]?.dirty) {
-        void get().saveActiveFile();
-      }
-    }
+    // Persist the OUTGOING file — whatever the editor shows, possibly an
+    // external one — before switching, so a quick tab switch (before the ~1s
+    // autosave fires) never strands its edits off-disk (#43).
+    commitOutgoingFile(get, { id: workspace.id, path });
 
     set((state) => {
       const updated = updateWorkspace(state.workspaces, workspace.id, (item) =>
@@ -150,14 +197,18 @@ export const createFilesSlice = (
         id: path,
         workspaceId: workspace.id,
       });
-      return navPatch ? { workspaces: updated, ...navPatch } : { workspaces: updated };
+      return {
+        workspaces: updated,
+        focusedArea: "workspace" as const,
+        ...(navPatch ?? {}),
+      };
     });
     persistTabs(get().workspaces, workspace.id);
 
     await loadBufferIfMissing(set, get, workspace.id, path);
   },
   ensureActiveBuffer: async () => {
-    const workspace = get().activeWorkspace();
+    const workspace = get().focusedWorkspace();
     if (workspace?.activeFilePath) {
       await loadBufferIfMissing(set, get, workspace.id, workspace.activeFilePath);
     }
@@ -285,6 +336,12 @@ export const createFilesSlice = (
     }
   },
   deleteActiveFile: async () => {
+    // Deleting an external file would trash a document OUTSIDE the workspace;
+    // the sidebar's remove control (stop tracking) is the affordance instead.
+    if (get().focusedArea === "loose") {
+      showErrorToast("External files can't be deleted from Compose — remove them from the list instead.");
+      return;
+    }
     const filePath = get().activeWorkspace()?.activeFilePath;
     if (filePath) {
       await get().deleteFile(filePath);
@@ -347,6 +404,12 @@ export const createFilesSlice = (
     }
   },
   renameActiveFile: async (toRelativePath: string) => {
+    // External files are other apps' documents at their own paths — renaming
+    // them belongs to Finder, not Compose (#113 v1).
+    if (get().focusedArea === "loose") {
+      showErrorToast("External files can't be renamed from Compose.");
+      return;
+    }
     const workspace = get().activeWorkspace();
     if (!workspace || !workspace.activeFilePath) {
       return;
@@ -395,13 +458,13 @@ export const createFilesSlice = (
     }
   },
   reloadActiveFile: async () => {
-    const workspace = get().activeWorkspace();
+    const workspace = get().focusedWorkspace();
     if (!workspace || !workspace.activeFilePath) {
       return;
     }
     const filePath = workspace.activeFilePath;
     try {
-      const buffer = await readFileIpc(workspace.id, filePath);
+      const buffer = await readFileFor(workspace, filePath);
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
           applyFileBuffer(item, filePath, buffer),
@@ -419,7 +482,7 @@ export const createFilesSlice = (
     // data-loss bug. `flushActiveEditor` runs the editor's flush
     // synchronously (Zustand set), so the buffer read below is current.
     flushActiveEditor();
-    const workspace = get().activeWorkspace();
+    const workspace = get().focusedWorkspace();
     if (!workspace || !workspace.activeFilePath) {
       return;
     }
@@ -431,7 +494,8 @@ export const createFilesSlice = (
     // An IMPLICIT save (autosave, quit flush) must never re-create a file that
     // was deleted under the tab — that resurrection made deletes look like
     // no-ops (#105). An explicit Cmd+S on a kept dirty tab still writes: that
-    // is the user deliberately bringing the note back.
+    // is the user deliberately bringing the note back. For external files the
+    // list entry plays the same role: removing one stops its implicit saves.
     if (
       options?.implicit &&
       !workspace.files.some((entry) => entry.relativePath === filePath)
@@ -440,13 +504,7 @@ export const createFilesSlice = (
     }
 
     try {
-      const result = await writeFileIpc(
-        workspace.id,
-        filePath,
-        buffer.content,
-        buffer.conflict ? null : buffer.lastModifiedMs,
-        buffer.pendingChanges,
-      );
+      const result = await writeBufferFor(workspace, filePath, buffer);
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
           markBufferSaved(item, filePath, result.lastModifiedMs),
@@ -469,9 +527,10 @@ export const createFilesSlice = (
   saveAllDirtyBuffers: async () => {
     // Flush the active editor (its buffer write is 500ms debounced), then write
     // EVERY dirty buffer across all workspaces — including background tabs that
-    // never autosave on their own. This is the flush-on-quit so closing the app
-    // doesn't drop unsaved edits (#43). Best-effort per file: one failure (e.g.
-    // a disk conflict) must not block the others or trap the user's quit.
+    // never autosave on their own, and external files in the loose workspace.
+    // This is the flush-on-quit so closing the app doesn't drop unsaved edits
+    // (#43). Best-effort per file: one failure (e.g. a disk conflict) must not
+    // block the others or trap the user's quit.
     flushActiveEditor();
     const writes: Promise<unknown>[] = [];
     for (const workspace of get().workspaces) {
@@ -485,13 +544,7 @@ export const createFilesSlice = (
           continue;
         }
         writes.push(
-          writeFileIpc(
-            workspace.id,
-            filePath,
-            buffer.content,
-            buffer.lastModifiedMs,
-            buffer.pendingChanges,
-          )
+          writeBufferFor(workspace, filePath, buffer)
             .then((result) => {
               set((state) => ({
                 workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
@@ -506,7 +559,7 @@ export const createFilesSlice = (
     await Promise.all(writes);
   },
   updateActiveContent: (markdown: string, changes: DocumentTextChange[] = []) => {
-    const workspace = get().activeWorkspace();
+    const workspace = get().focusedWorkspace();
     if (!workspace || !workspace.activeFilePath) {
       return;
     }
@@ -527,7 +580,7 @@ export const createFilesSlice = (
     }
   },
   dismissConflict: (relativePath: string) => {
-    const workspace = get().activeWorkspace();
+    const workspace = get().focusedWorkspace();
     if (!workspace) {
       return;
     }

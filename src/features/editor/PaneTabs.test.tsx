@@ -20,7 +20,7 @@ let scrollIntoView: ReturnType<typeof vi.fn>;
 
 function tab(relativePath: string): EditorTab {
   const entry: WorkspaceFileEntry = { lastModifiedMs: 0, relativePath, sizeBytes: 0 };
-  return { entry };
+  return { entry, area: "workspace" };
 }
 
 const noop = () => {};
@@ -30,6 +30,7 @@ function render(files: EditorTab[], activeFilePath: string): void {
     root.render(
       <PaneTabs
         activeFilePath={activeFilePath}
+        activeArea="workspace"
         files={files}
         onCloseFile={noop}
         onSelectFile={noop}
