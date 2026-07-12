@@ -18,6 +18,8 @@ import { useWorkspaceStore } from "../workspaceStore";
  * `workspaces` and its actions drive document selection, so it lives in the
  * workspace store (see navSlice.ts).
  */
+export type ResizablePane = "sidebar" | "chat";
+
 export interface UiState {
   chatOpen: boolean;
   editorOpen: boolean;
@@ -49,6 +51,11 @@ export interface UiState {
   /** Focus mode (#126): sidebar + chat hidden, document centered. Persisted. */
   focusMode: boolean;
   toggleFocusMode: () => void;
+  /** User-dragged pane widths (#119); null = default. Committed on drag
+   *  release, never per-move (the splitter writes the CSS var directly). */
+  sidebarWidthPx: number | null;
+  chatWidthPx: number | null;
+  setPaneWidth: (pane: ResizablePane, widthPx: number | null) => void;
   analyticsEnabled: boolean;
   setAnalyticsEnabled: (enabled: boolean) => void;
   composerFocusNonce: number;
@@ -57,6 +64,17 @@ export interface UiState {
   chatPulseSignal: number;
   /** Reveal the chat pane and pulse its border (sidebar → open conversation). */
   pulseChatPanel: () => void;
+}
+
+function persistAll(get: () => UiState): void {
+  const state = get();
+  persistUiPrefs({
+    soundOnComplete: state.soundOnComplete,
+    analyticsEnabled: state.analyticsEnabled,
+    focusMode: state.focusMode,
+    sidebarWidthPx: state.sidebarWidthPx,
+    chatWidthPx: state.chatWidthPx,
+  });
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -133,30 +151,23 @@ export const useUiStore = create<UiState>((set, get) => ({
   soundOnComplete: INITIAL_UI_PREFS.soundOnComplete,
   setSoundOnComplete: (enabled) => {
     set({ soundOnComplete: enabled });
-    persistUiPrefs({
-      soundOnComplete: enabled,
-      analyticsEnabled: get().analyticsEnabled,
-      focusMode: get().focusMode,
-    });
+    persistAll(get);
   },
   analyticsEnabled: INITIAL_UI_PREFS.analyticsEnabled,
   setAnalyticsEnabled: (enabled) => {
     set({ analyticsEnabled: enabled });
-    persistUiPrefs({
-      soundOnComplete: get().soundOnComplete,
-      analyticsEnabled: enabled,
-      focusMode: get().focusMode,
-    });
+    persistAll(get);
   },
   focusMode: INITIAL_UI_PREFS.focusMode,
   toggleFocusMode: () => {
-    const focusMode = !get().focusMode;
-    set({ focusMode });
-    persistUiPrefs({
-      soundOnComplete: get().soundOnComplete,
-      analyticsEnabled: get().analyticsEnabled,
-      focusMode,
-    });
+    set({ focusMode: !get().focusMode });
+    persistAll(get);
+  },
+  sidebarWidthPx: INITIAL_UI_PREFS.sidebarWidthPx,
+  chatWidthPx: INITIAL_UI_PREFS.chatWidthPx,
+  setPaneWidth: (pane, widthPx) => {
+    set(pane === "sidebar" ? { sidebarWidthPx: widthPx } : { chatWidthPx: widthPx });
+    persistAll(get);
   },
   composerFocusNonce: 0,
   requestComposerFocus: () => {

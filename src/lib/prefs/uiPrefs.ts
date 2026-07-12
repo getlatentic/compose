@@ -16,9 +16,22 @@ export interface UiPrefs {
   /** Focus mode (#126): sidebar + chat hidden, the document centered. A
    *  writing posture worth keeping across restarts. */
   focusMode: boolean;
+  /** User-dragged pane widths in px (#119); null = the default grid width. */
+  sidebarWidthPx: number | null;
+  chatWidthPx: number | null;
 }
 
-const FALLBACK: UiPrefs = { soundOnComplete: true, analyticsEnabled: true, focusMode: false };
+const FALLBACK: UiPrefs = {
+  soundOnComplete: true,
+  analyticsEnabled: true,
+  focusMode: false,
+  sidebarWidthPx: null,
+  chatWidthPx: null,
+};
+
+function widthOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
 
 export function loadUiPrefs(): UiPrefs {
   if (typeof localStorage === "undefined") {
@@ -40,6 +53,8 @@ export function loadUiPrefs(): UiPrefs {
           ? parsed.analyticsEnabled
           : FALLBACK.analyticsEnabled,
       focusMode: typeof parsed.focusMode === "boolean" ? parsed.focusMode : FALLBACK.focusMode,
+      sidebarWidthPx: widthOrNull(parsed.sidebarWidthPx),
+      chatWidthPx: widthOrNull(parsed.chatWidthPx),
     };
   } catch {
     return FALLBACK;

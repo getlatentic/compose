@@ -18,11 +18,19 @@ describe("uiPrefs", () => {
   });
 
   it("round-trips all prefs", () => {
-    persistUiPrefs({ soundOnComplete: false, analyticsEnabled: false, focusMode: true });
+    persistUiPrefs({
+      soundOnComplete: false,
+      analyticsEnabled: false,
+      focusMode: true,
+      sidebarWidthPx: 320,
+      chatWidthPx: 480,
+    });
     expect(loadUiPrefs()).toEqual({
       soundOnComplete: false,
       analyticsEnabled: false,
       focusMode: true,
+      sidebarWidthPx: 320,
+      chatWidthPx: 480,
     });
   });
 
@@ -32,6 +40,8 @@ describe("uiPrefs", () => {
       soundOnComplete: false,
       analyticsEnabled: true,
       focusMode: false,
+      sidebarWidthPx: null,
+      chatWidthPx: null,
     });
   });
 
@@ -41,6 +51,18 @@ describe("uiPrefs", () => {
       soundOnComplete: true,
       analyticsEnabled: true,
       focusMode: false,
+      sidebarWidthPx: null,
+      chatWidthPx: null,
     });
+  });
+
+  it("rejects nonsense widths (zero, negative, NaN) back to defaults", () => {
+    localStorage.setItem(
+      "compose.uiPrefs.v1",
+      JSON.stringify({ sidebarWidthPx: -5, chatWidthPx: "wide" }),
+    );
+    const prefs = loadUiPrefs();
+    expect(prefs.sidebarWidthPx).toBeNull();
+    expect(prefs.chatWidthPx).toBeNull();
   });
 });
