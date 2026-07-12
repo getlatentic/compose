@@ -95,10 +95,12 @@ pub fn run() {
         // emits `menu://print` (routed in `setup`) → the editor opens the system
         // print panel (a printer, or Save as PDF from the panel).
         .menu(|handle| {
-            use tauri::menu::{Menu, MenuItem, Submenu};
+            use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
             let menu = Menu::default(handle)?;
             let print =
                 MenuItem::with_id(handle, "print", "Print…", true, Some("CmdOrCtrl+P"))?;
+            let open_file =
+                MenuItem::with_id(handle, "open-file", "Open File…", true, Some("CmdOrCtrl+O"))?;
             let focus = MenuItem::with_id(
                 handle,
                 "focus-mode",
@@ -106,16 +108,27 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+Shift+D"),
             )?;
-            // `Menu::default` already has File and View submenus — add to them
-            // rather than inserting duplicates.
+            let settings =
+                MenuItem::with_id(handle, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+            // `Menu::default` already has the app, File and View submenus — add
+            // to them rather than inserting duplicates. The app submenu is the
+            // FIRST item (its title is the app name); Settings… sits after
+            // About + its separator, per the macOS convention.
             let mut print_added = false;
             let mut focus_added = false;
-            for item in menu.items()? {
+            for (index, item) in menu.items()?.iter().enumerate() {
                 let Some(submenu) = item.as_submenu() else {
                     continue;
                 };
+                if index == 0 {
+                    submenu.insert(&settings, 2)?;
+                    submenu.insert(&PredefinedMenuItem::separator(handle)?, 3)?;
+                    continue;
+                }
                 match submenu.text().as_deref() {
                     Ok("File") => {
+                        submenu.prepend(&PredefinedMenuItem::separator(handle)?)?;
+                        submenu.prepend(&open_file)?;
                         submenu.append(&print)?;
                         print_added = true;
                     }
@@ -127,7 +140,10 @@ pub fn run() {
                 }
             }
             if !print_added {
-                menu.insert(&Submenu::with_items(handle, "File", true, &[&print])?, 1)?;
+                menu.insert(
+                    &Submenu::with_items(handle, "File", true, &[&open_file, &print])?,
+                    1,
+                )?;
             }
             if !focus_added {
                 menu.append(&Submenu::with_items(handle, "View", true, &[&focus])?)?;
@@ -163,6 +179,12 @@ pub fn run() {
                 }
                 if event.id() == "focus-mode" {
                     let _ = app.emit("menu://focus-mode", ());
+                }
+                if event.id() == "settings" {
+                    let _ = app.emit("menu://settings", ());
+                }
+                if event.id() == "open-file" {
+                    let _ = app.emit("menu://open-file", ());
                 }
             });
 
