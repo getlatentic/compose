@@ -91,7 +91,11 @@ these are product work; they're the ship vehicle.
         the PUBLIC key into tauri.conf.json `plugins.updater.pubkey`; put the
         private key + password in `src-tauri/.env.release` (see the example).
   - [ ] **Each release:** run `build-release.sh` (key set) → `make-update-manifest.sh`
-        → create GitHub Release `v<version>`, upload `Compose.app.tar.gz` + `latest.json`.
+        → create GitHub Release `v<version>`, upload `Compose.app.tar.gz` + `latest.json`
+        → **bump the Homebrew cask** ([getlatentic/homebrew-tap](https://github.com/getlatentic/homebrew-tap)
+        `Casks/compose.rb`): new `version` + `shasum -a 256` of BOTH release dmgs
+        (arm64 + universal), push — a stale cask strands `brew` users on the old
+        version even though the app self-updates.
 - [x] **Real README** — replaced the Tauri boilerplate with a proper
       Compose README (what it is, features, dev setup, layout, docs, license).
 - [x] **LICENSE file** — MIT (`LICENSE`), `license: "MIT"` added to
