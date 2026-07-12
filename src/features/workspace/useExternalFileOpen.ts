@@ -21,6 +21,29 @@ const DRAIN_PENDING_URLS_CMD = "drain_pending_open_urls";
  * earlier (launch-by-double-click, or during onboarding) sit buffered on the
  * Rust side until this drains them.
  */
+/**
+ * Route one absolute path the way an OS open would: inside a registered
+ * workspace → switch + select in place; anywhere else → external-files tab.
+ * Shared by the Finder open events below and File → Open File… (⌘O).
+ */
+export async function openPathFromOs(absolutePath: string): Promise<void> {
+  if (!absolutePath) return;
+  try {
+    const target = await resolveOpenPath(absolutePath);
+    const store = useWorkspaceStore.getState();
+    if (target.kind === "workspace") {
+      if (store.activeWorkspaceId !== target.workspaceId) {
+        store.switchWorkspace(target.workspaceId);
+      }
+      await useWorkspaceStore.getState().selectFile(target.relativePath);
+    } else {
+      await store.openLooseFile(target.path);
+    }
+  } catch (error) {
+    showErrorToast(error instanceof Error ? error.message : "Could not open file");
+  }
+}
+
 export function useExternalFileOpen(): void {
   useEffect(function bindExternalFileOpen() {
     if (!isTauriRuntime()) return;
@@ -28,22 +51,8 @@ export function useExternalFileOpen(): void {
     let disposed = false;
 
     async function openFromOs(absolutePath: string) {
-      if (!absolutePath) return;
-      try {
-        const target = await resolveOpenPath(absolutePath);
-        if (disposed) return;
-        const store = useWorkspaceStore.getState();
-        if (target.kind === "workspace") {
-          if (store.activeWorkspaceId !== target.workspaceId) {
-            store.switchWorkspace(target.workspaceId);
-          }
-          await useWorkspaceStore.getState().selectFile(target.relativePath);
-        } else {
-          await store.openLooseFile(target.path);
-        }
-      } catch (error) {
-        showErrorToast(error instanceof Error ? error.message : "Could not open file");
-      }
+      if (disposed) return;
+      await openPathFromOs(absolutePath);
     }
 
     void (async () => {

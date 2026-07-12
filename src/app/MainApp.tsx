@@ -5,8 +5,11 @@ import { isTauriRuntime } from "../lib/runtime/desktopRuntime";
 import { AppShell } from "./AppShell";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useUiStore } from "./store/uiStore";
-import { useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
+import { openPathFromOs, useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
 import { useSaveOnExit } from "./useSaveOnExit";
+
+/** The extensions File → Open File… offers — mirrors the fileAssociations. */
+const MARKDOWN_EXTENSIONS = ["md", "markdown", "mdown", "mkd"];
 
 /**
  * The main app screen (mounted by AppRouter once boot + onboarding are done).
@@ -29,16 +32,38 @@ export function MainApp() {
   // arrivals stay buffered on the Rust side until this mounts.
   useExternalFileOpen();
 
-  // View → Focus Mode (⌘⇧D, a native menu item) emits `menu://focus-mode`.
+  // Native menu routing: View → Focus Mode (⌘⇧D), Compose → Settings… (⌘,),
+  // and File → Open File… (⌘O, a picker routed exactly like a Finder open —
+  // in-workspace files select in place, anything else joins External files).
   useEffect(() => {
     if (!isTauriRuntime()) {
       return;
     }
-    const unlisten = listen("menu://focus-mode", () => {
-      useUiStore.getState().toggleFocusMode();
-    });
+    const unlistens = [
+      listen("menu://focus-mode", () => {
+        useUiStore.getState().toggleFocusMode();
+      }),
+      listen("menu://settings", () => {
+        useUiStore.getState().openSettings();
+      }),
+      listen("menu://open-file", () => {
+        void (async () => {
+          const { open } = await import("@tauri-apps/plugin-dialog");
+          const picked = await open({
+            multiple: true,
+            filters: [{ name: "Markdown", extensions: MARKDOWN_EXTENSIONS }],
+          });
+          const paths = Array.isArray(picked) ? picked : picked ? [picked] : [];
+          for (const path of paths) {
+            await openPathFromOs(path);
+          }
+        })();
+      }),
+    ];
     return () => {
-      void unlisten.then((off) => off());
+      for (const unlisten of unlistens) {
+        void unlisten.then((off) => off());
+      }
     };
   }, []);
 
