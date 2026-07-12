@@ -27,6 +27,7 @@
 @use "@carbon/react/scss/components/combo-box";
 @use "@carbon/react/scss/components/inline-loading";
 @use "@carbon/react/scss/components/list-box";
+@use "@carbon/react/scss/components/menu";
 @use "@carbon/react/scss/components/modal";
 @use "@carbon/react/scss/components/notification";
 @use "@carbon/react/scss/components/overflow-menu";
@@ -686,8 +687,8 @@ select {
   flex-direction: column;
   gap: 0.25rem;
   // No right padding: the file tree (and its scrollbar) reaches the sidebar's
-  // right border. The classic 8px scrollbar reserves its own space, so the rows
-  // and their kebab stay clear of it.
+  // right border. The classic 8px scrollbar reserves its own space, so the
+  // rows stay clear of it.
   padding: 0.75rem 0 0.5rem 0.5rem;
 }
 
@@ -1081,10 +1082,9 @@ select {
   // Vertical scroll only — long names truncate (`.truncate`), so a horizontal
   // bar must never appear. A custom `::-webkit-scrollbar` forces a thin,
   // always-classic bar instead of the macOS overlay one (which is wider,
-  // toggles size, and sat on top of each row's kebab ⋯ so a click scrolled
-  // instead of opening the menu). The classic bar takes its own 8px outside
-  // the content box, and the row reserves extra end padding (see `.file-row`),
-  // so the right-aligned kebab always stays clear of it.
+  // toggles size, and overlaid the rows' trailing edge so a click there
+  // scrolled instead). The classic bar takes its own 8px outside the content
+  // box, clear of the rows.
   overflow-x: hidden;
   overflow-y: auto;
   // `::-webkit-scrollbar` is a legacy pseudo-element that honours physical
@@ -1377,9 +1377,7 @@ body.pane-resizing {
   align-items: center;
   block-size: 1.75rem;
   gap: 0.5rem;
-  // The kebab is absolutely placed over the row's end (see `.file-row-wrapper`),
-  // so the name takes the full width — only a small end inset keeps it off the
-  // scrollbar gutter rather than reserving a whole column for the menu.
+  // A small end inset keeps the name off the scrollbar gutter.
   padding-inline: 0.5rem 0.5rem;
   color: var(--cds-text-secondary, #525252);
   font-size: 0.875rem;
@@ -6064,13 +6062,7 @@ body.pane-resizing {
 }
 
 .file-row-wrapper {
-  // The row fills the width; the kebab (and its pre-mount spacer) are layered
-  // over the trailing end, so a long name only loses its tail on hover instead
-  // of always ceding a column to the menu. Clamp to one row's height: a mounted
-  // Carbon OverflowMenu keeps an in-flow ~19px wrapper element that would
-  // otherwise inflate the row and spill the hover/selection bg into the next
-  // row (the kebab itself is absolutely overlaid, so clamping never hides it).
-  position: relative;
+  // Clamped to the virtualizer's fixed row height (ROW_HEIGHT in FileTree.tsx).
   block-size: 1.75rem;
 }
 
@@ -6121,7 +6113,11 @@ body.pane-resizing {
   border-radius: 4px;
 }
 
+// The button IS the row: full width, so a click (and a drag) lands anywhere on
+// the line, and the pointer cursor matches everywhere. The wrapper carries the
+// hover/selection background, so the button's own stays off.
 .file-row-wrapper .file-row {
+  inline-size: 100%;
   background: transparent;
 }
 
@@ -6129,56 +6125,11 @@ body.pane-resizing {
   background: transparent;
 }
 
-// Carbon wraps the kebab trigger in `.cds--overflow-menu__wrapper`. Position
-// THAT wrapper (not the inner trigger — Carbon's own styles fight a trigger
-// override and shove it off-screen) at the row's trailing edge and out of flow,
-// so the kebab sits at the right and adds nothing to the row's height.
-.file-row-wrapper .cds--overflow-menu__wrapper {
-  position: absolute;
-  inset-block-start: 50%;
-  inset-inline-end: 0.25rem;
-  left: auto;
-  transform: translateY(-50%);
-}
-
-// The kebab is just the ⋮ icon — no fill, no border, no shadow in any state, so
-// nothing but the glyph sits on the row. Carbon paints a background on
-// hover/focus and a shadow + border when the menu is open; the kebab IS the
-// `.cds--overflow-menu` button (no separate trigger element), so name every
-// interactive state here to beat Carbon's equal-specificity, later-loaded rules.
-.file-row-wrapper .cds--overflow-menu {
-  position: static;
-  transform: none;
-  block-size: 1.75rem;
-  min-block-size: 1.75rem;
-  inline-size: 1.75rem;
-  opacity: 0;
-  transition: opacity 80ms ease;
-}
-
-.file-row-wrapper .cds--overflow-menu,
-.file-row-wrapper .cds--overflow-menu:hover,
-.file-row-wrapper .cds--overflow-menu:focus,
-.file-row-wrapper .cds--overflow-menu:active,
-.file-row-wrapper .cds--overflow-menu--open {
-  background-color: transparent;
-  border: 0;
-  box-shadow: none;
-}
-
-.file-row-wrapper:hover .cds--overflow-menu,
-.file-row-wrapper:focus-within .cds--overflow-menu,
-.file-row-wrapper .cds--overflow-menu--open {
-  opacity: 1;
-}
-
-// Placeholder before the OverflowMenu lazily mounts. Layered like the menu (not
-// in flow) so the name keeps the full width either way.
-.file-row-kebab-spacer {
-  position: absolute;
-  inset-inline-end: 0.25rem;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
+// The tree's right-click context menu (Carbon Menu) — the same white surface
+// treatment as the kebab menus below.
+.cds--menu {
+  background-color: var(--cds-layer-02, #ffffff);
+  border: 1px solid #e0e0e0;
 }
 
 // Context/kebab menu polish (interaction spec §02).

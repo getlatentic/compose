@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
+import { Menu, MenuItem, MenuItemDivider } from "@carbon/react";
 import { CaretDown, CaretRight, Document } from "@carbon/react/icons";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
@@ -34,11 +34,9 @@ let draggedFilePath: string | null = null;
 /**
  * The unsaved-edit dot for one file row. Self-subscribes to just that file's
  * dirty flag (a boolean), so a dirty flip on first-edit / autosave re-renders
- * ONLY this dot — never the row, its `OverflowMenu` (a Carbon Popover stack),
- * or the FileTree. Mirrors {@link TabDirtyDot} in PaneTabs. Before this, the
- * row's `dirty` prop flipped twice per edit burst (dirty on first keystroke,
- * clean on autosave), re-rendering the row + its Popover menu each time
- * (react-scan: Popover ×51 on a single file during a typing burst).
+ * ONLY this dot — never the row or the FileTree. Mirrors {@link TabDirtyDot}
+ * in PaneTabs: a `dirty` prop would flip twice per edit burst (dirty on first
+ * keystroke, clean on autosave) and re-render the row each time.
  */
 function FileRowDirtyDot({ path }: { path: string }) {
   const dirty = useWorkspaceStore((state) => {
@@ -48,47 +46,21 @@ function FileRowDirtyDot({ path }: { path: string }) {
   return dirty ? <span className="dirty-dot" aria-label="Unsaved" /> : null;
 }
 
-/**
- * Row-menu wiring shared by file + folder rows. The Carbon `OverflowMenu` (the
- * ⋯ kebab) mounts lazily on first hover/focus — mounting one per row up front
- * tanked first paint on large vaults. Right-clicking the row opens that same
- * menu (and suppresses the OS context menu), so the row's actions are a
- * right-click away — the file-explorer expectation — without duplicating them.
- */
-function useRowMenu() {
-  const [menuMounted, setMenuMounted] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const openWhenMounted = useRef(false);
-  const openMenu = useCallback(() => {
-    wrapperRef.current?.querySelector<HTMLButtonElement>(".cds--overflow-menu")?.click();
-  }, []);
-  const mountMenu = useCallback(() => setMenuMounted(true), []);
-  const onContextMenu = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => {
-      // Open our menu instead of the webview's native context menu. Defer the
-      // open past this right-click's own mouseup — Carbon treats that mouseup as
-      // an outside-click and would instantly close a menu opened synchronously.
-      // (The not-yet-mounted branch is naturally deferred: it opens in the
-      // effect below, after the mount render commits.)
-      event.preventDefault();
-      if (menuMounted) {
-        window.setTimeout(openMenu, 0);
-      } else {
-        openWhenMounted.current = true;
-        setMenuMounted(true);
-      }
-    },
-    [menuMounted, openMenu],
-  );
-  // A right-click before the menu has ever mounted opens it once it renders.
-  useEffect(() => {
-    if (menuMounted && openWhenMounted.current) {
-      openWhenMounted.current = false;
-      openMenu();
-    }
-  }, [menuMounted, openMenu]);
-  return { menuMounted, wrapperRef, mountMenu, onContextMenu };
+/** A row's pending context menu: which node it targets and where to open. The
+ *  tree renders ONE Carbon `Menu` for all rows (no per-row menu instances). */
+interface RowMenuState {
+  kind: "file" | "folder";
+  path: string;
+  x: number;
+  y: number;
 }
+
+/** Opens the tree's context menu for one row. Rows pass their own kind/path. */
+type OpenRowMenu = (
+  event: MouseEvent<HTMLDivElement>,
+  kind: RowMenuState["kind"],
+  path: string,
+) => void;
 
 /** The parent directory of a path ("" for a root item). */
 function parentDirOf(path: string): string {
@@ -138,14 +110,13 @@ function useDropInto(
 }
 
 /**
- * One file row, memoised. Each row mounts a Carbon `OverflowMenu` (the ⋯
- * kebab) which drags in a Popover + Icon floating-ui stack. Before this,
- * the whole `rows.map` re-ran on any FileTree render — selecting a file
- * re-rendered all 50 rows' menus (react-scan: Icon ×201, Popover ×56,
- * 23 FPS, ~170ms/click). With per-row memo + stable callbacks, selecting
- * a file only re-renders the two rows whose `active` flips. The unsaved dot
- * is NOT a prop — it self-subscribes via {@link FileRowDirtyDot}, so a dirty
- * flip never re-renders the row or its Popover menu.
+ * One file row, memoised — with per-row memo + stable callbacks, selecting a
+ * file only re-renders the two rows whose `active` flips. The whole row is one
+ * click/drag target (the button fills the wrapper), and right-click anywhere on
+ * it opens the tree's shared context menu — there is no per-row menu instance,
+ * so a large vault mounts zero menu stacks. The unsaved dot is NOT a prop — it
+ * self-subscribes via {@link FileRowDirtyDot}, so a dirty flip never re-renders
+ * the row.
  */
 const FileRow = memo(function FileRow({
   path,
@@ -153,10 +124,7 @@ const FileRow = memo(function FileRow({
   depth,
   active,
   onSelect,
-  onRename,
-  onDelete,
-  onCopyPath,
-  onReveal,
+  onMenu,
   onMoveHere,
 }: {
   path: string;
@@ -164,20 +132,14 @@ const FileRow = memo(function FileRow({
   depth: number;
   active: boolean;
   onSelect: (relativePath: string) => void;
-  onRename: (relativePath: string) => void;
-  onDelete: (relativePath: string) => void;
-  onCopyPath: (relativePath: string) => void;
-  onReveal: (relativePath: string) => void;
+  onMenu: OpenRowMenu;
   onMoveHere: (fromPath: string, folderPath: string) => void;
 }) {
-  // Carbon's `OverflowMenu` mounts a whole Popover + floating-ui + Icon stack
-  // even while closed. Mounting one per row meant a large vault paid that cost
-  // ×N up front — a 194-note vault tanked first paint to ~20 FPS (react-scan:
-  // Popover ×590, Icon ×691, OverflowMenuVertical2 ×388). The kebab is only
-  // revealed on hover/focus anyway (CSS opacity), so mount it lazily then; at
-  // rest the slot is an empty same-size spacer (no layout shift), and a freshly
-  // opened vault mounts ZERO menus.
-  const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
+  const onContextMenu = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => onMenu(event, "file", path),
+    [onMenu, path],
+  );
+  const handleSelect = useCallback(() => onSelect(path), [onSelect, path]);
   const onDragStart = useCallback(
     (event: DragEvent<HTMLButtonElement>) => {
       event.dataTransfer.setData(DRAG_FILE_MIME, path);
@@ -210,7 +172,6 @@ const FileRow = memo(function FileRow({
   );
   return (
     <div
-      ref={wrapperRef}
       className={[
         "file-row-wrapper",
         active ? "file-row-wrapper--active" : "",
@@ -218,8 +179,6 @@ const FileRow = memo(function FileRow({
       ]
         .filter(Boolean)
         .join(" ")}
-      onMouseEnter={mountMenu}
-      onFocus={mountMenu}
       onContextMenu={onContextMenu}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -230,7 +189,7 @@ const FileRow = memo(function FileRow({
         draggable
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        onClick={() => onSelect(path)}
+        onClick={handleSelect}
         className={["file-row", active ? "file-row--active" : ""]
           .filter(Boolean)
           .join(" ")}
@@ -241,24 +200,14 @@ const FileRow = memo(function FileRow({
         <span className="truncate">{name}</span>
         <FileRowDirtyDot path={path} />
       </button>
-      {menuMounted ? (
-        <OverflowMenu aria-label={`Actions for ${path}`} size="sm" flipped align="bottom">
-          <OverflowMenuItem itemText="Rename..." onClick={() => onRename(path)} />
-          <OverflowMenuItem itemText="Copy path" onClick={() => onCopyPath(path)} />
-          <OverflowMenuItem itemText="Reveal in Finder" onClick={() => onReveal(path)} />
-          <OverflowMenuItem hasDivider isDelete itemText="Delete" onClick={() => onDelete(path)} />
-        </OverflowMenu>
-      ) : (
-        <span className="file-row-kebab-spacer" aria-hidden />
-      )}
     </div>
   );
 });
 
 /** One folder row, memoised — re-renders only when its open/selected state
- * flips. Mirrors {@link FileRow}: a lazily-mounted, hover-revealed kebab with
- * folder actions ("New note here" / "Reveal in Finder"). `selected` marks it as
- * the destination a plain "New note" lands in. */
+ * flips. Mirrors {@link FileRow}: the whole row toggles the folder, and
+ * right-click opens the tree's shared context menu with the folder actions.
+ * `selected` marks it as the destination a plain "New note" lands in. */
 const FolderRow = memo(function FolderRow({
   path,
   name,
@@ -266,11 +215,8 @@ const FolderRow = memo(function FolderRow({
   open,
   selected,
   onActivate,
-  onNewNoteHere,
-  onNewFolderHere,
+  onMenu,
   onMoveHere,
-  onReveal,
-  onDeleteFolder,
 }: {
   path: string;
   name: string;
@@ -278,17 +224,17 @@ const FolderRow = memo(function FolderRow({
   open: boolean;
   selected: boolean;
   onActivate: (path: string) => void;
-  onNewNoteHere: (path: string) => void;
-  onNewFolderHere: (path: string) => void;
+  onMenu: OpenRowMenu;
   onMoveHere: (fromPath: string, folderPath: string) => void;
-  onReveal: (path: string) => void;
-  onDeleteFolder: (path: string) => void;
 }) {
-  const { menuMounted, wrapperRef, mountMenu, onContextMenu } = useRowMenu();
+  const onContextMenu = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => onMenu(event, "folder", path),
+    [onMenu, path],
+  );
+  const handleActivate = useCallback(() => onActivate(path), [onActivate, path]);
   const { dropTarget, onDragOver, onDragLeave, onDrop } = useDropInto(path, onMoveHere);
   return (
     <div
-      ref={wrapperRef}
       className={[
         "file-row-wrapper",
         selected ? "file-row-wrapper--target" : "",
@@ -296,8 +242,6 @@ const FolderRow = memo(function FolderRow({
       ]
         .filter(Boolean)
         .join(" ")}
-      onMouseEnter={mountMenu}
-      onFocus={mountMenu}
       onContextMenu={onContextMenu}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -307,28 +251,13 @@ const FolderRow = memo(function FolderRow({
         type="button"
         className="file-row file-row--folder"
         style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
-        onClick={() => onActivate(path)}
+        onClick={handleActivate}
         aria-expanded={open}
         title={name}
       >
         {open ? <CaretDown size={16} /> : <CaretRight size={16} />}
         <span className="truncate">{name}</span>
       </button>
-      {menuMounted ? (
-        <OverflowMenu aria-label={`Actions for ${path}`} size="sm" flipped align="bottom">
-          <OverflowMenuItem itemText="New note here" onClick={() => onNewNoteHere(path)} />
-          <OverflowMenuItem itemText="New folder here" onClick={() => onNewFolderHere(path)} />
-          <OverflowMenuItem itemText="Reveal in Finder" onClick={() => onReveal(path)} />
-          <OverflowMenuItem
-            hasDivider
-            isDelete
-            itemText="Delete folder"
-            onClick={() => onDeleteFolder(path)}
-          />
-        </OverflowMenu>
-      ) : (
-        <span className="file-row-kebab-spacer" aria-hidden />
-      )}
     </div>
   );
 });
@@ -599,6 +528,32 @@ function FileTreeInner({
     [onSelectFile, setNewNoteDir],
   );
 
+  // ONE context menu for the whole tree, opened at the pointer from any row's
+  // right-click. Replaces the old per-row kebab (a Carbon OverflowMenu per row
+  // was the tree's dominant mount cost on large vaults, and its trailing slot
+  // left a dead, wrong-cursor zone on every row).
+  const [rowMenu, setRowMenu] = useState<RowMenuState | null>(null);
+  const openRowMenu = useCallback<OpenRowMenu>((event, kind, path) => {
+    // Suppress the webview's native context menu, and defer the open past this
+    // right-click's own mouseup — a menu opened synchronously registers that
+    // mouseup as an outside-click and instantly closes.
+    event.preventDefault();
+    const { clientX, clientY } = event;
+    window.setTimeout(() => setRowMenu({ kind, path, x: clientX, y: clientY }), 0);
+  }, []);
+  const closeRowMenu = useCallback(() => setRowMenu(null), []);
+  const menuPath = rowMenu?.path ?? "";
+  const menuRename = useCallback(() => onRename(menuPath), [onRename, menuPath]);
+  const menuCopyPath = useCallback(() => copyPath(menuPath), [copyPath, menuPath]);
+  const menuReveal = useCallback(() => revealInFinder(menuPath), [revealInFinder, menuPath]);
+  const menuDelete = useCallback(() => onDelete(menuPath), [onDelete, menuPath]);
+  const menuNewNoteHere = useCallback(() => newNoteHere(menuPath), [newNoteHere, menuPath]);
+  const menuNewFolderHere = useCallback(() => newFolderHere(menuPath), [newFolderHere, menuPath]);
+  const menuDeleteFolder = useCallback(
+    () => handleDeleteFolder(menuPath),
+    [handleDeleteFolder, menuPath],
+  );
+
   // Window the (already collapse-flattened) rows: only ~a viewport-worth mount,
   // regardless of vault size. `rows` already excludes descendants of collapsed
   // folders, so the count is exactly the currently-visible rows. Fixed row
@@ -727,11 +682,8 @@ function FileTreeInner({
                   open={expanded.has(node.path)}
                   selected={node.path === newNoteDir}
                   onActivate={activateFolder}
-                  onNewNoteHere={newNoteHere}
-                  onNewFolderHere={newFolderHere}
+                  onMenu={openRowMenu}
                   onMoveHere={onMoveFile}
-                  onReveal={revealInFinder}
-                  onDeleteFolder={handleDeleteFolder}
                 />
               ) : (
                 <FileRow
@@ -740,10 +692,7 @@ function FileTreeInner({
                   depth={node.depth}
                   active={node.path === activePath}
                   onSelect={selectFileTrackingDir}
-                  onRename={onRename}
-                  onDelete={onDelete}
-                  onCopyPath={copyPath}
-                  onReveal={revealInFinder}
+                  onMenu={openRowMenu}
                   onMoveHere={onMoveFile}
                 />
               )}
@@ -751,6 +700,34 @@ function FileTreeInner({
           );
         })}
       </div>
+      {rowMenu ? (
+        <Menu
+          label={`Actions for ${rowMenu.path}`}
+          size="sm"
+          open
+          x={rowMenu.x}
+          y={rowMenu.y}
+          onClose={closeRowMenu}
+        >
+          {rowMenu.kind === "file" ? (
+            <>
+              <MenuItem label="Rename…" onClick={menuRename} />
+              <MenuItem label="Copy path" onClick={menuCopyPath} />
+              <MenuItem label="Reveal in Finder" onClick={menuReveal} />
+              <MenuItemDivider />
+              <MenuItem label="Delete" kind="danger" onClick={menuDelete} />
+            </>
+          ) : (
+            <>
+              <MenuItem label="New note here" onClick={menuNewNoteHere} />
+              <MenuItem label="New folder here" onClick={menuNewFolderHere} />
+              <MenuItem label="Reveal in Finder" onClick={menuReveal} />
+              <MenuItemDivider />
+              <MenuItem label="Delete folder" kind="danger" onClick={menuDeleteFolder} />
+            </>
+          )}
+        </Menu>
+      ) : null}
     </nav>
   );
 }
