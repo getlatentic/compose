@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "./ChatPanel";
+import { PaneSplitter } from "../workspace/PaneSplitter";
 import { MarkdownLinkContext } from "../../lib/markdown/workspaceLinks";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
@@ -40,6 +41,7 @@ export function ChatRegion() {
         .filter(Boolean)
         .join(" ")}
     >
+      <PaneSplitter pane="chat" />
       <MarkdownLinkContext.Provider value={chatLinkContext}>
         <ChatPanel />
       </MarkdownLinkContext.Provider>

@@ -1128,6 +1128,53 @@ select {
   block-size: 2.5rem;
 }
 
+// Pane resize handles (#119). Thin strips straddling the pane edge; the
+// hosting panes get a positioning context below. Hidden on the single-column
+// mobile layout where the grid has no adjustable tracks.
+.pane-splitter {
+  position: absolute;
+  inset-block: 0;
+  inline-size: 7px;
+  cursor: col-resize;
+  z-index: 6;
+  // The affordance: invisible at rest, a hairline on hover/drag.
+  background: transparent;
+
+  &:hover,
+  &:active {
+    background: var(--cds-border-interactive, #0f62fe);
+    background-clip: content-box;
+    padding-inline: 3px;
+  }
+}
+
+.pane-splitter--sidebar {
+  inset-inline-end: -3px;
+}
+
+.pane-splitter--chat {
+  inset-inline-start: -3px;
+}
+
+.sidebar,
+.chat-region {
+  position: relative;
+}
+
+// While a drag is live the whole app keeps the resize cursor and text
+// selection is off — WebKit otherwise selects across panes mid-drag.
+body.pane-resizing {
+  cursor: col-resize;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (max-width: 48rem) {
+  .pane-splitter {
+    display: none;
+  }
+}
+
 // Focus mode (#126): the document narrows to a comfortable reading measure,
 // centered. Applied to the workspace container (not the editor internals) so
 // CM6's own metrics/theme stay untouched — the column just gets narrower.
@@ -5944,14 +5991,17 @@ select {
   }
 
   // editor-only (the resting layout) OR chat-only: sidebar + one pane.
+  // Column widths read the #119 resize vars (drag-set, persisted) and fall
+  // back to the original defaults.
   .workspace--editor-open,
   .workspace--chat-open {
-    grid-template-columns: 15rem minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-w, 15rem) minmax(0, 1fr);
   }
 
   // both panes open: sidebar + editor + chat.
   .workspace--editor-open.workspace--chat-open {
-    grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
+    grid-template-columns:
+      var(--sidebar-w, 15rem) minmax(17rem, 1fr) var(--chat-w, 22rem);
   }
 
   // Sidebar collapsed: drop its column entirely. The editor's tab strip
@@ -5961,7 +6011,7 @@ select {
     grid-template-columns: minmax(0, 1fr);
   }
   .workspace--sidebar-collapsed.workspace--editor-open.workspace--chat-open {
-    grid-template-columns: minmax(17rem, 1fr) minmax(18rem, 22rem);
+    grid-template-columns: minmax(17rem, 1fr) var(--chat-w, 22rem);
   }
 
   // Focus mode (#126): the editor alone. AppShell applies ONLY this modifier

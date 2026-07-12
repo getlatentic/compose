@@ -12,6 +12,7 @@ import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { SidebarChatList } from "../chat/SidebarChatList";
 import { ActiveFileProperties } from "./ActiveFilePanels";
 import { ExternalFilesSection } from "./ExternalFilesSection";
+import { PaneSplitter } from "./PaneSplitter";
 import { NewMenu } from "./NewMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
@@ -168,6 +169,7 @@ export function WorkspaceSidebar() {
 
   return (
     <aside className="sidebar">
+      <PaneSplitter pane="sidebar" />
       <div
         className="sidebar-titlebar"
         // The row is the macOS title-bar drag zone. We wire `mousedown` to

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type CSSProperties } from "react";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import { NoWorkspaceWelcome } from "../features/workspace/NoWorkspaceWelcome";
 import { WorkspaceSearchPopover } from "../features/workspace/WorkspaceSearchPopover";
@@ -45,6 +45,11 @@ export function AppShell() {
   // layout — including across restarts (the flag persists, the panes don't
   // need to).
   const focusMode = useUiStore((state) => state.focusMode);
+  // Committed pane widths (#119). Live dragging writes the CSS var on the
+  // element directly; these only change on release, so the shell re-renders
+  // once per drag, not per pixel.
+  const sidebarWidthPx = useUiStore((state) => state.sidebarWidthPx);
+  const chatWidthPx = useUiStore((state) => state.chatWidthPx);
   const settingsOpen = useUiStore((state) => state.settingsOpen);
   const closeSettings = useUiStore((state) => state.closeSettings);
 
@@ -71,6 +76,12 @@ export function AppShell() {
                   ]
                     .filter(Boolean)
                     .join(" ")
+            }
+            style={
+              {
+                ...(sidebarWidthPx ? { "--sidebar-w": `${sidebarWidthPx}px` } : {}),
+                ...(chatWidthPx ? { "--chat-w": `${chatWidthPx}px` } : {}),
+              } as CSSProperties
             }
           >
             {focusMode ? null : <WorkspaceSidebar />}
