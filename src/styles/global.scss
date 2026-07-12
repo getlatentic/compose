@@ -1121,6 +1121,13 @@ select {
   inline-size: 100%;
 }
 
+// Deeper focus (#143): the strip that replaces the tab strip — clears the
+// macOS traffic lights, drags the window, shows nothing.
+.focus-titlebar {
+  flex: none;
+  block-size: 2.5rem;
+}
+
 // Focus mode (#126): the document narrows to a comfortable reading measure,
 // centered. Applied to the workspace container (not the editor internals) so
 // CM6's own metrics/theme stay untouched — the column just gets narrower.

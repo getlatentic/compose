@@ -182,7 +182,6 @@ function PaneTabsInner({
   onReorderTab,
   leadingInsetPx,
   onShowSidebar,
-  leadLabel = "Show sidebar",
 }: {
   files: EditorTab[];
   activeFilePath: string;
@@ -198,9 +197,6 @@ function PaneTabsInner({
   /** When set, render a small PanelLeft button next to the inset that re-opens
    * the sidebar (visible only when collapsed). */
   onShowSidebar?: () => void;
-  /** Accessible label/tooltip for that button — focus mode repurposes it as
-   *  the exit affordance. */
-  leadLabel?: string;
 }) {
   const hasShow = Boolean(onShowSidebar);
   const onStripMouseDown = useWindowDrag();
@@ -244,8 +240,8 @@ function PaneTabsInner({
             className="sidebar-titlebar__btn"
             data-tauri-drag-region="false"
             onClick={onShowSidebar}
-            aria-label={leadLabel}
-            title={leadLabel}
+            aria-label="Show sidebar"
+            title="Show sidebar"
           >
             <PanelLeft size={16} aria-hidden />
           </button>

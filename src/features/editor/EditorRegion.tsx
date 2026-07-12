@@ -17,6 +17,7 @@ import {
 } from "../../app/store/activeWorkspace";
 import { isActiveFilePresent, resolveOpenTabs } from "../../app/workspaceModel";
 import { flushActiveEditor } from "../../lib/editor/editorFlush";
+import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
 import { markBoot } from "../../lib/perf";
 
 /**
@@ -83,7 +84,7 @@ export function EditorRegion() {
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const focusMode = useUiStore((state) => state.focusMode);
-  const toggleFocusMode = useUiStore((state) => state.toggleFocusMode);
+  const onTitlebarMouseDown = useWindowDrag();
   const requestComposerFocus = useUiStore((state) => state.requestComposerFocus);
   const { openFolder, canOpenNativeFolder } = useWorkspaceActions();
   const confirm = useConfirm();
@@ -164,21 +165,23 @@ export function EditorRegion() {
 
   return (
     <main id="main-content" className="editor-region">
-      <PaneTabs
-        files={openTabs}
-        activeFilePath={activeFilePath}
-        activeArea={focusedArea}
-        onSelectFile={handleSelectTab}
-        onCloseFile={handleCloseTab}
-        onReorderTab={handleReorderTab}
-        leadingInsetPx={sidebarCollapsed || focusMode ? MAC_TRAFFIC_LIGHTS_INSET : 0}
-        // In focus mode the sidebar toggle becomes the way OUT — clicking it
-        // restores the whole previous layout, not just the sidebar.
-        onShowSidebar={
-          focusMode ? toggleFocusMode : sidebarCollapsed ? toggleSidebar : undefined
-        }
-        leadLabel={focusMode ? "Exit focus mode" : undefined}
-      />
+      {focusMode ? (
+        // Deeper focus (#143): no tabs, no chrome — just a quiet strip that
+        // keeps the document clear of the traffic lights and still drags the
+        // window. Exits stay discoverable: ⌘⇧D, Esc, and View → Focus Mode.
+        <div className="focus-titlebar" data-tauri-drag-region onMouseDown={onTitlebarMouseDown} />
+      ) : (
+        <PaneTabs
+          files={openTabs}
+          activeFilePath={activeFilePath}
+          activeArea={focusedArea}
+          onSelectFile={handleSelectTab}
+          onCloseFile={handleCloseTab}
+          onReorderTab={handleReorderTab}
+          leadingInsetPx={sidebarCollapsed ? MAC_TRAFFIC_LIGHTS_INSET : 0}
+          onShowSidebar={sidebarCollapsed ? toggleSidebar : undefined}
+        />
+      )}
       {activeFileExists ? (
         <ActiveDocument />
       ) : scanPending ? (
