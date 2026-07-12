@@ -12,6 +12,7 @@ import type { SourceRange } from "../comments/commentModel";
 import { VersionHistory } from "../history/VersionHistory";
 import { EditorFileActions, type DocumentExportFormat } from "./EditorFileActions";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
+import { markdownToClipboardHtml } from "../../lib/markdown/markdownToClipboardHtml";
 import { exportDocumentToPdf } from "../../lib/export/pdfExport";
 import { exportDocumentToHtml } from "../../lib/export/htmlExport";
 import { printDocument } from "../../lib/export/printDocument";
@@ -367,6 +368,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
         saveImageBytes={saveImageBytes}
         onOpenExternalUrl={openExternalUrl}
         onCommentOnExcerpt={handleCommentOnExcerpt}
+        renderClipboardHtml={markdownToClipboardHtml}
         onAfterContentSwap={markTabSwitchEnd}
         onFlushReady={registerActiveEditorFlush}
       />
