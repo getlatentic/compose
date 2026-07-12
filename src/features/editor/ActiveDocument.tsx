@@ -103,6 +103,9 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
   const updateActiveContent = useWorkspaceStore((state) => state.updateActiveContent);
 
   const editorMode = useUiStore((state) => state.editorMode);
+  // Deeper focus (#143): the formatting toolbar is part of the room — omit
+  // the slot entirely so the editor renders chromeless.
+  const focusMode = useUiStore((state) => state.focusMode);
   const commentsOpen = useUiStore((state) => state.commentsOpen);
   const chatOpen = useUiStore((state) => state.chatOpen);
   const toggleComments = useUiStore((state) => state.toggleComments);
@@ -362,7 +365,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
         linkTargets={linkTargets}
         onNavigateToLink={navigateToFile}
         onChange={updateActiveContent}
-        toolbar={toolbar}
+        toolbar={focusMode ? undefined : toolbar}
         selectionActions={selectionActions}
         resolveImageSrc={resolveDisplaySrc}
         saveImageBytes={saveImageBytes}
