@@ -40,6 +40,11 @@ export function AppShell() {
   const editorOpen = useUiStore((state) => state.editorOpen);
   const chatOpen = useUiStore((state) => state.chatOpen);
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
+  // Focus mode (#126) is a LAYOUT OVERRIDE: the pane flags above stay
+  // untouched while it's on, so leaving focus restores the exact previous
+  // layout — including across restarts (the flag persists, the panes don't
+  // need to).
+  const focusMode = useUiStore((state) => state.focusMode);
   const settingsOpen = useUiStore((state) => state.settingsOpen);
   const closeSettings = useUiStore((state) => state.closeSettings);
 
@@ -55,22 +60,26 @@ export function AppShell() {
           <NoWorkspaceWelcome />
         ) : (
           <div
-            className={[
-              "workspace",
-              editorOpen ? "workspace--editor-open" : "",
-              chatOpen ? "workspace--chat-open" : "",
-              sidebarCollapsed ? "workspace--sidebar-collapsed" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
+            className={
+              focusMode
+                ? "workspace workspace--focus"
+                : [
+                    "workspace",
+                    editorOpen ? "workspace--editor-open" : "",
+                    chatOpen ? "workspace--chat-open" : "",
+                    sidebarCollapsed ? "workspace--sidebar-collapsed" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")
+            }
           >
-            <WorkspaceSidebar />
-            {editorOpen ? (
+            {focusMode ? null : <WorkspaceSidebar />}
+            {editorOpen || focusMode ? (
               <Suspense fallback={<div className="editor-region" aria-busy="true" />}>
                 <EditorRegion />
               </Suspense>
             ) : null}
-            {chatOpen ? <ChatRegion /> : null}
+            {chatOpen && !focusMode ? <ChatRegion /> : null}
           </div>
         )}
       </div>

@@ -1,5 +1,7 @@
 import { useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { subscribeToWorkspaceFs } from "../lib/ipc/fileWatcherClient";
+import { isTauriRuntime } from "../lib/runtime/desktopRuntime";
 import { AppShell } from "./AppShell";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useUiStore } from "./store/uiStore";
@@ -26,6 +28,19 @@ export function MainApp() {
   // so the cold-start drain routes against the real workspace list; earlier
   // arrivals stay buffered on the Rust side until this mounts.
   useExternalFileOpen();
+
+  // View → Focus Mode (⌘⇧D, a native menu item) emits `menu://focus-mode`.
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    const unlisten = listen("menu://focus-mode", () => {
+      useUiStore.getState().toggleFocusMode();
+    });
+    return () => {
+      void unlisten.then((off) => off());
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeWorkspaceId) {
@@ -90,6 +105,24 @@ export function MainApp() {
       if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
         openSearch();
+        return;
+      }
+      // ⌘⇧D toggles focus mode (#126). In the packaged app the native View
+      // menu's accelerator normally consumes this first; this handler is the
+      // browser-preview path and the fallback.
+      if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        useUiStore.getState().toggleFocusMode();
+        return;
+      }
+      // Esc leaves focus mode — only when nothing else consumed it (editor
+      // bubbles, menus, and dialogs all preventDefault their Esc).
+      if (
+        event.key === "Escape" &&
+        !event.defaultPrevented &&
+        useUiStore.getState().focusMode
+      ) {
+        useUiStore.getState().toggleFocusMode();
       }
     }
     window.addEventListener("keydown", onKeyDown);

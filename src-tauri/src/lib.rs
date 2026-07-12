@@ -99,20 +99,38 @@ pub fn run() {
             let menu = Menu::default(handle)?;
             let print =
                 MenuItem::with_id(handle, "print", "Print…", true, Some("CmdOrCtrl+P"))?;
-            // `Menu::default` already has a File submenu — add Print to it rather
-            // than inserting a second File.
-            let mut added = false;
+            let focus = MenuItem::with_id(
+                handle,
+                "focus-mode",
+                "Focus Mode",
+                true,
+                Some("CmdOrCtrl+Shift+D"),
+            )?;
+            // `Menu::default` already has File and View submenus — add to them
+            // rather than inserting duplicates.
+            let mut print_added = false;
+            let mut focus_added = false;
             for item in menu.items()? {
-                if let Some(file) = item.as_submenu() {
-                    if file.text().map(|text| text == "File").unwrap_or(false) {
-                        file.append(&print)?;
-                        added = true;
-                        break;
+                let Some(submenu) = item.as_submenu() else {
+                    continue;
+                };
+                match submenu.text().as_deref() {
+                    Ok("File") => {
+                        submenu.append(&print)?;
+                        print_added = true;
                     }
+                    Ok("View") => {
+                        submenu.prepend(&focus)?;
+                        focus_added = true;
+                    }
+                    _ => {}
                 }
             }
-            if !added {
+            if !print_added {
                 menu.insert(&Submenu::with_items(handle, "File", true, &[&print])?, 1)?;
+            }
+            if !focus_added {
+                menu.append(&Submenu::with_items(handle, "View", true, &[&focus])?)?;
             }
             Ok(menu)
         })
@@ -142,6 +160,9 @@ pub fn run() {
             app.on_menu_event(|app, event| {
                 if event.id() == "print" {
                     let _ = app.emit("menu://print", ());
+                }
+                if event.id() == "focus-mode" {
+                    let _ = app.emit("menu://focus-mode", ());
                 }
             });
 

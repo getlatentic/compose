@@ -435,6 +435,9 @@ export function ActiveDocument() {
     (state) => selectFocusedWorkspace(state)?.comments ?? EMPTY_COMMENTS,
   );
   const commentsOpen = useUiStore((state) => state.commentsOpen);
+  // Focus mode hides the room — the comments panel included; `commentsOpen`
+  // itself stays untouched so leaving focus restores it.
+  const focusMode = useUiStore((state) => state.focusMode);
 
   const dismissConflict = useWorkspaceStore((state) => state.dismissConflict);
   const reloadActiveFile = useWorkspaceStore((state) => state.reloadActiveFile);
@@ -528,7 +531,9 @@ export function ActiveDocument() {
         <div
           className={[
             "document-workspace",
-            commentsOpen && commentsEnabled ? "document-workspace--comments-open" : "",
+            commentsOpen && commentsEnabled && !focusMode
+              ? "document-workspace--comments-open"
+              : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -536,7 +541,7 @@ export function ActiveDocument() {
           <DocumentEditor
             onShowVersionHistory={historyEnabled ? handleShowVersionHistory : undefined}
           />
-          {commentsOpen && commentsEnabled ? (
+          {commentsOpen && commentsEnabled && !focusMode ? (
             <CommentsPanel
               comments={activeFileAllComments}
               filePath={activeFilePath}

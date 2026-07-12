@@ -13,9 +13,12 @@ export interface UiPrefs {
   /** Send an anonymous app-open signal so active users can be counted. Opt-out
    *  (defaults on); honoured only when a build also carries GA4 credentials. */
   analyticsEnabled: boolean;
+  /** Focus mode (#126): sidebar + chat hidden, the document centered. A
+   *  writing posture worth keeping across restarts. */
+  focusMode: boolean;
 }
 
-const FALLBACK: UiPrefs = { soundOnComplete: true, analyticsEnabled: true };
+const FALLBACK: UiPrefs = { soundOnComplete: true, analyticsEnabled: true, focusMode: false };
 
 export function loadUiPrefs(): UiPrefs {
   if (typeof localStorage === "undefined") {
@@ -36,6 +39,7 @@ export function loadUiPrefs(): UiPrefs {
         typeof parsed.analyticsEnabled === "boolean"
           ? parsed.analyticsEnabled
           : FALLBACK.analyticsEnabled,
+      focusMode: typeof parsed.focusMode === "boolean" ? parsed.focusMode : FALLBACK.focusMode,
     };
   } catch {
     return FALLBACK;
