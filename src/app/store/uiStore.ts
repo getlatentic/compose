@@ -46,6 +46,9 @@ export interface UiState {
   closeSettings: () => void;
   soundOnComplete: boolean;
   setSoundOnComplete: (enabled: boolean) => void;
+  /** Focus mode (#126): sidebar + chat hidden, document centered. Persisted. */
+  focusMode: boolean;
+  toggleFocusMode: () => void;
   analyticsEnabled: boolean;
   setAnalyticsEnabled: (enabled: boolean) => void;
   composerFocusNonce: number;
@@ -130,12 +133,30 @@ export const useUiStore = create<UiState>((set, get) => ({
   soundOnComplete: INITIAL_UI_PREFS.soundOnComplete,
   setSoundOnComplete: (enabled) => {
     set({ soundOnComplete: enabled });
-    persistUiPrefs({ soundOnComplete: enabled, analyticsEnabled: get().analyticsEnabled });
+    persistUiPrefs({
+      soundOnComplete: enabled,
+      analyticsEnabled: get().analyticsEnabled,
+      focusMode: get().focusMode,
+    });
   },
   analyticsEnabled: INITIAL_UI_PREFS.analyticsEnabled,
   setAnalyticsEnabled: (enabled) => {
     set({ analyticsEnabled: enabled });
-    persistUiPrefs({ soundOnComplete: get().soundOnComplete, analyticsEnabled: enabled });
+    persistUiPrefs({
+      soundOnComplete: get().soundOnComplete,
+      analyticsEnabled: enabled,
+      focusMode: get().focusMode,
+    });
+  },
+  focusMode: INITIAL_UI_PREFS.focusMode,
+  toggleFocusMode: () => {
+    const focusMode = !get().focusMode;
+    set({ focusMode });
+    persistUiPrefs({
+      soundOnComplete: get().soundOnComplete,
+      analyticsEnabled: get().analyticsEnabled,
+      focusMode,
+    });
   },
   composerFocusNonce: 0,
   requestComposerFocus: () => {

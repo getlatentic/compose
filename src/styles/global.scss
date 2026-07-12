@@ -1121,6 +1121,15 @@ select {
   inline-size: 100%;
 }
 
+// Focus mode (#126): the document narrows to a comfortable reading measure,
+// centered. Applied to the workspace container (not the editor internals) so
+// CM6's own metrics/theme stay untouched — the column just gets narrower.
+.workspace--focus .document-workspace {
+  inline-size: 100%;
+  max-inline-size: 52rem;
+  margin-inline: auto;
+}
+
 // ── External files (#113) — the sidebar group above the tree ───────────────
 // Files opened from outside any workspace. Rows echo `.file-row`'s metrics
 // (28px, same hover/active layers) but are NOT tree rows — no folder
@@ -5946,6 +5955,13 @@ select {
   }
   .workspace--sidebar-collapsed.workspace--editor-open.workspace--chat-open {
     grid-template-columns: minmax(17rem, 1fr) minmax(18rem, 22rem);
+  }
+
+  // Focus mode (#126): the editor alone. AppShell applies ONLY this modifier
+  // (no pane classes), so the single column needs no specificity fight; the
+  // tab strip owns the traffic-lights inset like the collapsed-sidebar mode.
+  .workspace--focus {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {

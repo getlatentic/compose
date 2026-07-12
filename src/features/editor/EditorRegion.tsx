@@ -82,6 +82,8 @@ export function EditorRegion() {
   const toggleChat = useUiStore((state) => state.toggleChat);
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const focusMode = useUiStore((state) => state.focusMode);
+  const toggleFocusMode = useUiStore((state) => state.toggleFocusMode);
   const requestComposerFocus = useUiStore((state) => state.requestComposerFocus);
   const { openFolder, canOpenNativeFolder } = useWorkspaceActions();
   const confirm = useConfirm();
@@ -169,8 +171,13 @@ export function EditorRegion() {
         onSelectFile={handleSelectTab}
         onCloseFile={handleCloseTab}
         onReorderTab={handleReorderTab}
-        leadingInsetPx={sidebarCollapsed ? MAC_TRAFFIC_LIGHTS_INSET : 0}
-        onShowSidebar={sidebarCollapsed ? toggleSidebar : undefined}
+        leadingInsetPx={sidebarCollapsed || focusMode ? MAC_TRAFFIC_LIGHTS_INSET : 0}
+        // In focus mode the sidebar toggle becomes the way OUT — clicking it
+        // restores the whole previous layout, not just the sidebar.
+        onShowSidebar={
+          focusMode ? toggleFocusMode : sidebarCollapsed ? toggleSidebar : undefined
+        }
+        leadLabel={focusMode ? "Exit focus mode" : undefined}
       />
       {activeFileExists ? (
         <ActiveDocument />
