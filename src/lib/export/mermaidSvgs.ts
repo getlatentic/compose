@@ -15,16 +15,19 @@ import { renderMermaidToSvg } from "ai-editor";
  */
 export async function collectMermaidSvgs(markdown: string): Promise<Record<string, string>> {
   const sources = extractMermaidSources(markdown);
-  const svgs: Record<string, string> = {};
+  // Built as a Map: bracket-assignment onto a plain object silently drops a
+  // key like "__proto__" (it hits the prototype setter), and a diagram whose
+  // source is exactly that would vanish from the export map.
+  const svgs = new Map<string, string>();
   await Promise.all(
     sources.map(async (source) => {
       const result = await renderMermaidToSvg(source);
       if (result.ok) {
-        svgs[source] = result.svg;
+        svgs.set(source, result.svg);
       }
     }),
   );
-  return svgs;
+  return Object.fromEntries(svgs);
 }
 
 /** The trimmed sources of every CLOSED ```mermaid fence, de-duplicated (two
