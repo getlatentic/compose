@@ -31,7 +31,8 @@ pub fn render_markdown_to_html(markdown: &str, title: &str, doc_dir: &Path) -> S
     wrap_document(title, &body)
 }
 
-/// comrak GFM render of the body. Frontmatter skipped; raw HTML escaped.
+/// comrak GFM render of the body, with syntax-highlighted code fences.
+/// Frontmatter skipped; raw HTML escaped.
 fn markdown_to_body(markdown: &str) -> String {
     let mut options = comrak::Options::default();
     options.extension.table = true;
@@ -48,9 +49,29 @@ fn markdown_to_body(markdown: &str) -> String {
     // `render.unsafe_` stays false: raw inline HTML is escaped rather than
     // passed through, so a document can never inject a runnable <script> into
     // the export webview.
+
+    // Syntax-highlight fenced code so the export matches the editor instead of
+    // shipping flat monospace. An unknown fence language (e.g. `mermaid`) falls
+    // back to plain text — the diagram itself is a separate concern (#149).
+    let mut plugins = comrak::options::Plugins::default();
+    plugins.render.codefence_syntax_highlighter = Some(syntect_adapter());
+
     let prepared = convert_wikilinks_to_links(markdown);
-    let html = comrak::markdown_to_html(&prepared, &options);
+    let html = comrak::markdown_to_html_with_plugins(&prepared, &options, &plugins);
     render_math_to_mathml(&html)
+}
+
+/// The syntect highlighter, built once — loading the default syntax + theme
+/// sets is not cheap, so it must not be rebuilt per export. `InspiredGitHub` is
+/// a light theme from syntect's bundled defaults, matching the export's white
+/// page. It MUST stay a real default theme name: the adapter indexes its theme
+/// set by name and panics on a miss (the highlight tests exercise this path, so
+/// a bad name fails in CI, not in a user's export).
+fn syntect_adapter() -> &'static comrak::plugins::syntect::SyntectAdapter {
+    use comrak::plugins::syntect::SyntectAdapter;
+    use std::sync::OnceLock;
+    static ADAPTER: OnceLock<SyntectAdapter> = OnceLock::new();
+    ADAPTER.get_or_init(|| SyntectAdapter::new(Some("InspiredGitHub")))
 }
 
 /// Typeset the math comrak tagged. comrak's math extension emits
@@ -553,6 +574,29 @@ mod tests {
         assert!(html.contains("type=\"checkbox\""));
         assert!(html.contains("<!doctype html>"));
         assert!(html.contains("<title>doc</title>"));
+    }
+
+    #[test]
+    fn syntax_highlights_fenced_code() {
+        // A known language gets syntect color spans + a theme background on the
+        // <pre> — the print/PDF/HTML export no longer ships flat monospace.
+        let html = render_markdown_to_html("```rust\nfn main() {}\n```", "doc", &doc_dir());
+        assert!(
+            html.contains("<span style=\"color:"),
+            "fenced code should be syntax-highlighted: {html:.500}"
+        );
+        assert!(
+            html.contains("background-color:"),
+            "highlighted <pre> carries a theme background: {html:.500}"
+        );
+    }
+
+    #[test]
+    fn unknown_fence_language_renders_source_without_panicking() {
+        // `mermaid` is not a syntect language; it must fall back to plain text
+        // (its source), never panic. The diagram rendering is a separate concern.
+        let html = render_markdown_to_html("```mermaid\ngraph TD; A-->B\n```", "doc", &doc_dir());
+        assert!(html.contains("graph TD"), "unknown-language fence keeps its source: {html:.300}");
     }
 
     #[test]
