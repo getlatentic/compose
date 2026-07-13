@@ -3,77 +3,33 @@
  * block. Clicking the diagram moves the caret into the fence, which flips the
  * block back to source (mermaidPlugin owns that swap).
  *
- * The mermaid library is heavy (~2 MB minified), so it loads lazily on the
- * first diagram — bundled with the app, never fetched at runtime, so
- * diagrams work fully offline. Render results and measured heights are
- * cached by source text: caret-in/out toggling and edits elsewhere in the
- * doc reuse the cached SVG instead of re-running the renderer, and
- * `estimatedHeight` answers with the real measured height so re-created
- * widgets never shift the scroll position (the #120 contract).
+ * Rendering itself (lazy mermaid load, SVG cache, clipboard PNG warm-up) lives
+ * in [mermaidRender](./mermaidRender.ts) — this file owns only the widget:
+ * measured heights are cached by source so `estimatedHeight` answers with the
+ * real height and re-created widgets never shift the scroll position (the
+ * #120 contract).
  */
 
 import { EditorView, WidgetType } from "@codemirror/view";
 
-export type MermaidRenderResult = { ok: true; svg: string } | { ok: false; message: string };
+import {
+  getCachedMermaidSvg,
+  renderMermaidToSvg,
+  warmMermaidPng,
+  type MermaidRenderResult,
+} from "./mermaidRender";
+
 type RenderResult = MermaidRenderResult;
 
-let mermaidLoader: Promise<typeof import("mermaid").default> | null = null;
-
-function loadMermaid(): Promise<typeof import("mermaid").default> {
-  mermaidLoader ??= import("mermaid").then((mod) => {
-    const mermaid = mod.default;
-    mermaid.initialize({
-      startOnLoad: false,
-      // "strict" escapes HTML in labels and blocks script/click directives —
-      // fence content is the user's own doc, but pasted diagrams shouldn't
-      // be able to inject markup either.
-      securityLevel: "strict",
-      theme: "neutral",
-      fontFamily: "inherit",
-      // On a parse error mermaid otherwise injects its own bomb-icon SVG
-      // into <body>; the widget renders the error state itself.
-      suppressErrorRendering: true,
-    });
-    return mermaid;
-  });
-  return mermaidLoader;
-}
-
-let renderSeq = 0;
-
-/** Render results by fence source. Bounded: a doc being actively rewritten
- *  produces a new key per keystroke-burst, and SVG strings are not small. */
-const svgCache = new Map<string, RenderResult>();
 const measuredHeights = new Map<string, number>();
-const CACHE_CAP = 100;
+const MEASURED_CACHE_CAP = 100;
 
-function remember(source: string, result: RenderResult): void {
-  if (svgCache.size >= CACHE_CAP) {
-    const oldest = svgCache.keys().next().value;
-    if (oldest !== undefined) {
-      svgCache.delete(oldest);
-      measuredHeights.delete(oldest);
-    }
+function rememberHeight(source: string, height: number): void {
+  if (measuredHeights.size >= MEASURED_CACHE_CAP) {
+    const oldest = measuredHeights.keys().next().value;
+    if (oldest !== undefined) measuredHeights.delete(oldest);
   }
-  svgCache.set(source, result);
-}
-
-/** Render a mermaid diagram source to SVG, memoised by source. Shared by the
- *  editor widget and the document export (which needs the same SVGs the editor
- *  shows). Never rejects — a parse error resolves to `{ ok: false, message }`. */
-export async function renderMermaidToSvg(source: string): Promise<MermaidRenderResult> {
-  const cached = svgCache.get(source);
-  if (cached) return cached;
-  let result: RenderResult;
-  try {
-    const mermaid = await loadMermaid();
-    const { svg } = await mermaid.render(`cm-mermaid-${renderSeq++}`, source);
-    result = { ok: true, svg };
-  } catch (error) {
-    result = { ok: false, message: error instanceof Error ? error.message : String(error) };
-  }
-  remember(source, result);
-  return result;
+  measuredHeights.set(source, height);
 }
 
 /** Pre-measure estimate: diagram height doesn't map cleanly onto source
@@ -84,29 +40,57 @@ export function estimateMermaidHeight(source: string): number {
   return Math.min(520, Math.max(140, 96 + lines * 32));
 }
 
+/** The rendered source per container, so `updateDOM` can tell a
+ *  selection-only flip (toggle a class in place) from a source change
+ *  (rebuild + re-render). */
+const containerSources = new WeakMap<HTMLElement, string>();
+
 export class MermaidWidget extends WidgetType {
-  constructor(readonly source: string) {
+  constructor(
+    readonly source: string,
+    /** The fence is covered by a (spanning) selection — native selection
+     *  paints nothing over a block widget, so the widget shows its own
+     *  selected state. */
+    readonly selected = false,
+  ) {
     super();
   }
 
-  /** Source-only identity: edits elsewhere shift the fence's position but
-   *  must not tear down (and re-render) the diagram DOM. */
+  /** Identity = source + selected. Edits elsewhere shift the fence's position
+   *  but must not tear down the diagram DOM; a selected flip alone updates
+   *  the class in place via {@link updateDOM}. */
   override eq(other: MermaidWidget): boolean {
-    return other.source === this.source;
+    return other.source === this.source && other.selected === this.selected;
+  }
+
+  override updateDOM(dom: HTMLElement): boolean {
+    if (containerSources.get(dom) !== this.source) return false;
+    dom.classList.toggle("cm-mermaid-block--selected", this.selected);
+    return true;
   }
 
   override toDOM(view: EditorView): HTMLElement {
     const container = document.createElement("div");
     container.className = "cm-mermaid-block";
+    if (this.selected) container.classList.add("cm-mermaid-block--selected");
+    containerSources.set(container, this.source);
     container.setAttribute("role", "img");
-    container.setAttribute("aria-label", "Mermaid diagram — click to edit the source");
-    container.title = "Click to edit the diagram source";
+    container.setAttribute("aria-label", "Mermaid diagram — click to select, double-click to edit");
+    container.title = "Click to select · double-click to edit";
+    // A diagram is an OBJECT first: click selects the whole fence (still
+    // rendered — the reveal rule ignores spanning selections), so ⌘C copies
+    // it without ever flashing to source. Editing is the deliberate action:
+    // double-click, or the Edit chip.
     container.addEventListener("mousedown", (event) => {
       event.preventDefault();
-      revealSource(view, container);
+      if (event.detail >= 2) {
+        revealSource(view, container);
+      } else {
+        selectFenceBlock(view, container);
+      }
     });
 
-    const cached = svgCache.get(this.source);
+    const cached = getCachedMermaidSvg(this.source);
     if (cached) {
       this.fill(container, cached, view);
     } else {
@@ -125,14 +109,25 @@ export class MermaidWidget extends WidgetType {
   private fill(container: HTMLElement, result: RenderResult, view: EditorView): void {
     if (result.ok) {
       container.innerHTML = result.svg;
-      // Hover-revealed click-to-edit cue (the block itself stays cursor-plain —
-      // a diagram is content, not a button). Purely visual: the container's
-      // mousedown handler owns the actual reveal, chip included.
+      // The hover-revealed Edit chip is the pointer path INTO the source
+      // (alongside double-click); a plain click selects the diagram instead.
       const edit = document.createElement("span");
       edit.className = "cm-mermaid-edit";
-      edit.setAttribute("aria-hidden", "true");
+      edit.setAttribute("role", "button");
+      edit.setAttribute("aria-label", "Edit diagram source");
+      edit.title = "Edit source";
       edit.textContent = "Edit";
+      edit.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        revealSource(view, container);
+      });
       container.appendChild(edit);
+      // Rasterise a clipboard PNG in the background — the copy event is
+      // synchronous, so it can only embed diagrams warmed ahead of time.
+      // Deferred off the paint path (NOT requestIdleCallback: WebKit never
+      // runs it while the window is unfocused).
+      window.setTimeout(() => void warmMermaidPng(this.source), 300);
     } else {
       container.classList.add("cm-mermaid-block--error");
       const title = document.createElement("div");
@@ -148,7 +143,7 @@ export class MermaidWidget extends WidgetType {
     view.requestMeasure({
       read: () => {
         if (container.isConnected && container.offsetHeight > 0) {
-          measuredHeights.set(this.source, container.offsetHeight);
+          rememberHeight(this.source, container.offsetHeight);
         }
       },
     });
@@ -173,5 +168,26 @@ function revealSource(view: EditorView, container: HTMLElement): void {
   view.dispatch({
     selection: { anchor: Math.min(opener.to + 1, view.state.doc.length) },
   });
+  view.focus();
+}
+
+/** Select the whole fence as one block. Both endpoints sit ON the fence's
+ *  boundaries — not inside — so the diagram stays rendered while selected,
+ *  and ⌘C picks up the full fence markdown (which the clipboard enrichment
+ *  turns back into the diagram). */
+function selectFenceBlock(view: EditorView, container: HTMLElement): void {
+  const fenceStart = view.posAtDOM(container);
+  const doc = view.state.doc;
+  const opener = doc.lineAt(fenceStart);
+  const markChar = opener.text.trim()[0];
+  const markCount = opener.text.trim().length - opener.text.trim().replace(/^(`+|~+)/, "").length;
+  const closerRe = new RegExp(`^\\s*\\${markChar}{${Math.max(markCount, 3)},}\\s*$`);
+  let end = opener.to;
+  for (let lineNumber = opener.number + 1; lineNumber <= doc.lines; lineNumber += 1) {
+    const line = doc.line(lineNumber);
+    end = line.to;
+    if (closerRe.test(line.text)) break;
+  }
+  view.dispatch({ selection: { anchor: opener.from, head: end } });
   view.focus();
 }
