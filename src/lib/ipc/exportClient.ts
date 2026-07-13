@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
+import { collectMermaidSvgs } from "../export/mermaidSvgs";
 
 /**
  * Document-export IPC leaf (see `compose::export`). Both formats render the
@@ -24,12 +25,15 @@ interface ExportArgs {
   destinationPath: string;
 }
 
-function exportInvokeArgs(args: ExportArgs) {
+/** Pre-render the document's mermaid diagrams to SVG so the backend can inline
+ *  them (there is no Rust mermaid renderer). See {@link collectMermaidSvgs}. */
+async function exportInvokeArgs(args: ExportArgs) {
   return {
     workspaceId: args.workspaceId,
     relativePath: args.relativePath,
     content: args.content,
     destinationPath: args.destinationPath,
+    mermaidSvgs: await collectMermaidSvgs(args.content),
   };
 }
 
@@ -38,7 +42,7 @@ export async function exportPdf(args: ExportArgs): Promise<ExportArtifact> {
   if (!isTauriRuntime()) {
     throw new Error("PDF export is available in the desktop app.");
   }
-  return invoke<ExportArtifact>("workspace_export_pdf", exportInvokeArgs(args));
+  return invoke<ExportArtifact>("workspace_export_pdf", await exportInvokeArgs(args));
 }
 
 /** Render `content` to a standalone HTML file at `destinationPath`. */
@@ -46,5 +50,5 @@ export async function exportHtml(args: ExportArgs): Promise<ExportArtifact> {
   if (!isTauriRuntime()) {
     throw new Error("HTML export is available in the desktop app.");
   }
-  return invoke<ExportArtifact>("workspace_export_html", exportInvokeArgs(args));
+  return invoke<ExportArtifact>("workspace_export_html", await exportInvokeArgs(args));
 }

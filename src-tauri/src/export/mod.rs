@@ -13,12 +13,14 @@
 
 mod fonts;
 mod html;
+mod mermaid;
 mod paged;
 mod pdf;
 mod print;
 
 use crate::workspace::WorkspaceRegistry;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::Path;
 use tauri::{AppHandle, State};
 
@@ -52,11 +54,13 @@ pub fn workspace_export_pdf(
     relative_path: String,
     content: String,
     destination_path: String,
+    mermaid_svgs: HashMap<String, String>,
     app: AppHandle,
     registry: State<'_, WorkspaceRegistry>,
 ) -> Result<ExportArtifact, String> {
     let destination = check_destination(&destination_path, "PDF")?;
-    let document_html = render_document_html(&registry, &workspace_id, &relative_path, &content)?;
+    let document_html =
+        render_document_html(&registry, &workspace_id, &relative_path, &content, mermaid_svgs)?;
     let pdf_bytes = pdf::html_to_pdf(&app, &document_html)?;
     crate::files::write_file_atomic(destination, &pdf_bytes)
         .map_err(|error| format!("Could not save the PDF: {error}"))?;
@@ -75,10 +79,12 @@ pub fn workspace_export_html(
     relative_path: String,
     content: String,
     destination_path: String,
+    mermaid_svgs: HashMap<String, String>,
     registry: State<'_, WorkspaceRegistry>,
 ) -> Result<ExportArtifact, String> {
     let destination = check_destination(&destination_path, "HTML file")?;
-    let document_html = render_document_html(&registry, &workspace_id, &relative_path, &content)?;
+    let document_html =
+        render_document_html(&registry, &workspace_id, &relative_path, &content, mermaid_svgs)?;
     crate::files::write_file_atomic(destination, document_html.as_bytes())
         .map_err(|error| format!("Could not save the HTML file: {error}"))?;
     Ok(ExportArtifact {
@@ -98,10 +104,12 @@ pub fn workspace_print(
     workspace_id: String,
     relative_path: String,
     content: String,
+    mermaid_svgs: HashMap<String, String>,
     app: AppHandle,
     registry: State<'_, WorkspaceRegistry>,
 ) -> Result<bool, String> {
-    let document_html = render_document_html(&registry, &workspace_id, &relative_path, &content)?;
+    let document_html =
+        render_document_html(&registry, &workspace_id, &relative_path, &content, mermaid_svgs)?;
     print::print_html(&app, &document_html)
 }
 
@@ -119,6 +127,7 @@ fn render_document_html(
     workspace_id: &str,
     relative_path: &str,
     content: &str,
+    mermaid_svgs: HashMap<String, String>,
 ) -> Result<String, String> {
     let source = registry.resolve_workspace_path(workspace_id, relative_path)?;
     let doc_dir = source.parent().unwrap_or_else(|| Path::new("."));
@@ -126,7 +135,12 @@ fn render_document_html(
         .file_stem()
         .and_then(|stem| stem.to_str())
         .unwrap_or("document");
-    Ok(html::render_markdown_to_html(content, title, doc_dir))
+    Ok(html::render_markdown_to_html_with_mermaid(
+        content,
+        title,
+        doc_dir,
+        mermaid_svgs,
+    ))
 }
 
 #[cfg(test)]
@@ -147,9 +161,14 @@ mod tests {
     #[test]
     fn renders_document_html_from_current_content() {
         let (registry, workspace_id, _dir) = registry_with_workspace();
-        let html =
-            render_document_html(&registry, &workspace_id, "notes/x.md", "# Hi\n\n**bold**")
-                .expect("render");
+        let html = render_document_html(
+            &registry,
+            &workspace_id,
+            "notes/x.md",
+            "# Hi\n\n**bold**",
+            HashMap::new(),
+        )
+        .expect("render");
         assert!(html.contains("<h1"));
         assert!(html.contains("<strong>bold</strong>"));
         assert!(html.contains("<title>x</title>"));
@@ -159,7 +178,10 @@ mod tests {
     #[test]
     fn render_rejects_path_traversal() {
         let (registry, workspace_id, _dir) = registry_with_workspace();
-        assert!(render_document_html(&registry, &workspace_id, "../escape.md", "x").is_err());
+        assert!(
+            render_document_html(&registry, &workspace_id, "../escape.md", "x", HashMap::new())
+                .is_err()
+        );
     }
 
     #[test]

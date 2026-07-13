@@ -18,7 +18,10 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use std::collections::HashMap;
 use std::path::Path;
+
+use super::mermaid::{MermaidRenderer, MERMAID_LANG};
 
 /// Render `markdown` to a complete, self-contained HTML document.
 ///
@@ -26,14 +29,26 @@ use std::path::Path;
 /// in the body). `doc_dir` is the directory the document lives in, used to
 /// resolve relative image paths for inlining.
 pub fn render_markdown_to_html(markdown: &str, title: &str, doc_dir: &Path) -> String {
-    let body = markdown_to_body(markdown);
+    render_markdown_to_html_with_mermaid(markdown, title, doc_dir, HashMap::new())
+}
+
+/// Like [`render_markdown_to_html`], but inlines front-end-rendered mermaid
+/// diagrams: `mermaid_svgs` maps a fence's (trimmed) source to its SVG. A fence
+/// without an entry degrades to its source as a code block.
+pub fn render_markdown_to_html_with_mermaid(
+    markdown: &str,
+    title: &str,
+    doc_dir: &Path,
+    mermaid_svgs: HashMap<String, String>,
+) -> String {
+    let body = markdown_to_body(markdown, mermaid_svgs);
     let body = inline_local_images(&body, doc_dir);
     wrap_document(title, &body)
 }
 
-/// comrak GFM render of the body, with syntax-highlighted code fences.
-/// Frontmatter skipped; raw HTML escaped.
-fn markdown_to_body(markdown: &str) -> String {
+/// comrak GFM render of the body: syntax-highlighted code fences, mermaid fences
+/// swapped for their SVG. Frontmatter skipped; raw HTML escaped.
+fn markdown_to_body(markdown: &str, mermaid_svgs: HashMap<String, String>) -> String {
     let mut options = comrak::Options::default();
     options.extension.table = true;
     options.extension.strikethrough = true;
@@ -51,10 +66,16 @@ fn markdown_to_body(markdown: &str) -> String {
     // the export webview.
 
     // Syntax-highlight fenced code so the export matches the editor instead of
-    // shipping flat monospace. An unknown fence language (e.g. `mermaid`) falls
-    // back to plain text — the diagram itself is a separate concern (#149).
+    // shipping flat monospace. A `mermaid` fence is intercepted first by the
+    // per-language renderer below (it wins over the highlighter), so it becomes
+    // its diagram; every other language is highlighted.
+    let mermaid = MermaidRenderer::new(mermaid_svgs);
     let mut plugins = comrak::options::Plugins::default();
     plugins.render.codefence_syntax_highlighter = Some(syntect_adapter());
+    plugins
+        .render
+        .codefence_renderers
+        .insert(MERMAID_LANG.to_string(), &mermaid);
 
     let prepared = convert_wikilinks_to_links(markdown);
     let html = comrak::markdown_to_html_with_plugins(&prepared, &options, &plugins);
@@ -465,6 +486,8 @@ ul.contains-task-list { list-style: none; padding-left: 1em; }
 math { font-size: 1.05em; }
 math[display="block"] { display: block; margin: 0.9em 0; text-align: center; }
 .math-error { color: #b22222; }
+figure.mermaid-diagram { margin: 0.9em 0; text-align: center; page-break-inside: avoid; }
+figure.mermaid-diagram svg { max-width: 100%; height: auto; }
 "#;
 
 #[cfg(test)]
@@ -592,11 +615,28 @@ mod tests {
     }
 
     #[test]
-    fn unknown_fence_language_renders_source_without_panicking() {
-        // `mermaid` is not a syntect language; it must fall back to plain text
-        // (its source), never panic. The diagram rendering is a separate concern.
+    fn mermaid_fence_without_svg_falls_back_to_source() {
+        // No SVG supplied → the diagram degrades to its source, never a blank.
         let html = render_markdown_to_html("```mermaid\ngraph TD; A-->B\n```", "doc", &doc_dir());
-        assert!(html.contains("graph TD"), "unknown-language fence keeps its source: {html:.300}");
+        assert!(html.contains("graph TD"), "mermaid fence keeps its source: {html:.300}");
+        assert!(!html.contains("<figure"), "no diagram figure without an svg: {html:.300}");
+    }
+
+    #[test]
+    fn mermaid_fence_with_svg_is_inlined_as_a_diagram() {
+        let mut svgs = HashMap::new();
+        svgs.insert("graph TD; A-->B".to_string(), "<svg id=\"d\"></svg>".to_string());
+        let html = render_markdown_to_html_with_mermaid(
+            "```mermaid\ngraph TD; A-->B\n```",
+            "doc",
+            &doc_dir(),
+            svgs,
+        );
+        assert!(
+            html.contains("<figure class=\"mermaid-diagram\"><svg id=\"d\">"),
+            "supplied SVG is inlined as a diagram: {html:.400}"
+        );
+        assert!(!html.contains("language-mermaid"), "no source code block remains: {html:.400}");
     }
 
     #[test]
