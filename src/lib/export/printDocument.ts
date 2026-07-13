@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
+import { collectMermaidSvgs } from "./mermaidSvgs";
 
 /**
  * Open the system print panel for a document. The Rust side renders the same
@@ -20,5 +21,6 @@ export async function printDocument(args: {
     workspaceId: args.workspaceId,
     relativePath: args.relativePath,
     content: args.content,
+    mermaidSvgs: await collectMermaidSvgs(args.content),
   });
 }
