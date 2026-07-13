@@ -77,7 +77,7 @@ fn markdown_to_body(markdown: &str, mermaid_svgs: HashMap<String, String>) -> St
         .codefence_renderers
         .insert(MERMAID_LANG.to_string(), &mermaid);
 
-    let prepared = convert_wikilinks_to_links(markdown);
+    let prepared = normalize_mermaid_fence_info(&convert_wikilinks_to_links(markdown));
     let html = comrak::markdown_to_html_with_plugins(&prepared, &options, &plugins);
     render_math_to_mathml(&html)
 }
@@ -230,23 +230,119 @@ fn strip_spec_whitespace(spec: &str) -> String {
     out
 }
 
+/// Line-level fence state for the markdown pre-passes (wikilink conversion,
+/// mermaid info normalization). Follows CommonMark closely enough for the
+/// export's needs: an opener is 3+ backticks or tildes at ≤3 spaces of indent
+/// (a backtick fence's info string may not contain a backtick); the fence
+/// closes only on a line of the SAME character, at least as LONG as the
+/// opener, with nothing but whitespace after it. So a `~~~` line inside a
+/// backtick fence is content, and ```` isn't closed by ``` — the naive
+/// "any ``` toggles" tracker this replaces got both wrong, which could
+/// rewrite wikilinks inside code.
+struct FenceTracker {
+    open: Option<(u8, usize)>,
+}
+
+enum FenceLine {
+    /// Opens a fence; `info_at` is the byte offset of its info string.
+    Opener { info_at: usize },
+    /// Closes the open fence.
+    Closer,
+    /// A line inside an open fence.
+    Content,
+    /// Ordinary prose.
+    Prose,
+}
+
+impl FenceTracker {
+    fn new() -> Self {
+        Self { open: None }
+    }
+
+    fn classify(&mut self, line: &str) -> FenceLine {
+        let text = line.trim_end_matches(['\n', '\r']);
+        if let Some((ch, len)) = self.open {
+            if let Some((c, l, rest)) = fence_marks(text) {
+                if c == ch && l >= len && rest.trim().is_empty() {
+                    self.open = None;
+                    return FenceLine::Closer;
+                }
+            }
+            return FenceLine::Content;
+        }
+        if let Some((ch, len, rest)) = fence_marks(text) {
+            if ch == b'`' && rest.contains('`') {
+                return FenceLine::Prose;
+            }
+            self.open = Some((ch, len));
+            let info_at = text.len() - rest.len();
+            return FenceLine::Opener { info_at };
+        }
+        FenceLine::Prose
+    }
+}
+
+/// `(fence char, mark count, rest-of-line)` when `text` starts with a fence
+/// marker at ≤3 spaces of indent, else `None`.
+fn fence_marks(text: &str) -> Option<(u8, usize, &str)> {
+    let indent = text.len() - text.trim_start_matches(' ').len();
+    if indent > 3 {
+        return None;
+    }
+    let rest = &text[indent..];
+    let ch = *rest.as_bytes().first()?;
+    if ch != b'`' && ch != b'~' {
+        return None;
+    }
+    let count = rest.bytes().take_while(|&b| b == ch).count();
+    if count < 3 {
+        return None;
+    }
+    Some((ch, count, &rest[count..]))
+}
+
+/// Lowercase a fence's language token when it is `mermaid` in any casing.
+/// comrak dispatches per-language codefence renderers on the VERBATIM token,
+/// while the editor matches the tag case-insensitively — without this, a
+/// ```Mermaid block renders as a diagram in the editor but as plain source in
+/// the export.
+fn normalize_mermaid_fence_info(markdown: &str) -> String {
+    let mut tracker = FenceTracker::new();
+    let mut out = String::with_capacity(markdown.len());
+    for line in markdown.split_inclusive('\n') {
+        match tracker.classify(line) {
+            FenceLine::Opener { info_at } => {
+                let info = &line[info_at..];
+                let token_len = info
+                    .find(|c: char| c.is_whitespace())
+                    .unwrap_or(info.len());
+                let token = &info[..token_len];
+                if token.eq_ignore_ascii_case("mermaid") && token != "mermaid" {
+                    out.push_str(&line[..info_at]);
+                    out.push_str("mermaid");
+                    out.push_str(&info[token_len..]);
+                } else {
+                    out.push_str(line);
+                }
+            }
+            _ => out.push_str(line),
+        }
+    }
+    out
+}
+
 /// Convert `[[target]]` / `[[target|alias]]` into markdown links so the export
 /// renders them cleanly (as the editor does) instead of leaving raw `[[…]]`
 /// brackets. comrak doesn't understand wikilinks, so we rewrite them to
 /// `[alias](<target.md>)` before parsing. Fenced code blocks are skipped so a
 /// documented `[[…]]` stays literal.
 fn convert_wikilinks_to_links(markdown: &str) -> String {
+    let mut tracker = FenceTracker::new();
     let mut out = String::with_capacity(markdown.len());
-    let mut in_fence = false;
     for line in markdown.split_inclusive('\n') {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            in_fence = !in_fence;
-            out.push_str(line);
-        } else if in_fence {
-            out.push_str(line);
-        } else {
-            convert_wikilinks_in_line(line, &mut out);
+        match tracker.classify(line) {
+            FenceLine::Prose => convert_wikilinks_in_line(line, &mut out),
+            _ => out.push_str(line),
         }
     }
     out
@@ -462,7 +558,10 @@ code {
   border-radius: 3px;
 }
 pre {
-  background: #f6f8fa;
+  /* Highlighted fences carry the syntect theme's inline background, which a
+     stylesheet value always loses to — so the border, not a background, is
+     what delimits every code block (including the mermaid source fallback,
+     which has no inline background). */
   border: 1px solid #e2e2e2;
   border-radius: 6px;
   padding: 0.9em 1em;
@@ -534,6 +633,42 @@ mod tests {
     fn leaves_wikilinks_in_fenced_code_alone() {
         let html = render_markdown_to_html("```\n[[Literal]]\n```", "doc", &doc_dir());
         assert!(html.contains("[[Literal]]"), "code-fenced wikilink stays literal: {html}");
+    }
+
+    #[test]
+    fn a_tilde_line_inside_a_backtick_fence_does_not_end_it() {
+        // The old tracker toggled on ANY ```/~~~ prefix, so the ~~~ content
+        // line "closed" the fence and the wikilink below got rewritten.
+        let md = "```\n~~~\n[[Still Code]]\n```\n\n[[Real Link]]";
+        let html = render_markdown_to_html(md, "doc", &doc_dir());
+        assert!(html.contains("[[Still Code]]"), "inside the fence stays literal: {html}");
+        assert!(html.contains(">Real Link</a>"), "prose wikilink still converts: {html}");
+    }
+
+    #[test]
+    fn a_shorter_closer_does_not_end_a_longer_fence() {
+        // ```` opens; a ``` line is content per CommonMark, not a closer.
+        let md = "````\n```\n[[Code]]\n````\n";
+        let html = render_markdown_to_html(md, "doc", &doc_dir());
+        assert!(html.contains("[[Code]]"), "{html}");
+    }
+
+    #[test]
+    fn mermaid_fence_language_is_matched_case_insensitively() {
+        // The editor accepts ```Mermaid; comrak's per-language dispatch is
+        // exact-match, so the info token is normalized before parsing.
+        let mut svgs = HashMap::new();
+        svgs.insert("graph TD; A-->B".to_string(), "<svg id=\"c\"></svg>".to_string());
+        let html = render_markdown_to_html_with_mermaid(
+            "```Mermaid\ngraph TD; A-->B\n```",
+            "doc",
+            &doc_dir(),
+            svgs,
+        );
+        assert!(
+            html.contains("<figure class=\"mermaid-diagram\"><svg id=\"c\">"),
+            "a case-varied mermaid tag still renders its diagram: {html:.400}"
+        );
     }
 
     #[test]

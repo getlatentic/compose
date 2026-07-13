@@ -44,4 +44,10 @@ describe("collectMermaidSvgs", () => {
     const svgs = await collectMermaidSvgs("~~~Mermaid\ngraph TD\n~~~");
     expect(svgs).toEqual({ "graph TD": "<svg/>" });
   });
+
+  it("keeps a diagram whose source is __proto__ (no prototype-setter drop)", async () => {
+    editor.renderMermaidToSvg.mockResolvedValue({ ok: true, svg: "<svg/>" });
+    const svgs = await collectMermaidSvgs("```mermaid\n__proto__\n```");
+    expect(Object.getOwnPropertyDescriptor(svgs, "__proto__")?.value).toBe("<svg/>");
+  });
 });
