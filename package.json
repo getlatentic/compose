@@ -19,7 +19,7 @@
     "test:rust": "cargo test",
     "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.include='src/**' --coverage.include='packages/*/src/**' --coverage.exclude='**/*.test.{ts,tsx}' --coverage.exclude='**/*.d.ts' --coverage.reporter=text-summary",
     "coverage:rust": "cd src-tauri && cargo llvm-cov --workspace --summary-only",
-    "check": "pnpm build && pnpm test && pnpm test:rust",
+    "check": "pnpm build:editor && pnpm build && pnpm test && pnpm test:rust",
     "test:browser": "vitest run --config vitest.browser.config.ts"
   },
   "dependencies": {
