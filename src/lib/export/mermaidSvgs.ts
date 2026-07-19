@@ -1,4 +1,6 @@
-import { renderMermaidToSvg } from "ai-editor";
+import { isMermaidFenceInfo, renderMermaidToSvg } from "ai-editor";
+
+import { createMarkdownProcessor } from "../markdown/processor";
 
 /**
  * Pre-render the document's mermaid diagrams to SVG for export (#149).
@@ -10,8 +12,10 @@ import { renderMermaidToSvg } from "ai-editor";
  * fence that fails to render is simply absent from the map; the backend then
  * degrades it to its source, never a blank.
  *
- * The key is the fence's trimmed inner text, matching what the export renderer
- * keys on (comrak hands it the fence body; both sides trim).
+ * Fences are discovered by PARSING the markdown (the app's single remark
+ * pipeline), not by scanning lines — so closer length, indentation, and
+ * nesting follow the same CommonMark grammar the export's comrak side uses,
+ * and the `{source → svg}` keys can't diverge from what the backend looks up.
  */
 export async function collectMermaidSvgs(markdown: string): Promise<Record<string, string>> {
   const sources = extractMermaidSources(markdown);
@@ -30,32 +34,40 @@ export async function collectMermaidSvgs(markdown: string): Promise<Record<strin
   return Object.fromEntries(svgs);
 }
 
-/** The trimmed sources of every CLOSED ```mermaid fence, de-duplicated (two
- *  identical diagrams render once). Only closed fences count — an unterminated
- *  fence is still being typed, exactly as the editor treats it. */
+interface MdastCode {
+  type: string;
+  lang?: string | null;
+  meta?: string | null;
+  value: string;
+  position?: {
+    start: { line: number; column: number };
+    end: { line: number; column: number };
+  };
+}
+
+/** The trimmed sources of the document's diagram fences, de-duplicated (two
+ *  identical diagrams render once). Matches the editor's discovery: a bare
+ *  `mermaid` tag (any casing, no meta), top-level and unindented, and CLOSED —
+ *  an unterminated fence is still being typed and renders as source. */
 function extractMermaidSources(markdown: string): string[] {
-  const lines = markdown.split("\n");
+  const tree = createMarkdownProcessor().parse(markdown) as { children?: MdastCode[] };
   const sources = new Set<string>();
-  let index = 0;
-  while (index < lines.length) {
-    const opener = lines[index].match(/^\s*(`{3,}|~{3,})\s*mermaid\s*$/i);
-    if (!opener) {
-      index += 1;
-      continue;
-    }
-    const fenceChar = opener[1][0];
-    const closer = new RegExp(`^\\s*\\${fenceChar}{3,}\\s*$`);
-    const body: string[] = [];
-    index += 1;
-    while (index < lines.length && !closer.test(lines[index])) {
-      body.push(lines[index]);
-      index += 1;
-    }
-    // Reached a real closer (not end-of-doc) → a closed fence.
-    if (index < lines.length) {
-      sources.add(body.join("\n").trim());
-      index += 1;
-    }
+  for (const node of tree.children ?? []) {
+    if (node.type !== "code" || !node.position) continue;
+    if (node.position.start.column !== 1) continue;
+    const info = [node.lang, node.meta].filter(Boolean).join(" ");
+    if (!isMermaidFenceInfo(info)) continue;
+    if (!fenceIsClosed(node)) continue;
+    sources.add(node.value.trim());
   }
   return [...sources];
+}
+
+/** A closed fence spans its body plus the opener AND closer lines; an
+ *  unterminated one ends on its last content line. */
+function fenceIsClosed(node: MdastCode): boolean {
+  if (!node.position) return false;
+  const spanned = node.position.end.line - node.position.start.line + 1;
+  const bodyLines = node.value === "" ? 0 : node.value.split("\n").length;
+  return spanned >= bodyLines + 2;
 }
