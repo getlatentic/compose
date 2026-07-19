@@ -1,4 +1,4 @@
-import { getCachedMermaidPng, highlightFenceSpans, warmMermaidPng } from "ai-editor";
+import { getCachedMermaidPng, highlightFenceSpans } from "ai-editor";
 
 /**
  * Enrich the clipboard's sanitized hast tree so a copy keeps its richness in
@@ -12,9 +12,11 @@ import { getCachedMermaidPng, highlightFenceSpans, warmMermaidPng } from "ai-edi
  * from our own mermaid render of the (already sanitized) fence text.
  *
  * The copy event writes the clipboard synchronously, so both enrichments are
- * cache-reads: a diagram the editor has shown has a warm PNG; a fence the
- * editor has shown has a warm grammar. A cold one degrades to the plain code
- * block and warms itself for the next copy.
+ * PURE cache-reads: a diagram the editor has shown has a warm PNG (the widget
+ * warms it); a fence the editor has shown has a warm grammar. A cold one
+ * degrades to the plain code block — deliberately with no warming side
+ * effect, so copying the same document twice always produces the same
+ * clipboard.
  */
 
 interface HastText {
@@ -73,7 +75,6 @@ function enrichCodeBlock(pre: HastElement): HastElement | null {
         children: [],
       };
     }
-    void warmMermaidPng(source);
     return null;
   }
 

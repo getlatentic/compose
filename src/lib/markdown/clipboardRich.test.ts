@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const editor = vi.hoisted(() => ({
   getCachedMermaidPng: vi.fn(),
-  warmMermaidPng: vi.fn(async () => {}),
   highlightFenceSpans: vi.fn(),
 }));
 vi.mock("ai-editor", () => editor);
@@ -23,13 +22,24 @@ describe("clipboard enrichment — mermaid", () => {
     expect(editor.getCachedMermaidPng).toHaveBeenCalledWith("flowchart TD\n  A --> B\n");
   });
 
-  it("keeps the source block on a cold cache and warms it for the next copy", () => {
+  it("keeps the source block on a cold cache, with no warming side effect", () => {
     editor.getCachedMermaidPng.mockReturnValue(null);
-    const html = markdownToClipboardHtml(MERMAID_DOC);
-    expect(html).toContain("flowchart TD");
-    expect(html).toContain("<pre>");
+    const first = markdownToClipboardHtml(MERMAID_DOC);
+    const second = markdownToClipboardHtml(MERMAID_DOC);
+    expect(first).toContain("flowchart TD");
+    expect(first).toContain("<pre>");
+    expect(first).not.toContain("<img");
+    // Copying is a pure cache-read: identical input, identical clipboard —
+    // the enrichment never renders on its own.
+    expect(second).toBe(first);
+  });
+
+  it("treats a mermaid tag with meta as plain code — the editor shows it as source", () => {
+    editor.getCachedMermaidPng.mockReturnValue("data:image/png;base64,AAA");
+    const html = markdownToClipboardHtml("```mermaid title=x\nflowchart TD\n```");
     expect(html).not.toContain("<img");
-    expect(editor.warmMermaidPng).toHaveBeenCalledOnce();
+    expect(html).toContain("flowchart TD");
+    expect(editor.getCachedMermaidPng).not.toHaveBeenCalled();
   });
 });
 

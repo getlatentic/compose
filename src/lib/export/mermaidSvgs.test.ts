@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const editor = vi.hoisted(() => ({ renderMermaidToSvg: vi.fn() }));
+const editor = vi.hoisted(() => ({
+  renderMermaidToSvg: vi.fn(),
+  // Mirrors the real predicate's contract: bare tag, any casing, no meta.
+  isMermaidFenceInfo: (info: string) => /^mermaid\s*$/i.test(info.trim()),
+}));
 vi.mock("ai-editor", () => editor);
 
 import { collectMermaidSvgs } from "./mermaidSvgs";
@@ -43,6 +47,30 @@ describe("collectMermaidSvgs", () => {
     editor.renderMermaidToSvg.mockResolvedValue({ ok: true, svg: "<svg/>" });
     const svgs = await collectMermaidSvgs("~~~Mermaid\ngraph TD\n~~~");
     expect(svgs).toEqual({ "graph TD": "<svg/>" });
+  });
+
+  it("keeps the FULL body of a 4-backtick fence containing a bare ``` line", async () => {
+    // CommonMark: a closer must be at least as long as its opener, so the
+    // interior ``` is content — the svg key must be the whole body or the
+    // backend lookup misses and the export degrades the diagram.
+    editor.renderMermaidToSvg.mockResolvedValue({ ok: true, svg: "<svg/>" });
+    const svgs = await collectMermaidSvgs("````mermaid\ngraph TD\n```\nmore\n````");
+    expect(Object.keys(svgs)).toEqual(["graph TD\n```\nmore"]);
+  });
+
+  it("skips indented and container-nested fences, like the editor does", async () => {
+    editor.renderMermaidToSvg.mockResolvedValue({ ok: true, svg: "<svg/>" });
+    const indented = "    ```mermaid\n    graph TD\n    ```";
+    const listed = "- item\n\n  ```mermaid\n  graph LR\n  ```";
+    expect(await collectMermaidSvgs(indented)).toEqual({});
+    expect(await collectMermaidSvgs(listed)).toEqual({});
+    expect(editor.renderMermaidToSvg).not.toHaveBeenCalled();
+  });
+
+  it("skips a mermaid tag with trailing meta — the editor shows it as source", async () => {
+    editor.renderMermaidToSvg.mockResolvedValue({ ok: true, svg: "<svg/>" });
+    expect(await collectMermaidSvgs("```mermaid title=x\ngraph TD\n```")).toEqual({});
+    expect(editor.renderMermaidToSvg).not.toHaveBeenCalled();
   });
 
   it("keeps a diagram whose source is __proto__ (no prototype-setter drop)", async () => {

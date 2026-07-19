@@ -38,29 +38,30 @@ impl CodefenceRendererAdapter for MermaidRenderer {
         &self,
         output: &mut dyn fmt::Write,
         _lang: &str,
-        _meta: &str,
+        meta: &str,
         code: &str,
         _sourcepos: Option<Sourcepos>,
     ) -> fmt::Result {
-        match self.svgs.get(code.trim()) {
+        // The editor treats only a bare `mermaid` info string as a diagram
+        // (`/^mermaid\s*$/i`); a fence with trailing meta ("mermaid title=x")
+        // shows as source there, so it must export as source too.
+        let svg = if meta.trim().is_empty() { self.svgs.get(code.trim()) } else { None };
+        match svg {
             // The SVG is produced by the front end's mermaid with
             // `securityLevel: "strict"` (no scripts, escaped labels) — the same
             // output the editor already inlines via innerHTML — so it is inlined
             // here directly, matching that trust boundary.
             Some(svg) => write!(output, "<figure class=\"mermaid-diagram\">{svg}</figure>\n"),
-            None => write!(
-                output,
-                "<pre><code class=\"language-mermaid\">{}</code></pre>\n",
-                escape_html_text(code)
-            ),
+            None => {
+                output.write_str("<pre><code class=\"language-mermaid\">")?;
+                // comrak's own escaper (covers `"` and NUL as well), since its
+                // default escaping is bypassed once a codefence renderer takes
+                // over.
+                comrak::html::escape(output, code)?;
+                output.write_str("</code></pre>\n")
+            }
         }
     }
-}
-
-/// Escape a fence body for the fallback code block (comrak's default escaping is
-/// bypassed once a codefence renderer takes over, so do it here).
-fn escape_html_text(text: &str) -> String {
-    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
 #[cfg(test)]
