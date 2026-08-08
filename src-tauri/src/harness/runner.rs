@@ -43,11 +43,10 @@ pub struct HarnessRunRequest {
     pub chat_mode: ChatMode,
     #[serde(default)]
     pub context_file_paths: Vec<String>,
-    pub max_coins: u32,
     pub prompt: String,
     pub run_id: String,
     pub workspace_id: String,
-    /// Which harness to run. Defaults to `"bob"`; every id — bob
+    /// Which harness to run; every id
     /// included — routes through the `agent-harness` registry
     /// (`run_via_harness`).
     #[serde(default = "default_harness_id")]
@@ -401,14 +400,7 @@ fn run_via_harness(
     // max-turns; codex: model + effort) and ignores the rest. An empty
     // model string is treated as "unset" so a cleared field falls back
     // to the CLI default rather than passing `--model ""`.
-    // The coin budget is bob's alone (no neutral RunTuning field represents it),
-    // so it's the one place keyed to the bob id — the registry's own
-    // `BOB_HARNESS_ID`, not a Compose constant.
-    let mut extra_args = request.extra_args;
-    if harness_id == harness::BOB_HARNESS_ID {
-        extra_args.push("--max-coins".to_owned());
-        extra_args.push(request.max_coins.to_string());
-    }
+    let extra_args = request.extra_args;
 
     let tuning = RunTuning {
         model: request

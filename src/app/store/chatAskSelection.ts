@@ -234,7 +234,6 @@ export async function runAskAboutSelection(
     await runHarnessStream({
       approvalMode: "default",
       chatMode,
-      maxCoins: 30,
       prompt: prefixWorkspaceContext(sentUserMessage, workspace.path, workspace.activeFilePath),
       runId,
       workspaceId,

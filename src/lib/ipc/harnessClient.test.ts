@@ -27,7 +27,6 @@ describe("harnessClient runtime boundary", () => {
         approvalMode: "default",
         chatMode: "plan",
         contextFilePaths: [],
-        maxCoins: 200,
         prompt: "hello",
         runId: "run-browser",
         workspaceId: "workspace-1",

@@ -21,7 +21,7 @@ const FILE: &str = "active-runs.json";
 /// claude / bob may also report their own name). A recorded pid is only killed
 /// on boot when its live process name is in this set — the reuse guard.
 #[cfg(unix)]
-const AGENT_PROCESS_NAMES: [&str; 5] = ["node", "claude", "codex", "bob", "ollama"];
+const AGENT_PROCESS_NAMES: [&str; 4] = ["node", "claude", "codex", "ollama"];
 
 fn file_path(data_dir: &Path) -> PathBuf {
     data_dir.join(FILE)

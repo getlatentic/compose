@@ -12,7 +12,7 @@ use std::path::Path;
 
 /// Put the bundled Node + uv ahead of system installs on PATH, and send
 /// `npm install -g` to a writable prefix (`<data>/runtime/npm`) so a chosen CLI
-/// agent (Claude/Codex/Bob) installs on first use without a system Node. Gated
+/// agent (Claude/Codex) installs on first use without a system Node. Gated
 /// on the bundled Node being present, so it's a no-op for a `pnpm dev` run or a
 /// build made before the bundler. Must run before the first harness probe, since
 /// `augmented_node_path` caches PATH on first use.

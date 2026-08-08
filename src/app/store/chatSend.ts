@@ -348,7 +348,6 @@ export async function runSendChatPrompt(
       approvalMode: "default",
       chatMode,
       contextFilePaths,
-      maxCoins: 200,
       prompt: prefixWorkspaceContext(
         promptWithContext,
         viewingLoose ? undefined : workspace.path,
