@@ -103,12 +103,22 @@ export interface HarnessCapabilities {
   supportsCustomInstructions: boolean;
 }
 
+/**
+ * Where a user gets an agent that isn't on this machine. Compose discovers and
+ * runs agents; it never installs them, so this is what a "Not installed" row
+ * shows instead of an action button.
+ */
+export interface InstallHint {
+  url: string;
+  command: string | null;
+}
+
 /** One entry in the harness catalog (`harness_list` command). */
 export interface HarnessInfo {
   id: string;
   displayName: string;
   description: string;
-  requiresInstall: boolean;
+  installHint: InstallHint | null;
   capabilities: HarnessCapabilities;
 }
 
@@ -599,14 +609,6 @@ export async function* streamSubprocessCommand(
       pendingResolve = resolve;
     });
   }
-}
-
-/**
- * Stream a harness's one-time install. Yields events as they arrive on a
- * Tauri `Channel`; resolves when the install process exits.
- */
-export function harnessInstall(harnessId: string): AsyncGenerator<HarnessInstallEvent, void, void> {
-  return streamSubprocessCommand("harness_install", { harnessId });
 }
 
 /**

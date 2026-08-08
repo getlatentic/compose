@@ -13,7 +13,7 @@ import {
   pastedTextChipLabel,
   shouldSpillChatInput,
 } from "../../app/store/chatInputSpill";
-import { spillChatInput } from "../../lib/ipc/harnessClient";
+import { spillChatInput, type InstallHint } from "../../lib/ipc/harnessClient";
 import { basename } from "../../lib/workspace/displayPath";
 import { ChatComposerFooter } from "./ChatComposerFooter";
 import { ChatErrorNotice } from "./ChatErrorNotice";
@@ -47,9 +47,7 @@ export function MessageComposer({
   onAddFileContext,
   onHeightChange,
   onOpenSettings,
-  onInstall,
-  installing,
-  installError,
+  installHint,
   onStartOllama,
   startingOllama,
   startOllamaError,
@@ -84,9 +82,7 @@ export function MessageComposer({
   /** When set, the selected agent needs a one-time install — the not-ready
    *  banner offers an inline "Set up" action (it installs on the bundled npm)
    *  instead of only the Settings link. */
-  onInstall?: () => void;
-  installing?: boolean;
-  installError?: string | null;
+  installHint?: InstallHint | null;
   /** When set, the selected agent is Ollama and its server isn't running — the
    *  not-ready banner offers a one-click "Start Ollama" (launches the app)
    *  instead of just telling the user to start it themselves. */
@@ -222,20 +218,16 @@ export function MessageComposer({
               {startingOllama ? "Starting…" : startOllamaError ? "Try again" : "Start Ollama"}
             </button>
           </div>
-        ) : onInstall ? (
+        ) : installHint ? (
           <div className="chat-setup-notice" role="status">
             <span className="chat-setup-notice__text">
-              {installing
-                ? `Setting up ${harnessName}…`
-                : (installError ?? `${harnessName} needs a one-time setup.`)}
+              {harnessName} isn&rsquo;t installed.
+              {installHint.command ? (
+                <code className="chat-setup-notice__command">{installHint.command}</code>
+              ) : null}
             </span>
-            <button
-              type="button"
-              className="chat-setup-notice__action"
-              disabled={installing}
-              onClick={onInstall}
-            >
-              {installing ? "Setting up…" : installError ? "Try again" : `Set up ${harnessName}`}
+            <button type="button" className="chat-setup-notice__action" onClick={onOpenSettings}>
+              How to install
             </button>
           </div>
         ) : (

@@ -7,21 +7,18 @@ import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessRemoveCustom } from "../../lib/ipc/harnessClient";
 import { agentStatus } from "./agentStatus";
 import { AdvancedRunOptions, hasAdvancedRunOptions } from "./AdvancedRunOptions";
-import {
-  HarnessCredentialForm,
-  ManagedHarnessSetup,
-  ModelSection,
-} from "./agentConfigControls";
+import { HarnessCredentialForm, ModelSection } from "./agentConfigControls";
+import { InstallHintBlock } from "./InstallHint";
 import { OllamaModelManager } from "./OllamaModelManager";
 import { RuntimeDetailPanel } from "./RuntimeDetailPanel";
 import { useHarnessSetup } from "./useHarnessSetup";
 
 /**
  * One agent's setup + configuration screen, reached from {@link AgentList} — a
- * single scrollable page (no tabs). The setup is capability-driven: a
- * Compose-managed agent (bob) gets the install + key + test panel; everything
- * else gets an install and/or OAuth sign-in step where its status calls for one,
- * then the optional key form and the default-model picker. The agent-specific
+ * single scrollable page (no tabs). The setup is capability-driven: an agent
+ * that isn't on the machine shows where to get it, one that authenticates by
+ * OAuth gets a sign-in step, and one that needs a key gets the key form —
+ * followed by the default-model picker. The agent-specific
  * run knobs and the runtime facts each live behind a collapsed section, so the
  * page stays short. Setting the default moves here: the header carries a "Set as
  * default" button that becomes a "Default" tag once chosen. Runtime is probed
@@ -40,8 +37,6 @@ export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () =
   const setup = useHarnessSetup(agentId);
   const status = info ? agentStatus(info, setup.readiness) : null;
   const isDefault = agentId === selectedHarnessId;
-  const usesManagedSetup = Boolean(info?.requiresInstall && caps.credentialRequired);
-  const needsInstall = !setup.readiness?.installed;
   const showAdvanced = hasAdvancedRunOptions(harnessCatalog, agentId);
 
   // Probe whether this agent manages its own local models (Ollama). Drives the
@@ -81,35 +76,11 @@ export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () =
         </div>
       </div>
 
-      {usesManagedSetup ? (
-        <ManagedHarnessSetup
-          name={name}
-          apiKey={setup.apiKey}
-          setApiKey={setup.setApiKey}
-          authConfigured={setup.managedKeyConfigured}
-          needsInstall={needsInstall}
-          installing={setup.installing}
-          installLog={setup.installLog}
-          installResult={setup.installResult}
-          logRef={setup.logRef}
-          errorMessage={setup.error}
-          saveSuccess={setup.saveSuccess}
-          saving={setup.saving}
-          checkingRuntime={setup.checkingRuntime}
-          runtimeCheck={setup.runtimeCheck}
-          onInstall={() => void setup.install()}
-          onSubmit={setup.saveManagedKey}
-          onRuntimeCheck={() => void setup.runRuntimeCheck()}
-        />
-      ) : (
-        <>
-          {status?.action === "install" ? <InstallBlock name={name} setup={setup} /> : null}
-          {status?.action === "signIn" ? <SignInBlock name={name} setup={setup} /> : null}
-          {caps.credentialRequired ? (
-            <HarnessCredentialForm harnessId={agentId} name={name} />
-          ) : null}
-        </>
-      )}
+      {status?.kind === "notInstalled" && info?.installHint ? (
+        <InstallHintBlock name={name} hint={info.installHint} />
+      ) : null}
+      {status?.action === "signIn" ? <SignInBlock name={name} setup={setup} /> : null}
+      {caps.credentialRequired ? <HarnessCredentialForm harnessId={agentId} name={name} /> : null}
 
       <ModelSection harnessId={agentId} />
 
@@ -233,60 +204,6 @@ function RemoveAgentSection({
           Remove agent
         </Button>
       )}
-    </div>
-  );
-}
-
-/** Install step for a CLI agent that isn't on disk yet (Claude/Codex). */
-function InstallBlock({ name, setup }: { name: string; setup: Setup }) {
-  return (
-    <div className="settings-section">
-      <h3>{name} CLI</h3>
-      <p className="settings-helper">{name} runs as a local CLI that isn't installed yet.</p>
-      <div className="settings-actions">
-        <Button
-          size="sm"
-          kind="primary"
-          disabled={setup.installing}
-          onClick={() => void setup.install()}
-        >
-          {setup.installing ? "Installing…" : `Install ${name}`}
-        </Button>
-      </div>
-      {setup.installLog.length > 0 ? (
-        <pre
-          ref={setup.logRef}
-          className="settings-install-log"
-          aria-label={`${name} install progress`}
-          aria-live="polite"
-        >
-          {setup.installLog.map((entry, i) => (
-            <div
-              key={i}
-              className={`settings-install-log__line settings-install-log__line--${entry.kind}`}
-            >
-              {entry.kind === "step" ? "› " : entry.kind === "stderr" ? "! " : "  "}
-              {entry.text}
-            </div>
-          ))}
-        </pre>
-      ) : null}
-      {setup.installResult ? (
-        <InlineNotification
-          hideCloseButton
-          kind={setup.installResult.ok ? "success" : "error"}
-          lowContrast
-          title={setup.installResult.ok ? `${name} installed` : "Install failed"}
-          subtitle={
-            setup.installResult.ok
-              ? `${name} is ready.`
-              : `Exited with code ${setup.installResult.exitCode ?? "?"}. Check the log above.`
-          }
-        />
-      ) : null}
-      {setup.error ? (
-        <InlineNotification hideCloseButton kind="error" lowContrast subtitle={setup.error} title="Setup error" />
-      ) : null}
     </div>
   );
 }

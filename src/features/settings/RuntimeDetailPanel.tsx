@@ -12,7 +12,6 @@ import {
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { agentStatus, statusTagType } from "./agentStatus";
 import { installKindBadge } from "./installKind";
-import { useRuntimeInstall } from "./useRuntimeInstall";
 
 /**
  * One agent's runtime detail: which binary its CLI resolves to, the version,
@@ -58,8 +57,6 @@ export function RuntimeDetailPanel({
     };
   }, [harnessId]);
 
-  const install = useRuntimeInstall(harnessId, (next) => setReadiness(next));
-
   if (!isTauriRuntime()) {
     return (
       <div className="settings-section">
@@ -75,18 +72,6 @@ export function RuntimeDetailPanel({
   const status = checking ? null : agentStatus(info, readiness);
   const { resolvedPath, installKind } = runtimeDetailsOf(readiness);
   const badge = installKind ? installKindBadge(installKind) : null;
-  const installed = readiness?.installed ?? false;
-  const actionLabel = !installed
-    ? `Install ${info.displayName}`
-    : installKind === "npm-global"
-      ? "Switch to native build"
-      : "Update";
-
-  // Only a CLI that Compose can install/update gets an action, and only when
-  // there's a real one: an Install when it's missing, or a switch-to-native when
-  // it's a stale npm copy. The native build updates itself, so it shows no
-  // button. A harness with no managed install path (Ollama) shows status only.
-  const canManage = info.requiresInstall && (!installed || installKind === "npm-global");
   const isOllama = harnessId === "ollama";
   const ollamaNotReady = isOllama && !checking && !(readiness?.ready ?? false);
 
@@ -121,19 +106,6 @@ export function RuntimeDetailPanel({
 
       <OllamaStart show={ollamaNotReady} onReadiness={setReadiness} />
 
-      {canManage ? (
-        <div className="settings-actions">
-          <Button
-            size="sm"
-            kind={installed ? "tertiary" : "primary"}
-            disabled={install.running}
-            onClick={() => void install.run()}
-          >
-            {install.running ? "Working…" : actionLabel}
-          </Button>
-        </div>
-      ) : null}
-
       <dl className="runtime-detail">
         <dt>Resolved path</dt>
         <dd className="runtime-detail__path">
@@ -154,46 +126,6 @@ export function RuntimeDetailPanel({
       />
       <SavedHint value={binaryPath} />
 
-      {install.log.length > 0 ? (
-        <pre
-          className="settings-install-log"
-          aria-label={`${info.displayName} update progress`}
-          aria-live="polite"
-        >
-          {install.log.map((entry, i) => (
-            <div
-              key={i}
-              className={`settings-install-log__line settings-install-log__line--${entry.kind}`}
-            >
-              {entry.kind === "step" ? "› " : entry.kind === "stderr" ? "! " : "  "}
-              {entry.text}
-            </div>
-          ))}
-        </pre>
-      ) : null}
-
-      {install.result ? (
-        <InlineNotification
-          hideCloseButton
-          kind={install.result.ok ? "success" : "error"}
-          lowContrast
-          title={install.result.ok ? `${info.displayName} updated` : "Update failed"}
-          subtitle={
-            install.result.ok
-              ? `${info.displayName} is up to date.`
-              : `Exited with code ${install.result.exitCode ?? "?"}. Check the log above.`
-          }
-        />
-      ) : null}
-      {install.error ? (
-        <InlineNotification
-          hideCloseButton
-          kind="error"
-          lowContrast
-          subtitle={install.error}
-          title="Update error"
-        />
-      ) : null}
     </div>
   );
 }

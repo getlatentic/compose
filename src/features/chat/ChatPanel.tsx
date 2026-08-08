@@ -8,7 +8,7 @@ import {
 } from "../../app/store/activeWorkspace";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import { harnessInstall, startOllama } from "../../lib/ipc/harnessClient";
+import { startOllama } from "../../lib/ipc/harnessClient";
 import { agentStatus } from "../settings/agentStatus";
 import { missingFileContextPaths, sumChatThreadStats } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
@@ -133,31 +133,12 @@ function ChatPanelInner() {
   // send-time credential preflight still backstops key-managed harnesses).
   const selectedInfo = harnessCatalog.find((entry) => entry.id === selectedHarnessId);
   const selectedHarnessName = selectedInfo?.displayName ?? "Your assistant";
-  // A CLI agent that isn't on disk yet → offer a one-click install right here
-  // (it runs on the bundled npm), instead of sending the user off to Settings.
-  const needsInstall =
-    !!selectedInfo && agentStatus(selectedInfo, selectedHarnessReadiness).action === "install";
-  const [installing, setInstalling] = useState(false);
-  const [installError, setInstallError] = useState<string | null>(null);
-  const installSelected = useCallback(async () => {
-    if (!selectedHarnessId) return;
-    setInstalling(true);
-    setInstallError(null);
-    try {
-      for await (const event of harnessInstall(selectedHarnessId)) {
-        if (event.kind === "done" && !event.ok) {
-          setInstallError(`Couldn't set up ${selectedHarnessName}. Open Settings for details.`);
-        }
-      }
-    } catch (error) {
-      setInstallError(
-        error instanceof Error ? error.message : `Couldn't set up ${selectedHarnessName}.`,
-      );
-    } finally {
-      setInstalling(false);
-      void reloadSelectedHarnessReadiness();
-    }
-  }, [selectedHarnessId, selectedHarnessName, reloadSelectedHarnessReadiness]);
+  // An agent that isn't on this machine. Compose doesn't install agents, so the
+  // composer shows where to get it rather than a Set-up button.
+  const missingAgentHint =
+    selectedInfo && agentStatus(selectedInfo, selectedHarnessReadiness).kind === "notInstalled"
+      ? selectedInfo.installHint
+      : null;
 
   // Ollama isn't a CLI we install — it's a local app that may just be stopped.
   // Offer a one-click start (launches the app, which boots its server) and then
@@ -183,7 +164,7 @@ function ChatPanelInner() {
     selectedHarnessId === "ollama" &&
     !!selectedHarnessReadiness &&
     !selectedHarnessReadiness.ready &&
-    !needsInstall;
+    !missingAgentHint;
 
   // While the first-run probe is still running, the selection is transiently
   // null — show a neutral "connecting" state, not the "set up an agent" error.
@@ -379,9 +360,7 @@ function ChatPanelInner() {
         onAddFileContext={addChatFileContext}
         onHeightChange={setComposerHeight}
         onOpenSettings={() => openSettings(selectedHarnessId || undefined)}
-        onInstall={needsInstall ? () => void installSelected() : undefined}
-        installing={installing}
-        installError={installError}
+        installHint={missingAgentHint}
         onStartOllama={needsOllamaStart ? () => void startSelectedOllama() : undefined}
         startingOllama={startingOllama}
         startOllamaError={startOllamaError}

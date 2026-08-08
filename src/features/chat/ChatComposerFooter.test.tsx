@@ -9,7 +9,7 @@ function harness(id: string, displayName: string): HarnessInfo {
     id,
     displayName,
     description: "",
-    requiresInstall: false,
+    installHint: null,
     capabilities: {
       credentialRequired: false,
       previewsEdits: false,

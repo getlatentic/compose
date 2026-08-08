@@ -303,7 +303,6 @@ pub fn run() {
             harness::commands::harness_list,
             harness::commands::harness_discover,
             harness::commands::harness_readiness,
-            harness::commands::harness_install,
             harness::commands::harness_login,
             harness::commands::harness_verify_runtime,
             harness::commands::harness_list_models,

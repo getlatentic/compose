@@ -37,15 +37,6 @@ pub fn harness_list_models(harness_id: String) -> Result<Vec<HarnessModel>, Stri
 }
 
 #[tauri::command(async)]
-pub fn harness_install(harness_id: String, on_event: Channel<InstallEvent>) -> Result<(), String> {
-    let harness = resolve(&harness_id)?;
-    let callback: InstallCallback = std::sync::Arc::new(move |event| {
-        let _ = on_event.send(event);
-    });
-    harness.install(callback).map_err(|e| e.to_string())
-}
-
-#[tauri::command(async)]
 pub fn harness_login(harness_id: String, on_event: Channel<InstallEvent>) -> Result<(), String> {
     let harness = resolve(&harness_id)?;
     let callback: InstallCallback = std::sync::Arc::new(move |event| {

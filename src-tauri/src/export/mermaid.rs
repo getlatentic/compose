@@ -3,7 +3,7 @@
 //! There is no Rust mermaid renderer, so the diagrams are rasterised to SVG on
 //! the front end (the same `mermaid` the editor uses) and handed to the export
 //! commands as a `{ source → svg }` map. This comrak codefence renderer swaps a
-//! ```mermaid block for its SVG; a fence with no supplied SVG (the render
+//! `mermaid` fence for its SVG; a fence with no supplied SVG (the render
 //! failed, or the map is stale) degrades to the source as a plain code block —
 //! never a blank.
 //!

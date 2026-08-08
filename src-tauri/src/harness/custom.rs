@@ -191,6 +191,9 @@ pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
             display_name: record.display_name,
             command,
             args,
+            // The user named this command themselves; there is nowhere
+            // to send them to get it.
+            install_hint: None,
         })),
         CustomAgentKind::OpenAiCompatible {
             base_url,

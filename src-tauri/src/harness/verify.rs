@@ -152,7 +152,7 @@ fn preview(text: &str) -> Option<String> {
 mod tests {
     use super::*;
     use harness::{
-        CredentialSpec, HarnessError, HarnessInfo, HarnessReadiness, InstallCallback, RunCallback,
+        CredentialSpec, HarnessError, HarnessInfo, HarnessReadiness, RunCallback,
         RunControl,
     };
 
@@ -189,9 +189,6 @@ mod tests {
                 error: None,
                 details: serde_json::Value::Null,
             }
-        }
-        fn install(&self, _on_event: InstallCallback) -> Result<(), HarnessError> {
-            Ok(())
         }
         fn run(
             &self,

@@ -3,13 +3,13 @@ import { Button, InlineNotification, Tag, Toggle } from "@carbon/react";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import {
   harnessDiscover,
-  harnessInstall,
   harnessList,
   harnessLogin,
   type HarnessInfo,
   type HarnessReadiness,
 } from "../../lib/ipc/harnessClient";
 import { agentStatus, statusTagType } from "./agentStatus";
+import { InstallHintInline } from "./InstallHint";
 
 /**
  * The AI-assistant ("harness") picker.
@@ -61,7 +61,6 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
   // True while the readiness probe is in flight. The agent cards render
   // immediately from the catalog; this only gates the "Checking…" badges.
   const [probing, setProbing] = useState(true);
-  const [installingId, setInstallingId] = useState<string | null>(null);
   const [signingInId, setSigningInId] = useState<string | null>(null);
   const [installLog, setInstallLog] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -127,27 +126,6 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [installLog.length]);
-
-  async function handleInstall(id: string) {
-    setInstallingId(id);
-    setInstallLog([]);
-    setError(null);
-    try {
-      for await (const event of harnessInstall(id)) {
-        if (event.kind !== "done" && "text" in event && event.text) {
-          setInstallLog((prev) => [...prev, event.text]);
-        }
-        if (event.kind === "done" && !event.ok) {
-          setError(`Install exited with code ${event.exitCode ?? "?"}.`);
-        }
-      }
-      await refresh();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Install failed");
-    } finally {
-      setInstallingId(null);
-    }
-  }
 
   // Trigger the harness's own OAuth sign-in (claude/codex). The CLI opens
   // the browser; we stream its progress, then re-probe so the badge flips
@@ -236,15 +214,8 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
                   <span className="harness-card__version">{readiness.version}</span>
                 ) : null}
               </button>
-              {status?.action === "install" ? (
-                <Button
-                  size="sm"
-                  kind="tertiary"
-                  disabled={installingId !== null}
-                  onClick={() => void handleInstall(info.id)}
-                >
-                  {installingId === info.id ? "Installing…" : "Install"}
-                </Button>
+              {status?.kind === "notInstalled" && info.installHint ? (
+                <InstallHintInline hint={info.installHint} />
               ) : status?.action === "signIn" ? (
                 <Button
                   size="sm"
