@@ -42,59 +42,8 @@ export interface HarnessPrefs {
   /** Global extra system-prompt instructions, applied to every agent that honors
    *  them (the openai-compatible adapters). Empty → none. */
   customInstructions: string;
-  /** Keyed by harness id (`compose` / `claude` / `codex`). */
+  /** Keyed by harness id (`bob` / `claude` / `codex`). */
   harnessOptions: Record<string, HarnessRunOptions>;
-  /** Which endpoint the built-in `compose` agent talks to — `ollama`,
-   *  `openrouter`, a custom one. Only meaningful while `compose` is selected;
-   *  kept across agent switches so returning to it restores the last provider. */
-  selectedProviderId: string;
-  /** Per-provider run options, chiefly the model. Separate from
-   *  `harnessOptions` because one agent has many providers, and each remembers
-   *  its own model. */
-  providerOptions: Record<string, HarnessRunOptions>;
-}
-
-/**
- * Agent ids that became providers of the built-in `compose` agent.
- *
- * They were never separate agents. Each was one `OpenHarness` — the same loop,
- * the same tools — differing only in `base_url` and which environment variable
- * holds the key. Listing them as peers of Claude Code asked the user two
- * different questions in one control: which agent does the work, and where do
- * the tokens come from.
- */
-const MIGRATED_PROVIDER_IDS = ["ollama", "openrouter"];
-
-/** The built-in agent's id in the registry. */
-export const COMPOSE_HARNESS_ID = "compose";
-
-/**
- * Carry a selection made before providers existed.
- *
- * Without this, the stale-agent guard in `resolveDefaultHarness` sees an id
- * that is no longer in the catalog, treats it as unset, and silently re-picks —
- * so every existing user loses their agent AND the model they chose. A
- * migration is the difference between an upgrade and a reset.
- */
-function migrateProviderSelection(prefs: HarnessPrefs): HarnessPrefs {
-  const wasProvider =
-    MIGRATED_PROVIDER_IDS.includes(prefs.selectedHarnessId) ||
-    prefs.selectedHarnessId.startsWith("custom:openai:");
-  if (!wasProvider) {
-    return prefs;
-  }
-  const providerId = prefs.selectedHarnessId;
-  const carried = prefs.harnessOptions[providerId];
-  return {
-    ...prefs,
-    selectedHarnessId: COMPOSE_HARNESS_ID,
-    selectedProviderId: providerId,
-    // The model was stored against the old agent id. Move it to the provider
-    // so the next run uses the same model the user last chose.
-    providerOptions: carried
-      ? { ...prefs.providerOptions, [providerId]: carried }
-      : prefs.providerOptions,
-  };
 }
 
 /** Load the persisted harness selection + edit permission + per-harness run
@@ -108,8 +57,6 @@ export function loadHarnessPrefs(): HarnessPrefs {
     reviewEdits: false,
     customInstructions: "",
     harnessOptions: {},
-    selectedProviderId: "",
-    providerOptions: {},
   };
   if (typeof localStorage === "undefined") {
     return fallback;
@@ -120,7 +67,7 @@ export function loadHarnessPrefs(): HarnessPrefs {
       return fallback;
     }
     const parsed = JSON.parse(raw) as Partial<HarnessPrefs>;
-    return migrateProviderSelection({
+    return {
       selectedHarnessId:
         typeof parsed.selectedHarnessId === "string" && parsed.selectedHarnessId
           ? parsed.selectedHarnessId
@@ -136,15 +83,7 @@ export function loadHarnessPrefs(): HarnessPrefs {
         parsed.harnessOptions && typeof parsed.harnessOptions === "object"
           ? (parsed.harnessOptions as Record<string, HarnessRunOptions>)
           : fallback.harnessOptions,
-      selectedProviderId:
-        typeof parsed.selectedProviderId === "string"
-          ? parsed.selectedProviderId
-          : fallback.selectedProviderId,
-      providerOptions:
-        parsed.providerOptions && typeof parsed.providerOptions === "object"
-          ? (parsed.providerOptions as Record<string, HarnessRunOptions>)
-          : fallback.providerOptions,
-    });
+    };
   } catch {
     return fallback;
   }
