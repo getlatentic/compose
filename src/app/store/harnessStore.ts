@@ -124,6 +124,18 @@ export const useHarnessStore = create<HarnessState>((set, get) => {
     persist();
   },
   resolveDefaultHarness: async () => {
+    // A persisted selection that no longer exists — an agent dropped from the
+    // build, a deleted custom agent — must not survive the upgrade: the id is
+    // saved across launches, and every run would fail with "Unknown assistant"
+    // until the user noticed the picker. Treat it as unset and let the choice
+    // below pick a live one. Guarded on a loaded catalog so an empty one (the
+    // pre-load state) can never wipe a good selection.
+    const catalog = get().harnessCatalog;
+    const persisted = get().selectedHarnessId;
+    if (persisted && catalog.length > 0 && !catalog.some((entry) => entry.id === persisted)) {
+      set({ selectedHarnessId: "", selectedHarnessReadiness: null });
+      persist();
+    }
     // No agent chosen yet → pick the first ready one in catalog priority order.
     if (!get().selectedHarnessId) {
       // Fire every probe at once, then AWAIT them in catalog priority order
