@@ -1012,6 +1012,37 @@ describe("workspace store", () => {
       details: null,
     });
 
+    it("replaces a persisted agent that no longer exists (bob's removal)", async () => {
+      // The upgrade case: the id survives in prefs, the agent does not. Left
+      // alone, every run fails with "Unknown assistant: bob".
+      useHarnessStore.setState({
+        selectedHarnessId: "bob",
+        harnessCatalog: [agent("ollama"), agent("claude")],
+      });
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, id === "claude"));
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("claude");
+    });
+
+    it("keeps a persisted agent that still exists", async () => {
+      useHarnessStore.setState({
+        selectedHarnessId: "codex",
+        harnessCatalog: [agent("ollama"), agent("claude"), agent("codex")],
+      });
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, true));
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("codex");
+    });
+
+    it("does not clear a selection while the catalog is still empty", async () => {
+      // Pre-load state: an empty catalog proves nothing about the selection.
+      useHarnessStore.setState({ selectedHarnessId: "claude", harnessCatalog: [] });
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, true));
+      vi.mocked(ollamaInstalled).mockResolvedValue(false);
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().selectedHarnessId).toBe("claude");
+    });
+
     it("picks the first ready agent in catalog (Ollama-first) order", async () => {
       useHarnessStore.setState({
         selectedHarnessId: "",
