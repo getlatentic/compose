@@ -42,7 +42,14 @@ export interface HarnessState {
   customInstructions: string;
   /** Per-harness run tuning, keyed by harness id. Persisted. */
   harnessOptions: Record<string, HarnessRunOptions>;
+  /** Which endpoint the built-in `compose` agent talks to. Empty until the
+   *  user picks one or the boot probe settles on a reachable default. */
+  selectedProviderId: string;
+  /** Per-provider run options — chiefly the model, which differs per endpoint
+   *  even though the agent is the same. */
+  providerOptions: Record<string, HarnessRunOptions>;
   setSelectedHarness: (harnessId: string) => void;
+  setSelectedProvider: (providerId: string) => void;
   setAllowEdits: (allow: boolean) => void;
   setReviewEdits: (review: boolean) => void;
   setCustomInstructions: (instructions: string) => void;
@@ -107,6 +114,8 @@ export const useHarnessStore = create<HarnessState>((set, get) => {
       reviewEdits: state.reviewEdits,
       customInstructions: state.customInstructions,
       harnessOptions: state.harnessOptions,
+      selectedProviderId: state.selectedProviderId,
+      providerOptions: state.providerOptions,
     });
   };
   return {
@@ -116,6 +125,14 @@ export const useHarnessStore = create<HarnessState>((set, get) => {
   reviewEdits: INITIAL_HARNESS_PREFS.reviewEdits,
   customInstructions: INITIAL_HARNESS_PREFS.customInstructions,
   harnessOptions: INITIAL_HARNESS_PREFS.harnessOptions,
+  selectedProviderId: INITIAL_HARNESS_PREFS.selectedProviderId,
+  providerOptions: INITIAL_HARNESS_PREFS.providerOptions,
+  setSelectedProvider: (providerId) => {
+    // The provider decides the endpoint and the key, so readiness described
+    // the previous one. Clear it and let the probe re-run.
+    set({ selectedProviderId: providerId, selectedHarnessReadiness: null });
+    persist();
+  },
   setSelectedHarness: (harnessId) => {
     // Clear stale readiness immediately — it described the *previous* harness.
     // AppRouter re-probes on the selection change; null meanwhile reads as
