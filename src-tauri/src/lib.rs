@@ -272,9 +272,6 @@ pub fn run() {
             // re-signed build), and inline that stalls the setup hook — so
             // `app.run()` never starts and the boot IPC responses never reach
             // the webview, leaving the splash up forever. Nothing on the launch
-            // path awaits the export; a harness whose key hasn't landed yet just
-            // probes "not ready" until it does.
-            std::thread::spawn(harness::credentials::export_all);
             // Purge soft-deleted files past the trash retention window. Off the
             // launch path on its own thread (nothing in the app waits on it),
             // and only after metadata init above so the store is ready.

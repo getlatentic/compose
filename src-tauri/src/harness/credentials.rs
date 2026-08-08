@@ -1,7 +1,7 @@
 //! Host-owned credentials. Compose keeps each harness's API key in one
-//! encrypted store and gives it to the harness only by exporting it into the
-//! environment variable the harness reads — the harness never opens the store
-//! itself.
+//! encrypted store and hands it to the harness as a value when the registry
+//! builds it — the harness never opens the store, and the key never becomes an
+//! environment variable, which every child the agent spawns would inherit.
 //!
 //! Storage moved from one OS-vault entry per harness to a single entry holding
 //! a master key, with the secrets in an encrypted file
@@ -51,27 +51,55 @@ pub fn init_from_dir(config_dir: &std::path::Path) -> Result<bool, String> {
 /// leaving a single vault entry behind as intended.
 fn migrate_legacy_entries(loaded: &mut SecretStore) {
     for spec in every_spec() {
-        if spec.keychain_service.is_empty() || spec.keychain_account.is_empty() {
+        if spec.keychain_service.is_empty() {
             continue;
         }
         if loaded.get(&spec.keychain_service).is_some() {
             continue;
         }
-        let Ok(entry) = keyring::Entry::new(&spec.keychain_service, &spec.keychain_account) else {
-            continue;
-        };
-        let Ok(value) = entry.get_password() else {
-            continue;
-        };
-        if value.trim().is_empty() {
-            continue;
-        }
-        if loaded.set(&spec.keychain_service, &value).is_ok() {
-            // Only after the new store has it on disk — a failed write must not
-            // lose the key.
-            let _ = entry.delete_credential();
+        for account in legacy_accounts(&spec) {
+            let Ok(entry) = keyring::Entry::new(&spec.keychain_service, &account) else {
+                continue;
+            };
+            let Ok(value) = entry.get_password() else {
+                continue;
+            };
+            if value.trim().is_empty() {
+                continue;
+            }
+            if loaded.set(&spec.keychain_service, &value).is_ok() {
+                // Only after the new store has it on disk — a failed write must
+                // not lose the key.
+                let _ = entry.delete_credential();
+            }
+            break;
         }
     }
+}
+
+/// Account names an old entry may sit under, newest naming first.
+///
+/// The per-entry scheme keyed the account by the environment variable the
+/// harness read — `OPENROUTER_API_KEY`, or `COMPOSE_CUSTOM_<ID>_API_KEY` for a
+/// user's own endpoint. Now that no variable is involved, the account is the
+/// provider id, so a migration that looked only at today's name would walk
+/// straight past everyone's saved key.
+fn legacy_accounts(spec: &CredentialSpec) -> Vec<String> {
+    let mut names = Vec::new();
+    if !spec.keychain_account.is_empty() {
+        names.push(spec.keychain_account.clone());
+    }
+    let derived = super::custom::custom_api_key_env(&spec.keychain_service);
+    if !names.contains(&derived) {
+        names.push(derived);
+    }
+    // The built-in providers' old variable names.
+    for legacy in ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"] {
+        if !names.iter().any(|n| n == legacy) {
+            names.push(legacy.to_owned());
+        }
+    }
+    names
 }
 
 /// Every harness that can hold a host-stored key: the configured providers plus
@@ -88,6 +116,17 @@ fn every_spec() -> Vec<CredentialSpec> {
             .map(|harness| harness.credential()),
     );
     specs
+}
+
+/// The stored secret for a provider id, for handing to a harness as a value.
+///
+/// Used at construction time by the registry so the key reaches the adapter
+/// without passing through the environment, where the agent's own shell tool
+/// would inherit it.
+pub fn secret_for(provider_id: &str) -> Option<String> {
+    let guard = store().lock().ok()?;
+    let value = guard.as_ref()?.get(provider_id)?;
+    (!value.trim().is_empty()).then(|| value.to_owned())
 }
 
 pub struct Credential {
@@ -145,46 +184,20 @@ impl Credential {
         }
         let store = guard.as_mut().ok_or("credential store is not initialised")?;
         store.set(&self.spec.keychain_service, value)?;
-        if value.is_empty() {
-            std::env::remove_var(&self.spec.keychain_account);
-        } else {
-            std::env::set_var(&self.spec.keychain_account, value);
-        }
+        // Deliberately not exported. The registry rebuilds each harness per
+        // call and reads the value straight from the store, so a variable would
+        // add nothing but reach — every child the agent spawns inherits it.
         Ok(())
     }
 
-    pub fn export_to_env(&self) {
-        if let Some(key) = self.read() {
-            std::env::set_var(&self.spec.keychain_account, key);
-        }
-    }
 }
 
-/// Boot-time export of the host-configured providers' keys. One decrypt covers
-/// every provider, so unlike the per-entry scheme this is a single read.
-pub fn export_all() {
-    for harness in super::registry::extra_harnesses() {
-        Credential::of(harness.as_ref()).export_to_env();
-    }
-    for harness in super::custom::custom_agent_store().build_harnesses() {
-        Credential::of(harness.as_ref()).export_to_env();
-    }
-}
-
-/// Drop every stored key and the master key with it (the "Reset all data"
-/// flow), then clear the exported environment variables so a running process
-/// stops using what the user just deleted.
+/// Drop every stored key and the master key with it (the "Reset all data" flow).
 pub fn forget_all() {
-    let specs = every_spec();
     if let Ok(mut guard) = store().lock() {
         if let Some(store) = guard.as_mut() {
             let _ = store.clear();
         }
         *guard = None;
-    }
-    for spec in specs {
-        if !spec.keychain_account.is_empty() {
-            std::env::remove_var(&spec.keychain_account);
-        }
     }
 }

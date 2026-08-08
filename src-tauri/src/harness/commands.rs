@@ -47,9 +47,9 @@ pub fn harness_login(harness_id: String, on_event: Channel<InstallEvent>) -> Res
 
 #[tauri::command(async)]
 pub fn harness_verify_runtime(harness_id: String) -> Result<HarnessRuntimeVerification, String> {
+    // The registry hands the harness its key as a value when it builds it, so
+    // `resolve` already returns one that can authenticate.
     let harness = resolve(&harness_id)?;
-    // The adapter reads the key from the env, so export it before the run.
-    Credential::of(harness.as_ref()).export_to_env();
     Ok(verify::run(harness.as_ref()))
 }
 

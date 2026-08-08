@@ -20,7 +20,6 @@
 
 use crate::db::MetadataStore;
 use crate::harness::chat_event::{run_event_to_chat, ChatEvent};
-use crate::harness::credentials::Credential;
 use crate::harness::registry::compose_harness_by_id;
 use crate::harness::{ApprovalMode, ChatMode};
 use crate::review::{prepare_edit_guard, EditGuard, ReviewSessionStore};
@@ -441,11 +440,6 @@ fn run_via_harness(
         // 0.4: image attachments for multimodal models — bob is text-only here.
         attachments: Vec::new(),
     };
-
-    // Bridge a stored API key (bob, OpenRouter, …) into the env var the harness
-    // reads it from, just before the run. Credential-free harnesses (Ollama,
-    // OpenCode, Claude, Codex) are no-ops. See harness::credentials.
-    Credential::of(harness.as_ref()).export_to_env();
 
     let app_cb = app.clone();
     let runner_inner = Arc::clone(&runner.inner);

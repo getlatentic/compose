@@ -69,8 +69,6 @@ dependencies = [
 [[package]]
 name = "agent-harness"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9740472115a6da4b9eb707b6ddc61bca901dd319d9dc3f5ec2b1b17bd73493a"
 dependencies = [
  "agent-client-protocol",
  "async-trait",
@@ -776,8 +774,6 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 [[package]]
 name = "cli-stream"
 version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35173367d05e4613b843aa77d258c82504f2081b4415bbfae8eaf90fe47a3841"
 dependencies = [
  "libc",
  "serde",

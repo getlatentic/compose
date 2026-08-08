@@ -200,7 +200,9 @@ pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
             default_model,
             requires_key,
         } => {
-            let api_key_env = requires_key.then(|| custom_api_key_env(&record.id));
+            // No env var: the key goes in as a value. `requires_key` still
+            // says whether one is needed, which is what drives the key field.
+            let _ = custom_api_key_env;
             let models = default_model
                 .filter(|model| !model.trim().is_empty())
                 .map(|model| {
@@ -210,12 +212,18 @@ pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
                     }]
                 })
                 .unwrap_or_default();
+            // The key goes in as a value, never an environment variable — an
+            // exported one is inherited by the agent's own shell tool.
+            let api_key =
+                requires_key.then(|| crate::harness::credentials::secret_for(&record.id)).flatten();
             Box::new(OpenHarness::custom(OpenHarnessConfig {
                 id: record.id,
                 display_name: record.display_name,
                 base_url,
-                api_key_env,
+                api_key,
+                requires_api_key: requires_key,
                 models,
+                ..Default::default()
             }))
         }
     }
@@ -337,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn builds_harnesses_with_matching_ids_and_derived_key_env() {
+    fn builds_harnesses_with_matching_ids_and_a_key_slot() {
         let dir = tempdir().unwrap();
         let store = CustomAgentStore::default();
         store.init_from_dir(dir.path()).unwrap();
@@ -349,7 +357,13 @@ mod tests {
         assert_eq!(ids, vec!["custom:gem", "custom:gw"]);
 
         let gateway = built.iter().find(|harness| harness.info().id == "custom:gw").unwrap();
-        assert_eq!(gateway.credential().keychain_account, custom_api_key_env("custom:gw"));
+        let spec = gateway.credential();
+        // A key is still required, and the slot is keyed by the agent id — no
+        // environment variable is involved now that the key is passed by value.
+        assert!(spec.required);
+        assert_eq!(spec.keychain_service, "custom:gw");
+        // The derived variable name survives only for reading entries written
+        // by the old per-entry scheme; see credentials::legacy_accounts.
         assert_eq!(custom_api_key_env("custom:gw"), "COMPOSE_CUSTOM_GW_API_KEY");
     }
 }

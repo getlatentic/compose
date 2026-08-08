@@ -12,7 +12,14 @@ fn openrouter() -> OpenHarness {
         id: "openrouter".to_owned(),
         display_name: "OpenRouter".to_owned(),
         base_url: "https://openrouter.ai/api".to_owned(),
-        api_key_env: Some("OPENROUTER_API_KEY".to_owned()),
+        // The key is handed over as a value, not exported. An environment
+        // variable is inherited by every child the agent spawns — the `bash`
+        // tool among them — which would let the model read the very secret the
+        // encrypted store exists to protect. No `api_key_env`, so there is no
+        // variable to read either; `requires_api_key` carries what that flag
+        // used to imply, so Settings still offers the field.
+        api_key: crate::harness::credentials::secret_for("openrouter"),
+        requires_api_key: true,
         ..Default::default()
     })
     .with_models_dev("openrouter")
