@@ -9,6 +9,7 @@ import {
   type HarnessReadiness,
 } from "../../lib/ipc/harnessClient";
 import { agentStatus, statusTagType } from "./agentStatus";
+import { groupAgents, isBuiltInProvider, isLocalProvider } from "./agentGroups";
 import { InstallHintInline } from "./InstallHint";
 
 /**
@@ -168,8 +169,21 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
           : "Choose which AI Compose works with. You can change this anytime."}
       </p>
 
-      <ul className="harness-grid">
-        {rows.map(({ info, readiness }) => {
+      {groupAgents(rows.map((row) => row.info)).map((group) => (
+        <div key={group.label} className="agent-group">
+          <p className="agent-group__label">
+            {group.label}
+            {group.builtIn ? (
+              <span className="agent-group__note">
+                built in — pick where the models come from
+              </span>
+            ) : null}
+          </p>
+          <ul className="harness-grid">
+        {group.entries.map((groupInfo) => {
+          const row = rows.find((candidate) => candidate.info.id === groupInfo.id);
+          if (!row) return null;
+          const { info, readiness } = row;
           const selected = info.id === selectedHarnessId;
           // Until the probe lands, a card reads "Checking…" and isn't selectable —
           // agentStatus(null) would otherwise report a definite (wrong) status.
@@ -192,6 +206,11 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
                     {selected ? "●" : "○"}
                   </span>
                   <strong className="harness-card__name">{info.displayName}</strong>
+                  {isBuiltInProvider(info.id) ? (
+                    <span className="harness-card__where">
+                      {isLocalProvider(info.id) ? "on this Mac" : "hosted"}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="harness-card__badges">
                   {info.id === suggestedId && !checking ? (
@@ -229,7 +248,9 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
             </li>
           );
         })}
-      </ul>
+          </ul>
+        </div>
+      ))}
 
       {installLog.length > 0 ? (
         <pre

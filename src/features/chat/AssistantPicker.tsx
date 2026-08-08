@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Checkmark, ChevronDown, WarningAltFilled } from "@carbon/react/icons";
+import { Checkmark, ChevronDown, Laptop, WarningAltFilled } from "@carbon/react/icons";
 
 import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 
@@ -25,8 +25,12 @@ export interface ModelOption {
 }
 
 export interface AssistantPickerViewProps {
-  /** The collapsed footer text, e.g. `opencode/deepseek-v4-flash-free`. */
+  /** The collapsed footer text, e.g. `gpt-oss:20b · Compose`. */
   label: string;
+  /** The models come from this machine. Drawn as a glyph rather than a word:
+   *  local-versus-hosted is the one provider fact worth permanent space, and it
+   *  fits in an icon where "Ollama" costs ten characters. */
+  local?: boolean;
   assistants: AssistantOption[];
   selectedAssistantId: string;
   onSelectAssistant: (id: string) => void;
@@ -43,6 +47,7 @@ export interface AssistantPickerViewProps {
 
 export function AssistantPickerView({
   label,
+  local = false,
   assistants,
   selectedAssistantId,
   onSelectAssistant,
@@ -86,6 +91,9 @@ export function AssistantPickerView({
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
+        {local ? (
+          <Laptop size={12} className="assistant-picker__where" aria-label="Runs on this Mac" />
+        ) : null}
         <span className="assistant-picker__label">{label}</span>
         {unavailable ? (
           <WarningAltFilled size={12} className="assistant-picker__offline" aria-label="Offline" />
