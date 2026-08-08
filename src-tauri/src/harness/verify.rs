@@ -52,7 +52,7 @@ pub fn run(harness: &dyn Harness) -> HarnessRuntimeVerification {
         resume: None,
     };
 
-    match harness.run_channel(request) {
+    match harness.run(request) {
         Ok((handle, events)) => drain(handle, events, readiness.version),
         Err(error) => HarnessRuntimeVerification {
             installed: true,
@@ -190,7 +190,7 @@ mod tests {
                 details: serde_json::Value::Null,
             }
         }
-        fn run(
+        fn start(
             &self,
             _request: RunRequest,
             on_event: RunCallback,

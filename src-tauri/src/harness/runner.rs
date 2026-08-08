@@ -468,7 +468,9 @@ fn run_via_harness(
         }
     });
 
-    match harness.run(run_request, callback) {
+    // `start` is the push form: events go straight onto the Tauri event
+    // stream from the callback, so a channel would be a wasted hop.
+    match harness.start(run_request, callback) {
         Ok(handle) => {
             runner.attach_handle(&run_id, handle)?;
             Ok(())
