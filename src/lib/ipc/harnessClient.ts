@@ -21,7 +21,6 @@ export interface HarnessRunRequest {
   approvalMode: ApprovalMode;
   chatMode: ChatMode;
   contextFilePaths?: string[];
-  maxCoins: number;
   prompt: string;
   runId: string;
   workspaceId: string;

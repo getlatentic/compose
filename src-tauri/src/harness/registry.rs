@@ -3,7 +3,7 @@
 //! server, OpenCode's ACP command).
 
 use harness::{
-    AcpHarness, Bob, Claude, Codex, Harness, HarnessInfo, HarnessReadiness, OpenHarness,
+    AcpHarness, Claude, Codex, Harness, HarnessInfo, HarnessReadiness, OpenHarness,
     OpenHarnessConfig, Registry,
 };
 
@@ -42,11 +42,11 @@ pub fn compose_registry() -> Registry {
         .register(Codex::new())
         .register(openrouter())
         .register(AcpHarness::opencode());
-    // User-registered agents rank after the built-in providers, before bob.
+    // User-registered agents rank after the built-in providers.
     for harness in crate::harness::custom::custom_agent_store().build_harnesses() {
         registry = registry.register_boxed(harness);
     }
-    registry.register(Bob::new())
+    registry
 }
 
 pub fn compose_harness_by_id(id: &str) -> Option<Box<dyn Harness>> {
