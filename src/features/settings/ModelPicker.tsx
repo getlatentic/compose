@@ -91,25 +91,13 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
           items={items}
           // A committed custom value arrives as a bare string, not a ModelItem,
           // so handle both shapes (Carbon's types only know the item shape).
-          // The id, not the display name. This field saves an id and a run
-          // needs an id, so showing the friendly name left no way to learn the
-          // format — someone reading "GPT OSS 120B" cannot guess that the
-          // thing to type is "openai/gpt-oss-120b".
+          // The id, everywhere — in the field and in the list. This field
+          // saves an id and a run needs an id, so a friendly name like
+          // "GPT OSS 120B" only hid the one string that matters and left no
+          // way to learn that a vendor prefix was required.
           itemToString={(item) => {
             const value = item as ModelItem | string | null;
             return value == null ? "" : typeof value === "string" ? value : value.value;
-          }}
-          // The display name still shows, under the id.
-          itemToElement={(item) => {
-            const model = item as ModelItem;
-            return (
-              <span className="model-option">
-                <span className="model-option__id">{model.value}</span>
-                {model.label && model.label !== model.value ? (
-                  <span className="model-option__name">{model.label}</span>
-                ) : null}
-              </span>
-            );
           }}
           // Match the id, the id without its vendor prefix, or the display
           // name — all three are things people type for the same model.
@@ -117,6 +105,15 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
             modelMatchesQuery(item as ModelItem, inputValue ?? "")
           }
           selectedItem={selectedItem}
+          // A model id is not prose. Autocapitalisation turned a typed
+          // `gpt-oss-120b` into `Gpt-oss-120b`, which then matched nothing —
+          // and autocorrect and spellcheck are just as wrong on an id.
+          inputProps={{
+            autoCapitalize: "off",
+            autoCorrect: "off",
+            autoComplete: "off",
+            spellCheck: false,
+          }}
           allowCustomValue={caps.allowsCustomModel}
           onChange={(data) => {
             const picked = data.selectedItem as ModelItem | string | null;
