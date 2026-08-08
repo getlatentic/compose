@@ -23,15 +23,6 @@ use std::path::Path;
 
 use super::mermaid::{MermaidRenderer, MERMAID_LANG};
 
-/// Render `markdown` to a complete, self-contained HTML document.
-///
-/// `title` becomes the document `<title>` (used by the PDF metadata, not shown
-/// in the body). `doc_dir` is the directory the document lives in, used to
-/// resolve relative image paths for inlining.
-pub fn render_markdown_to_html(markdown: &str, title: &str, doc_dir: &Path) -> String {
-    render_markdown_to_html_with_mermaid(markdown, title, doc_dir, HashMap::new())
-}
-
 /// Like [`render_markdown_to_html`], but inlines front-end-rendered mermaid
 /// diagrams: `mermaid_svgs` maps a fence's (trimmed) source to its SVG. A fence
 /// without an entry degrades to its source as a code block.
@@ -260,7 +251,7 @@ fn protected_regions(markdown: &str) -> ProtectedRegions {
         inline_spans: HashMap::new(),
         mermaid_openers: Vec::new(),
     };
-    let mut protect_lines = |from: usize, to: usize, regions: &mut ProtectedRegions| {
+    let protect_lines = |from: usize, to: usize, regions: &mut ProtectedRegions| {
         for line in from..=to.min(line_count) {
             if line >= 1 {
                 regions.block_lines[line - 1] = true;
@@ -620,6 +611,13 @@ figure.mermaid-diagram svg { max-width: 100%; height: auto; }
 
 #[cfg(test)]
 mod tests {
+    /// The mermaid-free form, which only tests need: production always has a
+    /// (possibly empty) SVG map to pass. Keeps one public entry point rather
+    /// than two that must be kept in step.
+    fn render_markdown_to_html(markdown: &str, title: &str, doc_dir: &Path) -> String {
+        render_markdown_to_html_with_mermaid(markdown, title, doc_dir, HashMap::new())
+    }
+
     use super::*;
     use std::fs;
     use tempfile::tempdir;
