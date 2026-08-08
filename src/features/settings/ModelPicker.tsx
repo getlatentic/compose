@@ -3,11 +3,7 @@ import { ComboBox } from "@carbon/react";
 
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-
-interface ModelItem {
-  value: string;
-  label: string;
-}
+import { findIntendedModel, type ModelItem, modelMatchesQuery } from "./modelMatching";
 
 /**
  * The "Default model" picker for an agent: a ComboBox over its known models — a
@@ -58,6 +54,14 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
     discovered.length > 0 &&
     !discovered.some((model) => model.value === currentModel);
 
+  // A missing value is usually a typo rather than a withdrawn model — the
+  // reported case was `gpt-oss-120b` for `openai/gpt-oss-120b`. Naming the
+  // model they meant beats telling them it might be gone.
+  const intended = useMemo(
+    () => (savedModelMissing ? findIntendedModel(discovered ?? [], currentModel) : null),
+    [savedModelMissing, discovered, currentModel],
+  );
+
   // Live-discovery agents (no curated list) can gain models after launch — an
   // Ollama pull, a provider catalog refresh — so let the list be re-pulled.
   const canRefresh = caps.models.length === 0;
@@ -87,10 +91,31 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
           items={items}
           // A committed custom value arrives as a bare string, not a ModelItem,
           // so handle both shapes (Carbon's types only know the item shape).
+          // The id, not the display name. This field saves an id and a run
+          // needs an id, so showing the friendly name left no way to learn the
+          // format — someone reading "GPT OSS 120B" cannot guess that the
+          // thing to type is "openai/gpt-oss-120b".
           itemToString={(item) => {
             const value = item as ModelItem | string | null;
-            return value == null ? "" : typeof value === "string" ? value : value.label;
+            return value == null ? "" : typeof value === "string" ? value : value.value;
           }}
+          // The display name still shows, under the id.
+          itemToElement={(item) => {
+            const model = item as ModelItem;
+            return (
+              <span className="model-option">
+                <span className="model-option__id">{model.value}</span>
+                {model.label && model.label !== model.value ? (
+                  <span className="model-option__name">{model.label}</span>
+                ) : null}
+              </span>
+            );
+          }}
+          // Match the id, the id without its vendor prefix, or the display
+          // name — all three are things people type for the same model.
+          shouldFilterItem={({ item, inputValue }) =>
+            modelMatchesQuery(item as ModelItem, inputValue ?? "")
+          }
           selectedItem={selectedItem}
           allowCustomValue={caps.allowsCustomModel}
           onChange={(data) => {
@@ -115,9 +140,23 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
         ) : null}
       </div>
       {savedModelMissing ? (
-        <p className="model-picker__stale">
-          “{currentModel}” isn’t in the list — it may no longer be available. Pick another above.
-        </p>
+        intended ? (
+          <p className="model-picker__stale">
+            “{currentModel}” isn’t an id.{" "}
+            <button
+              type="button"
+              className="model-picker__suggest"
+              onClick={() => setHarnessOptions(harnessId, { model: intended.value })}
+            >
+              Use {intended.value}
+            </button>{" "}
+            ({intended.label})?
+          </p>
+        ) : (
+          <p className="model-picker__stale">
+            “{currentModel}” isn’t in the list — it may no longer be available. Pick another above.
+          </p>
+        )
       ) : null}
     </div>
   );
