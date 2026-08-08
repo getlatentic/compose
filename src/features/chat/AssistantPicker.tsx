@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Checkmark, ChevronDown, Laptop, WarningAltFilled } from "@carbon/react/icons";
+import { groupAgents, isBuiltInProvider, isLocalProvider } from "../settings/agentGroups";
 
 import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 
@@ -86,7 +87,7 @@ export function AssistantPickerView({
         className="assistant-picker__trigger"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Assistant and model"
+        aria-label="Agent and model"
         title={label}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
@@ -107,19 +108,20 @@ export function AssistantPickerView({
               ref={popoverRef}
               className="assistant-picker__popover"
               role="menu"
-              aria-label="Assistant and model"
+              aria-label="Agent and model"
               style={{ bottom: coords.bottom, left: coords.left, inlineSize: coords.width }}
             >
-              <div className="assistant-picker__section">
-                <p className="assistant-picker__heading">Assistant</p>
-                {assistants.map((assistant) => (
+              {groupAgents(assistants).map((group) => (
+                <div key={group.label} className="assistant-picker__section">
+                  <p className="assistant-picker__heading">{group.label}</p>
+                  {group.entries.map((assistant) => (
                   <button
                     key={assistant.id}
                     type="button"
                     role="menuitemradio"
                     aria-checked={assistant.id === selectedAssistantId}
                     className="assistant-picker__item"
-                    // Switching assistant keeps the popup open so a model can be
+                    // Switching agent keeps the popup open so a model can be
                     // picked next; the Model section re-renders for it.
                     onClick={() => onSelectAssistant(assistant.id)}
                   >
@@ -131,10 +133,16 @@ export function AssistantPickerView({
                       />
                     ) : null}
                     <span className="assistant-picker__item-label">{assistant.name}</span>
+                    {isBuiltInProvider(assistant.id) ? (
+                      <span className="assistant-picker__where-label">
+                        {isLocalProvider(assistant.id) ? "on this Mac" : "hosted"}
+                      </span>
+                    ) : null}
                     {assistant.id === selectedAssistantId ? <Checkmark size={16} aria-hidden /> : null}
                   </button>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ))}
 
               {models.length > 0 ? (
                 <div className="assistant-picker__section">

@@ -36,12 +36,12 @@ export function isLocalProvider(harnessId: string): boolean {
   return harnessId === "ollama";
 }
 
-export interface AgentGroup {
+export interface AgentGroup<T> {
   /** Heading for the group. */
   label: string;
   /** True for the built-in agent, whose entries are providers, not agents. */
   builtIn: boolean;
-  entries: HarnessInfo[];
+  entries: T[];
 }
 
 /**
@@ -49,14 +49,19 @@ export interface AgentGroup {
  * agents, preserving the backend's order within each. Registration order is
  * the recommendation order, so it must survive the grouping.
  *
+ * Generic over anything carrying an `id`, so the settings list and the chat
+ * footer group identically from one implementation. Two groupings that could
+ * drift apart would be worse than none — the footer saying "Ollama" while the
+ * chip says "Compose" is the exact confusion this removes.
+ *
  * An empty provider set yields no built-in group, so a build without the
  * `openai-compatible` feature renders a plain agent list.
  */
-export function groupAgents(catalog: HarnessInfo[]): AgentGroup[] {
+export function groupAgents<T extends { id: string }>(catalog: T[]): AgentGroup<T>[] {
   const providers = catalog.filter((entry) => isBuiltInProvider(entry.id));
   const standalone = catalog.filter((entry) => !isBuiltInProvider(entry.id));
 
-  const groups: AgentGroup[] = [];
+  const groups: AgentGroup<T>[] = [];
   if (providers.length > 0) {
     groups.push({ label: BUILT_IN_AGENT_NAME, builtIn: true, entries: providers });
   }
