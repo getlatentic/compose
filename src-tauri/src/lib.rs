@@ -205,6 +205,17 @@ pub fn run() {
                     {
                         eprintln!("custom-agent store init failed: {error}");
                     }
+                    // Then the credential store, which must come after the
+                    // custom agents so their keys migrate too. One decrypt
+                    // covers every provider, and it carries over anything the
+                    // old one-entry-per-harness scheme left behind.
+                    match harness::credentials::init_from_dir(&config_dir) {
+                        Ok(true) => eprintln!(
+                            "credential store could not be unlocked — saved API keys must be re-entered"
+                        ),
+                        Ok(false) => {}
+                        Err(error) => eprintln!("credential store init failed: {error}"),
+                    }
                 }
                 Err(error) => eprintln!("app config dir unavailable for custom agents: {error}"),
             }

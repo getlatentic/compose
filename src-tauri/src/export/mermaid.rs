@@ -51,7 +51,7 @@ impl CodefenceRendererAdapter for MermaidRenderer {
             // `securityLevel: "strict"` (no scripts, escaped labels) — the same
             // output the editor already inlines via innerHTML — so it is inlined
             // here directly, matching that trust boundary.
-            Some(svg) => write!(output, "<figure class=\"mermaid-diagram\">{svg}</figure>\n"),
+            Some(svg) => writeln!(output, "<figure class=\"mermaid-diagram\">{svg}</figure>"),
             None => {
                 output.write_str("<pre><code class=\"language-mermaid\">")?;
                 // comrak's own escaper (covers `"` and NUL as well), since its

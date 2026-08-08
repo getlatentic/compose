@@ -1,0 +1,365 @@
+//! One secret store, three operating systems.
+//!
+//! The OS vault holds a single 32-byte master key. Every provider secret lives
+//! in one file next to the app's config, encrypted with that key. This is the
+//! shape VS Code uses, and it is chosen for a specific reason: a vault entry
+//! per secret only works where a vault reliably exists. macOS always has the
+//! Keychain and Windows always has the Credential Manager, but a Linux desktop
+//! may have libsecret, kwallet, or nothing at all. Keeping the secrets in a
+//! file we encrypt ourselves means the file is byte-identical everywhere and
+//! only the *key* needs a platform-specific home.
+//!
+//! It also has a smaller benefit that matters on macOS. A keychain item's ACL
+//! is bound to the code signature that created it, so an ad-hoc-signed
+//! development build is a stranger to items written by a signed release and
+//! its reads are blocked. With one item instead of one per provider, that
+//! failure is one prompt rather than several — and adding a provider stops
+//! touching the vault at all.
+//!
+//! The key is per-machine and there is no passphrase, so the store is invisible
+//! in normal use — no prompt on read, which is the whole point. The cost is
+//! that losing the key (a wiped keychain, a restored backup, a new machine)
+//! makes the file undecryptable. That is recoverable only by re-entering the
+//! secrets, so [`SecretStore::load`] reports it as its own outcome rather than
+//! a generic error, and the caller says so in those words.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+use base64::Engine as _;
+use chacha20poly1305::aead::{Aead, KeyInit, OsRng};
+use chacha20poly1305::{XChaCha20Poly1305, XNonce};
+use rand::RngCore;
+use serde::{Deserialize, Serialize};
+use zeroize::Zeroize;
+
+/// The vault entry holding the master key. One entry, whatever the platform.
+const KEYRING_SERVICE: &str = "ai.latentic.compose";
+const KEYRING_ACCOUNT: &str = "credential-store-key";
+/// The encrypted file, alongside the app's other config.
+const STORE_FILE: &str = "credentials.enc";
+
+const KEY_LEN: usize = 32;
+const NONCE_LEN: usize = 24;
+
+/// What happened when the store was opened.
+///
+/// `KeyLost` is separated from the error cases deliberately. It is not a fault
+/// the user can debug; it means the secrets are gone and must be typed again.
+/// Collapsing it into "could not read credentials" would leave someone
+/// retrying a thing that will never succeed.
+#[derive(Debug)]
+pub enum Opened {
+    /// Decrypted, with whatever it held (empty on first run).
+    Ready(SecretStore),
+    /// The file exists but the master key that encrypted it does not. The
+    /// secrets are unrecoverable; the user re-enters them.
+    KeyLost,
+}
+
+/// The on-disk envelope. The ciphertext is a JSON map of id → secret.
+#[derive(Serialize, Deserialize)]
+struct Envelope {
+    /// Bumped only for a format change that old builds cannot read.
+    version: u8,
+    /// Base64. Random per write — XChaCha20's nonce is wide enough that random
+    /// generation needs no counter to stay collision-free.
+    nonce: String,
+    /// Base64.
+    ciphertext: String,
+}
+
+pub struct SecretStore {
+    path: PathBuf,
+    key: [u8; KEY_LEN],
+    secrets: BTreeMap<String, String>,
+}
+
+/// Redacting by construction: a store must never be printable into a log.
+/// Names are safe — they are provider ids — but no value or key material.
+impl std::fmt::Debug for SecretStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecretStore").field("secrets", &self.secrets.len()).finish()
+    }
+}
+
+impl Drop for SecretStore {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
+}
+
+impl SecretStore {
+    /// Open the store for `config_dir`, creating the master key on first use.
+    pub fn load(config_dir: &Path) -> Result<Opened, String> {
+        let path = config_dir.join(STORE_FILE);
+        let existing = read_envelope(&path)?;
+
+        // A file with no key is the unrecoverable case. Check it before
+        // minting a key, or we would silently replace the one that could have
+        // opened the file — if it were ever to come back.
+        let key = match (read_master_key()?, existing.is_some()) {
+            (Some(key), _) => key,
+            (None, true) => return Ok(Opened::KeyLost),
+            (None, false) => {
+                let key = new_master_key();
+                write_master_key(&key)?;
+                key
+            }
+        };
+
+        let secrets = match existing {
+            Some(envelope) => match decrypt(&key, &envelope) {
+                Ok(secrets) => secrets,
+                // The key exists but does not open this file: a stale file from
+                // a previous install, or a rotated key. Same remedy as a lost
+                // key, so report it the same way rather than failing the boot.
+                Err(_) => return Ok(Opened::KeyLost),
+            },
+            None => BTreeMap::new(),
+        };
+        Ok(Opened::Ready(Self { path, key, secrets }))
+    }
+
+    pub fn get(&self, id: &str) -> Option<&str> {
+        self.secrets.get(id).map(String::as_str)
+    }
+
+    /// Store a secret, or remove it when `value` is empty.
+    pub fn set(&mut self, id: &str, value: &str) -> Result<(), String> {
+        let value = value.trim();
+        if value.is_empty() {
+            self.secrets.remove(id);
+        } else {
+            self.secrets.insert(id.to_owned(), value.to_owned());
+        }
+        self.persist()
+    }
+
+    /// Drop every secret and the master key with them — the "reset all data"
+    /// path. Removing the key as well means a leftover file cannot be read by
+    /// a future install that happens to reuse the directory.
+    pub fn clear(&mut self) -> Result<(), String> {
+        self.secrets.clear();
+        if self.path.exists() {
+            std::fs::remove_file(&self.path).map_err(|e| format!("could not remove store: {e}"))?;
+        }
+        delete_master_key();
+        Ok(())
+    }
+
+    fn persist(&self) -> Result<(), String> {
+        // Nothing left to protect — remove the file rather than leave an
+        // encrypted empty map behind.
+        if self.secrets.is_empty() {
+            if self.path.exists() {
+                std::fs::remove_file(&self.path)
+                    .map_err(|e| format!("could not remove store: {e}"))?;
+            }
+            return Ok(());
+        }
+        let envelope = encrypt(&self.key, &self.secrets)?;
+        let json = serde_json::to_vec(&envelope).map_err(|e| e.to_string())?;
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&self.path, json).map_err(|e| format!("could not write store: {e}"))?;
+        restrict_permissions(&self.path);
+        Ok(())
+    }
+}
+
+fn read_envelope(path: &Path) -> Result<Option<Envelope>, String> {
+    match std::fs::read(path) {
+        Ok(bytes) => serde_json::from_slice::<Envelope>(&bytes)
+            .map(Some)
+            .map_err(|e| format!("credential store is corrupt: {e}")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("could not read credential store: {error}")),
+    }
+}
+
+fn encrypt(key: &[u8; KEY_LEN], secrets: &BTreeMap<String, String>) -> Result<Envelope, String> {
+    let plaintext = serde_json::to_vec(secrets).map_err(|e| e.to_string())?;
+    let cipher = XChaCha20Poly1305::new(key.into());
+    let mut nonce = [0u8; NONCE_LEN];
+    OsRng.fill_bytes(&mut nonce);
+    let ciphertext = cipher
+        .encrypt(XNonce::from_slice(&nonce), plaintext.as_slice())
+        .map_err(|_| "could not encrypt credentials".to_owned())?;
+    let b64 = base64::engine::general_purpose::STANDARD;
+    Ok(Envelope {
+        version: 1,
+        nonce: b64.encode(nonce),
+        ciphertext: b64.encode(ciphertext),
+    })
+}
+
+fn decrypt(key: &[u8; KEY_LEN], envelope: &Envelope) -> Result<BTreeMap<String, String>, String> {
+    if envelope.version != 1 {
+        return Err(format!("unsupported store version {}", envelope.version));
+    }
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let nonce = b64.decode(&envelope.nonce).map_err(|e| e.to_string())?;
+    let ciphertext = b64.decode(&envelope.ciphertext).map_err(|e| e.to_string())?;
+    if nonce.len() != NONCE_LEN {
+        return Err("bad nonce length".to_owned());
+    }
+    let cipher = XChaCha20Poly1305::new(key.into());
+    let plaintext = cipher
+        .decrypt(XNonce::from_slice(&nonce), ciphertext.as_slice())
+        .map_err(|_| "could not decrypt credentials".to_owned())?;
+    serde_json::from_slice(&plaintext).map_err(|e| e.to_string())
+}
+
+fn new_master_key() -> [u8; KEY_LEN] {
+    let mut key = [0u8; KEY_LEN];
+    OsRng.fill_bytes(&mut key);
+    key
+}
+
+fn entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+        .map_err(|e| format!("no OS credential store available: {e}"))
+}
+
+fn read_master_key() -> Result<Option<[u8; KEY_LEN]>, String> {
+    let entry = entry()?;
+    match entry.get_password() {
+        Ok(encoded) => {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(encoded.trim())
+                .map_err(|e| format!("master key is malformed: {e}"))?;
+            let key: [u8; KEY_LEN] = bytes
+                .try_into()
+                .map_err(|_| "master key is the wrong length".to_owned())?;
+            Ok(Some(key))
+        }
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(format!("could not read the master key: {error}")),
+    }
+}
+
+fn write_master_key(key: &[u8; KEY_LEN]) -> Result<(), String> {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(key);
+    entry()?
+        .set_password(&encoded)
+        .map_err(|e| format!("could not save the master key: {e}"))
+}
+
+fn delete_master_key() {
+    if let Ok(entry) = entry() {
+        let _ = entry.delete_credential();
+    }
+}
+
+/// Owner-only on Unix. The file is encrypted regardless; this just keeps it out
+/// of reach of other accounts on a shared machine. Windows inherits the user's
+/// profile ACL, so there is nothing to set.
+#[cfg(unix)]
+fn restrict_permissions(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+}
+
+#[cfg(not(unix))]
+fn restrict_permissions(_path: &Path) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Exercise the crypto without touching the OS vault — a test must not
+    /// write to the developer's real keychain.
+    fn store_at(dir: &Path, key: [u8; KEY_LEN]) -> SecretStore {
+        SecretStore { path: dir.join(STORE_FILE), key, secrets: BTreeMap::new() }
+    }
+
+    #[test]
+    fn a_secret_survives_a_write_and_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = new_master_key();
+        let mut store = store_at(dir.path(), key);
+        store.set("openrouter", "sk-or-v1-example").unwrap();
+
+        let envelope = read_envelope(&dir.path().join(STORE_FILE)).unwrap().unwrap();
+        let round_tripped = decrypt(&key, &envelope).unwrap();
+        assert_eq!(round_tripped.get("openrouter").map(String::as_str), Some("sk-or-v1-example"));
+    }
+
+    #[test]
+    fn the_file_never_contains_the_secret_in_clear() {
+        // The point of the exercise: someone reading the file, or a backup of
+        // it, learns nothing.
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = store_at(dir.path(), new_master_key());
+        store.set("openrouter", "sk-or-v1-SENTINEL").unwrap();
+
+        let raw = std::fs::read_to_string(dir.path().join(STORE_FILE)).unwrap();
+        assert!(!raw.contains("sk-or-v1-SENTINEL"));
+        assert!(!raw.contains("SENTINEL"));
+    }
+
+    #[test]
+    fn a_different_key_cannot_open_the_file() {
+        // The lost-key case, which the caller reports as "re-enter your keys".
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = store_at(dir.path(), new_master_key());
+        store.set("openrouter", "sk-or-v1-example").unwrap();
+
+        let envelope = read_envelope(&dir.path().join(STORE_FILE)).unwrap().unwrap();
+        assert!(decrypt(&new_master_key(), &envelope).is_err());
+    }
+
+    #[test]
+    fn every_write_uses_a_fresh_nonce() {
+        // Reusing a nonce with the same key breaks XChaCha20-Poly1305 outright,
+        // so this is the one crypto invariant worth pinning.
+        let dir = tempfile::tempdir().unwrap();
+        let key = new_master_key();
+        let mut store = store_at(dir.path(), key);
+
+        store.set("a", "one").unwrap();
+        let first = read_envelope(&dir.path().join(STORE_FILE)).unwrap().unwrap().nonce;
+        store.set("b", "two").unwrap();
+        let second = read_envelope(&dir.path().join(STORE_FILE)).unwrap().unwrap().nonce;
+
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn clearing_the_last_secret_removes_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = store_at(dir.path(), new_master_key());
+        store.set("openrouter", "sk-or-v1-example").unwrap();
+        assert!(dir.path().join(STORE_FILE).exists());
+
+        store.set("openrouter", "").unwrap();
+        assert!(!dir.path().join(STORE_FILE).exists(), "an empty store leaves nothing behind");
+    }
+
+    #[test]
+    fn many_providers_share_one_file() {
+        // The reason for the change: adding a provider must not add a vault
+        // entry.
+        let dir = tempfile::tempdir().unwrap();
+        let key = new_master_key();
+        let mut store = store_at(dir.path(), key);
+        store.set("openrouter", "sk-or").unwrap();
+        store.set("custom:openai:a", "sk-a").unwrap();
+        store.set("custom:openai:b", "sk-b").unwrap();
+
+        let envelope = read_envelope(&dir.path().join(STORE_FILE)).unwrap().unwrap();
+        let all = decrypt(&key, &envelope).unwrap();
+        assert_eq!(all.len(), 3);
+    }
+
+    #[test]
+    fn a_corrupt_file_is_reported_not_ignored() {
+        // Silently starting empty would look like "my keys vanished" with no
+        // explanation, and would then overwrite whatever was there.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(STORE_FILE), b"not json").unwrap();
+        assert!(read_envelope(&dir.path().join(STORE_FILE)).is_err());
+    }
+}

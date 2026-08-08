@@ -264,7 +264,7 @@ pub(crate) fn resolve_target(workspaces: &[(String, PathBuf)], raw: &Path) -> Op
             continue;
         }
         let depth = root.components().count();
-        if best.as_ref().map_or(true, |(existing, _, _)| depth > *existing) {
+        if best.as_ref().is_none_or(|(existing, _, _)| depth > *existing) {
             best = Some((depth, id.clone(), relative.to_path_buf()));
         }
     }
