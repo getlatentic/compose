@@ -72,16 +72,59 @@ describe("ChatMessageList", () => {
     expect(spacer()).toBeNull();
   });
 
+  /** jsdom doesn't lay out, so drive the geometry the effects read. */
+  function geometry(scroller: HTMLElement, scrollHeight: number, clientHeight: number) {
+    Object.defineProperty(scroller, "scrollHeight", { value: scrollHeight, configurable: true });
+    Object.defineProperty(scroller, "clientHeight", { value: clientHeight, configurable: true });
+  }
+
   it("pins the transcript to the bottom after the composer height changes", () => {
     const messages = [message("u1", "user", "hi"), message("a1", "assistant", "hello")];
     render({ composerHeight: 100, messages });
     const scroller = container.querySelector<HTMLElement>(".chat-messages")!;
-    // jsdom doesn't lay out, so drive the scroll geometry the effect reads.
-    Object.defineProperty(scroller, "scrollHeight", { value: 900, configurable: true });
-    scroller.scrollTop = 0;
-    // A composer resize must re-pin to bottom (regression: scroll fired before
-    // the reserved space updated, leaving the last turn under the composer).
+    geometry(scroller, 900, 400);
+    // At the bottom → following, so a composer resize must re-pin (regression:
+    // scroll fired before the reserved space updated, leaving the last turn
+    // under the composer).
+    scroller.scrollTop = 500;
     render({ composerHeight: 260, messages });
+    expect(scroller.scrollTop).toBe(900);
+  });
+
+  it("leaves the scroll alone when the reader has scrolled up", () => {
+    // The reported bug: scrolling up to re-read something was undone by the
+    // next delta. A reasoning model emits its answer in one lump, so the yank
+    // was a whole message tall.
+    const messages = [message("u1", "user", "hi"), message("a1", "assistant", "hello")];
+    render({ composerHeight: 100, messages });
+    const scroller = container.querySelector<HTMLElement>(".chat-messages")!;
+    geometry(scroller, 900, 400);
+    scroller.scrollTop = 0; // scrolled right up to read the start
+
+    render({
+      composerHeight: 100,
+      messages: [...messages, message("a2", "assistant", "another turn")],
+    });
+
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  it("resumes following once the reader returns to the bottom", () => {
+    const messages = [message("u1", "user", "hi")];
+    render({ composerHeight: 100, messages });
+    const scroller = container.querySelector<HTMLElement>(".chat-messages")!;
+    geometry(scroller, 900, 400);
+
+    scroller.scrollTop = 0;
+    render({ composerHeight: 100, messages: [...messages, message("a1", "assistant", "one")] });
+    expect(scroller.scrollTop).toBe(0);
+
+    // Back to the bottom — following again.
+    scroller.scrollTop = 500;
+    render({
+      composerHeight: 100,
+      messages: [...messages, message("a1", "assistant", "one"), message("a2", "assistant", "two")],
+    });
     expect(scroller.scrollTop).toBe(900);
   });
 });
