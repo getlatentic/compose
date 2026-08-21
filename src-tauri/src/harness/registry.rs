@@ -91,3 +91,60 @@ pub fn compose_discover() -> Vec<Readiness> {
         .filter_map(|handle| handle.join().ok().flatten())
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The `harness_list` payload, as the front end receives it.
+    ///
+    /// This is the contract that broke silently: agent-harness split identity
+    /// from capability and renamed the capability fields, and nothing here
+    /// noticed until the crate stopped compiling. A shape test fails on the
+    /// rename that matters — one the compiler would have accepted, because
+    /// serde is happy to emit any field name at all.
+    #[test]
+    fn the_catalog_crosses_to_the_front_end_in_the_shape_it_reads() {
+        let catalog = compose_harness_catalog();
+        assert!(!catalog.is_empty(), "Compose registers agents");
+
+        let wire = serde_json::to_value(&catalog).expect("the catalog serializes");
+        let first = &wire[0];
+
+        // Identity and capability arrive as two objects; `harnessClient.ts`
+        // flattens them. Renaming either key breaks the picker with no
+        // compile error anywhere.
+        let manifest = first.get("manifest").expect("manifest object");
+        let capabilities = first.get("capabilities").expect("capabilities object");
+
+        for key in ["id", "displayName", "description", "installHint"] {
+            assert!(manifest.get(key).is_some(), "manifest.{key} missing from {manifest}");
+        }
+        for key in [
+            "credentialRequired",
+            "previewsEdits",
+            "models",
+            "customModel",
+            "effort",
+            "maxTurns",
+            "login",
+            "customInstructions",
+        ] {
+            assert!(
+                capabilities.get(key).is_some(),
+                "capabilities.{key} missing from {capabilities}",
+            );
+        }
+    }
+
+    #[test]
+    fn every_registered_agent_can_be_built_by_its_own_id() {
+        // `compose_discover` spawns a thread per id and rebuilds the harness
+        // there, so an id the registry lists but cannot resolve silently drops
+        // that agent from the picker rather than failing.
+        for entry in compose_harness_catalog() {
+            let id = entry.manifest.id;
+            assert!(compose_harness_by_id(&id).is_some(), "{id} listed but not resolvable");
+        }
+    }
+}
