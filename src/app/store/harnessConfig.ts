@@ -119,11 +119,11 @@ export function harnessCapabilitiesOf(
     credentialRequired: false,
     previewsEdits: false,
     models: [],
-    allowsCustomModel: false,
-    supportsEffort: false,
-    supportsMaxTurns: false,
-    supportsLogin: false,
-    supportsCustomInstructions: false,
+    customModel: false,
+    effort: false,
+    maxTurns: false,
+    login: false,
+    customInstructions: false,
   };
 }
 

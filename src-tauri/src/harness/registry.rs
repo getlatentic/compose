@@ -3,8 +3,8 @@
 //! server, OpenCode's ACP command).
 
 use harness::{
-    AcpHarness, Claude, Codex, Harness, HarnessInfo, HarnessReadiness, OpenHarness,
-    OpenHarnessConfig, Registry,
+    AcpHarness, ApiKey, Claude, Codex, Harness, Listing, OpenHarness, OpenHarnessConfig,
+    Readiness, Registry,
 };
 
 fn openrouter() -> OpenHarness {
@@ -15,11 +15,11 @@ fn openrouter() -> OpenHarness {
         // The key is handed over as a value, not exported. An environment
         // variable is inherited by every child the agent spawns — the `bash`
         // tool among them — which would let the model read the very secret the
-        // encrypted store exists to protect. No `api_key_env`, so there is no
-        // variable to read either; `requires_api_key` carries what that flag
-        // used to imply, so Settings still offers the field.
-        api_key: crate::harness::credentials::secret_for("openrouter"),
-        requires_api_key: true,
+        // encrypted store exists to protect. `ApiKey` also carries "needed but
+        // absent" in the same field, so Settings still offers the slot when the
+        // vault has nothing yet, and the two cannot contradict each other.
+        api_key: crate::harness::credentials::secret_for("openrouter")
+            .map_or(ApiKey::Required, ApiKey::Value),
         ..Default::default()
     })
     .with_models_dev("openrouter")
@@ -60,7 +60,14 @@ pub fn compose_harness_by_id(id: &str) -> Option<Box<dyn Harness>> {
     compose_registry().into_by_id(id)
 }
 
-pub fn compose_harness_catalog() -> Vec<HarnessInfo> {
+/// The registry's own listing shape — identity plus capability per agent.
+///
+/// agent-harness keeps the two apart on the trait (identity is asked once,
+/// capability constantly) and rejoins them in `Listing` precisely because a
+/// picker needs both for every row. Compose has nothing to add, so it passes
+/// that through rather than defining a near-copy; the front end flattens it in
+/// its own IPC client.
+pub fn compose_harness_catalog() -> Vec<Listing> {
     compose_registry().catalog()
 }
 
@@ -71,11 +78,11 @@ pub fn compose_harness_catalog() -> Vec<HarnessInfo> {
 /// state drag for several seconds across the full set. Each thread rebuilds its
 /// own harness (cheap struct construction) so no `Box<dyn Harness>` crosses a
 /// thread boundary — only the id goes in and the readiness comes out.
-pub fn compose_discover() -> Vec<HarnessReadiness> {
+pub fn compose_discover() -> Vec<Readiness> {
     let handles: Vec<_> = compose_harness_catalog()
         .into_iter()
-        .map(|info| {
-            let id = info.id;
+        .map(|entry| {
+            let id = entry.manifest.id;
             std::thread::spawn(move || compose_harness_by_id(&id).map(|harness| harness.readiness()))
         })
         .collect();

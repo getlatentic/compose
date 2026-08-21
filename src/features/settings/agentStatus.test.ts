@@ -7,11 +7,11 @@ const caps = (over: Partial<HarnessCapabilities> = {}): HarnessCapabilities => (
   credentialRequired: false,
   previewsEdits: false,
   models: [],
-  allowsCustomModel: false,
-  supportsEffort: false,
-  supportsMaxTurns: false,
-  supportsLogin: false,
-  supportsCustomInstructions: false,
+  customModel: false,
+  effort: false,
+  maxTurns: false,
+  login: false,
+  customInstructions: false,
   ...over,
 });
 
@@ -64,7 +64,7 @@ describe("agentStatus", () => {
 
   it("an OAuth CLI that's installed but not signed in says 'Needs sign-in'", () => {
     const status = agentStatus(
-      info({ installHint: HINT, capabilities: { supportsLogin: true } }),
+      info({ installHint: HINT, capabilities: { login: true } }),
       readiness({ installed: true, ready: false }),
     );
     expect(status.kind).toBe("needsSignIn");
@@ -73,7 +73,7 @@ describe("agentStatus", () => {
 
   it("a CLI that isn't on disk says 'Not installed' before any auth state", () => {
     const status = agentStatus(
-      info({ installHint: HINT, capabilities: { supportsLogin: true } }),
+      info({ installHint: HINT, capabilities: { login: true } }),
       readiness({ installed: false }),
     );
     expect(status.kind).toBe("notInstalled");

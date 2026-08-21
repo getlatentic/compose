@@ -12,11 +12,11 @@ const info = (id: string, displayName = id): HarnessInfo => ({
     credentialRequired: false,
     previewsEdits: false,
     models: [],
-    allowsCustomModel: true,
-    supportsEffort: false,
-    supportsMaxTurns: false,
-    supportsLogin: false,
-    supportsCustomInstructions: false,
+    customModel: true,
+    effort: false,
+    maxTurns: false,
+    login: false,
+    customInstructions: false,
   },
 });
 

@@ -7,7 +7,7 @@
 use crate::harness::credentials::{Credential, CredentialStatus};
 use crate::harness::registry::{compose_discover, compose_harness_by_id, compose_harness_catalog};
 use crate::harness::verify::{self, HarnessRuntimeVerification};
-use harness::{Harness, HarnessInfo, HarnessModel, HarnessReadiness, InstallCallback, InstallEvent};
+use harness::{Harness, InstallCallback, InstallEvent, Listing, ModelChoice, Readiness};
 use tauri::ipc::Channel;
 
 pub(crate) fn resolve(harness_id: &str) -> Result<Box<dyn Harness>, String> {
@@ -15,24 +15,24 @@ pub(crate) fn resolve(harness_id: &str) -> Result<Box<dyn Harness>, String> {
 }
 
 #[tauri::command(async)]
-pub fn harness_list() -> Result<Vec<HarnessInfo>, String> {
+pub fn harness_list() -> Result<Vec<Listing>, String> {
     Ok(compose_harness_catalog())
 }
 
 /// Probe readiness of every registered harness in one call — drives the picker's
 /// "what's already on your machine" detection. `(async)`: each probe may shell out.
 #[tauri::command(async)]
-pub fn harness_discover() -> Result<Vec<HarnessReadiness>, String> {
+pub fn harness_discover() -> Result<Vec<Readiness>, String> {
     Ok(compose_discover())
 }
 
 #[tauri::command(async)]
-pub fn harness_readiness(harness_id: String) -> Result<HarnessReadiness, String> {
+pub fn harness_readiness(harness_id: String) -> Result<Readiness, String> {
     Ok(resolve(&harness_id)?.readiness())
 }
 
 #[tauri::command(async)]
-pub fn harness_list_models(harness_id: String) -> Result<Vec<HarnessModel>, String> {
+pub fn harness_list_models(harness_id: String) -> Result<Vec<ModelChoice>, String> {
     resolve(&harness_id)?.list_models().map_err(|e| e.to_string())
 }
 

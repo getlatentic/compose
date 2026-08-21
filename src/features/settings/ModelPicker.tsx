@@ -8,7 +8,7 @@ import { findIntendedModel, type ModelItem, modelMatchesQuery } from "./modelMat
 /**
  * The "Default model" picker for an agent: a ComboBox over its known models — a
  * live-discovered list (Ollama / Codex / OpenRouter / OpenCode) or a curated one
- * (Claude) — with type-ahead. Agents that accept any id (`allowsCustomModel`)
+ * (Claude) — with type-ahead. Agents that accept any id (`customModel`)
  * can also type one that isn't listed, so Ollama still works while it's down
  * (type a known id) and custom agents accept anything. An empty value means
  * "Automatic" — the agent picks per chat. Rendered in the agent's main detail
@@ -76,7 +76,7 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
   };
 
   // Nothing to pick and no custom ids allowed → no picker at all.
-  if (items.length === 0 && !caps.allowsCustomModel) {
+  if (items.length === 0 && !caps.customModel) {
     return null;
   }
 
@@ -114,14 +114,14 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
             autoComplete: "off",
             spellCheck: false,
           }}
-          allowCustomValue={caps.allowsCustomModel}
+          allowCustomValue={caps.customModel}
           onChange={(data) => {
             const picked = data.selectedItem as ModelItem | string | null;
             const next =
               typeof picked === "string"
                 ? picked.trim()
                 : (picked?.value ??
-                  (caps.allowsCustomModel ? (data.inputValue?.trim() ?? "") : ""));
+                  (caps.customModel ? (data.inputValue?.trim() ?? "") : ""));
             setHarnessOptions(harnessId, { model: next || undefined });
           }}
         />

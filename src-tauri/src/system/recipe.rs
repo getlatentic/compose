@@ -49,7 +49,7 @@ pub enum InstallSpec {
 }
 
 /// Per-dependency status from the readiness "doctor". camelCase to match the
-/// TypeScript consumer; mirrors the harness `HarnessReadiness` shape.
+/// TypeScript consumer; mirrors the harness `Readiness` shape.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DependencyStatus {

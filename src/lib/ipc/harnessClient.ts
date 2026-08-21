@@ -89,18 +89,18 @@ export interface HarnessCapabilities {
   /** Curated model choices for the picker. Empty → no curated list. */
   models: HarnessModel[];
   /** Accepts a free-text model id beyond `models` (codex). */
-  allowsCustomModel: boolean;
+  customModel: boolean;
   /** Honors reasoning effort (codex). */
-  supportsEffort: boolean;
+  effort: boolean;
   /** Honors a max-turns cap (claude). */
-  supportsMaxTurns: boolean;
+  maxTurns: boolean;
   /** Supports an interactive sign-in flow (claude/codex OAuth) the picker
    * can trigger when installed-but-not-signed-in. */
-  supportsLogin: boolean;
+  login: boolean;
   /** Honors per-harness custom instructions (appended to the system prompt via
    * `RunTuning.extra_instructions`). True for the openai-compatible adapter
    * (Ollama / OpenRouter); the picker hides the field for harnesses that don't. */
-  supportsCustomInstructions: boolean;
+  customInstructions: boolean;
 }
 
 /**
@@ -111,6 +111,16 @@ export interface HarnessCapabilities {
 export interface InstallHint {
   url: string;
   command: string | null;
+}
+
+/**
+ * The wire shape of one `harness_list` entry, before [`harnessList`] flattens
+ * it into a {@link HarnessInfo}. Identity and capability arrive separately
+ * because the harness trait asks them at different frequencies.
+ */
+interface HarnessListing {
+  manifest: Omit<HarnessInfo, "capabilities">;
+  capabilities: HarnessCapabilities;
 }
 
 /** One entry in the harness catalog (`harness_list` command). */
@@ -293,7 +303,12 @@ export async function harnessList(): Promise<HarnessInfo[]> {
   if (!isTauriRuntime()) {
     return [];
   }
-  return invoke<HarnessInfo[]>("harness_list");
+  // The harness registry answers `{ manifest, capabilities }` — it asks identity
+  // once and capability constantly, so the trait keeps them apart. Everything
+  // above this line wants one object per agent, and this is the layer whose job
+  // that is.
+  const listings = await invoke<HarnessListing[]>("harness_list");
+  return listings.map(({ manifest, capabilities }) => ({ ...manifest, capabilities }));
 }
 
 /** Probe one harness's readiness (installed / version / auth). */

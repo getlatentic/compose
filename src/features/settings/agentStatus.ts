@@ -44,7 +44,7 @@ export function agentStatus(info: HarnessInfo, readiness: HarnessReadiness | nul
   if (!installed && info.installHint) {
     return { kind: "notInstalled", label: "Not installed", tone: "neutral" };
   }
-  if (info.capabilities.supportsLogin) {
+  if (info.capabilities.login) {
     return { kind: "needsSignIn", label: "Needs sign-in", tone: "info", action: "signIn" };
   }
   if (info.capabilities.credentialRequired) {

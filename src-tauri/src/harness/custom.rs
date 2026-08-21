@@ -12,7 +12,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use harness::{
-    AcpHarness, AcpHarnessConfig, Harness, HarnessModel, OpenHarness, OpenHarnessConfig,
+    AcpHarness, AcpHarnessConfig, ApiKey, Harness, ModelChoice, OpenHarness,
+    OpenHarnessConfig,
 };
 use serde::{Deserialize, Serialize};
 
@@ -206,7 +207,7 @@ pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
             let models = default_model
                 .filter(|model| !model.trim().is_empty())
                 .map(|model| {
-                    vec![HarnessModel {
+                    vec![ModelChoice {
                         value: model.clone(),
                         label: model,
                     }]
@@ -214,14 +215,19 @@ pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
                 .unwrap_or_default();
             // The key goes in as a value, never an environment variable — an
             // exported one is inherited by the agent's own shell tool.
-            let api_key =
-                requires_key.then(|| crate::harness::credentials::secret_for(&record.id)).flatten();
+            // One field, three states: no key wanted, wanted and missing (so
+            // Settings offers the slot), or the secret itself.
+            let api_key = if requires_key {
+                crate::harness::credentials::secret_for(&record.id)
+                    .map_or(ApiKey::Required, ApiKey::Value)
+            } else {
+                ApiKey::NotNeeded
+            };
             Box::new(OpenHarness::custom(OpenHarnessConfig {
                 id: record.id,
                 display_name: record.display_name,
                 base_url,
                 api_key,
-                requires_api_key: requires_key,
                 models,
                 ..Default::default()
             }))

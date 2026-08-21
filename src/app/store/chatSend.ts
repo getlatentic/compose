@@ -178,10 +178,10 @@ export async function runSendChatPrompt(
   // Tool-native CLI agents (claude/codex/bob) read context files on demand via
   // their own tools, so we send a PATH REFERENCE — keeping the prompt small,
   // current, and cache-stable rather than inlining a snapshot. The openai-
-  // compatible adapter (Ollama / OpenRouter, capability `supportsCustomInstructions`)
+  // compatible adapter (Ollama / OpenRouter, capability `customInstructions`)
   // gets the file CONTENT inlined (budgeted), since a weak local model may not
   // reliably read on its own. Only that path needs the IO.
-  const inlineContext = harnessCapabilitiesOf(harnessCatalog, harnessId).supportsCustomInstructions;
+  const inlineContext = harnessCapabilitiesOf(harnessCatalog, harnessId).customInstructions;
   const fileContextContent = inlineContext
     ? await collectFileContextContent(
         workspace,
