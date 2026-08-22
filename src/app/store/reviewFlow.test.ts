@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const reviewCleanup = vi.fn(async () => {});
+const reviewCleanup = vi.fn(async (_runId: string) => {});
 vi.mock("../../lib/ipc/reviewClient", () => ({
   applyReviewChange: vi.fn(),
   reviewCleanup: (runId: string) => reviewCleanup(runId),
