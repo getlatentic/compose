@@ -933,12 +933,106 @@ mod tests {
         assert!(html.contains("data:image/png;base64,"), "{html}");
     }
 
+    #[test]
+    fn an_inlined_image_declares_the_type_the_bytes_actually_are() {
+        // The image goes into the document as a data URI, and the MIME is the
+        // only thing telling the renderer how to decode it. Wrong, and the
+        // picture silently does not appear in the exported PDF.
+        for (name, expected) in [
+            ("a.png", "image/png"),
+            ("a.jpg", "image/jpeg"),
+            ("a.jpeg", "image/jpeg"),
+            ("a.gif", "image/gif"),
+            ("a.svg", "image/svg+xml"),
+            ("a.webp", "image/webp"),
+            ("a.bmp", "image/bmp"),
+        ] {
+            assert_eq!(mime_for(Path::new(name)), expected, "for {name}");
+            let shouted = name.to_ascii_uppercase();
+            assert_eq!(mime_for(Path::new(&shouted)), expected, "for {shouted}");
+        }
 
+        // Anything else is declared as opaque bytes rather than guessed at.
+        assert_eq!(mime_for(Path::new("notes.txt")), "application/octet-stream");
+        assert_eq!(mime_for(Path::new("no-extension")), "application/octet-stream");
+    }
 
+    #[test]
+    fn a_wikilink_becomes_a_link_and_a_broken_one_stays_text() {
+        // Export is the last stop: a wikilink left as `[[...]]` prints raw
+        // brackets in the PDF, and one converted with an empty target prints a
+        // link that goes nowhere.
+        let mut out = String::new();
+        let mut cursor = 0;
+        let line = "see [[Some Note]] here";
+        convert_one_wikilink(line, line.find("[[").unwrap(), &mut cursor, &mut out);
+        out.push_str(&line[cursor..]);
+        // The destination is not percent-encoded, and does not need to be: the
+        // angle-bracket form is exactly the one that permits spaces. Encoding
+        // it as well would produce a path with a literal `%20` in it.
+        assert_eq!(out, "see [Some Note](<Some Note.md>) here", "got {out}");
 
+        // `target|label` shows the label and links the target.
+        let mut out = String::new();
+        let mut cursor = 0;
+        let line = "[[Target|Shown]]";
+        convert_one_wikilink(line, 0, &mut cursor, &mut out);
+        assert!(out.starts_with("[Shown](<"), "label is what the reader sees: {out}");
+        assert!(out.contains("Target"), "target is what it points at: {out}");
+    }
 
+    #[test]
+    fn an_unclosed_or_empty_wikilink_is_left_alone_and_still_advances() {
+        // Two things at once, and the second is the one with teeth. The caller
+        // loops on `line[cursor..].find("[[")`, so a path that declines to
+        // convert must still move the cursor past the opener — otherwise it
+        // finds the same `[[` forever and the export hangs.
+        //
+        // Asserting only the text cannot see that: with the cursor left at 0
+        // the caller's `push_str(&line[cursor..])` re-emits the same bytes the
+        // literal would have.
+        for line in ["[[never closed", "[[]]", "[[ |label]]"] {
+            let mut out = String::new();
+            let mut cursor = 0;
+            convert_one_wikilink(line, 0, &mut cursor, &mut out);
+            assert!(cursor >= 2, "{line}: cursor stuck at {cursor}, the caller would spin");
+            out.push_str(&line[cursor..]);
+            assert_eq!(out, line, "{line} should survive verbatim");
+        }
+    }
 
+    #[test]
+    fn a_line_of_broken_wikilinks_terminates() {
+        // The property the cursor rule exists for, through the real caller.
+        let line = "[[a [[b [[c";
+        let mut out = String::new();
+        convert_wikilinks_in_line(line, &[], &mut out);
+        assert_eq!(out, line);
+    }
 
+    #[test]
+    fn a_mermaid_fence_is_recognised_however_it_is_written() {
+        // The opener is normalized so the mermaid pass can find it. Miss one
+        // spelling and that diagram exports as a code block instead of a
+        // picture — which still looks like a successful export.
+        let normalized = |line: &str| {
+            let mut out = String::new();
+            normalize_mermaid_opener_line(line, &mut out);
+            out
+        };
+        // What is normalized is the language token's *case*; the surrounding
+        // layout is left exactly as the author wrote it.
+        assert_eq!(normalized("```Mermaid"), "```mermaid");
+        assert_eq!(normalized("```MERMAID"), "```mermaid");
+        assert_eq!(normalized("   ```Mermaid"), "   ```mermaid", "indent preserved");
+        assert_eq!(normalized("```  Mermaid"), "```  mermaid", "padding preserved");
+        assert_eq!(normalized("~~~Mermaid"), "~~~mermaid", "tilde fences too");
+        assert_eq!(normalized("````Mermaid"), "````mermaid", "longer fences");
 
-
+        // Another language is not ours to touch, and a line with no fence at
+        // all must survive verbatim — this runs over every line of the document.
+        assert_eq!(normalized("```rust"), "```rust");
+        assert_eq!(normalized("```mermaidish"), "```mermaidish", "a prefix is not a match");
+        assert_eq!(normalized("plain text"), "plain text");
+    }
 }
