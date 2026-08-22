@@ -74,3 +74,72 @@ describe("live markdown preview parser", () => {
       ]);
   });
 });
+
+describe("what markdown the live preview refuses to style", () => {
+  it("leaves markers inside inline code literal", () => {
+    // Code spans are collected first and occupy their range precisely so that
+    // `**not bold**` in a snippet stays as typed. Styling it would hide the
+    // asterisks a reader is being shown on purpose.
+    const ranges = toLivePreviewInlineRanges("Type `**not bold**` exactly.");
+    expect(ranges.map((range) => range.kind)).toEqual(["inlineCode"]);
+  });
+
+  it("reads a double marker as bold, not as two italics", () => {
+    const ranges = toLivePreviewInlineRanges("**strong**");
+    expect(ranges.map((range) => range.kind)).toEqual(["bold"]);
+  });
+
+  it("styles a link's label and not its destination", () => {
+    // The URL is the part the reader does not want to see. `from`/`to` cover
+    // the label; the brackets and the destination are markers.
+    const ranges = toLivePreviewInlineRanges("[docs](https://example.test)");
+    expect(ranges).toHaveLength(1);
+    expect("[docs](https://example.test)".slice(ranges[0].from, ranges[0].to)).toBe("docs");
+  });
+
+  it("returns ranges in the order they appear", () => {
+    // They are applied as decorations left to right; out of order they overlap
+    // and CodeMirror throws.
+    const ranges = toLivePreviewInlineRanges("`a` then **b** then *c*");
+    const starts = ranges.map((range) => range.from);
+    expect([...starts].sort((x, y) => x - y)).toEqual(starts);
+  });
+});
+
+describe("line kinds the preview recognises", () => {
+  it("reads both ordered-list spellings", () => {
+    for (const source of ["1. First", "1) First"]) {
+      expect(toLivePreviewLine(source)).toEqual({
+        checked: null,
+        kind: "listItem",
+        ordered: true,
+        text: "First",
+      });
+    }
+  });
+
+  it("reads a task box in either case, and an empty one as unchecked", () => {
+    expect(toLivePreviewLine("- [X] Done")?.checked).toBe(true);
+    expect(toLivePreviewLine("- [ ] Not done")?.checked).toBe(false);
+    expect(toLivePreviewLine("- Plain item")?.checked).toBeNull();
+  });
+
+  it("drops a closing hash run from a heading", () => {
+    // `## Title ##` is ATX-closed; showing the trailing hashes as part of the
+    // title is the bug this strips.
+    expect(toLivePreviewLine("## Title ##")).toEqual({
+      depth: 2,
+      kind: "heading",
+      text: "Title",
+    });
+  });
+
+  it("reads a quote", () => {
+    expect(toLivePreviewLine("> quoted")).toEqual({ kind: "quote", text: "quoted" });
+  });
+
+  it("is not fooled by a fence that never closes", () => {
+    // A block needs an opener and a closer; one line cannot be both.
+    expect(toLivePreviewCodeBlock(["```ts"])).toBeNull();
+  });
+});
