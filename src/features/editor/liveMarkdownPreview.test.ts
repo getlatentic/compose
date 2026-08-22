@@ -119,9 +119,14 @@ describe("line kinds the preview recognises", () => {
   });
 
   it("reads a task box in either case, and an empty one as unchecked", () => {
-    expect(toLivePreviewLine("- [X] Done")?.checked).toBe(true);
-    expect(toLivePreviewLine("- [ ] Not done")?.checked).toBe(false);
-    expect(toLivePreviewLine("- Plain item")?.checked).toBeNull();
+    const checkbox = (source: string) => {
+      const line = toLivePreviewLine(source);
+      expect(line?.kind).toBe("listItem");
+      return line?.kind === "listItem" ? line.checked : undefined;
+    };
+    expect(checkbox("- [X] Done")).toBe(true);
+    expect(checkbox("- [ ] Not done")).toBe(false);
+    expect(checkbox("- Plain item")).toBeNull();
   });
 
   it("drops a closing hash run from a heading", () => {
