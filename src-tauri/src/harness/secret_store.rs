@@ -384,6 +384,27 @@ mod tests {
         assert!(read_envelope(&dir.path().join(STORE_FILE)).is_err(), "corrupt is reported");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn a_store_we_cannot_read_is_not_an_empty_store() {
+        // Only *absent* means "nothing yet". A file that exists and will not
+        // open — wrong owner after a restore, a permissions change — has to be
+        // an error. Collapsed into `Ok(None)` the app starts with no secrets,
+        // silently, and the first write replaces the file the user still had.
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join(STORE_FILE);
+        std::fs::write(&path, b"{}").expect("write");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).expect("chmod");
+
+        let outcome = read_envelope(&path);
+
+        // Restore before asserting, so a failure cannot leave an unremovable
+        // temp dir behind.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).expect("chmod");
+        assert!(outcome.is_err(), "unreadable must not read as absent");
+    }
+
     #[test]
     fn clearing_removes_the_file_as_well_as_the_secrets() {
         // "Reset all data". `set("")` on the last secret also removes the file,
