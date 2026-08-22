@@ -515,6 +515,47 @@ mod tests {
     // mapper tests). The runner just bridges those onto Tauri's emit pump,
     // so there's nothing event-shape-specific left to assert here.
 
+    /// A stand-in child. Records that it was told to stop and reports whatever
+    /// pid the test wants, so the registry's bookkeeping can be checked without
+    /// spawning anything.
+    struct FakeChild {
+        cancelled: Arc<AtomicBool>,
+        pid: Option<u32>,
+    }
+
+    impl FakeChild {
+        fn boxed(pid: Option<u32>) -> (Box<dyn RunControl>, Arc<AtomicBool>) {
+            let cancelled = Arc::new(AtomicBool::new(false));
+            let child = FakeChild { cancelled: Arc::clone(&cancelled), pid };
+            (Box::new(child), cancelled)
+        }
+    }
+
+    impl RunControl for FakeChild {
+        fn cancel(&self) -> Result<(), harness::Error> {
+            self.cancelled.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+        fn was_cancelled(&self) -> bool {
+            self.cancelled.load(Ordering::SeqCst)
+        }
+        fn pid(&self) -> Option<u32> {
+            self.pid
+        }
+    }
+
+    /// The orphan file, by name. The coupling is deliberate: this file is read
+    /// by the *next* launch, so renaming it does not fail anything here — it
+    /// silently strands every file a previous version wrote, and the orphans
+    /// they name are never reaped.
+    fn recorded_pids(dir: &std::path::Path) -> BTreeMap<String, u32> {
+        let path = dir.join("active-runs.json");
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return BTreeMap::new();
+        };
+        serde_json::from_str(&text).unwrap_or_default()
+    }
+
     #[test]
     fn cancel_unknown_run_returns_error() {
         let runner = RunnerState::default();
@@ -522,5 +563,112 @@ mod tests {
             .cancel("run-missing")
             .unwrap_err()
             .contains("not active"));
+    }
+
+    #[test]
+    fn stop_before_the_child_exists_still_stops_the_child() {
+        // The window this registry exists for: the user can hit Stop while the
+        // run is still resolving a workspace or waiting on a keychain prompt,
+        // long before a process exists. If the flag did not survive to the
+        // attach, the agent would spawn *after* being cancelled and start
+        // editing files nobody asked it to touch.
+        let runner = RunnerState::default();
+        let token = runner.register_pending("r1".to_owned()).expect("register");
+
+        runner.cancel("r1").expect("cancel a pending run");
+        assert!(token.load(Ordering::SeqCst), "the preparation step sees the intent");
+
+        let (child, child_cancelled) = FakeChild::boxed(Some(4242));
+        runner.attach_handle("r1", child).expect("attach");
+        assert!(child_cancelled.load(Ordering::SeqCst), "the late child is stopped");
+    }
+
+    #[test]
+    fn stop_after_the_child_exists_signals_it() {
+        let runner = RunnerState::default();
+        runner.register_pending("r1".to_owned()).expect("register");
+        let (child, child_cancelled) = FakeChild::boxed(Some(1));
+        runner.attach_handle("r1", child).expect("attach");
+
+        runner.cancel("r1").expect("cancel");
+        assert!(child_cancelled.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn attaching_to_a_run_that_already_ended_does_not_leak_it() {
+        // The exit pump deregisters a run when it finishes. A handle arriving
+        // after that has nowhere to live, and simply dropping it leaves the
+        // process running with nothing holding its id.
+        let runner = RunnerState::default();
+        let (child, child_cancelled) = FakeChild::boxed(Some(7));
+        runner.attach_handle("never-registered", child).expect("attach is not an error");
+        assert!(child_cancelled.load(Ordering::SeqCst), "an unattachable child is stopped");
+    }
+
+    #[test]
+    fn quitting_stops_every_run_not_just_the_first() {
+        // On app exit each child is signalled. A loop that stopped early would
+        // leave agents editing the user's files after the window is gone —
+        // and the survivors are only reaped on the *next* launch.
+        let runner = RunnerState::default();
+        let mut flags = Vec::new();
+        for id in ["a", "b", "c"] {
+            runner.register_pending(id.to_owned()).expect("register");
+            let (child, cancelled) = FakeChild::boxed(Some(1));
+            runner.attach_handle(id, child).expect("attach");
+            flags.push((id, cancelled));
+        }
+
+        runner.cancel_all();
+
+        for (id, cancelled) in flags {
+            assert!(cancelled.load(Ordering::SeqCst), "{id} was left running");
+        }
+    }
+
+    #[test]
+    fn live_pids_are_mirrored_to_disk_and_cleared_when_a_run_ends() {
+        // The file is the only thing that survives a hard crash, so it is what
+        // lets the next launch reap an orphaned agent. Recording a pid that is
+        // no longer live, or missing one that is, both break that sweep.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let runner = RunnerState::default();
+        runner.set_data_dir(dir.path().to_path_buf());
+
+        runner.register_pending("r1".to_owned()).expect("register");
+        let (child, _) = FakeChild::boxed(Some(4242));
+        runner.attach_handle("r1", child).expect("attach");
+
+        assert_eq!(recorded_pids(dir.path()).get("r1"), Some(&4242));
+
+        runner.unregister("r1");
+        assert!(recorded_pids(dir.path()).is_empty(), "a finished run is not an orphan");
+    }
+
+    #[test]
+    fn a_run_with_no_process_records_no_pid() {
+        // The direct-model adapter aborts an HTTP stream; there is no child to
+        // reap. Writing 0 would have the next launch inspect pid 0.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let runner = RunnerState::default();
+        runner.set_data_dir(dir.path().to_path_buf());
+
+        runner.register_pending("r1".to_owned()).expect("register");
+        let (child, _) = FakeChild::boxed(None);
+        runner.attach_handle("r1", child).expect("attach");
+
+        assert!(recorded_pids(dir.path()).is_empty(), "nothing to reap, nothing recorded");
+    }
+
+    #[test]
+    fn pid_bookkeeping_without_a_data_dir_is_a_no_op_not_a_failure() {
+        // `set_data_dir` happens at boot; anything before it must still run.
+        let runner = RunnerState::default();
+        runner.register_pending("r1".to_owned()).expect("register");
+        let (child, cancelled) = FakeChild::boxed(Some(9));
+        runner.attach_handle("r1", child).expect("attach without a data dir");
+
+        runner.cancel("r1").expect("cancel still works");
+        assert!(cancelled.load(Ordering::SeqCst));
     }
 }
