@@ -2,13 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { createWorkspaceId, normalizeWorkspacePath } from "../../app/workspaceModel";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
 
-export interface WorkspaceStatus {
-  exists: boolean;
-  isDirectory: boolean;
-  path: string | null;
-  selected: boolean;
-}
-
 export interface WorkspaceTabs {
   activeFilePath: string;
   openFilePaths: string[];
@@ -43,10 +36,6 @@ let devList: WorkspaceListResult = {
 function mutateDevList(transform: (current: WorkspaceListResult) => WorkspaceListResult) {
   devList = transform(devList);
   return devList;
-}
-
-export function getWorkspaceStatus(path?: string) {
-  return invoke<WorkspaceStatus>("workspace_status", { path });
 }
 
 export async function addWorkspace(path: string) {
