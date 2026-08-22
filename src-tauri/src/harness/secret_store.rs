@@ -357,12 +357,47 @@ mod tests {
     #[test]
     fn the_store_never_prints_what_it_holds() {
         // `SecretStore` is reachable from state that gets logged on a panic.
+        // Asserting only that the secret is absent is satisfied by printing
+        // nothing at all, so the count has to be asserted too — otherwise the
+        // redaction and a broken Debug impl look identical.
         let dir = tempfile::tempdir().expect("tempdir");
         let mut store = store_at(dir.path(), [5u8; KEY_LEN]);
         store.set("openrouter", "sk-super-secret").expect("write");
 
         let shown = format!("{store:?}");
         assert!(!shown.contains("sk-super-secret"), "secret leaked into Debug: {shown}");
+        assert!(shown.contains("SecretStore"), "still identifies itself: {shown}");
+        assert!(shown.contains('1'), "and says how many it holds: {shown}");
+    }
+
+    #[test]
+    fn no_store_on_disk_is_an_empty_store_not_a_failure() {
+        // First launch. Reading a missing file has to be "nothing yet"; an
+        // error here fails the boot for every new user.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let absent = read_envelope(&dir.path().join(STORE_FILE)).expect("not an error");
+        assert!(absent.is_none());
+
+        // A file that exists but cannot be parsed is a different answer: the
+        // user has a store and we could not read it, which is worth saying.
+        std::fs::write(dir.path().join(STORE_FILE), b"not json").expect("write");
+        assert!(read_envelope(&dir.path().join(STORE_FILE)).is_err(), "corrupt is reported");
+    }
+
+    #[test]
+    fn clearing_removes_the_file_as_well_as_the_secrets() {
+        // "Reset all data". `set("")` on the last secret also removes the file,
+        // so only `clear` covers the case where several remain.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut store = store_at(dir.path(), [5u8; KEY_LEN]);
+        store.set("openrouter", "sk-a").expect("write");
+        store.set("anthropic", "sk-b").expect("write");
+        assert!(dir.path().join(STORE_FILE).exists());
+
+        store.clear().expect("clear");
+        assert_eq!(store.get("openrouter"), None);
+        assert_eq!(store.get("anthropic"), None);
+        assert!(!dir.path().join(STORE_FILE).exists(), "the file goes too");
     }
 
     #[test]

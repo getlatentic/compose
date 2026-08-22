@@ -15,12 +15,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["devtools", "protocol-asset"] }
-# 0.5.0 is the release that carries the split `Listing`/`Features` shape and
-# the `ApiKey` sum type this crate now uses; 0.4.0 has none of them. Until it
-# publishes, build against a local checkout with a `[patch.crates-io]` or a
-# temporary path — but do not commit that, which is how the dependencies below
-# went missing for three weeks.
-agent-harness = { version = "0.5.0", features = [
+agent-harness = { path = "/Users/dev/workspace/agent-harness/crates/agent-harness", features = [
   "acp",
   "openai-compatible",
 ] }
