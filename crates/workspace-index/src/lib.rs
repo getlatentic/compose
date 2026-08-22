@@ -1016,6 +1016,83 @@ mod tests {
     }
 
     #[test]
+    fn tags_are_read_from_a_yaml_list_as_well_as_an_inline_one() {
+        // Obsidian writes both forms and users mix them freely. Reading only
+        // the inline form loses every tag in a list-style document, which
+        // presents as "this note has no tags" rather than as a parse failure.
+        let (_, inline, _) = parse_frontmatter("---\ntags: alpha, beta\n---\nbody\n");
+        let names: Vec<&str> = inline.iter().map(|(tag, _, _)| tag.as_str()).collect();
+        assert_eq!(names, ["alpha", "beta"], "inline");
+
+        let listed = "---\ntags:\n  - alpha\n  - beta\n---\nbody\n";
+        let (_, tags, _) = parse_frontmatter(listed);
+        let names: Vec<&str> = tags.iter().map(|(tag, _, _)| tag.as_str()).collect();
+        assert_eq!(names, ["alpha", "beta"], "list");
+    }
+
+    #[test]
+    fn a_key_after_a_tag_list_ends_the_list() {
+        // Without closing the list, every later value would be read as a tag —
+        // an author's `title:` would become one.
+        // The trailing list item is the point: if the list is never closed it
+        // is read as a tag, so an author's bulleted `summary` becomes tags.
+        let doc = "---\ntags:\n  - alpha\ntitle: My Note\nsummary:\n  - not a tag\n---\nbody\n";
+        let (fields, tags, _) = parse_frontmatter(doc);
+        let names: Vec<&str> = tags.iter().map(|(tag, _, _)| tag.as_str()).collect();
+        assert_eq!(names, ["alpha"], "only the tags list contributes tags");
+        assert!(
+            fields.iter().any(|(k, v, _)| k == "title" && v == "My Note"),
+            "the following key is still a field: {fields:?}",
+        );
+    }
+
+    #[test]
+    fn frontmatter_that_never_closes_indexes_nothing() {
+        // A stray `---` at the top of a note would otherwise swallow the whole
+        // document as metadata, and its prose would vanish from search.
+        let (fields, tags, end) = parse_frontmatter("---\ntitle: never closed\nbody text\n");
+        assert!(fields.is_empty() && tags.is_empty());
+        assert_eq!(end, 0, "no content is consumed");
+
+        // And a document that merely starts with a rule is not frontmatter.
+        let (fields, _, _) = parse_frontmatter("not frontmatter\n---\ntitle: x\n---\n");
+        assert!(fields.is_empty());
+    }
+
+    #[test]
+    fn only_links_that_could_be_notes_become_graph_edges() {
+        // The graph is between documents in the workspace. Indexing anything
+        // else fills it with edges to targets that can never resolve.
+        assert!(should_index_markdown_target("Some Note.md"));
+        assert!(should_index_markdown_target("folder/note"), "extensionless is a note");
+        assert!(should_index_markdown_target("note.md#heading"), "a fragment is still a note");
+
+        assert!(!should_index_markdown_target(""), "empty");
+        assert!(!should_index_markdown_target("#heading"), "same-document anchor");
+        // A dotted host is rejected by the extension rule below regardless, so
+        // it cannot show that the scheme check works. A dotless one can.
+        assert!(!should_index_markdown_target("https://localhost"), "external, no dot");
+        assert!(!should_index_markdown_target("https://example.com"), "external");
+        assert!(!should_index_markdown_target("mailto:someone"), "mail, no dot");
+        assert!(!should_index_markdown_target("image.png"), "not a document");
+    }
+
+    #[test]
+    fn a_search_with_no_terms_boosts_nothing() {
+        // The boost multiplies a score. Returning anything but zero for an
+        // empty query would rank files by name alone.
+        // Both guards answer this; the first is an early-out that skips the
+        // join and the shaping, not a separate correctness rule.
+        assert_eq!(filename_match_boost("notes/alpha.md", &[]), 0.0);
+        assert_eq!(filename_match_boost("notes/alpha.md", &[""]), 0.0);
+        assert_eq!(filename_match_boost("notes/alpha.md", &["  ", "!!"]), 0.0);
+        assert!(
+            filename_match_boost("notes/alpha.md", &["alpha"]) > 0.0,
+            "a real term still boosts its own file",
+        );
+    }
+
+    #[test]
     fn search_hits_return_utf8_byte_ranges() {
         let snapshot = build_snapshot(
             "workspace-1".to_owned(),
