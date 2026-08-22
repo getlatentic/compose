@@ -95,30 +95,15 @@ impl SecretStore {
         let path = config_dir.join(STORE_FILE);
         let existing = read_envelope(&path)?;
 
-        // A file with no key is the unrecoverable case. Check it before
-        // minting a key, or we would silently replace the one that could have
-        // opened the file — if it were ever to come back.
-        let key = match (read_master_key()?, existing.is_some()) {
-            (Some(key), _) => key,
-            (None, true) => return Ok(Opened::KeyLost),
-            (None, false) => {
+        Ok(match decide(read_master_key()?, existing.as_ref()) {
+            Decision::Ready { key, secrets } => Opened::Ready(Self { path, key, secrets }),
+            Decision::KeyLost => Opened::KeyLost,
+            Decision::Mint => {
                 let key = new_master_key();
                 write_master_key(&key)?;
-                key
+                Opened::Ready(Self { path, key, secrets: BTreeMap::new() })
             }
-        };
-
-        let secrets = match existing {
-            Some(envelope) => match decrypt(&key, &envelope) {
-                Ok(secrets) => secrets,
-                // The key exists but does not open this file: a stale file from
-                // a previous install, or a rotated key. Same remedy as a lost
-                // key, so report it the same way rather than failing the boot.
-                Err(_) => return Ok(Opened::KeyLost),
-            },
-            None => BTreeMap::new(),
-        };
-        Ok(Opened::Ready(Self { path, key, secrets }))
+        })
     }
 
     pub fn get(&self, id: &str) -> Option<&str> {
@@ -166,6 +151,36 @@ impl SecretStore {
         std::fs::write(&self.path, json).map_err(|e| format!("could not write store: {e}"))?;
         restrict_permissions(&self.path);
         Ok(())
+    }
+}
+
+/// What opening the store should do, given only the key the vault returned and
+/// whatever is on disk.
+///
+/// Split out because it is the security decision and the rest is I/O: reading
+/// the vault needs an OS keychain, so with the two together not one branch of
+/// this table could be exercised. The dangerous branch is a file with no key —
+/// minting one there would overwrite the only key that could ever open it.
+#[cfg_attr(test, derive(Debug))]
+enum Decision {
+    Ready { key: [u8; KEY_LEN], secrets: BTreeMap<String, String> },
+    KeyLost,
+    /// No key and nothing to lose.
+    Mint,
+}
+
+fn decide(key: Option<[u8; KEY_LEN]>, existing: Option<&Envelope>) -> Decision {
+    match (key, existing) {
+        (Some(key), Some(envelope)) => match decrypt(&key, envelope) {
+            Ok(secrets) => Decision::Ready { key, secrets },
+            // The key exists but does not open this file: a stale file from a
+            // previous install, or a rotated key. Same remedy as a lost key, so
+            // report it the same way rather than failing the boot.
+            Err(_) => Decision::KeyLost,
+        },
+        (Some(key), None) => Decision::Ready { key, secrets: BTreeMap::new() },
+        (None, Some(_)) => Decision::KeyLost,
+        (None, None) => Decision::Mint,
     }
 }
 
@@ -273,6 +288,81 @@ mod tests {
     /// write to the developer's real keychain.
     fn store_at(dir: &Path, key: [u8; KEY_LEN]) -> SecretStore {
         SecretStore { path: dir.join(STORE_FILE), key, secrets: BTreeMap::new() }
+    }
+
+    fn envelope_for(key: [u8; KEY_LEN], pairs: &[(&str, &str)]) -> Envelope {
+        let secrets: BTreeMap<String, String> =
+            pairs.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect();
+        encrypt(&key, &secrets).expect("seals")
+    }
+
+    #[test]
+    fn a_file_with_no_key_is_never_reopened_by_minting_a_new_one() {
+        // The dangerous branch. Minting here would write a fresh key over the
+        // only one that could ever open this file, turning "your keychain was
+        // wiped, restore it" into "your secrets are gone" — permanently, and
+        // silently, on the next boot.
+        let sealed = envelope_for([7u8; KEY_LEN], &[("openrouter", "sk-live")]);
+        assert!(matches!(decide(None, Some(&sealed)), Decision::KeyLost));
+    }
+
+    #[test]
+    fn a_first_run_mints_a_key_and_a_later_one_does_not() {
+        // No key and no file is the only case where minting is right.
+        assert!(matches!(decide(None, None), Decision::Mint));
+
+        // With a key in hand and nothing on disk, the store opens empty rather
+        // than minting a second key over the first.
+        match decide(Some([3u8; KEY_LEN]), None) {
+            Decision::Ready { key, secrets } => {
+                assert_eq!(key, [3u8; KEY_LEN], "the vault's key is kept");
+                assert!(secrets.is_empty());
+            }
+            other => panic!("expected Ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_right_key_opens_the_file_and_a_rotated_one_reports_it_as_lost() {
+        let key = [9u8; KEY_LEN];
+        let sealed = envelope_for(key, &[("openrouter", "sk-live")]);
+
+        match decide(Some(key), Some(&sealed)) {
+            Decision::Ready { secrets, .. } => {
+                assert_eq!(secrets.get("openrouter").map(String::as_str), Some("sk-live"));
+            }
+            other => panic!("expected Ready, got {other:?}"),
+        }
+
+        // A key that does not open this file has the same remedy as no key at
+        // all: re-enter the secrets. Failing the boot instead would leave the
+        // user with an app that will not start and no way to fix it.
+        assert!(matches!(decide(Some([1u8; KEY_LEN]), Some(&sealed)), Decision::KeyLost));
+    }
+
+    #[test]
+    fn a_secret_is_trimmed_before_it_is_stored() {
+        // Keys get pasted with a trailing newline. Sending that to a provider
+        // fails as "unauthorized", which reads as a wrong key rather than a
+        // stray byte.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut store = store_at(dir.path(), [5u8; KEY_LEN]);
+        store.set("openrouter", "  sk-live\n").expect("write");
+        assert_eq!(store.get("openrouter"), Some("sk-live"));
+
+        store.set("blank", "   ").expect("whitespace only");
+        assert_eq!(store.get("blank"), None, "whitespace is not a secret");
+    }
+
+    #[test]
+    fn the_store_never_prints_what_it_holds() {
+        // `SecretStore` is reachable from state that gets logged on a panic.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut store = store_at(dir.path(), [5u8; KEY_LEN]);
+        store.set("openrouter", "sk-super-secret").expect("write");
+
+        let shown = format!("{store:?}");
+        assert!(!shown.contains("sk-super-secret"), "secret leaked into Debug: {shown}");
     }
 
     #[test]
