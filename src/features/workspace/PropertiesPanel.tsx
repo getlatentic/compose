@@ -34,6 +34,20 @@ interface PropertiesPanelProps {
   onCommitFrontmatter: (next: Frontmatter | null) => void;
 }
 
+/**
+ * `frontmatter` with `key` gone — or `null` when that was the last field.
+ *
+ * The null matters: the caller re-serializes whatever it is given, and an empty
+ * object writes an empty `---` block back into the file instead of removing it.
+ * Exported because it is a rule, not a rendering detail, and clicking a remove
+ * button is the only other way to reach it.
+ */
+export function withoutField(frontmatter: Frontmatter, key: string): Frontmatter | null {
+  const updated: Frontmatter = { ...frontmatter };
+  delete updated[key];
+  return Object.keys(updated).length === 0 ? null : updated;
+}
+
 function PropertiesPanelInner({ frontmatter, onCommitFrontmatter }: PropertiesPanelProps) {
   const entries = useMemo(() => Object.entries(frontmatter ?? {}), [frontmatter]);
   const [draftKey, setDraftKey] = useState("");
@@ -45,9 +59,7 @@ function PropertiesPanelInner({ frontmatter, onCommitFrontmatter }: PropertiesPa
 
   function removeField(key: string) {
     if (!frontmatter) return;
-    const updated: Frontmatter = { ...frontmatter };
-    delete updated[key];
-    onCommitFrontmatter(Object.keys(updated).length === 0 ? null : updated);
+    onCommitFrontmatter(withoutField(frontmatter, key));
   }
 
   function addField() {
