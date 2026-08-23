@@ -151,3 +151,41 @@ describe("MessageComposer context chips", () => {
     expect(panel.querySelector(".chat-context-chip")?.getAttribute("title")).toBe(fileItem.label);
   });
 });
+
+describe("what the composer offers when the assistant isn't ready", () => {
+  const notReady = {
+    ...baseProps,
+    assistantReady: { ready: false, message: "Ollama isn't running." },
+    harnessName: "Ollama",
+    onHeightChange: () => {},
+  };
+
+  function renderComposer(props: Record<string, unknown>): void {
+    act(() => {
+      root.render(<MessageComposer {...notReady} {...props} />);
+    });
+  }
+
+  it("hands off to the install instructions when the agent isn't on the machine", () => {
+    // The reported dead end: with Ollama uninstalled the composer offered
+    // "Start Ollama", the start failed, and the notice became "Couldn't start
+    // Ollama. / Try again" — with no way to reach the download. An agent that
+    // isn't installed must never be offered a start.
+    renderComposer({
+      installHint: { url: "https://ollama.com/download", command: null },
+      onStartOllama: undefined,
+    });
+
+    expect(panel.textContent).toContain("Ollama isn\u2019t installed");
+    expect(panel.textContent).toContain("How to install");
+    expect(panel.textContent).not.toContain("Start Ollama");
+    expect(panel.textContent).not.toContain("Try again");
+  });
+
+  it("offers the one-click start when it is installed and merely stopped", () => {
+    renderComposer({ installHint: null, onStartOllama: () => {} });
+
+    expect(panel.textContent).toContain("Start Ollama");
+    expect(panel.textContent).not.toContain("How to install");
+  });
+});
