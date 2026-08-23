@@ -26,10 +26,9 @@ import {
 } from "@carbon/react/icons";
 import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
-import { syntaxTree } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 
-import { blockCommands, formatCommands, onEditorUpdate } from "ai-editor";
+import { blockCommands, formatCommands, onEditorUpdate, treeAt } from "ai-editor";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { useLinkPrompt } from "../dialogs/LinkInsertProvider";
 
@@ -71,7 +70,7 @@ export const EMPTY_CONTEXT: CaretContext = {
 
 export function caretContext(view: EditorView): CaretContext {
   const pos = view.state.selection.main.head;
-  const tree = syntaxTree(view.state);
+  const tree = treeAt(view.state, pos);
   let node: { name: string; parent: typeof node } | null = tree.resolveInner(
     pos,
     1,

@@ -93,3 +93,12 @@ describe("reading the caret's context from the document", () => {
     expect(caretContext(editorAt("just words", 4))).toEqual(EMPTY_CONTEXT);
   });
 });
+
+describe("caret context below the fold", () => {
+  it("reports bold for a caret the viewport-driven parse never reached", () => {
+    const filler = Array.from({ length: 400 }, (_, i) => `paragraph line ${i}`).join("\n\n");
+    const doc = `${filler}\n\n**hello**`;
+    const ctx = caretContext(editorAt(doc, doc.length - 4));
+    expect(ctx.bold).toBe(true);
+  });
+});
