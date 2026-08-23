@@ -5,7 +5,9 @@ import {
 } from "../../lib/ipc/harnessClient";
 import type { HarnessRunOptions } from "./types";
 
-const HARNESS_PREFS_KEY = "compose.harnessPrefs";
+/** Where the prefs live. Exported so a test can seed a malformed entry — and
+ *  so the name is pinned: renaming it silently resets every user's settings. */
+export const HARNESS_PREFS_KEY = "compose.harnessPrefs";
 
 /** Compose's default permission mode per harness — its run policy, overridable
  * by the per-harness `permissionMode` setting. Claude runs fully headless (no

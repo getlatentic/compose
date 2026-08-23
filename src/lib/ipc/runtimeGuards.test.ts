@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 /**
  * Modules that deliberately let the call reach `invoke` and reject.
@@ -50,7 +50,10 @@ const CLIENTS = [
   "workspaceClient.ts",
 ];
 
-beforeEach(() => vi.resetModules());
+const invoke = vi.fn(() => {
+  throw new Error("IPC");
+});
+vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 describe("the desktop-runtime boundary, across every IPC client", () => {
   it("no command reaches IPC outside Tauri unless it is documented to", async () => {
@@ -60,16 +63,15 @@ describe("the desktop-runtime boundary, across every IPC client", () => {
     // rendered nothing. Enumerating the modules is what catches a *new* client
     // added without a guard; a per-module test only covers what someone
     // remembered to write.
+    //
+    // One mock for the whole sweep. Resetting the module registry per client
+    // re-imports each dependency graph seventeen times, which pushed this past
+    // the 5s default timeout under a loaded parallel run.
     const offenders: string[] = [];
 
     for (const file of CLIENTS) {
-      vi.resetModules();
-      const invoke = vi.fn(() => {
-        throw new Error("IPC");
-      });
-      vi.doMock("@tauri-apps/api/core", () => ({ invoke }));
-
       const mod: Record<string, unknown> = await import(`./${file.replace(/\.ts$/, "")}`);
+      const before = invoke.mock.calls.length;
       for (const value of Object.values(mod)) {
         if (typeof value !== "function") continue;
         try {
@@ -78,8 +80,7 @@ describe("the desktop-runtime boundary, across every IPC client", () => {
           // A rejection is fine; an unguarded `invoke` is what we are counting.
         }
       }
-      if (invoke.mock.calls.length > 0) offenders.push(file);
-      vi.doUnmock("@tauri-apps/api/core");
+      if (invoke.mock.calls.length > before) offenders.push(file);
     }
 
     const documented = Object.keys(UNGUARDED_BY_DESIGN).sort();

@@ -63,6 +63,17 @@ export function makeEditor(doc: string, caret = 0, extra: Extension[] = []): Edi
     );
   }
   const view = new EditorView({ parent, state });
+  // Again, on the view's own state. Creating the view starts CodeMirror's
+  // viewport-driven parse, and jsdom has no layout — so the viewport can be
+  // tiny and `syntaxTree(view.state)` returns a tree that stops short of the
+  // caret. A command asking "am I inside a fence?" then gets `null` and takes
+  // the plain-text path, which is a wrong answer rather than a slow one.
+  if (ensureSyntaxTree(view.state, doc.length, 5000) === null) {
+    throw new Error(
+      `the markdown parse did not finish within 5s for a ${doc.length}-char document; ` +
+        "any assertion after this would be testing an unparsed editor",
+    );
+  }
   live.push(view);
   return view;
 }
