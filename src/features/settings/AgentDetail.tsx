@@ -84,7 +84,13 @@ export function AgentDetail({ agentId, onBack }: { agentId: string; onBack: () =
 
       <ModelSection harnessId={agentId} />
 
-      {modelManagement ? <OllamaModelManager harnessId={agentId} /> : null}
+      {/* Nothing to manage for an agent that isn't on the machine, and the
+          list probe would read its own failure as "not running" and poll for a
+          server that is never coming — under an install hand-off that already
+          said so. */}
+      {modelManagement && status?.kind !== "notInstalled" ? (
+        <OllamaModelManager harnessId={agentId} />
+      ) : null}
 
       {showAdvanced ? (
         <CollapsibleSection title="Advanced">
