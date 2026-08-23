@@ -68,9 +68,9 @@ dependencies = [
 
 [[package]]
 name = "agent-harness"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfbaa726eecd9fd323dde53ec69c2714aab577a7e881ee516ac72cc9d5d914e5"
+checksum = "04cd8acfab05c605f1f88d3f957dd7f1688ee4ba8d0c1c07c9bee277e55d9519"
 dependencies = [
  "agent-client-protocol",
  "async-trait",
@@ -775,13 +775,14 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "cli-stream"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b377ea8804273e3f98439b4881d8a79eea7d1c2f9ef9521c899277882847f530"
+checksum = "b1c5e7a7863cc40006303f0442259358cca369d8535a59dfcdbc03ca637fc260"
 dependencies = [
  "libc",
  "serde",
  "thiserror 2.0.18",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
