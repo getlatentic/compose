@@ -45,7 +45,7 @@ export interface CodeMirrorToolbarProps {
   mode: "wysiwyg" | "source";
 }
 
-interface CaretContext {
+export interface CaretContext {
   bold: boolean;
   italic: boolean;
   code: boolean;
@@ -57,7 +57,7 @@ interface CaretContext {
   blockquote: boolean;
 }
 
-const EMPTY_CONTEXT: CaretContext = {
+export const EMPTY_CONTEXT: CaretContext = {
   bold: false,
   italic: false,
   code: false,
@@ -69,7 +69,7 @@ const EMPTY_CONTEXT: CaretContext = {
   blockquote: false,
 };
 
-function caretContext(view: EditorView): CaretContext {
+export function caretContext(view: EditorView): CaretContext {
   const pos = view.state.selection.main.head;
   const tree = syntaxTree(view.state);
   let node: { name: string; parent: typeof node } | null = tree.resolveInner(
@@ -98,7 +98,7 @@ function caretContext(view: EditorView): CaretContext {
   return ctx;
 }
 
-function caretContextsEqual(a: CaretContext, b: CaretContext): boolean {
+export function caretContextsEqual(a: CaretContext, b: CaretContext): boolean {
   return (
     a.bold === b.bold &&
     a.italic === b.italic &&
