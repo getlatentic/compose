@@ -2,8 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ipc = vi.hoisted(() => ({
-  writeFile: vi.fn(async () => ({}) as never),
-  externalWriteFile: vi.fn(async () => ({}) as never),
+  writeFile: vi.fn(async (..._args: unknown[]) => ({}) as never),
+  externalWriteFile: vi.fn(async (..._args: unknown[]) => ({}) as never),
 }));
 vi.mock("../../lib/ipc/filesClient", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../lib/ipc/filesClient")>();
