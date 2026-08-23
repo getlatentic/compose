@@ -1,55 +1,37 @@
-//! The dependency recipe model and Compose's recipe set.
-//!
-//! Node and uv ship bundled in the app (`bundled_runtime`), so they aren't here:
-//! this set is the *optional* local-AI path — Ollama plus its install
-//! prerequisites. Each recipe is static data: how to detect a dependency and how
-//! to install it. `requires` encodes ordering (CLT → Homebrew → Ollama) so the
-//! doctor installs in order and the UI gates rows until prerequisites land.
+//! The optional local-AI dependency: Ollama. Compose detects it and — when it's
+//! absent — hands the user to the official download, the same `InstallHint`
+//! hand-off agents get: Compose discovers and runs local tools, it never
+//! installs them.
 
+use harness::InstallHint;
 use serde::Serialize;
 
-/// One bootstrappable dependency: its identity, what it provides, its
-/// prerequisites, and the detect/install strategies.
+/// One detectable dependency: its identity, how to probe for it, and where the
+/// user gets it when the probe comes back empty.
 pub struct DependencyRecipe {
     pub id: &'static str,
     pub name: &'static str,
     pub description: &'static str,
-    pub provides: &'static [&'static str],
-    pub requires: &'static [&'static str],
-    pub requires_admin: bool,
-    pub check: CheckSpec,
-    pub install: InstallSpec,
+    /// Probe run through the user's login shell (so nvm/brew-installed binaries
+    /// are visible); present iff it exits 0 and — when `min_version` is set —
+    /// its reported version meets the floor.
+    pub probe: &'static str,
+    pub min_version: Option<&'static str>,
+    pub hint_url: &'static str,
+    pub hint_command: Option<&'static str>,
 }
 
-/// How to detect whether a dependency is already present.
-pub enum CheckSpec {
-    /// Run `probe` through the user's login shell (so nvm/brew-installed
-    /// binaries are visible); present iff it exits 0 and — when `min_version`
-    /// is set — its reported version meets the floor.
-    LoginShell {
-        probe: &'static str,
-        min_version: Option<&'static str>,
-    },
-    /// `xcode-select -p` exit code — CLT binaries aren't on the node PATH.
-    XcodeSelectPath,
+impl DependencyRecipe {
+    pub fn hint(&self) -> InstallHint {
+        InstallHint {
+            url: self.hint_url.to_owned(),
+            command: self.hint_command.map(str::to_owned),
+        }
+    }
 }
 
-/// How to install a dependency.
-pub enum InstallSpec {
-    /// `brew install <formula>` plus `brew services start` — a persistent,
-    /// auto-starting background server (Ollama), via a user-level launchd agent
-    /// (no sudo).
-    BrewService(&'static str),
-    /// `xcode-select --install` — Apple's own GUI installer; completion is
-    /// asynchronous and confirmed by re-running the check.
-    XcodeSelect,
-    /// The privileged Homebrew bootstrap: a native admin dialog for the
-    /// root-only prefix prep, then the unprivileged streamed installer.
-    Homebrew,
-}
-
-/// Per-dependency status from the readiness "doctor". camelCase to match the
-/// TypeScript consumer; mirrors the harness `Readiness` shape.
+/// Per-dependency status from the readiness probe. camelCase to match the
+/// TypeScript consumer.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DependencyStatus {
@@ -58,56 +40,57 @@ pub struct DependencyStatus {
     pub description: String,
     pub present: bool,
     pub version: Option<String>,
-    pub requires_admin: bool,
-    pub provides: Vec<String>,
-    pub requires: Vec<String>,
-    pub error: Option<String>,
+    pub hint: InstallHint,
 }
 
-/// Compose's dependency set. List order is install order: each entry's
-/// `requires` names only earlier entries.
-pub const RECIPES: &[DependencyRecipe] = &[
-    DependencyRecipe {
-        id: "xcode-clt",
-        name: "Command Line Tools",
-        description:
-            "Apple's developer tools — provides git and the compilers some assistants and skills need.",
-        provides: &["git", "clang", "make"],
-        requires: &[],
-        requires_admin: false,
-        check: CheckSpec::XcodeSelectPath,
-        install: InstallSpec::XcodeSelect,
-    },
-    DependencyRecipe {
-        id: "homebrew",
-        name: "Homebrew",
-        description: "The macOS package manager used to install Ollama, below.",
-        provides: &["brew"],
-        requires: &["xcode-clt"],
-        requires_admin: true,
-        check: CheckSpec::LoginShell {
-            probe: "brew --version",
-            min_version: None,
-        },
-        install: InstallSpec::Homebrew,
-    },
-    DependencyRecipe {
-        id: "ollama",
-        name: "Ollama (local AI)",
-        description: "Runs AI models privately on your Mac — no account needed. Models download separately, on demand.",
-        provides: &["ollama"],
-        requires: &["homebrew"],
-        requires_admin: false,
-        // `ollama --version` prints connection warnings on stdout when the
-        // server is down, so pull just the version number out.
-        check: CheckSpec::LoginShell {
-            probe: "ollama --version 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1",
-            min_version: None,
-        },
-        install: InstallSpec::BrewService("ollama"),
-    },
-];
+pub const RECIPES: &[DependencyRecipe] = &[DependencyRecipe {
+    id: "ollama",
+    name: "Ollama (local AI)",
+    description: "Runs AI models privately on your Mac — no account needed. Models download separately, on demand.",
+    // `ollama --version` prints connection warnings on stdout when the
+    // server is down, so pull just the version number out.
+    probe: "ollama --version 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1",
+    min_version: None,
+    hint_url: "https://ollama.com/download",
+    hint_command: None,
+}];
 
-pub fn recipe_by_id(id: &str) -> Option<&'static DependencyRecipe> {
-    RECIPES.iter().find(|recipe| recipe.id == id)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The IPC wire shape the TypeScript `DependencyStatus` deserializes —
+    /// camelCase keys, and the hint nested with the same shape agents use.
+    #[test]
+    fn status_wire_shape() {
+        let status = DependencyStatus {
+            id: "ollama".into(),
+            name: "Ollama".into(),
+            description: "d".into(),
+            present: false,
+            version: None,
+            hint: RECIPES[0].hint(),
+        };
+        let json = serde_json::to_value(&status).expect("serialize");
+        let object = json.as_object().expect("object");
+        let keys: Vec<&str> = object.keys().map(String::as_str).collect();
+        // serde_json sorts map keys; the contract is the SET of camelCase keys.
+        assert_eq!(keys, ["description", "hint", "id", "name", "present", "version"]);
+        assert_eq!(json["hint"]["url"], "https://ollama.com/download");
+        assert!(json["hint"]["command"].is_null());
+    }
+
+    /// Every recipe must leave a usable hand-off: a real probe and an https
+    /// download page.
+    #[test]
+    fn recipes_hand_off_somewhere() {
+        for recipe in RECIPES {
+            assert!(!recipe.probe.trim().is_empty(), "{} has no probe", recipe.id);
+            assert!(
+                recipe.hint_url.starts_with("https://"),
+                "{} hint url must be https",
+                recipe.id
+            );
+        }
+    }
 }

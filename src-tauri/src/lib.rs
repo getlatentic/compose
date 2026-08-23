@@ -1,4 +1,4 @@
-mod bundled_runtime;
+mod user_tool_dirs;
 mod data_reset;
 pub mod db;
 mod default_handler;
@@ -224,21 +224,12 @@ pub fn run() {
             if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
                 std::env::set_var("AGENT_HARNESS_CACHE_DIR", cache_dir);
             }
-            // Put Compose's bundled Node + uv ahead of any system install, and
-            // point npm at a writable prefix for lazily-installed CLI agents, so
-            // a user needs no developer-tool setup. Before the keychain export /
-            // readiness probes below, so the harness's cached PATH includes it.
-            if let (Ok(resource_dir), Ok(data_dir)) =
-                (app_handle.path().resource_dir(), app_handle.path().app_data_dir())
-            {
-                bundled_runtime::configure(&resource_dir, &data_dir);
-            }
             // A Finder-launched .app inherits only the minimal launchd PATH, and
             // the login-shell PATH query can come back without nvm (a heavy
             // ~/.zshrc whose lazy nvm init no-ops under a stripped PATH). Add the
-            // user's toolchain dirs deterministically so an nvm-installed bob/codex
+            // user's toolchain dirs deterministically so an installed CLI agent
             // resolves — a fast directory scan, so it stays on the launch path.
-            bundled_runtime::append_user_tool_dirs();
+            user_tool_dirs::append();
             // Warm the harness PATH cache OFF the main thread: augmented_node_path
             // runs a login-shell query (`$SHELL -lic env`) that can take ~1-2s
             // against a heavy ~/.zshrc. Doing it here, not on the launch path, lets
@@ -329,7 +320,6 @@ pub fn run() {
             harness::ollama_runtime::ollama_start,
             harness::ollama_runtime::ollama_installed,
             system::commands::system_readiness,
-            system::commands::system_install_dependency,
             data_reset::app_reset_all_data,
             workspace::setup_complete_onboarding,
             workspace::setup_get_onboarding,

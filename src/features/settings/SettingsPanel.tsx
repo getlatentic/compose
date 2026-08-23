@@ -8,7 +8,7 @@ import { SystemSetupPanel } from "./SystemSetupPanel";
 const CATEGORIES = [
   { id: "general", label: "General" },
   { id: "agents", label: "AI agents" },
-  { id: "getready", label: "Requirements" },
+  { id: "localai", label: "Local AI" },
   { id: "about", label: "About" },
 ] as const;
 type CategoryId = (typeof CATEGORIES)[number]["id"];
@@ -46,7 +46,7 @@ export function SettingsPanel() {
       <div className="settings-content">
         {category === "agents" ? (
           <AgentsSettings />
-        ) : category === "getready" ? (
+        ) : category === "localai" ? (
           <SystemSetupPanel />
         ) : category === "general" ? (
           <GeneralSettings />
