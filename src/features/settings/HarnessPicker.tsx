@@ -3,13 +3,14 @@ import { Button, InlineNotification, Tag, Toggle } from "@carbon/react";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import {
   harnessDiscover,
-  harnessInstall,
   harnessList,
   harnessLogin,
   type HarnessInfo,
   type HarnessReadiness,
 } from "../../lib/ipc/harnessClient";
 import { agentStatus, statusTagType } from "./agentStatus";
+import { groupAgents, isBuiltInProvider, isLocalProvider } from "./agentGroups";
+import { InstallHintInline } from "./InstallHint";
 
 /**
  * The AI-assistant ("harness") picker.
@@ -61,7 +62,6 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
   // True while the readiness probe is in flight. The agent cards render
   // immediately from the catalog; this only gates the "Checking…" badges.
   const [probing, setProbing] = useState(true);
-  const [installingId, setInstallingId] = useState<string | null>(null);
   const [signingInId, setSigningInId] = useState<string | null>(null);
   const [installLog, setInstallLog] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -128,27 +128,6 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
     }
   }, [installLog.length]);
 
-  async function handleInstall(id: string) {
-    setInstallingId(id);
-    setInstallLog([]);
-    setError(null);
-    try {
-      for await (const event of harnessInstall(id)) {
-        if (event.kind !== "done" && "text" in event && event.text) {
-          setInstallLog((prev) => [...prev, event.text]);
-        }
-        if (event.kind === "done" && !event.ok) {
-          setError(`Install exited with code ${event.exitCode ?? "?"}.`);
-        }
-      }
-      await refresh();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Install failed");
-    } finally {
-      setInstallingId(null);
-    }
-  }
-
   // Trigger the harness's own OAuth sign-in (claude/codex). The CLI opens
   // the browser; we stream its progress, then re-probe so the badge flips
   // "Needs sign-in" → "Ready" without reopening Settings.
@@ -190,8 +169,21 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
           : "Choose which AI Compose works with. You can change this anytime."}
       </p>
 
-      <ul className="harness-grid">
-        {rows.map(({ info, readiness }) => {
+      {groupAgents(rows.map((row) => row.info)).map((group) => (
+        <div key={group.label} className="agent-group">
+          <p className="agent-group__label">
+            {group.label}
+            {group.builtIn ? (
+              <span className="agent-group__note">
+                built in — pick where the models come from
+              </span>
+            ) : null}
+          </p>
+          <ul className="harness-grid">
+        {group.entries.map((groupInfo) => {
+          const row = rows.find((candidate) => candidate.info.id === groupInfo.id);
+          if (!row) return null;
+          const { info, readiness } = row;
           const selected = info.id === selectedHarnessId;
           // Until the probe lands, a card reads "Checking…" and isn't selectable —
           // agentStatus(null) would otherwise report a definite (wrong) status.
@@ -214,6 +206,11 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
                     {selected ? "●" : "○"}
                   </span>
                   <strong className="harness-card__name">{info.displayName}</strong>
+                  {isBuiltInProvider(info) ? (
+                    <span className="harness-card__where">
+                      {isLocalProvider(info) ? "on this Mac" : "hosted"}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="harness-card__badges">
                   {info.id === suggestedId && !checking ? (
@@ -236,15 +233,8 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
                   <span className="harness-card__version">{readiness.version}</span>
                 ) : null}
               </button>
-              {status?.action === "install" ? (
-                <Button
-                  size="sm"
-                  kind="tertiary"
-                  disabled={installingId !== null}
-                  onClick={() => void handleInstall(info.id)}
-                >
-                  {installingId === info.id ? "Installing…" : "Install"}
-                </Button>
+              {status?.kind === "notInstalled" && info.installHint ? (
+                <InstallHintInline hint={info.installHint} />
               ) : status?.action === "signIn" ? (
                 <Button
                   size="sm"
@@ -258,7 +248,9 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
             </li>
           );
         })}
-      </ul>
+          </ul>
+        </div>
+      ))}
 
       {installLog.length > 0 ? (
         <pre

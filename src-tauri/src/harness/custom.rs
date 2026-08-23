@@ -12,7 +12,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use harness::{
-    AcpHarness, AcpHarnessConfig, Harness, HarnessModel, OpenHarness, OpenHarnessConfig,
+    AcpHarness, AcpHarnessConfig, ApiKey, Harness, ModelChoice, OpenHarness,
+    OpenHarnessConfig,
 };
 use serde::{Deserialize, Serialize};
 
@@ -191,29 +192,54 @@ pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
             display_name: record.display_name,
             command,
             args,
+            // The user named this command themselves; there is nowhere
+            // to send them to get it.
+            install_hint: None,
         })),
         CustomAgentKind::OpenAiCompatible {
             base_url,
             default_model,
             requires_key,
         } => {
-            let api_key_env = requires_key.then(|| custom_api_key_env(&record.id));
+            // No env var: the key goes in as a value. `requires_key` still
+            // says whether one is needed, which is what drives the key field.
+            let _ = custom_api_key_env;
+            // The one model the user named. It seeds the picker until discovery
+            // answers, and remains the fallback when the endpoint serves no list.
             let models = default_model
                 .filter(|model| !model.trim().is_empty())
                 .map(|model| {
-                    vec![HarnessModel {
+                    vec![ModelChoice {
                         value: model.clone(),
                         label: model,
                     }]
                 })
                 .unwrap_or_default();
-            Box::new(OpenHarness::custom(OpenHarnessConfig {
-                id: record.id,
-                display_name: record.display_name,
-                base_url,
-                api_key_env,
-                models,
-            }))
+            // The key goes in as a value, never an environment variable — an
+            // exported one is inherited by the agent's own shell tool.
+            // One field, three states: no key wanted, wanted and missing (so
+            // Settings offers the slot), or the secret itself.
+            let api_key = if requires_key {
+                crate::harness::credentials::secret_for(&record.id)
+                    .map_or(ApiKey::Required, ApiKey::Value)
+            } else {
+                ApiKey::NotNeeded
+            };
+            Box::new(
+                OpenHarness::custom(OpenHarnessConfig {
+                    id: record.id,
+                    display_name: record.display_name,
+                    base_url,
+                    api_key,
+                    models,
+                    ..Default::default()
+                })
+                // Ask the endpoint what it serves. Whoever added it typed a URL,
+                // not a catalog, and every OpenAI-compatible server publishes
+                // one; the model they named stays as the fallback for a server
+                // that doesn't.
+                .with_openai_models(),
+            )
         }
     }
 }
@@ -334,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn builds_harnesses_with_matching_ids_and_derived_key_env() {
+    fn builds_harnesses_with_matching_ids_and_a_key_slot() {
         let dir = tempdir().unwrap();
         let store = CustomAgentStore::default();
         store.init_from_dir(dir.path()).unwrap();
@@ -346,7 +372,13 @@ mod tests {
         assert_eq!(ids, vec!["custom:gem", "custom:gw"]);
 
         let gateway = built.iter().find(|harness| harness.info().id == "custom:gw").unwrap();
-        assert_eq!(gateway.credential().keychain_account, custom_api_key_env("custom:gw"));
+        let spec = gateway.credential();
+        // A key is still required, and the slot is keyed by the agent id — no
+        // environment variable is involved now that the key is passed by value.
+        assert!(spec.required);
+        assert_eq!(spec.keychain_service, "custom:gw");
+        // The derived variable name survives only for reading entries written
+        // by the old per-entry scheme; see credentials::legacy_accounts.
         assert_eq!(custom_api_key_env("custom:gw"), "COMPOSE_CUSTOM_GW_API_KEY");
     }
 }

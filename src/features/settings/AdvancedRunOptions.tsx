@@ -9,7 +9,7 @@ import { useHarnessStore } from "../../app/store/harnessStore";
 import type { HarnessInfo } from "../../lib/ipc/harnessClient";
 
 /** Reasoning-effort levels (Codex's `model_reasoning_effort`). Neutral presets —
- *  whether an agent honors them is decided by its `supportsEffort` capability. */
+ *  whether an agent honors them is decided by its `effort` capability. */
 const EFFORT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
   { value: "", label: "Default" },
   { value: "minimal", label: "Minimal" },
@@ -32,7 +32,7 @@ const MAX_TURNS_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
  *  that declare none. */
 export function hasAdvancedRunOptions(catalog: HarnessInfo[], harnessId: string): boolean {
   const caps = harnessCapabilitiesOf(catalog, harnessId);
-  return supportsPermissionMode(harnessId) || caps.supportsMaxTurns || caps.supportsEffort;
+  return supportsPermissionMode(harnessId) || caps.maxTurns || caps.effort;
 }
 
 /**
@@ -69,7 +69,7 @@ export function AdvancedRunOptions({ harnessId }: { harnessId: string }) {
         </Select>
       ) : null}
 
-      {caps.supportsMaxTurns ? (
+      {caps.maxTurns ? (
         <Select
           id={`${harnessId}-max-turns`}
           labelText="Max turns"
@@ -87,7 +87,7 @@ export function AdvancedRunOptions({ harnessId }: { harnessId: string }) {
         </Select>
       ) : null}
 
-      {caps.supportsEffort ? (
+      {caps.effort ? (
         <Select
           id={`${harnessId}-effort`}
           labelText="Reasoning effort"

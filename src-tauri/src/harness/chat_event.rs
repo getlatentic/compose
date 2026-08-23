@@ -184,7 +184,7 @@ pub fn run_event_to_chat(event: RunEvent) -> Option<ChatEvent> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use harness::ProcessEvent;
+    use harness::Event;
 
     // --- neutral RunEvent → ChatEvent (claude/codex) ------------------------
 
@@ -302,7 +302,7 @@ mod tests {
         // error, so the run looked like codex silently did nothing.
         use harness::codex::CodexStreamParser;
         let mut parser = CodexStreamParser::new();
-        let run_events = parser.on_process_event(ProcessEvent::Stdout {
+        let run_events = parser.on_process_event(Event::Stdout {
             run_id: "r".to_owned(),
             line: r#"{"type":"turn.failed","error":{"message":"quota exceeded"}}"#.to_owned(),
         });

@@ -3,6 +3,7 @@ import { harnessCapabilitiesOf, type HarnessRunOptions } from "../../app/workspa
 import { useHarnessStore } from "../../app/store/harnessStore";
 import type { HarnessInfo, HarnessModel } from "../../lib/ipc/harnessClient";
 import { AssistantPickerView, type ModelOption } from "./AssistantPicker";
+import { selectionLabel } from "../settings/agentGroups";
 
 /**
  * The composer footer line, a compact
@@ -19,16 +20,26 @@ import { AssistantPickerView, type ModelOption } from "./AssistantPicker";
 
 type PickerStatus = "online" | "offline" | "connecting";
 
-/** The footer's single label: the model when one is chosen (prefixed with the
- *  assistant unless the model id already carries it), else just the assistant. */
-function combinedLabel(harnessName: string, modelLabel: string, selectedModel: string): string {
+/**
+ * The footer's label: `model · agent`.
+ *
+ * The model leads because it is what people switch. The agent trails because
+ * it is sticky but must stay visible — what a run costs and what it can touch
+ * both depend on it. The provider's name is deliberately absent: showing
+ * `Compose / OpenRouter / claude-sonnet-4` spends three slots on a two-slot
+ * decision. Local-versus-hosted is the part worth permanent space, and the
+ * caller renders that as a glyph.
+ */
+function combinedLabel(agentName: string, modelLabel: string, selectedModel: string): string {
   if (!selectedModel) {
-    return harnessName;
+    return agentName;
   }
-  if (modelLabel.toLowerCase().startsWith(harnessName.toLowerCase())) {
+  // An id that already names its agent (e.g. `claude-sonnet-4`) would read as
+  // a stutter next to it.
+  if (modelLabel.toLowerCase().startsWith(agentName.toLowerCase())) {
     return modelLabel;
   }
-  return `${harnessName}/${modelLabel}`;
+  return `${modelLabel} · ${agentName}`;
 }
 
 export function ChatComposerFooterView({
@@ -76,17 +87,21 @@ export function ChatComposerFooterView({
   const assistants = harnesses.map((harness) => ({
     id: harness.id,
     name: harness.displayName,
+    provider: harness.provider,
     status: statusById?.[harness.id],
   }));
-  const selectedHarnessName =
-    harnesses.find((harness) => harness.id === selectedHarnessId)?.displayName ?? selectedHarnessId;
-  const label = combinedLabel(selectedHarnessName, modelLabel, selectedModel);
+  const selectedInfo = harnesses.find((harness) => harness.id === selectedHarnessId);
+  // A provider shows the built-in agent's name, not its own — the agent is
+  // what does the work; the provider only says where the tokens come from.
+  const selection = selectionLabel(selectedInfo, selectedModel);
+  const label = combinedLabel(selection.agent, modelLabel, selectedModel);
 
   return (
     <div className="chat-footer">
       <div className="chat-footer__meta">
         <AssistantPickerView
           label={label}
+          local={selection.local}
           assistants={assistants}
           selectedAssistantId={selectedHarnessId}
           onSelectAssistant={onSelectHarness}

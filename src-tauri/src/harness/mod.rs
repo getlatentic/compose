@@ -8,6 +8,7 @@ pub mod model_manager;
 pub mod ollama_runtime;
 pub mod orphan_runs;
 pub mod registry;
+pub mod secret_store;
 pub mod run_mode;
 pub mod runner;
 pub mod verify;

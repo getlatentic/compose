@@ -89,18 +89,51 @@ export interface HarnessCapabilities {
   /** Curated model choices for the picker. Empty → no curated list. */
   models: HarnessModel[];
   /** Accepts a free-text model id beyond `models` (codex). */
-  allowsCustomModel: boolean;
+  customModel: boolean;
   /** Honors reasoning effort (codex). */
-  supportsEffort: boolean;
+  effort: boolean;
   /** Honors a max-turns cap (claude). */
-  supportsMaxTurns: boolean;
+  maxTurns: boolean;
   /** Supports an interactive sign-in flow (claude/codex OAuth) the picker
    * can trigger when installed-but-not-signed-in. */
-  supportsLogin: boolean;
+  login: boolean;
   /** Honors per-harness custom instructions (appended to the system prompt via
    * `RunTuning.extra_instructions`). True for the openai-compatible adapter
    * (Ollama / OpenRouter); the picker hides the field for harnesses that don't. */
-  supportsCustomInstructions: boolean;
+  customInstructions: boolean;
+}
+
+/**
+ * Where a user gets an agent that isn't on this machine. Compose discovers and
+ * runs agents; it never installs them, so this is what a "Not installed" row
+ * shows instead of an action button.
+ */
+export interface InstallHint {
+  url: string;
+  command: string | null;
+}
+
+/**
+ * The wire shape of one `harness_list` entry, before [`harnessList`] flattens
+ * it into a {@link HarnessInfo}. Identity and capability arrive separately
+ * because the harness trait asks them at different frequencies.
+ */
+interface HarnessListing {
+  manifest: Omit<HarnessInfo, "capabilities" | "provider">;
+  capabilities: HarnessCapabilities;
+  provider: ProviderInfo | null;
+}
+
+/**
+ * Set when the entry is an OpenAI-compatible endpoint the built-in agent drives
+ * — same loop, same tools, different base URL — and null when the entry is a
+ * standalone agent that brings its own. Classified by the backend, which knows
+ * how each was registered; a user-added endpoint gets an opaque `custom:<uuid>`
+ * that says nothing.
+ */
+export interface ProviderInfo {
+  /** Served from this machine: free, private, offline. */
+  local: boolean;
 }
 
 /** One entry in the harness catalog (`harness_list` command). */
@@ -108,8 +141,9 @@ export interface HarnessInfo {
   id: string;
   displayName: string;
   description: string;
-  requiresInstall: boolean;
+  installHint: InstallHint | null;
   capabilities: HarnessCapabilities;
+  provider: ProviderInfo | null;
 }
 
 /** Probe result for one harness (`harness_readiness` command). */
@@ -283,7 +317,16 @@ export async function harnessList(): Promise<HarnessInfo[]> {
   if (!isTauriRuntime()) {
     return [];
   }
-  return invoke<HarnessInfo[]>("harness_list");
+  // The harness registry answers `{ manifest, capabilities }` — it asks identity
+  // once and capability constantly, so the trait keeps them apart. Everything
+  // above this line wants one object per agent, and this is the layer whose job
+  // that is.
+  const listings = await invoke<HarnessListing[]>("harness_list");
+  return listings.map(({ manifest, capabilities, provider }) => ({
+    ...manifest,
+    capabilities,
+    provider: provider ?? null,
+  }));
 }
 
 /** Probe one harness's readiness (installed / version / auth). */
@@ -599,14 +642,6 @@ export async function* streamSubprocessCommand(
       pendingResolve = resolve;
     });
   }
-}
-
-/**
- * Stream a harness's one-time install. Yields events as they arrive on a
- * Tauri `Channel`; resolves when the install process exits.
- */
-export function harnessInstall(harnessId: string): AsyncGenerator<HarnessInstallEvent, void, void> {
-  return streamSubprocessCommand("harness_install", { harnessId });
 }
 
 /**

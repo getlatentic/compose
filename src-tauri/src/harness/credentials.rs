@@ -1,19 +1,133 @@
-//! Host-owned credentials. Compose stores each harness's API key in the OS
-//! keychain and gives it to the harness only by exporting it into the env var the
-//! harness reads — the harness never opens the keychain itself.
+//! Host-owned credentials. Compose keeps each harness's API key in one
+//! encrypted store and hands it to the harness as a value when the registry
+//! builds it — the harness never opens the store, and the key never becomes an
+//! environment variable, which every child the agent spawns would inherit.
 //!
-//! Keys are stored per-app (the default file keychain), keyed by the harness's
-//! service + account. Sharing them across the Latentic apps via a keychain
-//! access group is deferred: `keychain-access-groups` is a provisioning-profile-
-//! restricted entitlement, and adding it without an embedded profile makes AMFI
-//! kill the app at launch — so the shared group needs a Developer ID provisioning
-//! profile (and Calibrate's side) before it can ship. See compose#16.
+//! Storage moved from one OS-vault entry per harness to a single entry holding
+//! a master key, with the secrets in an encrypted file
+//! ([`super::secret_store`]). The reason is portability: a vault entry per
+//! secret assumes a vault that always exists, which is true on macOS and
+//! Windows and not on Linux. Keys written by the old scheme migrate on first
+//! load, so nobody re-enters anything.
+
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 
 use harness::{CredentialSpec, Harness};
-use security_framework::passwords::{
-    delete_generic_password_options, generic_password, set_generic_password_options, PasswordOptions,
-};
 use serde::Serialize;
+
+use super::secret_store::{Opened, SecretStore};
+
+/// The process-wide store. `None` until [`init_from_dir`] runs at boot, and
+/// again if the master key was lost — in which case reads return nothing and
+/// writes mint a fresh store, which is exactly "re-enter your keys".
+static STORE: OnceLock<Mutex<Option<SecretStore>>> = OnceLock::new();
+static CONFIG_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+fn store() -> &'static Mutex<Option<SecretStore>> {
+    STORE.get_or_init(|| Mutex::new(None))
+}
+
+/// Load the store and fold in any keys written by the per-entry scheme.
+/// Returns whether the previous secrets were unrecoverable, so the host can
+/// say so rather than leaving the user wondering where their key went.
+pub fn init_from_dir(config_dir: &std::path::Path) -> Result<bool, String> {
+    let _ = CONFIG_DIR.set(config_dir.to_path_buf());
+    match SecretStore::load(config_dir)? {
+        Opened::Ready(mut loaded) => {
+            migrate_legacy_entries(&mut loaded);
+            *store().lock().map_err(|_| "credential store lock poisoned")? = Some(loaded);
+            Ok(false)
+        }
+        Opened::KeyLost => Ok(true),
+    }
+}
+
+/// Move keys written by the old one-entry-per-harness scheme into the store.
+///
+/// The old entries were generic passwords keyed by the harness's
+/// `keychain_service` + `keychain_account`, which is what `keyring` reads too —
+/// so this needs no platform-specific code. Each is deleted once carried over,
+/// leaving a single vault entry behind as intended.
+fn migrate_legacy_entries(loaded: &mut SecretStore) {
+    for spec in every_spec() {
+        if spec.keychain_service.is_empty() {
+            continue;
+        }
+        if loaded.get(&spec.keychain_service).is_some() {
+            continue;
+        }
+        for account in legacy_accounts(&spec) {
+            let Ok(entry) = keyring::Entry::new(&spec.keychain_service, &account) else {
+                continue;
+            };
+            let Ok(value) = entry.get_password() else {
+                continue;
+            };
+            if value.trim().is_empty() {
+                continue;
+            }
+            if loaded.set(&spec.keychain_service, &value).is_ok() {
+                // Only after the new store has it on disk — a failed write must
+                // not lose the key.
+                let _ = entry.delete_credential();
+            }
+            break;
+        }
+    }
+}
+
+/// Account names an old entry may sit under, newest naming first.
+///
+/// The per-entry scheme keyed the account by the environment variable the
+/// harness read — `OPENROUTER_API_KEY`, or `COMPOSE_CUSTOM_<ID>_API_KEY` for a
+/// user's own endpoint. Now that no variable is involved, the account is the
+/// provider id, so a migration that looked only at today's name would walk
+/// straight past everyone's saved key.
+fn legacy_accounts(spec: &CredentialSpec) -> Vec<String> {
+    let mut names = Vec::new();
+    if !spec.keychain_account.is_empty() {
+        names.push(spec.keychain_account.clone());
+    }
+    let derived = super::custom::custom_api_key_env(&spec.keychain_service);
+    if !names.contains(&derived) {
+        names.push(derived);
+    }
+    // The built-in providers' old variable names.
+    for legacy in ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"] {
+        if !names.iter().any(|n| n == legacy) {
+            names.push(legacy.to_owned());
+        }
+    }
+    names
+}
+
+/// Every harness that can hold a host-stored key: the configured providers plus
+/// the user's own OpenAI-compatible agents.
+fn every_spec() -> Vec<CredentialSpec> {
+    let mut specs: Vec<CredentialSpec> = super::registry::extra_harnesses()
+        .iter()
+        .map(|harness| harness.credential())
+        .collect();
+    specs.extend(
+        super::custom::custom_agent_store()
+            .build_harnesses()
+            .iter()
+            .map(|harness| harness.credential()),
+    );
+    specs
+}
+
+/// The stored secret for a provider id, for handing to a harness as a value.
+///
+/// Used at construction time by the registry so the key reaches the adapter
+/// without passing through the environment, where the agent's own shell tool
+/// would inherit it.
+pub fn secret_for(provider_id: &str) -> Option<String> {
+    let guard = store().lock().ok()?;
+    let value = guard.as_ref()?.get(provider_id)?;
+    (!value.trim().is_empty()).then(|| value.to_owned())
+}
 
 pub struct Credential {
     spec: CredentialSpec,
@@ -27,9 +141,7 @@ pub struct CredentialStatus {
 
 impl Credential {
     pub fn of(harness: &dyn Harness) -> Self {
-        Self {
-            spec: harness.credential(),
-        }
+        Self { spec: harness.credential() }
     }
 
     /// False when the harness owns its auth (Claude/Codex) or needs none (Ollama).
@@ -37,21 +149,13 @@ impl Credential {
         self.spec.required && !self.spec.keychain_account.is_empty()
     }
 
-    /// A keychain query keyed by the harness's service + account (e.g. service
-    /// `openrouter`, account `OPENROUTER_API_KEY`).
-    fn options(&self) -> PasswordOptions {
-        PasswordOptions::new_generic_password(
-            &self.spec.keychain_service,
-            &self.spec.keychain_account,
-        )
-    }
-
     pub fn read(&self) -> Option<String> {
         if !self.host_managed() {
             return None;
         }
-        let value = String::from_utf8(generic_password(self.options()).ok()?).ok()?;
-        (!value.trim().is_empty()).then_some(value)
+        let guard = store().lock().ok()?;
+        let value = guard.as_ref()?.get(&self.spec.keychain_service)?;
+        (!value.trim().is_empty()).then(|| value.to_owned())
     }
 
     pub fn status(&self) -> CredentialStatus {
@@ -66,44 +170,34 @@ impl Credential {
             return Err("This assistant does not take an API key here.".to_owned());
         }
         let value = value.trim();
-        if value.is_empty() {
-            let _ = delete_generic_password_options(self.options());
-            std::env::remove_var(&self.spec.keychain_account);
-            return Ok(());
+        let mut guard = store().lock().map_err(|_| "credential store lock poisoned")?;
+        // A lost master key leaves no store. Saving a key is the recovery, so
+        // build a fresh one rather than refusing the write.
+        if guard.is_none() {
+            let dir = CONFIG_DIR.get().ok_or("credential store is not initialised")?;
+            match SecretStore::load(dir)? {
+                Opened::Ready(fresh) => *guard = Some(fresh),
+                Opened::KeyLost => {
+                    return Err("Could not unlock the credential store. Reset it in Settings.".to_owned())
+                }
+            }
         }
-        set_generic_password_options(value.as_bytes(), self.options()).map_err(|e| e.to_string())?;
-        std::env::set_var(&self.spec.keychain_account, value);
+        let store = guard.as_mut().ok_or("credential store is not initialised")?;
+        store.set(&self.spec.keychain_service, value)?;
+        // Deliberately not exported. The registry rebuilds each harness per
+        // call and reads the value straight from the store, so a variable would
+        // add nothing but reach — every child the agent spawns inherits it.
         Ok(())
     }
 
-    pub fn export_to_env(&self) {
-        if let Some(key) = self.read() {
-            std::env::set_var(&self.spec.keychain_account, key);
-        }
-    }
 }
 
-/// Boot-time export of the host-configured providers' keys. A built-in's key is
-/// exported per-run instead, keeping boot off the keychain — a read on a
-/// re-signed build can block on a macOS permission prompt.
-pub fn export_all() {
-    for harness in crate::harness::registry::extra_harnesses() {
-        Credential::of(harness.as_ref()).export_to_env();
-    }
-    // User-registered OpenAI-compatible agents store a key the same way.
-    for harness in crate::harness::custom::custom_agent_store().build_harnesses() {
-        Credential::of(harness.as_ref()).export_to_env();
-    }
-}
-
-/// Delete every host-managed key from the keychain (the "Reset all data" flow).
-/// A `store("")` on a harness that owns its own auth (Claude/Codex/Ollama) is a
-/// no-op error, so iterating the same set as `export_all` is safe.
+/// Drop every stored key and the master key with it (the "Reset all data" flow).
 pub fn forget_all() {
-    for harness in crate::harness::registry::extra_harnesses() {
-        let _ = Credential::of(harness.as_ref()).store("");
-    }
-    for harness in crate::harness::custom::custom_agent_store().build_harnesses() {
-        let _ = Credential::of(harness.as_ref()).store("");
+    if let Ok(mut guard) = store().lock() {
+        if let Some(store) = guard.as_mut() {
+            let _ = store.clear();
+        }
+        *guard = None;
     }
 }

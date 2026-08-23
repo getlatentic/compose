@@ -69,10 +69,10 @@ these are product work; they're the ship vehicle.
       `APPLE_TEAM_ID`. The script loads `src-tauri/.env.release` (gitignored), runs
       the build, notarizes the DMG, and verifies signature + Gatekeeper + staple.
   - [x] Enrolled; **Developer ID Application** certificate installed (Team `94SW7AUBMX`).
-  - [x] Hardened runtime (Tauri default) + bundled-runtime entitlements
-        (`entitlements/runtime.plist`: JIT + unsigned-memory + library-validation
-        exceptions). The bundled `node` / `uv` / `uvx` are Resources Tauri doesn't
-        sign, so `fetch-runtime.sh` signs them with the same Developer ID.
+  - [x] Hardened runtime (Tauri default). No bundled runtime: Compose ships no
+        `node` / `uv` — agents and Ollama are the user's own installs, detected
+        and linked to (download-or-configure), so nothing outside Tauri's own
+        signing exists in the bundle.
   - [x] Notarization + stapling of **both** the `.app` (Tauri, automatic) and the
         `.dmg` (a `build-release.sh` post-step — Tauri only *signs* the DMG wrapper).
   - [ ] Verify the downloaded `.dmg` opens clean on a machine that never built it.

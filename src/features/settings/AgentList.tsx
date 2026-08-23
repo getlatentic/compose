@@ -5,6 +5,7 @@ import { Add, ChevronRight } from "@carbon/react/icons";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { harnessReadiness, type HarnessReadiness } from "../../lib/ipc/harnessClient";
 import { agentStatus } from "./agentStatus";
+import { groupAgents, isBuiltInProvider, isLocalProvider } from "./agentGroups";
 
 // Per-agent readiness, cached across mounts so returning from a detail screen
 // shows last-known statuses instantly while a background re-probe refreshes them.
@@ -80,8 +81,16 @@ export function AgentList({
           ))}
         </ul>
       ) : (
-        <ul className="agent-list">
-          {harnessCatalog.map((info) => {
+        groupAgents(harnessCatalog).map((group) => (
+          <div key={group.label} className="agent-group">
+            <p className="agent-group__label">
+              {group.label}
+              {group.builtIn ? (
+                <span className="agent-group__note">built in — choose where its models come from</span>
+              ) : null}
+            </p>
+            <ul className="agent-list">
+          {group.entries.map((info) => {
             const status = info.id in readiness ? agentStatus(info, readiness[info.id]) : null;
             const needsKey = status?.action === "addKey";
             const isDefault = info.id === selectedHarnessId;
@@ -93,6 +102,11 @@ export function AgentList({
                   onClick={() => onOpenAgent(info.id)}
                 >
                   <span className="agent-row__name">{info.displayName}</span>
+                  {isBuiltInProvider(info) ? (
+                    <span className="agent-row__where">
+                      {isLocalProvider(info) ? "on this Mac" : "hosted"}
+                    </span>
+                  ) : null}
                   {isDefault ? (
                     <Tag size="sm" type="blue">
                       Default
@@ -108,6 +122,13 @@ export function AgentList({
               </li>
             );
           })}
+            </ul>
+          </div>
+        ))
+      )}
+
+      {harnessCatalog.length > 0 ? (
+        <ul className="agent-list agent-list--append">
           <li>
             <button type="button" className="agent-row agent-row--add" onClick={onAddAgent}>
               <Add aria-hidden />
@@ -115,7 +136,7 @@ export function AgentList({
             </button>
           </li>
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }

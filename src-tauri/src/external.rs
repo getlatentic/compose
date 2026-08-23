@@ -264,7 +264,7 @@ pub(crate) fn resolve_target(workspaces: &[(String, PathBuf)], raw: &Path) -> Op
             continue;
         }
         let depth = root.components().count();
-        if best.as_ref().map_or(true, |(existing, _, _)| depth > *existing) {
+        if best.as_ref().is_none_or(|(existing, _, _)| depth > *existing) {
             best = Some((depth, id.clone(), relative.to_path_buf()));
         }
     }
@@ -405,6 +405,10 @@ mod tests {
         assert_eq!(readded.list.files.len(), 1);
     }
 
+    // `std::os::unix::fs::symlink` has no Windows equivalent that works
+    // without elevation, and the rule under test — a `.md` symlink must not
+    // smuggle in a non-markdown target — is enforced the same way regardless.
+    #[cfg(unix)]
     #[test]
     fn add_rejects_markdown_symlink_to_non_markdown_target() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -539,6 +543,8 @@ mod tests {
         ));
     }
 
+    // Symlinks again: see the note on the test above.
+    #[cfg(unix)]
     #[test]
     fn resolve_sees_through_symlinked_paths() {
         let dir = tempfile::tempdir().expect("tempdir");

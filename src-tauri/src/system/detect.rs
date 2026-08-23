@@ -1,40 +1,20 @@
-//! The readiness "doctor": probe each recipe and report whether it's present.
-//! Detection is method-agnostic — a Node from nvm or a uv installed by any
-//! means satisfies the check, so we never double-install.
+//! Readiness probing: is a dependency present, and at what version. Detection
+//! is method-agnostic — however the user installed it, finding it on their
+//! login-shell PATH counts.
 
-use crate::system::recipe::{CheckSpec, DependencyRecipe, DependencyStatus};
+use crate::system::recipe::{DependencyRecipe, DependencyStatus};
 use std::process::{Command, Stdio};
 
 /// Probe one recipe into a [`DependencyStatus`].
 pub fn detect(recipe: &DependencyRecipe) -> DependencyStatus {
-    let (present, version) = match &recipe.check {
-        CheckSpec::XcodeSelectPath => detect_xcode(),
-        CheckSpec::LoginShell { probe, min_version } => detect_login_shell(probe, *min_version),
-    };
+    let (present, version) = detect_login_shell(recipe.probe, recipe.min_version);
     DependencyStatus {
         id: recipe.id.to_owned(),
         name: recipe.name.to_owned(),
         description: recipe.description.to_owned(),
         present,
         version,
-        requires_admin: recipe.requires_admin,
-        provides: recipe.provides.iter().map(|s| (*s).to_owned()).collect(),
-        requires: recipe.requires.iter().map(|s| (*s).to_owned()).collect(),
-        error: None,
-    }
-}
-
-fn detect_xcode() -> (bool, Option<String>) {
-    match Command::new("xcode-select")
-        .arg("-p")
-        .stderr(Stdio::null())
-        .output()
-    {
-        Ok(out) if out.status.success() => {
-            let path = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-            (true, (!path.is_empty()).then_some(path))
-        }
-        _ => (false, None),
+        hint: recipe.hint(),
     }
 }
 

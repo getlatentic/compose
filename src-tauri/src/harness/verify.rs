@@ -52,7 +52,7 @@ pub fn run(harness: &dyn Harness) -> HarnessRuntimeVerification {
         resume: None,
     };
 
-    match harness.run_channel(request) {
+    match harness.run(request) {
         Ok((handle, events)) => drain(handle, events, readiness.version),
         Err(error) => HarnessRuntimeVerification {
             installed: true,
@@ -152,13 +152,13 @@ fn preview(text: &str) -> Option<String> {
 mod tests {
     use super::*;
     use harness::{
-        CredentialSpec, HarnessError, HarnessInfo, HarnessReadiness, InstallCallback, RunCallback,
+        CredentialSpec, Error, Info, Readiness, RunCallback,
         RunControl,
     };
 
     struct NoopControl;
     impl RunControl for NoopControl {
-        fn cancel(&self) -> Result<(), HarnessError> {
+        fn cancel(&self) -> Result<(), Error> {
             Ok(())
         }
         fn was_cancelled(&self) -> bool {
@@ -176,11 +176,11 @@ mod tests {
     }
 
     impl Harness for MockHarness {
-        fn info(&self) -> HarnessInfo {
+        fn info(&self) -> Info {
             unreachable!("verify::run does not read info()")
         }
-        fn readiness(&self) -> HarnessReadiness {
-            HarnessReadiness {
+        fn readiness(&self) -> Readiness {
+            Readiness {
                 harness_id: "mock".to_owned(),
                 ready: self.installed,
                 installed: self.installed,
@@ -190,14 +190,11 @@ mod tests {
                 details: serde_json::Value::Null,
             }
         }
-        fn install(&self, _on_event: InstallCallback) -> Result<(), HarnessError> {
-            Ok(())
-        }
-        fn run(
+        fn start(
             &self,
             _request: RunRequest,
             on_event: RunCallback,
-        ) -> Result<RunHandle, HarnessError> {
+        ) -> Result<RunHandle, Error> {
             for event in &self.events {
                 on_event(event.clone());
             }

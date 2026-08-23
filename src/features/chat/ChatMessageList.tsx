@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { ChatRunState, WorkspaceChatMessage } from "../../app/workspaceModel";
 import { ChatEmptyState } from "./ChatEmptyState";
@@ -11,6 +11,10 @@ import { WorkingIndicator } from "./WorkingIndicator";
  * — it re-pins when the message set or run state changes (a streaming
  * turn appends content under the current run, which `runState` tracks).
  */
+/** How far from the bottom still counts as "following" — a hair of slack so a
+ *  sub-pixel layout rounding does not read as a deliberate scroll-up. */
+const PINNED_SLACK = 24;
+
 export function ChatMessageList({
   callbacks,
   composerHeight,
@@ -40,12 +44,30 @@ export function ChatMessageList({
   const running = runState === "starting" || runState === "streaming";
   const showStartingLoader = running && messages[messages.length - 1]?.role !== "assistant";
 
+  // Whether the reader was at the bottom before this update. Read in a layout
+  // effect — after the DOM has the new content but before paint — because by
+  // the time an ordinary effect runs, `scrollHeight` already includes it and
+  // every position looks scrolled-up.
+  const wasAtBottom = useRef(true);
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (element) {
+      wasAtBottom.current =
+        element.scrollHeight - element.scrollTop - element.clientHeight <= PINNED_SLACK;
+    }
+  });
+
+  // Follow the conversation only while the reader is following it. Pinning
+  // unconditionally meant scrolling up to re-read something was undone by the
+  // next delta — and since a reasoning model emits its whole answer at once,
+  // that yank was a full message tall.
+  //
   // Re-pin on `composerHeight` too: the spacer below grows in the same commit,
   // so reading `scrollHeight` here already includes the reserved space — no
   // race with the composer's resize observer.
   useEffect(() => {
     const element = scrollRef.current;
-    if (!element) {
+    if (!element || !wasAtBottom.current) {
       return;
     }
     element.scrollTop = element.scrollHeight;

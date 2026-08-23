@@ -7,13 +7,15 @@ const caps = (over: Partial<HarnessCapabilities> = {}): HarnessCapabilities => (
   credentialRequired: false,
   previewsEdits: false,
   models: [],
-  allowsCustomModel: false,
-  supportsEffort: false,
-  supportsMaxTurns: false,
-  supportsLogin: false,
-  supportsCustomInstructions: false,
+  customModel: false,
+  effort: false,
+  maxTurns: false,
+  login: false,
+  customInstructions: false,
   ...over,
 });
+
+const HINT = { url: "https://example.dev/install", command: "npm i -g x" };
 
 const info = (
   over: Partial<Omit<HarnessInfo, "capabilities">> & { capabilities?: Partial<HarnessCapabilities> } = {},
@@ -21,7 +23,8 @@ const info = (
   id: "x",
   displayName: "X",
   description: "",
-  requiresInstall: false,
+  installHint: null,
+  provider: null,
   ...over,
   capabilities: caps(over.capabilities),
 });
@@ -62,7 +65,7 @@ describe("agentStatus", () => {
 
   it("an OAuth CLI that's installed but not signed in says 'Needs sign-in'", () => {
     const status = agentStatus(
-      info({ requiresInstall: true, capabilities: { supportsLogin: true } }),
+      info({ installHint: HINT, capabilities: { login: true } }),
       readiness({ installed: true, ready: false }),
     );
     expect(status.kind).toBe("needsSignIn");
@@ -71,18 +74,21 @@ describe("agentStatus", () => {
 
   it("a CLI that isn't on disk says 'Not installed' before any auth state", () => {
     const status = agentStatus(
-      info({ requiresInstall: true, capabilities: { supportsLogin: true } }),
+      info({ installHint: HINT, capabilities: { login: true } }),
       readiness({ installed: false }),
     );
     expect(status.kind).toBe("notInstalled");
-    expect(status.action).toBe("install");
+    // Compose doesn't install agents, so there is no button to offer — the
+    // hint is what the row renders instead.
+    expect(status.action).toBeUndefined();
   });
 
-  it("a managed agent installed without its key says 'Add a key' (install step already done)", () => {
-    // Bob: requiresInstall + credentialRequired.
+  it("a missing agent with no hint falls through to its auth state", () => {
+    // A user-supplied ACP command: nowhere to send them, so "Not installed"
+    // would be a dead end. Its real blocker is surfaced instead.
     const status = agentStatus(
-      info({ requiresInstall: true, capabilities: { credentialRequired: true } }),
-      readiness({ installed: true, ready: false }),
+      info({ installHint: null, capabilities: { credentialRequired: true } }),
+      readiness({ installed: false, ready: false }),
     );
     expect(status.kind).toBe("needsKey");
   });

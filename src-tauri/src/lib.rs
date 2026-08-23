@@ -1,4 +1,5 @@
-mod bundled_runtime;
+mod stale_state;
+mod user_tool_dirs;
 mod data_reset;
 pub mod db;
 mod default_handler;
@@ -205,6 +206,17 @@ pub fn run() {
                     {
                         eprintln!("custom-agent store init failed: {error}");
                     }
+                    // Then the credential store, which must come after the
+                    // custom agents so their keys migrate too. One decrypt
+                    // covers every provider, and it carries over anything the
+                    // old one-entry-per-harness scheme left behind.
+                    match harness::credentials::init_from_dir(&config_dir) {
+                        Ok(true) => eprintln!(
+                            "credential store could not be unlocked — saved API keys must be re-entered"
+                        ),
+                        Ok(false) => {}
+                        Err(error) => eprintln!("credential store init failed: {error}"),
+                    }
                 }
                 Err(error) => eprintln!("app config dir unavailable for custom agents: {error}"),
             }
@@ -213,22 +225,13 @@ pub fn run() {
             if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
                 std::env::set_var("AGENT_HARNESS_CACHE_DIR", cache_dir);
             }
-            // Put Compose's bundled Node + uv ahead of any system install, and
-            // point npm at a writable prefix for lazily-installed CLI agents, so
-            // a user needs no developer-tool setup. Before the keychain export /
-            // readiness probes below, so the harness's cached PATH includes it.
-            if let (Ok(resource_dir), Ok(data_dir)) =
-                (app_handle.path().resource_dir(), app_handle.path().app_data_dir())
-            {
-                bundled_runtime::configure(&resource_dir, &data_dir);
-            }
             // A Finder-launched .app inherits only the minimal launchd PATH, and
             // the login-shell PATH query can come back without nvm (a heavy
             // ~/.zshrc whose lazy nvm init no-ops under a stripped PATH). Add the
-            // user's toolchain dirs deterministically so an nvm-installed bob/codex
+            // user's toolchain dirs deterministically so an installed CLI agent
             // resolves — a fast directory scan, so it stays on the launch path.
-            bundled_runtime::append_user_tool_dirs();
-            // Warm the harness PATH cache OFF the main thread: augmented_node_path
+            user_tool_dirs::append();
+            // Warm the harness PATH cache OFF the main thread: augmented_path
             // runs a login-shell query (`$SHELL -lic env`) that can take ~1-2s
             // against a heavy ~/.zshrc. Doing it here, not on the launch path, lets
             // the window paint immediately and makes the first interaction with ANY
@@ -236,7 +239,7 @@ pub fn run() {
             // default. The deterministic dirs added above already make an
             // nvm-installed CLI resolvable, so detection is correct before this lands.
             std::thread::spawn(|| {
-                let _ = ::harness::augmented_node_path();
+                let _ = ::harness::augmented_path();
             });
             let metadata = app_handle.state::<db::MetadataStore>();
             if let Err(error) = metadata.init_from_app(&app_handle) {
@@ -250,7 +253,12 @@ pub fn run() {
                 app_handle
                     .state::<harness::runner::RunnerState>()
                     .set_data_dir(data_dir.clone());
-                std::thread::spawn(move || harness::orphan_runs::sweep(&data_dir));
+                std::thread::spawn(move || {
+                    harness::orphan_runs::sweep(&data_dir);
+                    // Same trip off the launch path: clear what removed
+                    // features left behind (the bundled runtime's npm prefix).
+                    stale_state::sweep(&data_dir);
+                });
             }
             let watchers = app_handle.state::<files::watcher::WatcherManager>();
             if let Err(error) = watchers.init(app_handle.clone()) {
@@ -261,9 +269,6 @@ pub fn run() {
             // re-signed build), and inline that stalls the setup hook — so
             // `app.run()` never starts and the boot IPC responses never reach
             // the webview, leaving the splash up forever. Nothing on the launch
-            // path awaits the export; a harness whose key hasn't landed yet just
-            // probes "not ready" until it does.
-            std::thread::spawn(harness::credentials::export_all);
             // Purge soft-deleted files past the trash retention window. Off the
             // launch path on its own thread (nothing in the app waits on it),
             // and only after metadata init above so the store is ready.
@@ -303,7 +308,6 @@ pub fn run() {
             harness::commands::harness_list,
             harness::commands::harness_discover,
             harness::commands::harness_readiness,
-            harness::commands::harness_install,
             harness::commands::harness_login,
             harness::commands::harness_verify_runtime,
             harness::commands::harness_list_models,
@@ -322,7 +326,6 @@ pub fn run() {
             harness::ollama_runtime::ollama_start,
             harness::ollama_runtime::ollama_installed,
             system::commands::system_readiness,
-            system::commands::system_install_dependency,
             data_reset::app_reset_all_data,
             workspace::setup_complete_onboarding,
             workspace::setup_get_onboarding,
@@ -388,6 +391,11 @@ pub fn run() {
 
     boot_native_mark("pre-run-loop");
     app.run(|app_handle, event| match event {
+        // Tauri defines this variant on macOS only — it is the
+        // `application:openURLs:` delegate callback, which no other platform
+        // has. The catch-all below covers its absence; how a file association
+        // would reach a non-macOS build is a question for whenever one ships.
+        #[cfg(target_os = "macos")]
         RunEvent::Opened { urls } => {
             let pending = app_handle.state::<PendingOpenUrls>();
             for url in urls {

@@ -291,6 +291,118 @@ fn now_ms() -> i64 {
 mod tests {
     use super::*;
 
+    use workspace_index::{
+        BacklinkRecord, FrontmatterRecord, GraphEdgeRecord, SourceRange, TagRecord,
+        WorkspaceIndexSnapshot,
+    };
+
+    fn range(start: i64) -> SourceRange {
+        SourceRange { start, end: start + 1 }
+    }
+
+    /// A snapshot whose records are individually identifiable — each names the
+    /// collection and the field it came from.
+    ///
+    /// Wiring a whole block to the wrong collection is a type error, so that
+    /// much is free. What is not: every record carries several `String` fields
+    /// with interchangeable types, so reading `target_path` where `source_path`
+    /// belongs compiles perfectly and points search at the wrong document.
+    fn snapshot() -> WorkspaceIndexSnapshot {
+        WorkspaceIndexSnapshot {
+            backlinks: vec![BacklinkRecord {
+                kind: LinkKind::Wikilink,
+                label: "from-backlinks".to_owned(),
+                source_doc_id: "b-src".to_owned(),
+                source_path: "backlinks.md".to_owned(),
+                source_range: range(1),
+                target_doc_id: Some("b-dst".to_owned()),
+                target_path: "target.md".to_owned(),
+            }],
+            documents: Vec::new(),
+            duration_ms: 0,
+            frontmatter: vec![FrontmatterRecord {
+                doc_id: "f-doc".to_owned(),
+                key: "from-frontmatter".to_owned(),
+                path: "frontmatter.md".to_owned(),
+                source_range: range(2),
+                value: "v".to_owned(),
+            }],
+            graph_edges: vec![GraphEdgeRecord {
+                from_doc_id: "g-from".to_owned(),
+                from_path: "graph.md".to_owned(),
+                kind: LinkKind::Markdown,
+                source_range: range(3),
+                to_doc_id: Some("g-to".to_owned()),
+                to_path: "to.md".to_owned(),
+            }],
+            indexed_at_ms: 0,
+            indexed_document_count: 0,
+            tags: vec![TagRecord {
+                doc_id: "t-doc".to_owned(),
+                kind: TagKind::Inline,
+                path: "tags.md".to_owned(),
+                source_range: range(4),
+                tag: "from-tags".to_owned(),
+            }],
+            workspace_id: "ws-1".to_owned(),
+        }
+    }
+
+    #[test]
+    fn each_collection_is_indexed_from_its_own_source() {
+        // Search reads these records, and a link that names the wrong end sends
+        // the reader to the wrong document. The paths differ per collection and
+        // per end, so a swapped same-typed field shows up here.
+        let records = metadata_records_for_snapshot(&snapshot());
+
+        assert_eq!(records.backlinks.len(), 1);
+        assert_eq!(records.backlinks[0].label, "from-backlinks");
+        assert_eq!(records.backlinks[0].source_path, "backlinks.md");
+
+        assert_eq!(records.frontmatter.len(), 1);
+        assert_eq!(records.frontmatter[0].key, "from-frontmatter");
+        assert_eq!(records.frontmatter[0].path, "frontmatter.md");
+
+        assert_eq!(records.graph_edges.len(), 1);
+        assert_eq!(records.graph_edges[0].from_path, "graph.md");
+        assert_eq!(records.graph_edges[0].to_path, "to.md");
+
+        assert_eq!(records.tags.len(), 1);
+        assert_eq!(records.tags[0].tag, "from-tags");
+        assert_eq!(records.tags[0].path, "tags.md");
+    }
+
+    #[test]
+    fn nothing_is_dropped_on_the_way_into_the_index() {
+        // The mapper is the only step between a built snapshot and what search
+        // can find. A filter slipping into any of the four collections makes
+        // documents quietly unsearchable rather than failing.
+        let mut snap = snapshot();
+        snap.tags = (0..25)
+            .map(|i| TagRecord {
+                doc_id: format!("d{i}"),
+                kind: if i % 2 == 0 { TagKind::Inline } else { TagKind::Frontmatter },
+                path: format!("{i}.md"),
+                source_range: range(i),
+                tag: format!("t{i}"),
+            })
+            .collect();
+
+        let records = metadata_records_for_snapshot(&snap);
+        assert_eq!(records.tags.len(), 25, "every tag reaches the index");
+    }
+
+    #[test]
+    fn the_kind_names_are_the_ones_the_index_stores() {
+        // These strings are persisted and queried by kind, so renaming one is
+        // not a refactor — it silently stops matching every row already written
+        // under the old name.
+        assert_eq!(link_kind_name(LinkKind::Markdown), "markdown");
+        assert_eq!(link_kind_name(LinkKind::Wikilink), "wikilink");
+        assert_eq!(tag_kind_name(TagKind::Frontmatter), "frontmatter");
+        assert_eq!(tag_kind_name(TagKind::Inline), "inline");
+    }
+
     #[test]
     fn second_build_is_declined_while_the_first_holds_the_slot() {
         let store = WorkspaceIndexStore::default();

@@ -4,27 +4,32 @@ import { describe, expect, it } from "vitest";
 import type { HarnessInfo } from "../../lib/ipc/harnessClient";
 import { ChatComposerFooterView } from "./ChatComposerFooter";
 
-function harness(id: string, displayName: string): HarnessInfo {
+function harness(
+  id: string,
+  displayName: string,
+  provider: HarnessInfo["provider"] = null,
+): HarnessInfo {
   return {
     id,
     displayName,
     description: "",
-    requiresInstall: false,
+    installHint: null,
+    provider,
     capabilities: {
       credentialRequired: false,
       previewsEdits: false,
       models: [],
-      allowsCustomModel: false,
-      supportsEffort: false,
-      supportsMaxTurns: false,
-      supportsLogin: false,
-      supportsCustomInstructions: false,
+      customModel: false,
+      effort: false,
+      maxTurns: false,
+      login: false,
+      customInstructions: false,
     },
   };
 }
 
 const base = {
-  harnesses: [harness("bob", "Bob"), harness("codex", "Codex")],
+  harnesses: [harness("opencode", "OpenCode"), harness("codex", "Codex")],
   selectedHarnessId: "codex",
   onSelectHarness: () => {},
   modelItems: [
@@ -38,9 +43,29 @@ const base = {
 };
 
 describe("ChatComposerFooterView", () => {
-  it("collapses the assistant + model into one label", () => {
+  it("leads with the model, since that is what people switch", () => {
+    // `model · agent`. The agent trails but stays visible — a run's cost and
+    // its file access both depend on which one it is.
     const html = renderToStaticMarkup(<ChatComposerFooterView {...base} />);
-    expect(html).toContain("Codex/gpt-5-codex");
+    expect(html).toContain("gpt-5-codex · Codex");
+  });
+
+  it("shows a provider under the built-in agent's name, not its own", () => {
+    // Ollama is where the tokens come from, not who does the work. Naming it
+    // here would spend a slot on the wrong question.
+    const html = renderToStaticMarkup(
+      <ChatComposerFooterView
+        {...base}
+        harnesses={[harness("ollama", "Ollama", { local: true })]}
+        selectedHarnessId="ollama"
+        selectedModel="gpt-oss:20b"
+        modelLabel="gpt-oss:20b"
+      />,
+    );
+    expect(html).toContain("gpt-oss:20b · Compose");
+    expect(html).not.toContain("Ollama");
+    // Local-versus-hosted is the part worth permanent space, as a glyph.
+    expect(html).toContain("Runs on this Mac");
   });
 
   it("avoids repeating the assistant when the model id already carries it", () => {

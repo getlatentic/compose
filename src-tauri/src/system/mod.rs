@@ -1,14 +1,9 @@
-//! System dependency bootstrap: detect and install the developer tooling the AI
-//! assistants and skills need (Xcode Command Line Tools, Homebrew, Node, uv).
-//!
-//! Mirrors the [`harness`](crate::harness) module's shape — a static recipe
-//! registry, a readiness "doctor", and a streamed installer — and reuses the
-//! same `InstallEvent` wire vocabulary so the front-end consumes both with one
-//! code path. The privileged steps (Homebrew's prefix) go through
-//! [`elevate`]'s native macOS auth dialog.
+//! Optional local-AI tooling: detect what's on the machine and, for anything
+//! missing, hand the user to the official download (`InstallHint`) — the same
+//! contract agents get. Compose discovers and runs local tools; it never
+//! installs them, so there is no installer, no elevation, and no bundled
+//! runtime here.
 
 pub mod commands;
 mod detect;
-mod elevate;
-mod install;
 mod recipe;

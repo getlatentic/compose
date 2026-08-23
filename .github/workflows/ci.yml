@@ -1,0 +1,104 @@
+# Compose had no CI: every check was run on one developer's Mac, which is also
+# the only machine that could build it. This is the floor — what must hold
+# before a build is worth signing.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # So a branch can be checked before it has a PR — this workflow did not
+  # exist until now, and the first thing to know is whether it passes.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # macOS is the platform Compose ships on, so it runs everything.
+  macos:
+    name: test (macos)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+
+      # Types first: a type error fails every suite below it in a way that
+      # takes longer to read than `tsc` saying so directly.
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Frontend tests
+        run: pnpm test
+
+      # `tsc --noEmit` does not emit declarations, so the errors that only
+      # occur while writing a `.d.ts` — an exported anonymous class with
+      # private fields, an inferred type naming a transitive dependency by its
+      # pnpm path — are invisible to every other check here. This is the build
+      # `npm publish` runs, and it was failing while the app was green.
+      - name: Editor package build
+        run: pnpm --filter ai-editor build
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test --no-fail-fast
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets
+
+  # Compose ships on macOS only, but the code carries `cfg(not(target_os =
+  # "macos"))` branches — the data-reset and profile-migration fallbacks — that
+  # the macOS job never compiles. Unbuilt code is not "passing", it is unknown,
+  # and the same blind spot cost agent-harness several rounds of CI to find. A
+  # check is enough: nothing here has to *run* off macOS, only compile.
+  other-platforms:
+    name: check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.os }}
+      # Tauri links against the system webview; on Linux that is webkit2gtk.
+      - name: Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+      # `-D warnings` is deliberately dropped here. Compose is a macOS app, so
+      # its macOS-only helpers — the printing page constants, the iCloud
+      # dataless-file check, the open-URLs buffer — are genuinely dead code
+      # elsewhere. That is a true statement about the app, not a defect, and
+      # making it an error would tax every future macOS helper with a `cfg`
+      # for a platform that does not ship. What this job is for is whether the
+      # code *compiles*: a dependency scoped to the wrong platform, an API that
+      # exists only on macOS, a test reaching for `std::os::unix`.
+      - name: Check
+        working-directory: src-tauri
+        env:
+          RUSTFLAGS: ""
+        run: cargo check --all-targets

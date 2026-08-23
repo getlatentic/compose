@@ -3,16 +3,12 @@ import { ComboBox } from "@carbon/react";
 
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-
-interface ModelItem {
-  value: string;
-  label: string;
-}
+import { findIntendedModel, type ModelItem, modelMatchesQuery } from "./modelMatching";
 
 /**
  * The "Default model" picker for an agent: a ComboBox over its known models — a
  * live-discovered list (Ollama / Codex / OpenRouter / OpenCode) or a curated one
- * (Claude) — with type-ahead. Agents that accept any id (`allowsCustomModel`)
+ * (Claude) — with type-ahead. Agents that accept any id (`customModel`)
  * can also type one that isn't listed, so Ollama still works while it's down
  * (type a known id) and custom agents accept anything. An empty value means
  * "Automatic" — the agent picks per chat. Rendered in the agent's main detail
@@ -58,6 +54,14 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
     discovered.length > 0 &&
     !discovered.some((model) => model.value === currentModel);
 
+  // A missing value is usually a typo rather than a withdrawn model — the
+  // reported case was `gpt-oss-120b` for `openai/gpt-oss-120b`. Naming the
+  // model they meant beats telling them it might be gone.
+  const intended = useMemo(
+    () => (savedModelMissing ? findIntendedModel(discovered ?? [], currentModel) : null),
+    [savedModelMissing, discovered, currentModel],
+  );
+
   // Live-discovery agents (no curated list) can gain models after launch — an
   // Ollama pull, a provider catalog refresh — so let the list be re-pulled.
   const canRefresh = caps.models.length === 0;
@@ -72,7 +76,7 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
   };
 
   // Nothing to pick and no custom ids allowed → no picker at all.
-  if (items.length === 0 && !caps.allowsCustomModel) {
+  if (items.length === 0 && !caps.customModel) {
     return null;
   }
 
@@ -87,19 +91,37 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
           items={items}
           // A committed custom value arrives as a bare string, not a ModelItem,
           // so handle both shapes (Carbon's types only know the item shape).
+          // The id, everywhere — in the field and in the list. This field
+          // saves an id and a run needs an id, so a friendly name like
+          // "GPT OSS 120B" only hid the one string that matters and left no
+          // way to learn that a vendor prefix was required.
           itemToString={(item) => {
             const value = item as ModelItem | string | null;
-            return value == null ? "" : typeof value === "string" ? value : value.label;
+            return value == null ? "" : typeof value === "string" ? value : value.value;
           }}
+          // Match the id, the id without its vendor prefix, or the display
+          // name — all three are things people type for the same model.
+          shouldFilterItem={({ item, inputValue }) =>
+            modelMatchesQuery(item as ModelItem, inputValue ?? "")
+          }
           selectedItem={selectedItem}
-          allowCustomValue={caps.allowsCustomModel}
+          // A model id is not prose. Autocapitalisation turned a typed
+          // `gpt-oss-120b` into `Gpt-oss-120b`, which then matched nothing —
+          // and autocorrect and spellcheck are just as wrong on an id.
+          inputProps={{
+            autoCapitalize: "off",
+            autoCorrect: "off",
+            autoComplete: "off",
+            spellCheck: false,
+          }}
+          allowCustomValue={caps.customModel}
           onChange={(data) => {
             const picked = data.selectedItem as ModelItem | string | null;
             const next =
               typeof picked === "string"
                 ? picked.trim()
                 : (picked?.value ??
-                  (caps.allowsCustomModel ? (data.inputValue?.trim() ?? "") : ""));
+                  (caps.customModel ? (data.inputValue?.trim() ?? "") : ""));
             setHarnessOptions(harnessId, { model: next || undefined });
           }}
         />
@@ -115,9 +137,23 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
         ) : null}
       </div>
       {savedModelMissing ? (
-        <p className="model-picker__stale">
-          “{currentModel}” isn’t in the list — it may no longer be available. Pick another above.
-        </p>
+        intended ? (
+          <p className="model-picker__stale">
+            “{currentModel}” isn’t an id.{" "}
+            <button
+              type="button"
+              className="model-picker__suggest"
+              onClick={() => setHarnessOptions(harnessId, { model: intended.value })}
+            >
+              Use {intended.value}
+            </button>{" "}
+            ({intended.label})?
+          </p>
+        ) : (
+          <p className="model-picker__stale">
+            “{currentModel}” isn’t in the list — it may no longer be available. Pick another above.
+          </p>
+        )
       ) : null}
     </div>
   );

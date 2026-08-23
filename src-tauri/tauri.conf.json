@@ -4,9 +4,9 @@
   "version": "0.0.1-alpha.12",
   "identifier": "ai.latentic.compose",
   "build": {
-    "beforeDevCommand": "pnpm dev:vite",
+    "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1421",
-    "beforeBuildCommand": "bash src-tauri/scripts/fetch-runtime.sh && pnpm build",
+    "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -45,9 +45,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": {
-      "binaries/runtime/": "runtime"
-    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

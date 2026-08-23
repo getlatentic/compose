@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Checkmark, ChevronDown, WarningAltFilled } from "@carbon/react/icons";
+import { Checkmark, ChevronDown, Laptop, WarningAltFilled } from "@carbon/react/icons";
+import { groupAgents, isBuiltInProvider, isLocalProvider } from "../settings/agentGroups";
+import type { ProviderInfo } from "../../lib/ipc/harnessClient";
 
 import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 
@@ -15,6 +17,9 @@ import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 export interface AssistantOption {
   id: string;
   name: string;
+  /** Set for an endpoint the built-in agent drives; null for a standalone
+   *  agent. Carried so the picker groups exactly as the settings list does. */
+  provider: ProviderInfo | null;
   /** Per-agent readiness dot shown in the picker. */
   status?: "online" | "offline" | "connecting";
 }
@@ -25,8 +30,12 @@ export interface ModelOption {
 }
 
 export interface AssistantPickerViewProps {
-  /** The collapsed footer text, e.g. `opencode/deepseek-v4-flash-free`. */
+  /** The collapsed footer text, e.g. `gpt-oss:20b · Compose`. */
   label: string;
+  /** The models come from this machine. Drawn as a glyph rather than a word:
+   *  local-versus-hosted is the one provider fact worth permanent space, and it
+   *  fits in an icon where "Ollama" costs ten characters. */
+  local?: boolean;
   assistants: AssistantOption[];
   selectedAssistantId: string;
   onSelectAssistant: (id: string) => void;
@@ -43,6 +52,7 @@ export interface AssistantPickerViewProps {
 
 export function AssistantPickerView({
   label,
+  local = false,
   assistants,
   selectedAssistantId,
   onSelectAssistant,
@@ -81,11 +91,14 @@ export function AssistantPickerView({
         className="assistant-picker__trigger"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Assistant and model"
+        aria-label="Agent and model"
         title={label}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
+        {local ? (
+          <Laptop size={12} className="assistant-picker__where" aria-label="Runs on this Mac" />
+        ) : null}
         <span className="assistant-picker__label">{label}</span>
         {unavailable ? (
           <WarningAltFilled size={12} className="assistant-picker__offline" aria-label="Offline" />
@@ -99,19 +112,20 @@ export function AssistantPickerView({
               ref={popoverRef}
               className="assistant-picker__popover"
               role="menu"
-              aria-label="Assistant and model"
+              aria-label="Agent and model"
               style={{ bottom: coords.bottom, left: coords.left, inlineSize: coords.width }}
             >
-              <div className="assistant-picker__section">
-                <p className="assistant-picker__heading">Assistant</p>
-                {assistants.map((assistant) => (
+              {groupAgents(assistants).map((group) => (
+                <div key={group.label} className="assistant-picker__section">
+                  <p className="assistant-picker__heading">{group.label}</p>
+                  {group.entries.map((assistant) => (
                   <button
                     key={assistant.id}
                     type="button"
                     role="menuitemradio"
                     aria-checked={assistant.id === selectedAssistantId}
                     className="assistant-picker__item"
-                    // Switching assistant keeps the popup open so a model can be
+                    // Switching agent keeps the popup open so a model can be
                     // picked next; the Model section re-renders for it.
                     onClick={() => onSelectAssistant(assistant.id)}
                   >
@@ -123,10 +137,16 @@ export function AssistantPickerView({
                       />
                     ) : null}
                     <span className="assistant-picker__item-label">{assistant.name}</span>
+                    {isBuiltInProvider(assistant) ? (
+                      <span className="assistant-picker__where-label">
+                        {isLocalProvider(assistant) ? "on this Mac" : "hosted"}
+                      </span>
+                    ) : null}
                     {assistant.id === selectedAssistantId ? <Checkmark size={16} aria-hidden /> : null}
                   </button>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ))}
 
               {models.length > 0 ? (
                 <div className="assistant-picker__section">
