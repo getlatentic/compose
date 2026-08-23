@@ -29,7 +29,7 @@
  * the opener in place re-opened the block.
  */
 
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { EditorSelection, EditorState, Prec, type Transaction } from "@codemirror/state";
 import { keymap, type Command } from "@codemirror/view";
 
@@ -189,9 +189,29 @@ export const fenceTypeAutoClose = EditorState.transactionFilter.of((tr: Transact
   ];
 });
 
-/** The FencedCode ancestor at `pos`, or null. */
+/**
+ * How long a structural lookup may spend parsing. This runs inside a keystroke,
+ * so it is a budget, not a guarantee: past it we answer from whatever is parsed.
+ */
+const STRUCTURE_PARSE_BUDGET_MS = 50;
+
+/** The FencedCode ancestor at `pos`, or null.
+ *
+ * Parses up to `pos` first. `syntaxTree` returns only what the *viewport* has
+ * driven the parser through — measured at 3,009 characters of a 62,000-character
+ * document — so resolving straight from it answers "no fence here" for anything
+ * further down, and the delete guards then merge a code block into the prose
+ * above it. `ensureSyntaxTree` returns a tree covering what was asked for, and
+ * only as far as `pos`, so the cost stays local to the caret rather than the
+ * document.
+ *
+ * It is also what made the fence tests flaky: jsdom has no layout, so a view
+ * reports a viewport of a few hundred characters whatever the document holds,
+ * and whether the parse happened to reach the caret came down to timing. */
 export function fenceAt(state: EditorState, pos: number): FenceNode | null {
-  let node = syntaxTree(state).resolveInner(pos, -1) as unknown as FenceNode | null;
+  const tree =
+    ensureSyntaxTree(state, pos + 1, STRUCTURE_PARSE_BUDGET_MS) ?? syntaxTree(state);
+  let node = tree.resolveInner(pos, -1) as unknown as FenceNode | null;
   while (node && node.name !== "FencedCode") node = node.parent;
   return node;
 }

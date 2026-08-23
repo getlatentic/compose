@@ -89,5 +89,8 @@ describe("the desktop-runtime boundary, across every IPC client", () => {
       "a client reached IPC with no runtime guard; guard it, or add it to " +
         "UNGUARDED_BY_DESIGN with the reason it is safe",
     ).toEqual(documented);
-  });
+    // Seventeen module graphs is real work, and it runs alongside every other
+    // suite. The 5s default made this fail on a loaded machine while passing
+    // alone — a slow test reported as a broken one.
+  }, 30_000);
 });
