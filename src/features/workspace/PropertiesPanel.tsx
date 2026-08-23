@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import { Add, TrashCan } from "@carbon/react/icons";
-import { type Frontmatter, type FrontmatterValue } from "@latentic/ai-editor";
+import { type Frontmatter, type FrontmatterValue } from "@latentic/live-markdown";
 
 /**
  * Sidebar Properties section.

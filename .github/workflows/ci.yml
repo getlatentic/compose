@@ -53,7 +53,7 @@ jobs:
       # pnpm path — are invisible to every other check here. This is the build
       # `npm publish` runs, and it was failing while the app was green.
       - name: Editor package build
-        run: pnpm --filter @latentic/ai-editor build
+        run: pnpm --filter @latentic/live-markdown build
 
       - name: Rust tests
         working-directory: src-tauri

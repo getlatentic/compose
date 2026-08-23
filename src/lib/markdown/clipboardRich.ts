@@ -1,4 +1,4 @@
-import { getCachedMermaidPng, highlightFenceSpans } from "@latentic/ai-editor";
+import { getCachedMermaidPng, highlightFenceSpans } from "@latentic/live-markdown";
 
 /**
  * Enrich the clipboard's sanitized hast tree so a copy keeps its richness in

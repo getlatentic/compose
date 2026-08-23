@@ -12,7 +12,7 @@ import { RenameProvider } from "../features/dialogs/RenameProvider";
 import {
   IMAGE_EDIT_ALT_EVENT,
   type ImageEditAltEventDetail,
-} from "@latentic/ai-editor";
+} from "@latentic/live-markdown";
 import { markBoot } from "../lib/perf";
 
 export function App() {

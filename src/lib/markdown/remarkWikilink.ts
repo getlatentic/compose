@@ -1,6 +1,6 @@
 import type { Plugin } from "unified";
 
-import { parseWikilinkBody } from "@latentic/ai-editor";
+import { parseWikilinkBody } from "@latentic/live-markdown";
 
 /** The subset of an mdast node this transform touches. Declared locally so the
  * markdown core needs no `@types/mdast` dependency (matches remarkHardBreaks). */

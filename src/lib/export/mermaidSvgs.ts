@@ -1,4 +1,4 @@
-import { isMermaidFenceInfo, renderMermaidToSvg } from "@latentic/ai-editor";
+import { isMermaidFenceInfo, renderMermaidToSvg } from "@latentic/live-markdown";
 
 import { createMarkdownProcessor } from "../markdown/processor";
 

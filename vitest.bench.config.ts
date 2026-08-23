@@ -30,7 +30,7 @@ export default defineConfig({
       // Same source-resolution as vite.config.ts: the CM benchmarks import the
       // in-repo editor package, whose package.json points at built output that
       // doesn't exist in dev.
-      "@latentic/ai-editor": new URL("./packages/rich-editor/src/index.ts", import.meta.url).pathname,
+      "@latentic/live-markdown": new URL("./packages/rich-editor/src/index.ts", import.meta.url).pathname,
     },
   },
   test: {
