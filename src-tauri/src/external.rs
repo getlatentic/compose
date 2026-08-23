@@ -543,6 +543,8 @@ mod tests {
         ));
     }
 
+    // Symlinks again: see the note on the test above.
+    #[cfg(unix)]
     #[test]
     fn resolve_sees_through_symlinked_paths() {
         let dir = tempfile::tempdir().expect("tempdir");

@@ -81,6 +81,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf libgtk-3-dev
+      # `-D warnings` is deliberately dropped here. Compose is a macOS app, so
+      # its macOS-only helpers — the printing page constants, the iCloud
+      # dataless-file check, the open-URLs buffer — are genuinely dead code
+      # elsewhere. That is a true statement about the app, not a defect, and
+      # making it an error would tax every future macOS helper with a `cfg`
+      # for a platform that does not ship. What this job is for is whether the
+      # code *compiles*: a dependency scoped to the wrong platform, an API that
+      # exists only on macOS, a test reaching for `std::os::unix`.
       - name: Check
         working-directory: src-tauri
+        env:
+          RUSTFLAGS: ""
         run: cargo check --all-targets
