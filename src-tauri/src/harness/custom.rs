@@ -204,6 +204,8 @@ pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
             // No env var: the key goes in as a value. `requires_key` still
             // says whether one is needed, which is what drives the key field.
             let _ = custom_api_key_env;
+            // The one model the user named. It seeds the picker until discovery
+            // answers, and remains the fallback when the endpoint serves no list.
             let models = default_model
                 .filter(|model| !model.trim().is_empty())
                 .map(|model| {
@@ -223,14 +225,21 @@ pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
             } else {
                 ApiKey::NotNeeded
             };
-            Box::new(OpenHarness::custom(OpenHarnessConfig {
-                id: record.id,
-                display_name: record.display_name,
-                base_url,
-                api_key,
-                models,
-                ..Default::default()
-            }))
+            Box::new(
+                OpenHarness::custom(OpenHarnessConfig {
+                    id: record.id,
+                    display_name: record.display_name,
+                    base_url,
+                    api_key,
+                    models,
+                    ..Default::default()
+                })
+                // Ask the endpoint what it serves. Whoever added it typed a URL,
+                // not a catalog, and every OpenAI-compatible server publishes
+                // one; the model they named stays as the fallback for a server
+                // that doesn't.
+                .with_openai_models(),
+            )
         }
     }
 }

@@ -135,6 +135,7 @@ export function AddAgentForm({
               autoCorrect="off"
               spellCheck={false}
               labelText="Default model (optional)"
+              helperText="Models are read from the endpoint. Name one only if it serves no list."
               placeholder="e.g. gpt-4o"
               value={defaultModel}
               onChange={(event) => setDefaultModel(event.target.value)}
