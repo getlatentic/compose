@@ -16,12 +16,17 @@ const PARSE_BUDGET_MS = 50;
  * `Document`. Every command that asks "am I inside a list / a fence / a table?"
  * then gets "no" and takes the plain-text path: a wrong answer, not a slow one.
  *
- * Measured in WebKit, the engine we ship on, with real layout: on the frame a
- * 7,902-character document opens, the parser has covered 3,009 characters and
- * the viewport is 0–331 — for an editor 11,404px tall. CodeMirror's background
- * parse walks past the viewport during idle and covers the rest within about a
- * second and a half, which is why the wrong answer survives hand-testing and
- * why `treeAt.browser.test.ts` runs the commands on the opening frame.
+ * Measured in WebKit, the engine we ship on, with real layout — two regimes.
+ *
+ * On the frame a document opens the parser has covered a few thousand
+ * characters: 3,009 of 7,902, viewport 0–331, for an editor 11,404px tall. The
+ * idle parse then catches up within about half a second, so near the viewport
+ * this is a race — and it heals before a hand-test can see it.
+ *
+ * Further out it never heals. The idle parse stops 100,000 characters past the
+ * viewport: the tree plateaus at 100,739 for a 167k-character document and a
+ * 341k one alike, and stays there. `ensureSyntaxTree` resumes from that plateau
+ * and finishes the 341k document in 43ms — inside the budget above.
  *
  * Only for questions about a *position*. Decoration plugins iterate
  * `view.visibleRanges` and should keep using `syntaxTree` directly: there,

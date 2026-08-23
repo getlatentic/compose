@@ -72,6 +72,19 @@ function expectParseStopsShortOf(view: EditorView, caret: number) {
   expect(syntaxTree(view.state).length).toBeLessThan(caret);
 }
 
+/** Wait until the background parse stops advancing, whatever it reached. */
+async function settle(view: EditorView): Promise<number> {
+  let last = -1;
+  let same = 0;
+  while (same < 3) {
+    await new Promise((r) => setTimeout(r, 100));
+    const len = syntaxTree(view.state).length;
+    same = len === last ? same + 1 : 0;
+    last = len;
+  }
+  return last;
+}
+
 describe("structural lookups on the frame the document opens", () => {
   it("walls a fence that the parser has not reached yet", () => {
     const doc = belowTheFold("```\ncode\n```");
@@ -92,4 +105,30 @@ describe("structural lookups on the frame the document opens", () => {
     expect(tightListContinuation(view)).toBe(true);
     expect(view.state.doc.toString()).toBe(`${doc}\n- `);
   });
+});
+
+/**
+ * The other regime, where the wrong answer is not a race and waiting does not
+ * help. CodeMirror's idle parse stops 100,000 characters past the viewport:
+ * measured, the tree plateaus at 100,739 for a 167k document and for a 341k
+ * one alike, and never advances again.
+ *
+ * Reaching it takes a document over ~100k *and* a caret that far from what is
+ * rendered — a restored caret on open, a search hit, an outline jump. Not
+ * typing, which scrolls the caret into view first. Narrow, but permanent, and
+ * this case cannot flake: its premise is that the parse has already given up.
+ */
+describe("structural lookups past the background parse's reach", () => {
+  it("walls a fence no amount of idle time will reach", async () => {
+    const filler = Array.from({ length: 8000 }, (_, i) => `paragraph line ${i}`).join("\n\n");
+    const doc = `${filler}\n\n\`\`\`\ncode\n\`\`\``;
+    const caret = doc.lastIndexOf("code");
+    const view = openEditor(doc, caret);
+
+    const reached = await settle(view);
+    expect(reached).toBeLessThan(caret);
+
+    expect(visibleBackspace(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
+  }, 60_000);
 });
