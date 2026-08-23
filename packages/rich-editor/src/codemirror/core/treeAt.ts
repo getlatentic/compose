@@ -12,15 +12,16 @@ const PARSE_BUDGET_MS = 50;
  * A syntax tree that reaches `pos`.
  *
  * `syntaxTree` returns only what the **viewport** has driven the parser
- * through — measured at 3,009 characters of a 62,000-character document — so
- * `resolveInner` past that point reports the position as bare `Document`. Every
- * command that asks "am I inside a list / a fence / a table?" then gets "no"
- * and takes the plain-text path: a wrong answer, not a slow one.
+ * through, so `resolveInner` past that point reports the position as bare
+ * `Document`. Every command that asks "am I inside a list / a fence / a table?"
+ * then gets "no" and takes the plain-text path: a wrong answer, not a slow one.
  *
- * It is also what made the editor suites flaky. jsdom has no layout, so a view
- * reports a viewport of a few hundred characters whatever the document holds,
- * and whether the parse happened to reach the caret came down to timing under
- * load — which is why those tests passed alone and failed in a full run.
+ * Measured in WebKit, the engine we ship on, with real layout: on the frame a
+ * 7,902-character document opens, the parser has covered 3,009 characters and
+ * the viewport is 0–331 — for an editor 11,404px tall. CodeMirror's background
+ * parse walks past the viewport during idle and covers the rest within about a
+ * second and a half, which is why the wrong answer survives hand-testing and
+ * why `treeAt.browser.test.ts` runs the commands on the opening frame.
  *
  * Only for questions about a *position*. Decoration plugins iterate
  * `view.visibleRanges` and should keep using `syntaxTree` directly: there,
