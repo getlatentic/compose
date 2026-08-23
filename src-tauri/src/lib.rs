@@ -231,7 +231,7 @@ pub fn run() {
             // user's toolchain dirs deterministically so an installed CLI agent
             // resolves — a fast directory scan, so it stays on the launch path.
             user_tool_dirs::append();
-            // Warm the harness PATH cache OFF the main thread: augmented_node_path
+            // Warm the harness PATH cache OFF the main thread: augmented_path
             // runs a login-shell query (`$SHELL -lic env`) that can take ~1-2s
             // against a heavy ~/.zshrc. Doing it here, not on the launch path, lets
             // the window paint immediately and makes the first interaction with ANY
@@ -239,7 +239,7 @@ pub fn run() {
             // default. The deterministic dirs added above already make an
             // nvm-installed CLI resolvable, so detection is correct before this lands.
             std::thread::spawn(|| {
-                let _ = ::harness::augmented_node_path();
+                let _ = ::harness::augmented_path();
             });
             let metadata = app_handle.state::<db::MetadataStore>();
             if let Err(error) = metadata.init_from_app(&app_handle) {

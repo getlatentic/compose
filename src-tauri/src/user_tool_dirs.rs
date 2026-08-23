@@ -11,7 +11,7 @@ use std::path::Path;
 /// spawned with a stripped inherited PATH — so an npm-global `codex` looks "not
 /// installed" even though it's right there. This adds those dirs
 /// deterministically (no shell spawn). Runs before the first
-/// `augmented_node_path` call so the cached PATH includes them.
+/// `augmented_path` call so the cached PATH includes them.
 pub fn append() {
     let Ok(home) = std::env::var("HOME") else {
         return;
