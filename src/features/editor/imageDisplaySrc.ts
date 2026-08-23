@@ -4,7 +4,7 @@ import {
   isAbsolutePath,
   joinPath,
   type ImageResolveContext,
-} from "ai-editor";
+} from "@latentic/live-markdown";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 
 /**

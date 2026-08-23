@@ -4,7 +4,7 @@ const editor = vi.hoisted(() => ({
   getCachedMermaidPng: vi.fn(),
   highlightFenceSpans: vi.fn(),
 }));
-vi.mock("ai-editor", () => editor);
+vi.mock("@latentic/live-markdown", () => editor);
 
 import { markdownToClipboardHtml } from "./markdownToClipboardHtml";
 

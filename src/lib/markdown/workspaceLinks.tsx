@@ -2,8 +2,8 @@ import { createContext, useContext, type MouseEvent, type ReactNode } from "reac
 import type { Components } from "hast-util-to-jsx-runtime";
 
 import { openExternalUrl } from "../links/openExternal";
-import { resolveWorkspaceLink } from "ai-editor";
-import { resolveWikilinkTarget } from "ai-editor";
+import { resolveWorkspaceLink } from "@latentic/live-markdown";
+import { resolveWikilinkTarget } from "@latentic/live-markdown";
 
 /** Href prefix the wikilink remark plugin emits (`#wikilink:<encoded-target>`);
  * a fragment URL, so it survives `rehype-sanitize`. */

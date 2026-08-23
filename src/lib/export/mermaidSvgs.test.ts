@@ -5,7 +5,7 @@ const editor = vi.hoisted(() => ({
   // Mirrors the real predicate's contract: bare tag, any casing, no meta.
   isMermaidFenceInfo: (info: string) => /^mermaid\s*$/i.test(info.trim()),
 }));
-vi.mock("ai-editor", () => editor);
+vi.mock("@latentic/live-markdown", () => editor);
 
 import { collectMermaidSvgs } from "./mermaidSvgs";
 
