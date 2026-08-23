@@ -120,6 +120,9 @@ export function AddAgentForm({
           <>
             <TextInput
               id="agent-base-url"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               labelText="Base URL"
               placeholder="https://…"
               helperText="Chat hits {base}/v1/chat/completions."
@@ -128,6 +131,9 @@ export function AddAgentForm({
             />
             <TextInput
               id="agent-default-model"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               labelText="Default model (optional)"
               placeholder="e.g. gpt-4o"
               value={defaultModel}
@@ -145,6 +151,9 @@ export function AddAgentForm({
           <>
             <TextInput
               id="agent-command"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               labelText="Command"
               placeholder="e.g. gemini"
               helperText="The program that launches the ACP server."
@@ -153,6 +162,9 @@ export function AddAgentForm({
             />
             <TextInput
               id="agent-args"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               labelText="Arguments (optional, space-separated)"
               placeholder="e.g. --experimental-acp"
               value={args}

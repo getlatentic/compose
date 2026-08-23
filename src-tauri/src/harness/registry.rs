@@ -6,6 +6,9 @@ use harness::{
     AcpHarness, ApiKey, Claude, Codex, Harness, Listing, OpenHarness, OpenHarnessConfig,
     Readiness, Registry,
 };
+use serde::Serialize;
+
+use crate::harness::custom::CustomAgentKind;
 
 fn openrouter() -> OpenHarness {
     OpenHarness::custom(OpenHarnessConfig {
@@ -71,6 +74,81 @@ pub fn compose_harness_catalog() -> Vec<Listing> {
     compose_registry().catalog()
 }
 
+/// The built-in agent's providers, and whether each is served from this machine.
+/// Kept beside the constructors above, which is what it describes: both are
+/// `OpenHarness`, so picking between them changes only a base URL.
+const BUILT_IN_PROVIDERS: &[(&str, bool)] = &[("ollama", true), ("openrouter", false)];
+
+/// What an entry is, from the product's point of view.
+///
+/// Present when the entry is the built-in agent pointed at an OpenAI-compatible
+/// endpoint — same loop, same tools, different base URL — and absent when the
+/// entry is a standalone agent that runs the work itself. That distinction is
+/// Compose's, not the registry's, and it cannot be read off an id: a
+/// user-registered endpoint gets an opaque `custom:<uuid>`, so guessing from the
+/// id filed every one of them under the wrong heading.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderInfo {
+    /// Served from this machine — the one thing about a provider worth
+    /// permanent screen space: local means free, private and offline.
+    pub local: bool,
+}
+
+/// Compose's catalog entry: the registry's listing plus what only Compose knows.
+/// `Listing` is flattened, so the wire shape stays `{manifest, capabilities}`
+/// with `provider` beside them.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogEntry {
+    #[serde(flatten)]
+    pub listing: Listing,
+    pub provider: Option<ProviderInfo>,
+}
+
+/// Whether a URL names this machine. Only the literal loopback forms — a
+/// hostname that merely resolves to 127.0.0.1 is somebody's deliberate alias
+/// and not worth a DNS lookup on every catalog read.
+fn is_loopback(base_url: &str) -> bool {
+    let host = base_url
+        .split("://")
+        .nth(1)
+        .unwrap_or(base_url)
+        .split('/')
+        .next()
+        .unwrap_or_default();
+    let host = host.rsplit_once(':').map_or(host, |(name, _port)| name);
+    matches!(host, "localhost" | "127.0.0.1" | "0.0.0.0" | "[::1]" | "::1")
+}
+
+/// Classify one catalog id. Built-ins are listed above; a user-registered
+/// endpoint is a provider too, and its locality comes from the URL it was
+/// registered with.
+fn provider_for(id: &str) -> Option<ProviderInfo> {
+    if let Some((_, local)) = BUILT_IN_PROVIDERS.iter().find(|(known, _)| *known == id) {
+        return Some(ProviderInfo { local: *local });
+    }
+    let records = crate::harness::custom::custom_agent_store().list().ok()?;
+    match &records.iter().find(|record| record.id == id)?.kind {
+        CustomAgentKind::OpenAiCompatible { base_url, .. } => {
+            Some(ProviderInfo { local: is_loopback(base_url) })
+        }
+        // An ACP command is somebody else's agent, not an endpoint we drive.
+        CustomAgentKind::Acp { .. } => None,
+    }
+}
+
+/// The catalog the front end renders, each entry classified.
+pub fn compose_catalog_entries() -> Vec<CatalogEntry> {
+    compose_harness_catalog()
+        .into_iter()
+        .map(|listing| {
+            let provider = provider_for(&listing.manifest.id);
+            CatalogEntry { listing, provider }
+        })
+        .collect()
+}
+
 /// Readiness of every registered harness — "what's actually on this machine."
 ///
 /// Probes every harness CONCURRENTLY: each `readiness()` may shell out to a CLI
@@ -95,6 +173,65 @@ pub fn compose_discover() -> Vec<Readiness> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A loopback endpoint is this machine, whatever port or scheme.
+    #[test]
+    fn loopback_forms_read_as_local() {
+        for url in [
+            "http://localhost:11434",
+            "http://127.0.0.1:1234",
+            "http://localhost:8080/v1",
+            "http://[::1]:1234",
+            "http://0.0.0.0:5000",
+        ] {
+            assert!(is_loopback(url), "{url} is this machine");
+        }
+    }
+
+    #[test]
+    fn a_remote_endpoint_is_not_local() {
+        for url in [
+            "https://openrouter.ai/api",
+            "https://api.openai.com/v1",
+            // The trap worth naming: a host whose NAME contains "localhost".
+            "https://localhost.example.com/v1",
+            "http://192.168.1.50:11434",
+        ] {
+            assert!(!is_loopback(url), "{url} is somewhere else");
+        }
+    }
+
+    /// Every id named as a built-in provider must actually be registered —
+    /// otherwise a rename silently drops it out of the Compose group.
+    #[test]
+    fn built_in_provider_ids_all_exist() {
+        let catalog = compose_harness_catalog();
+        for (id, _) in BUILT_IN_PROVIDERS {
+            assert!(
+                catalog.iter().any(|entry| entry.manifest.id == *id),
+                "{id} is named a provider but is not registered"
+            );
+        }
+    }
+
+    #[test]
+    fn built_ins_are_classified_and_agents_are_not() {
+        assert_eq!(provider_for("ollama"), Some(ProviderInfo { local: true }));
+        assert_eq!(provider_for("openrouter"), Some(ProviderInfo { local: false }));
+        assert_eq!(provider_for("claude"), None);
+        assert_eq!(provider_for("opencode"), None);
+    }
+
+    /// The wire contract the front end groups on.
+    #[test]
+    fn every_catalog_entry_carries_its_classification() {
+        let entries = compose_catalog_entries();
+        let json = serde_json::to_value(&entries).expect("serialize");
+        let first = &json.as_array().expect("array")[0];
+        assert!(first.get("manifest").is_some(), "manifest must survive the flatten");
+        assert!(first.get("capabilities").is_some(), "capabilities must survive the flatten");
+        assert!(first.get("provider").is_some(), "provider must be present, even as null");
+    }
 
     /// The `harness_list` payload, as the front end receives it.
     ///

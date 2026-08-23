@@ -22,9 +22,9 @@ afterEach(() => {
 });
 
 const assistants = [
-  { id: "ollama", name: "Ollama" },
-  { id: "opencode", name: "OpenCode" },
-  { id: "claude", name: "Claude" },
+  { id: "ollama", name: "Ollama", provider: { local: true } },
+  { id: "opencode", name: "OpenCode", provider: null },
+  { id: "claude", name: "Claude", provider: null },
 ];
 const models = [
   { value: "", label: "Default" },

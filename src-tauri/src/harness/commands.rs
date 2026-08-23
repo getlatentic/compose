@@ -5,9 +5,11 @@
 //! [`verify`](crate::harness::verify).
 
 use crate::harness::credentials::{Credential, CredentialStatus};
-use crate::harness::registry::{compose_discover, compose_harness_by_id, compose_harness_catalog};
+use crate::harness::registry::{
+    compose_catalog_entries, compose_discover, compose_harness_by_id, CatalogEntry,
+};
 use crate::harness::verify::{self, HarnessRuntimeVerification};
-use harness::{Harness, InstallCallback, InstallEvent, Listing, ModelChoice, Readiness};
+use harness::{Harness, InstallCallback, InstallEvent, ModelChoice, Readiness};
 use tauri::ipc::Channel;
 
 pub(crate) fn resolve(harness_id: &str) -> Result<Box<dyn Harness>, String> {
@@ -15,8 +17,8 @@ pub(crate) fn resolve(harness_id: &str) -> Result<Box<dyn Harness>, String> {
 }
 
 #[tauri::command(async)]
-pub fn harness_list() -> Result<Vec<Listing>, String> {
-    Ok(compose_harness_catalog())
+pub fn harness_list() -> Result<Vec<CatalogEntry>, String> {
+    Ok(compose_catalog_entries())
 }
 
 /// Probe readiness of every registered harness in one call — drives the picker's

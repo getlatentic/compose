@@ -119,8 +119,21 @@ export interface InstallHint {
  * because the harness trait asks them at different frequencies.
  */
 interface HarnessListing {
-  manifest: Omit<HarnessInfo, "capabilities">;
+  manifest: Omit<HarnessInfo, "capabilities" | "provider">;
   capabilities: HarnessCapabilities;
+  provider: ProviderInfo | null;
+}
+
+/**
+ * Set when the entry is an OpenAI-compatible endpoint the built-in agent drives
+ * — same loop, same tools, different base URL — and null when the entry is a
+ * standalone agent that brings its own. Classified by the backend, which knows
+ * how each was registered; a user-added endpoint gets an opaque `custom:<uuid>`
+ * that says nothing.
+ */
+export interface ProviderInfo {
+  /** Served from this machine: free, private, offline. */
+  local: boolean;
 }
 
 /** One entry in the harness catalog (`harness_list` command). */
@@ -130,6 +143,7 @@ export interface HarnessInfo {
   description: string;
   installHint: InstallHint | null;
   capabilities: HarnessCapabilities;
+  provider: ProviderInfo | null;
 }
 
 /** Probe result for one harness (`harness_readiness` command). */
@@ -308,7 +322,11 @@ export async function harnessList(): Promise<HarnessInfo[]> {
   // above this line wants one object per agent, and this is the layer whose job
   // that is.
   const listings = await invoke<HarnessListing[]>("harness_list");
-  return listings.map(({ manifest, capabilities }) => ({ ...manifest, capabilities }));
+  return listings.map(({ manifest, capabilities, provider }) => ({
+    ...manifest,
+    capabilities,
+    provider: provider ?? null,
+  }));
 }
 
 /** Probe one harness's readiness (installed / version / auth). */

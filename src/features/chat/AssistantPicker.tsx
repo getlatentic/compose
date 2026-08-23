@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Checkmark, ChevronDown, Laptop, WarningAltFilled } from "@carbon/react/icons";
 import { groupAgents, isBuiltInProvider, isLocalProvider } from "../settings/agentGroups";
+import type { ProviderInfo } from "../../lib/ipc/harnessClient";
 
 import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 
@@ -16,6 +17,9 @@ import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 export interface AssistantOption {
   id: string;
   name: string;
+  /** Set for an endpoint the built-in agent drives; null for a standalone
+   *  agent. Carried so the picker groups exactly as the settings list does. */
+  provider: ProviderInfo | null;
   /** Per-agent readiness dot shown in the picker. */
   status?: "online" | "offline" | "connecting";
 }
@@ -133,9 +137,9 @@ export function AssistantPickerView({
                       />
                     ) : null}
                     <span className="assistant-picker__item-label">{assistant.name}</span>
-                    {isBuiltInProvider(assistant.id) ? (
+                    {isBuiltInProvider(assistant) ? (
                       <span className="assistant-picker__where-label">
-                        {isLocalProvider(assistant.id) ? "on this Mac" : "hosted"}
+                        {isLocalProvider(assistant) ? "on this Mac" : "hosted"}
                       </span>
                     ) : null}
                     {assistant.id === selectedAssistantId ? <Checkmark size={16} aria-hidden /> : null}

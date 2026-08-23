@@ -87,6 +87,7 @@ export function ChatComposerFooterView({
   const assistants = harnesses.map((harness) => ({
     id: harness.id,
     name: harness.displayName,
+    provider: harness.provider,
     status: statusById?.[harness.id],
   }));
   const selectedInfo = harnesses.find((harness) => harness.id === selectedHarnessId);

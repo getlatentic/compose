@@ -102,9 +102,9 @@ export function AgentList({
                   onClick={() => onOpenAgent(info.id)}
                 >
                   <span className="agent-row__name">{info.displayName}</span>
-                  {isBuiltInProvider(info.id) ? (
+                  {isBuiltInProvider(info) ? (
                     <span className="agent-row__where">
-                      {isLocalProvider(info.id) ? "on this Mac" : "hosted"}
+                      {isLocalProvider(info) ? "on this Mac" : "hosted"}
                     </span>
                   ) : null}
                   {isDefault ? (

@@ -207,6 +207,7 @@ describe("workspace store", () => {
           displayName: "Bob",
           description: "",
           installHint: { url: "https://example.dev", command: null },
+          provider: null,
           capabilities: {
             credentialRequired: true,
             previewsEdits: true,
@@ -269,6 +270,7 @@ describe("workspace store", () => {
           displayName: "Acme",
           description: "",
           installHint: null,
+          provider: null,
           capabilities: {
             credentialRequired: true,
             previewsEdits: false,
@@ -306,6 +308,7 @@ describe("workspace store", () => {
           displayName: "Acme",
           description: "",
           installHint: null,
+          provider: null,
           capabilities: {
             credentialRequired: true,
             previewsEdits: false,
@@ -991,6 +994,7 @@ describe("workspace store", () => {
       displayName: id,
       description: "",
       installHint: null,
+      provider: null,
       capabilities: {
         credentialRequired: false,
         previewsEdits: false,

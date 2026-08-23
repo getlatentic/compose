@@ -3,9 +3,18 @@ import { describe, expect, it } from "vitest";
 import type { HarnessInfo } from "../../lib/ipc/harnessClient";
 import { groupAgents, isBuiltInProvider, isLocalProvider, selectionLabel } from "./agentGroups";
 
-const info = (id: string, displayName = id): HarnessInfo => ({
+/** A catalog entry as the backend emits it: the classification is a field, and
+ *  the id is opaque. The previous fixture invented `custom:openai:<name>` ids,
+ *  which is why the grouping bug passed its own tests — the backend assigns
+ *  `custom:<uuid>` and nothing downstream can read a kind off it. */
+const info = (
+  id: string,
+  displayName = id,
+  provider: HarnessInfo["provider"] = null,
+): HarnessInfo => ({
   id,
   displayName,
+  provider,
   description: "",
   installHint: null,
   capabilities: {
@@ -21,11 +30,14 @@ const info = (id: string, displayName = id): HarnessInfo => ({
 });
 
 /** The catalog in registration order, which is also recommendation order. */
+const LOCAL = { local: true };
+const HOSTED = { local: false };
+
 const CATALOG = [
-  info("ollama", "Ollama"),
+  info("ollama", "Ollama", LOCAL),
   info("claude", "Claude Code"),
   info("codex", "Codex"),
-  info("openrouter", "OpenRouter"),
+  info("openrouter", "OpenRouter", HOSTED),
   info("opencode", "OpenCode"),
 ];
 
@@ -52,10 +64,18 @@ describe("grouping the catalog", () => {
     expect(groups.map((g) => g.label)).toEqual(["Other agents"]);
   });
 
-  it("treats a custom OpenAI endpoint as a provider, a custom ACP agent as an agent", () => {
-    const groups = groupAgents([info("custom:openai:x"), info("custom:acp:y")]);
-    expect(groups[0].entries.map((e) => e.id)).toEqual(["custom:openai:x"]);
-    expect(groups[1].entries.map((e) => e.id)).toEqual(["custom:acp:y"]);
+  it("files a user-added endpoint with the providers, whatever its id", () => {
+    // The reported bug. A registered endpoint gets an opaque `custom:<uuid>`,
+    // so nothing about the id says which kind it is — and an LM Studio the user
+    // added landed under "Other agents", beside Claude Code, as though it
+    // brought its own agent loop.
+    const groups = groupAgents([
+      info("custom:8dae64f0-af60-4172-b421-77bf6c94aa56", "LM Studio", LOCAL),
+      info("custom:2b1f0c33-9e77-4a10-8c55-1d0b0a9e77aa", "My ACP agent"),
+    ]);
+    expect(groups[0].label).toBe("Compose");
+    expect(groups[0].entries.map((e) => e.displayName)).toEqual(["LM Studio"]);
+    expect(groups[1].entries.map((e) => e.displayName)).toEqual(["My ACP agent"]);
   });
 
   it("never rewrites an id — a run is started with it", () => {
@@ -67,17 +87,21 @@ describe("grouping the catalog", () => {
 });
 
 describe("classifying a provider", () => {
-  it("recognises the built-in providers", () => {
-    expect(isBuiltInProvider("ollama")).toBe(true);
-    expect(isBuiltInProvider("openrouter")).toBe(true);
-    expect(isBuiltInProvider("custom:openai:abc")).toBe(true);
-    expect(isBuiltInProvider("claude")).toBe(false);
-    expect(isBuiltInProvider("custom:acp:abc")).toBe(false);
+  it("reads the classification, never the id", () => {
+    expect(isBuiltInProvider(info("ollama", "Ollama", LOCAL))).toBe(true);
+    expect(isBuiltInProvider(info("openrouter", "OpenRouter", HOSTED))).toBe(true);
+    expect(isBuiltInProvider(info("custom:uuid", "LM Studio", LOCAL))).toBe(true);
+    expect(isBuiltInProvider(info("claude", "Claude Code"))).toBe(false);
+    expect(isBuiltInProvider(info("custom:uuid", "An ACP agent"))).toBe(false);
   });
 
-  it("knows which one serves models from this machine", () => {
-    expect(isLocalProvider("ollama")).toBe(true);
-    expect(isLocalProvider("openrouter")).toBe(false);
+  it("marks a user's local endpoint as local, not just the shipped one", () => {
+    // An LM Studio or llama.cpp on this machine is as local as Ollama; the old
+    // check hardcoded the one id we happened to ship.
+    expect(isLocalProvider(info("custom:uuid", "LM Studio", LOCAL))).toBe(true);
+    expect(isLocalProvider(info("ollama", "Ollama", LOCAL))).toBe(true);
+    expect(isLocalProvider(info("openrouter", "OpenRouter", HOSTED))).toBe(false);
+    expect(isLocalProvider(info("claude", "Claude Code"))).toBe(false);
   });
 });
 
@@ -85,14 +109,14 @@ describe("the footer label", () => {
   it("shows the built-in agent's name, not the provider's", () => {
     // `Compose / OpenRouter / claude-sonnet-4` spends three slots on a
     // two-slot decision.
-    const label = selectionLabel(info("openrouter", "OpenRouter"), "openai/gpt-oss-120b");
+    const label = selectionLabel(info("openrouter", "OpenRouter", HOSTED), "openai/gpt-oss-120b");
     expect(label.agent).toBe("Compose");
     expect(label.model).toBe("openai/gpt-oss-120b");
     expect(label.local).toBe(false);
   });
 
   it("marks a local provider, so cost and privacy read at a glance", () => {
-    expect(selectionLabel(info("ollama", "Ollama"), "gpt-oss:20b").local).toBe(true);
+    expect(selectionLabel(info("ollama", "Ollama", LOCAL), "gpt-oss:20b").local).toBe(true);
   });
 
   it("shows a standalone agent under its own name", () => {
@@ -102,8 +126,8 @@ describe("the footer label", () => {
   });
 
   it("copes with no model chosen yet", () => {
-    expect(selectionLabel(info("ollama", "Ollama"), undefined).model).toBeNull();
-    expect(selectionLabel(info("ollama", "Ollama"), "   ").model).toBeNull();
+    expect(selectionLabel(info("ollama", "Ollama", LOCAL), undefined).model).toBeNull();
+    expect(selectionLabel(info("ollama", "Ollama", LOCAL), "   ").model).toBeNull();
   });
 
   it("copes with no agent selected", () => {

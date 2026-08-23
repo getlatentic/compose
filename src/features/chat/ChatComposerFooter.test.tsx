@@ -4,12 +4,17 @@ import { describe, expect, it } from "vitest";
 import type { HarnessInfo } from "../../lib/ipc/harnessClient";
 import { ChatComposerFooterView } from "./ChatComposerFooter";
 
-function harness(id: string, displayName: string): HarnessInfo {
+function harness(
+  id: string,
+  displayName: string,
+  provider: HarnessInfo["provider"] = null,
+): HarnessInfo {
   return {
     id,
     displayName,
     description: "",
     installHint: null,
+    provider,
     capabilities: {
       credentialRequired: false,
       previewsEdits: false,
@@ -24,7 +29,7 @@ function harness(id: string, displayName: string): HarnessInfo {
 }
 
 const base = {
-  harnesses: [harness("bob", "Bob"), harness("codex", "Codex")],
+  harnesses: [harness("opencode", "OpenCode"), harness("codex", "Codex")],
   selectedHarnessId: "codex",
   onSelectHarness: () => {},
   modelItems: [
@@ -51,7 +56,7 @@ describe("ChatComposerFooterView", () => {
     const html = renderToStaticMarkup(
       <ChatComposerFooterView
         {...base}
-        harnesses={[harness("ollama", "Ollama")]}
+        harnesses={[harness("ollama", "Ollama", { local: true })]}
         selectedHarnessId="ollama"
         selectedModel="gpt-oss:20b"
         modelLabel="gpt-oss:20b"

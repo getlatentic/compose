@@ -206,9 +206,9 @@ export function HarnessPicker({ autoSuggestDefault = false }: { autoSuggestDefau
                     {selected ? "●" : "○"}
                   </span>
                   <strong className="harness-card__name">{info.displayName}</strong>
-                  {isBuiltInProvider(info.id) ? (
+                  {isBuiltInProvider(info) ? (
                     <span className="harness-card__where">
-                      {isLocalProvider(info.id) ? "on this Mac" : "hosted"}
+                      {isLocalProvider(info) ? "on this Mac" : "hosted"}
                     </span>
                   ) : null}
                 </span>

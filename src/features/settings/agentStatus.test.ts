@@ -24,6 +24,7 @@ const info = (
   displayName: "X",
   description: "",
   installHint: null,
+  provider: null,
   ...over,
   capabilities: caps(over.capabilities),
 });

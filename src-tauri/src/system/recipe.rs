@@ -45,7 +45,7 @@ pub struct DependencyStatus {
 
 pub const RECIPES: &[DependencyRecipe] = &[DependencyRecipe {
     id: "ollama",
-    name: "Ollama (local AI)",
+    name: "Ollama",
     description: "Runs AI models privately on your Mac — no account needed. Models download separately, on demand.",
     // `ollama --version` prints connection warnings on stdout when the
     // server is down, so pull just the version number out.

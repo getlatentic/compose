@@ -34,6 +34,7 @@ const OLLAMA: HarnessInfo = {
   displayName: "Ollama",
   description: "",
   installHint: { url: "https://ollama.com/download", command: null },
+  provider: null,
   capabilities: {
     credentialRequired: false,
     previewsEdits: false,

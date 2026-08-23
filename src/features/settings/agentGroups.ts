@@ -1,4 +1,4 @@
-import type { HarnessInfo } from "../../lib/ipc/harnessClient";
+import type { HarnessInfo, ProviderInfo } from "../../lib/ipc/harnessClient";
 
 /**
  * Which agent runs the work, and which endpoint serves the model, are two
@@ -18,12 +18,18 @@ import type { HarnessInfo } from "../../lib/ipc/harnessClient";
 /** The built-in agent's display name — the one Compose ships rather than wraps. */
 export const BUILT_IN_AGENT_NAME = "Compose";
 
-/** Providers of the built-in agent. Each is one `OpenHarness` differing only
- *  in configuration. `custom:openai:*` is a user-added endpoint, same story. */
-const BUILT_IN_PROVIDER_IDS = new Set(["ollama", "openrouter"]);
-
-export function isBuiltInProvider(harnessId: string): boolean {
-  return BUILT_IN_PROVIDER_IDS.has(harnessId) || harnessId.startsWith("custom:openai:");
+/**
+ * Whether this entry is an endpoint the built-in agent drives, rather than an
+ * agent that brings its own loop.
+ *
+ * Read from the backend's classification, never guessed from the id. A
+ * user-registered endpoint is assigned an opaque `custom:<uuid>`, so an id
+ * cannot say which kind it is — and matching a prefix the backend never
+ * generates filed every user-added endpoint under "Other agents", which is the
+ * one heading it does not belong to.
+ */
+export function isBuiltInProvider(entry: { provider: ProviderInfo | null }): boolean {
+  return entry.provider !== null;
 }
 
 /**
@@ -32,8 +38,8 @@ export function isBuiltInProvider(harnessId: string): boolean {
  * and offline; hosted means paid and networked. Which vendor it is can live
  * one click away.
  */
-export function isLocalProvider(harnessId: string): boolean {
-  return harnessId === "ollama";
+export function isLocalProvider(entry: { provider: ProviderInfo | null }): boolean {
+  return entry.provider?.local === true;
 }
 
 export interface AgentGroup<T> {
@@ -57,9 +63,11 @@ export interface AgentGroup<T> {
  * An empty provider set yields no built-in group, so a build without the
  * `openai-compatible` feature renders a plain agent list.
  */
-export function groupAgents<T extends { id: string }>(catalog: T[]): AgentGroup<T>[] {
-  const providers = catalog.filter((entry) => isBuiltInProvider(entry.id));
-  const standalone = catalog.filter((entry) => !isBuiltInProvider(entry.id));
+export function groupAgents<T extends { id: string; provider: ProviderInfo | null }>(
+  catalog: T[],
+): AgentGroup<T>[] {
+  const providers = catalog.filter(isBuiltInProvider);
+  const standalone = catalog.filter((entry) => !isBuiltInProvider(entry));
 
   const groups: AgentGroup<T>[] = [];
   if (providers.length > 0) {
@@ -87,10 +95,10 @@ export function selectionLabel(
   if (!info) {
     return { agent: "No agent", model: null, local: false };
   }
-  const builtIn = isBuiltInProvider(info.id);
+  const builtIn = isBuiltInProvider(info);
   return {
     agent: builtIn ? BUILT_IN_AGENT_NAME : info.displayName,
     model: model?.trim() ? model.trim() : null,
-    local: builtIn && isLocalProvider(info.id),
+    local: isLocalProvider(info),
   };
 }
