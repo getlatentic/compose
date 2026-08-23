@@ -3,10 +3,10 @@ import type { EditorView } from "@codemirror/view";
 import {
   CodeMirrorMarkdownEditor,
   type EditorSelectionSnapshot,
-} from "ai-editor";
+} from "@latentic/ai-editor";
 import { CodeMirrorToolbar } from "./CodeMirrorToolbar";
 import { CommentBubble, CommentComposer } from "./CommentBubble";
-import { pickImageFileForCaret } from "ai-editor";
+import { pickImageFileForCaret } from "@latentic/ai-editor";
 import { CommentsPanel } from "../comments/CommentsPanel";
 import type { SourceRange } from "../comments/commentModel";
 import { VersionHistory } from "../history/VersionHistory";

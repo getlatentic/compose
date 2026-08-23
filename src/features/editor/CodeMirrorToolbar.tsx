@@ -28,7 +28,7 @@ import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
 import { EditorView } from "@codemirror/view";
 
-import { blockCommands, formatCommands, onEditorUpdate, treeAt } from "ai-editor";
+import { blockCommands, formatCommands, onEditorUpdate, treeAt } from "@latentic/ai-editor";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { useLinkPrompt } from "../dialogs/LinkInsertProvider";
 

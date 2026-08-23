@@ -4,7 +4,7 @@ import {
   parseFrontmatter,
   serializeMarkdown,
   type Frontmatter,
-} from "ai-editor";
+} from "@latentic/ai-editor";
 import { PropertiesPanel } from "./PropertiesPanel";
 import type { Workspace } from "../../app/workspaceModel";
 

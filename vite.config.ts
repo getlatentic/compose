@@ -7,7 +7,7 @@ const host = process.env.TAURI_DEV_HOST;
 const require = createRequire(import.meta.url);
 const workerSafeCharacterDecoder = require.resolve("decode-named-character-reference");
 
-// Resolve the in-repo `ai-editor` workspace package to its TypeScript SOURCE
+// Resolve the in-repo `@latentic/ai-editor` workspace package to its TypeScript SOURCE
 // for dev / test / Compose's own build — Vite compiles it inline, so the
 // package's `dist/` (built only for npm publish) need not exist here. External
 // npm consumers get the built `dist/` via the package's `exports` field.
@@ -55,7 +55,7 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "decode-named-character-reference": workerSafeCharacterDecoder,
-      "ai-editor": aiEditorSource,
+      "@latentic/ai-editor": aiEditorSource,
     },
   },
   // Build-time perf gate — symmetric with the Rust-side

@@ -32,7 +32,7 @@ import { markdown, markdownKeymap } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 
-import { markdownDecorationsPlugin } from "ai-editor";
+import { markdownDecorationsPlugin } from "@latentic/ai-editor";
 import { buildDocument, type DocumentSizeLabel } from "./documentFixtures";
 import { summarize } from "./statistics";
 

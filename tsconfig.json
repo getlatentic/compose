@@ -14,12 +14,12 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Resolve the in-repo `ai-editor` workspace package to its TS source for
+    /* Resolve the in-repo `@latentic/ai-editor` workspace package to its TS source for
        typechecking (mirrors the Vite alias). External consumers resolve the
        built `dist/` via the package's own `exports`. */
     "baseUrl": ".",
     "paths": {
-      "ai-editor": ["./packages/rich-editor/src/index.ts"]
+      "@latentic/ai-editor": ["./packages/rich-editor/src/index.ts"]
     },
 
     /* Linting */
