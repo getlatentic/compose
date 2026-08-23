@@ -136,6 +136,19 @@ export const useHarnessStore = create<HarnessState>((set, get) => {
       set({ selectedHarnessId: "", selectedHarnessReadiness: null });
       persist();
     }
+    // Its saved options outlive it for the same reason, but silently: a dropped
+    // agent's model and run settings sit in the prefs forever, and a fresh
+    // install of a same-named agent would inherit a stranger's configuration.
+    // Same catalog guard — an unloaded catalog must never wipe live settings.
+    if (catalog.length > 0) {
+      const known = new Set(catalog.map((entry) => entry.id));
+      const options = get().harnessOptions;
+      const live = Object.entries(options).filter(([id]) => known.has(id));
+      if (live.length !== Object.keys(options).length) {
+        set({ harnessOptions: Object.fromEntries(live) });
+        persist();
+      }
+    }
     // No agent chosen yet → pick the first ready one in catalog priority order.
     if (!get().selectedHarnessId) {
       // Fire every probe at once, then AWAIT them in catalog priority order

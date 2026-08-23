@@ -1,3 +1,4 @@
+mod stale_state;
 mod user_tool_dirs;
 mod data_reset;
 pub mod db;
@@ -252,7 +253,12 @@ pub fn run() {
                 app_handle
                     .state::<harness::runner::RunnerState>()
                     .set_data_dir(data_dir.clone());
-                std::thread::spawn(move || harness::orphan_runs::sweep(&data_dir));
+                std::thread::spawn(move || {
+                    harness::orphan_runs::sweep(&data_dir);
+                    // Same trip off the launch path: clear what removed
+                    // features left behind (the bundled runtime's npm prefix).
+                    stale_state::sweep(&data_dir);
+                });
             }
             let watchers = app_handle.state::<files::watcher::WatcherManager>();
             if let Err(error) = watchers.init(app_handle.clone()) {

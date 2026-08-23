@@ -1034,6 +1034,41 @@ describe("workspace store", () => {
       expect(useHarnessStore.getState().selectedHarnessId).toBe("codex");
     });
 
+    it("drops a removed agent's saved options, keeping every live one", async () => {
+      // The quiet half of the same upgrade: the id is fixed above, but its
+      // model and run settings sit in the prefs forever — and a later agent
+      // reusing the id would silently inherit them.
+      useHarnessStore.setState({
+        selectedHarnessId: "claude",
+        harnessCatalog: [agent("ollama"), agent("claude")],
+        harnessOptions: {
+          bob: { model: "bob-1" },
+          claude: { model: "opus" },
+          ollama: { model: "granite4:micro" },
+        },
+      });
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, true));
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().harnessOptions).toEqual({
+        claude: { model: "opus" },
+        ollama: { model: "granite4:micro" },
+      });
+    });
+
+    it("does not drop saved options while the catalog is still empty", async () => {
+      // Same guard as the selection: an unloaded catalog proves nothing, and
+      // wiping every agent's settings on a slow boot would be unrecoverable.
+      useHarnessStore.setState({
+        selectedHarnessId: "claude",
+        harnessCatalog: [],
+        harnessOptions: { claude: { model: "opus" } },
+      });
+      vi.mocked(harnessReadiness).mockImplementation(async (id) => readiness(id, true));
+      vi.mocked(ollamaInstalled).mockResolvedValue(false);
+      await useHarnessStore.getState().resolveDefaultHarness();
+      expect(useHarnessStore.getState().harnessOptions).toEqual({ claude: { model: "opus" } });
+    });
+
     it("does not clear a selection while the catalog is still empty", async () => {
       // Pre-load state: an empty catalog proves nothing about the selection.
       useHarnessStore.setState({ selectedHarnessId: "claude", harnessCatalog: [] });
