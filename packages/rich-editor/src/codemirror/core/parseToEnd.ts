@@ -1,4 +1,5 @@
 import { forceParsing, language, syntaxTree } from "@codemirror/language";
+import type { Extension } from "@codemirror/state";
 import { ViewPlugin, type EditorView, type ViewUpdate } from "@codemirror/view";
 
 /** Work per slice. Small enough to never register as jank between frames. */
@@ -28,7 +29,7 @@ const GAP_MS = 25;
  * the app is in the background must still be parsed when the user comes back
  * to it.
  */
-export const parseToEnd = ViewPlugin.fromClass(
+export const parseToEnd: Extension = ViewPlugin.fromClass(
   class {
     private timer: number | null = null;
 

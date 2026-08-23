@@ -32,6 +32,11 @@ const PARSE_BUDGET_MS = 50;
  * `view.visibleRanges` and should keep using `syntaxTree` directly: there,
  * being limited to the viewport is the point.
  */
-export function treeAt(state: EditorState, pos: number) {
+/// The tree type, named without importing `@lezer/common` — it is a transitive
+/// dependency, and a declaration referring to it by pnpm path is not portable
+/// for anyone consuming the built package.
+type Tree = ReturnType<typeof syntaxTree>;
+
+export function treeAt(state: EditorState, pos: number): Tree {
   return ensureSyntaxTree(state, pos + 1, PARSE_BUDGET_MS) ?? syntaxTree(state);
 }
