@@ -391,6 +391,11 @@ pub fn run() {
 
     boot_native_mark("pre-run-loop");
     app.run(|app_handle, event| match event {
+        // Tauri defines this variant on macOS only — it is the
+        // `application:openURLs:` delegate callback, which no other platform
+        // has. The catch-all below covers its absence; how a file association
+        // would reach a non-macOS build is a question for whenever one ships.
+        #[cfg(target_os = "macos")]
         RunEvent::Opened { urls } => {
             let pending = app_handle.state::<PendingOpenUrls>();
             for url in urls {

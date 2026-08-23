@@ -405,6 +405,10 @@ mod tests {
         assert_eq!(readded.list.files.len(), 1);
     }
 
+    // `std::os::unix::fs::symlink` has no Windows equivalent that works
+    // without elevation, and the rule under test — a `.md` symlink must not
+    // smuggle in a non-markdown target — is enforced the same way regardless.
+    #[cfg(unix)]
     #[test]
     fn add_rejects_markdown_symlink_to_non_markdown_target() {
         let dir = tempfile::tempdir().expect("tempdir");
