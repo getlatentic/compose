@@ -1,3 +1,8 @@
+# Compose is its own workspace root, and this file exists to say so. Without it
+# pnpm searches UPWARD for a workspace to belong to — which silently captured a
+# git worktree nested under the primary checkout and resolved
+# `@latentic/live-markdown` to that checkout's `packages/rich-editor` instead of
+# the published package. There are no workspace members any more; the editor
+# lives in its own repository.
 packages:
   - "."
-  - "packages/*"

@@ -14,14 +14,6 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Resolve the in-repo `@latentic/live-markdown` workspace package to its TS source for
-       typechecking (mirrors the Vite alias). External consumers resolve the
-       built `dist/` via the package's own `exports`. */
-    "baseUrl": ".",
-    "paths": {
-      "@latentic/live-markdown": ["./packages/rich-editor/src/index.ts"]
-    },
-
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,

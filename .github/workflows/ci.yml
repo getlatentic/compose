@@ -47,14 +47,6 @@ jobs:
       - name: Frontend tests
         run: pnpm test
 
-      # `tsc --noEmit` does not emit declarations, so the errors that only
-      # occur while writing a `.d.ts` — an exported anonymous class with
-      # private fields, an inferred type naming a transitive dependency by its
-      # pnpm path — are invisible to every other check here. This is the build
-      # `npm publish` runs, and it was failing while the app was green.
-      - name: Editor package build
-        run: pnpm --filter @latentic/live-markdown build
-
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test --no-fail-fast
