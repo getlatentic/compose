@@ -7,14 +7,6 @@ const host = process.env.TAURI_DEV_HOST;
 const require = createRequire(import.meta.url);
 const workerSafeCharacterDecoder = require.resolve("decode-named-character-reference");
 
-// Resolve the in-repo `@latentic/live-markdown` workspace package to its TypeScript SOURCE
-// for dev / test / Compose's own build — Vite compiles it inline, so the
-// package's `dist/` (built only for npm publish) need not exist here. External
-// npm consumers get the built `dist/` via the package's `exports` field.
-const aiEditorSource = fileURLToPath(
-  new URL("./packages/rich-editor/src/index.ts", import.meta.url),
-);
-
 // Instrumented build? (react-scan overlay and/or perf marks enabled.) When set
 // we tell esbuild to KEEP function/class names through minification — otherwise
 // every component is renamed to a 2-letter token (`AX`, `gz`) and react-scan's
@@ -55,7 +47,6 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "decode-named-character-reference": workerSafeCharacterDecoder,
-      "@latentic/live-markdown": aiEditorSource,
     },
   },
   // Build-time perf gate — symmetric with the Rust-side
