@@ -10,6 +10,7 @@ import {
   type HarnessRuntimeVerification,
 } from "../../lib/ipc/harnessClient";
 import { ModelPicker } from "./ModelPicker";
+import { errorMessage } from "../../app/store/internals";
 
 /**
  * The per-agent configuration controls shared by the Settings detail screen.
@@ -74,7 +75,7 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
       setSaved(true);
       window.setTimeout(() => setSaved(false), 4000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Could not save the ${name} API key`);
+      setError(errorMessage(err, `Could not save the ${name} API key`));
     } finally {
       setSaving(false);
     }
