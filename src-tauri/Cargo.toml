@@ -1,6 +1,6 @@
 [package]
 name = "compose"
-version = "0.0.1-alpha.11"
+version = "0.0.1-alpha.13"
 description = "Compose — local-first AI writing workspace"
 authors = ["Compose contributors"]
 edition = "2021"
@@ -15,7 +15,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["devtools", "protocol-asset"] }
-agent-harness = { version = "0.5.2", features = [
+agent-harness = { version = "0.5.3", features = [
   "acp",
   "openai-compatible",
 ] }
