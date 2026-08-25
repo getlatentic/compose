@@ -273,8 +273,53 @@ fn new_master_key() -> [u8; KEY_LEN] {
     key
 }
 
+/// The keychain service the master key lives under.
+///
+/// A constant in the app. Under `cfg(test)` it can be pointed at a throwaway
+/// name, because the alternative is that `recover` — the whole recovery path —
+/// stays untestable: exercising it for real means minting a master key, and a
+/// test must never write to the developer's own `ai.latentic.compose` entry.
+#[cfg(not(test))]
+fn keyring_service() -> String {
+    KEYRING_SERVICE.to_owned()
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_SERVICE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn keyring_service() -> String {
+    TEST_SERVICE.with(|s| s.borrow().clone()).unwrap_or_else(|| KEYRING_SERVICE.to_owned())
+}
+
+/// Point the master key at a throwaway service for the current test, and delete
+/// whatever it left behind when the guard drops.
+#[cfg(test)]
+struct TestKeychain(String);
+
+#[cfg(test)]
+impl TestKeychain {
+    fn new(name: &str) -> Self {
+        TEST_SERVICE.with(|s| *s.borrow_mut() = Some(name.to_owned()));
+        Self(name.to_owned())
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestKeychain {
+    fn drop(&mut self) {
+        if let Ok(entry) = keyring::Entry::new(&self.0, KEYRING_ACCOUNT) {
+            let _ = entry.delete_credential();
+        }
+        TEST_SERVICE.with(|s| *s.borrow_mut() = None);
+    }
+}
+
 fn entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+    keyring::Entry::new(&keyring_service(), KEYRING_ACCOUNT)
         .map_err(|e| format!("no OS credential store available: {e}"))
 }
 
@@ -355,6 +400,52 @@ mod tests {
     fn set_aside_is_a_no_op_with_nothing_to_keep() {
         let dir = tempfile::tempdir().expect("tempdir");
         assert!(set_aside(dir.path()).expect("no error").is_none());
+    }
+
+    /// The bug, end to end, against a real OS keychain.
+    ///
+    /// A store file whose master key does not exist is exactly the state a user
+    /// reached: `load` reported `KeyLost`, nothing could be saved, and no
+    /// amount of retrying changed it. This asserts the whole way out — the
+    /// unreadable file is kept, a new key is minted, and the secret the user
+    /// was trying to save is there afterwards and readable on a reopen.
+    #[test]
+    fn a_store_with_no_key_recovers_and_accepts_the_save_that_was_blocked() {
+        let _keychain = TestKeychain::new("ai.latentic.compose.test.recover");
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        // The wedged state: a file encrypted under a key the keychain has never
+        // heard of.
+        let stranded = envelope_for([9u8; KEY_LEN], &[("openrouter", "old-secret")]);
+        std::fs::write(
+            dir.path().join(STORE_FILE),
+            serde_json::to_vec(&stranded).expect("serialize"),
+        )
+        .expect("write");
+
+        assert!(
+            matches!(SecretStore::load(dir.path()).expect("load"), Opened::KeyLost),
+            "premise: this is the state that could not be escaped",
+        );
+
+        let mut recovered = SecretStore::recover(dir.path()).expect("recovery");
+        recovered.set("openrouter", "the-key-the-user-typed").expect("the save that used to fail");
+
+        // Readable on a fresh open — the master key really did persist.
+        match SecretStore::load(dir.path()).expect("reopen") {
+            Opened::Ready(reopened) => {
+                assert_eq!(reopened.get("openrouter"), Some("the-key-the-user-typed"));
+            }
+            Opened::KeyLost => panic!("still wedged after recovery"),
+        }
+
+        // And the old ciphertext was kept, not destroyed.
+        let kept: Vec<_> = std::fs::read_dir(dir.path())
+            .expect("read dir")
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().contains(".unreadable-"))
+            .collect();
+        assert_eq!(kept.len(), 1, "the unreadable store must be preserved");
     }
 
     fn envelope_for(key: [u8; KEY_LEN], pairs: &[(&str, &str)]) -> Envelope {
