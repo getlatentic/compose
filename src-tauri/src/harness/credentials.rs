@@ -25,6 +25,39 @@ use super::secret_store::{Opened, SecretStore};
 static STORE: OnceLock<Mutex<Option<SecretStore>>> = OnceLock::new();
 static CONFIG_DIR: OnceLock<PathBuf> = OnceLock::new();
 
+thread_local! {
+    /// True while THIS thread is opening the store.
+    ///
+    /// Opening migrates the old per-harness entries, and to know which entries
+    /// exist it asks the registry for every credential spec — which builds each
+    /// harness, and building one reads its key. That read cannot be served: the
+    /// store is mid-open and this thread already holds its lock, so attempting
+    /// it deadlocks rather than returning anything. It reports "no key", which
+    /// is what it meant anyway — the specs are wanted for their NAMES.
+    static OPENING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether a credential read must decline because the store is being built.
+fn opening() -> bool {
+    OPENING.with(std::cell::Cell::get)
+}
+
+/// Sets the flag for as long as the returned guard lives.
+struct OpeningGuard;
+
+impl OpeningGuard {
+    fn new() -> Self {
+        OPENING.with(|f| f.set(true));
+        Self
+    }
+}
+
+impl Drop for OpeningGuard {
+    fn drop(&mut self) {
+        OPENING.with(|f| f.set(false));
+    }
+}
+
 fn store() -> &'static Mutex<Option<SecretStore>> {
     STORE.get_or_init(|| Mutex::new(None))
 }
@@ -52,6 +85,7 @@ fn loaded_for_read(guard: &mut Option<SecretStore>) -> Option<&mut SecretStore> 
         let dir = CONFIG_DIR.get()?;
         match SecretStore::load(dir).ok()? {
             Opened::Ready(mut fresh) => {
+                let _opening = OpeningGuard::new();
                 migrate_legacy_entries(&mut fresh);
                 *guard = Some(fresh);
             }
@@ -68,6 +102,7 @@ fn loaded_for_write(guard: &mut Option<SecretStore>) -> Result<&mut SecretStore,
         let dir = CONFIG_DIR.get().ok_or("credential store is not initialised")?;
         *guard = Some(match SecretStore::load(dir)? {
             Opened::Ready(mut fresh) => {
+                let _opening = OpeningGuard::new();
                 migrate_legacy_entries(&mut fresh);
                 fresh
             }
@@ -158,6 +193,9 @@ fn every_spec() -> Vec<CredentialSpec> {
 /// without passing through the environment, where the agent's own shell tool
 /// would inherit it.
 pub fn secret_for(provider_id: &str) -> Option<String> {
+    if opening() {
+        return None;
+    }
     let mut guard = store().lock().ok()?;
     let value = loaded_for_read(&mut guard)?.get(provider_id)?.to_owned();
     (!value.trim().is_empty()).then_some(value)
@@ -215,6 +253,9 @@ impl Credential {
 
     pub fn read(&self) -> Option<String> {
         if !self.host_managed() {
+            return None;
+        }
+        if opening() {
             return None;
         }
         let mut guard = store().lock().ok()?;
@@ -297,5 +338,38 @@ mod hint_tests {
             "hint revealed {revealed} of {} characters",
             secret.chars().count(),
         );
+    }
+}
+
+#[cfg(test)]
+mod reentrancy_tests {
+    use super::{secret_for, store, OpeningGuard};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    /// Opening the store must never ask the store for anything.
+    ///
+    /// Migration needs the list of credential specs, and getting it builds every
+    /// harness — which reads that harness's key. Do that while the loader holds
+    /// the store lock and `std::sync::Mutex` deadlocks, because it is not
+    /// reentrant. The symptom is not an error: Settings sits on its loading
+    /// skeletons for ever.
+    ///
+    /// The failure is a hang, so the work runs on another thread and the
+    /// assertion is a deadline. Remove the `opening()` guard and this fails with
+    /// its message rather than wedging the suite.
+    #[test]
+    fn opening_the_store_never_reads_from_it() {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _held = store().lock().expect("store lock");
+            let _opening = OpeningGuard::new();
+            let _ = tx.send(secret_for("openrouter"));
+        });
+
+        let seen = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("a credential read while opening must return, not deadlock");
+        assert_eq!(seen, None, "the store is mid-build; it has nothing to report");
     }
 }
