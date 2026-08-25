@@ -171,6 +171,36 @@ pub struct Credential {
 #[serde(rename_all = "camelCase")]
 pub struct CredentialStatus {
     pub configured: bool,
+    /// Enough of the stored key to recognise WHICH one it is, and no more.
+    /// `None` when nothing is stored, or when the value is too short to show
+    /// any of without giving most of it away.
+    pub hint: Option<String>,
+}
+
+/// `sk-or…9f2c` — the shape every provider uses to list keys it will not show
+/// again. The point is telling a stale key from the current one; it is not a
+/// redaction of something the user may later reveal, because nothing here ever
+/// reveals it.
+///
+/// Short values get no characters at all. A hint is only safe while it is a
+/// small fraction of the secret, and "small fraction" stops being true fast.
+fn hint_for(secret: &str) -> Option<String> {
+    const HEAD: usize = 5;
+    const TAIL: usize = 4;
+    /// Below this, HEAD + TAIL would be most of the value.
+    const MIN_LEN: usize = 16;
+
+    let secret = secret.trim();
+    if secret.is_empty() {
+        return None;
+    }
+    let chars: Vec<char> = secret.chars().collect();
+    if chars.len() < MIN_LEN {
+        return Some("•".repeat(8));
+    }
+    let head: String = chars[..HEAD].iter().collect();
+    let tail: String = chars[chars.len() - TAIL..].iter().collect();
+    Some(format!("{head}…{tail}"))
 }
 
 impl Credential {
@@ -193,8 +223,10 @@ impl Credential {
     }
 
     pub fn status(&self) -> CredentialStatus {
+        let stored = self.read();
         CredentialStatus {
-            configured: !self.host_managed() || self.read().is_some(),
+            configured: !self.host_managed() || stored.is_some(),
+            hint: stored.as_deref().and_then(hint_for),
         }
     }
 
@@ -221,5 +253,49 @@ pub fn forget_all() {
             let _ = store.clear();
         }
         *guard = None;
+    }
+}
+
+#[cfg(test)]
+mod hint_tests {
+    use super::hint_for;
+
+    #[test]
+    fn shows_enough_to_tell_two_keys_apart() {
+        assert_eq!(
+            hint_for("sk-or-v1-0123456789abcdef9f2c").as_deref(),
+            Some("sk-or…9f2c"),
+        );
+    }
+
+    #[test]
+    fn a_short_value_gives_up_no_characters() {
+        // The guard that matters. Head + tail on a short secret is most of it,
+        // and a hint is only safe while it stays a small fraction.
+        for short in ["abc", "sk-1234", "123456789012345"] {
+            let hint = hint_for(short).expect("something");
+            assert!(
+                !hint.contains(|c: char| c.is_ascii_alphanumeric()),
+                "{short} leaked characters through its hint: {hint}",
+            );
+        }
+    }
+
+    #[test]
+    fn nothing_stored_is_nothing_to_hint_at() {
+        assert_eq!(hint_for(""), None);
+        assert_eq!(hint_for("   "), None);
+    }
+
+    #[test]
+    fn never_reveals_more_than_a_fraction() {
+        let secret = "sk-or-v1-".to_owned() + &"a".repeat(48);
+        let hint = hint_for(&secret).expect("a hint");
+        let revealed = hint.chars().filter(|c| *c != '…').count();
+        assert!(
+            revealed * 4 < secret.chars().count(),
+            "hint revealed {revealed} of {} characters",
+            secret.chars().count(),
+        );
     }
 }

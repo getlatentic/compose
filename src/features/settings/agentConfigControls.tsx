@@ -45,6 +45,7 @@ export function ModelSection({ harnessId }: { harnessId: string }) {
 export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; name: string }) {
   const [apiKey, setApiKey] = useState("");
   const [configured, setConfigured] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +54,10 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
     let active = true;
     void harnessCredentialStatus(harnessId)
       .then((status) => {
-        if (active) setConfigured(status.configured);
+        if (active) {
+          setConfigured(status.configured);
+          setHint(status.hint ?? null);
+        }
       })
       .catch(() => {
         if (active) setConfigured(false);
@@ -73,7 +77,9 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
     try {
       await harnessSetCredential(harnessId, "");
       setApiKey("");
-      setConfigured((await harnessCredentialStatus(harnessId)).configured);
+      const cleared = await harnessCredentialStatus(harnessId);
+      setConfigured(cleared.configured);
+      setHint(cleared.hint ?? null);
     } catch (err) {
       setError(errorMessage(err, `Could not remove the ${name} API key`));
     } finally {
@@ -91,6 +97,7 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
       setApiKey("");
       const status = await harnessCredentialStatus(harnessId);
       setConfigured(status.configured);
+      setHint(status.hint ?? null);
       setSaved(true);
       window.setTimeout(() => setSaved(false), 4000);
     } catch (err) {
@@ -121,7 +128,14 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
           nobody had filled in yet. */}
       {configured && !error && !saved ? (
         <p className="settings-helper settings-helper--ok">
-          <CheckmarkFilled size={16} aria-hidden /> A key is saved — {name} is ready to use.
+          <CheckmarkFilled size={16} aria-hidden />{" "}
+          {hint ? (
+            <>
+              Saved key <code>{hint}</code> — {name} is ready to use.
+            </>
+          ) : (
+            <>A key is saved — {name} is ready to use.</>
+          )}
         </p>
       ) : null}
       {error ? (

@@ -3,7 +3,8 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const status = vi.fn(async () => ({ configured: false }));
+type Status = { configured: boolean; hint?: string | null };
+const status = vi.fn(async (): Promise<Status> => ({ configured: false }));
 const setCredential = vi.fn(async () => {});
 vi.mock("../../lib/ipc/harnessClient", () => ({
   harnessCredentialStatus: (...args: unknown[]) => status(...(args as [])),
@@ -21,12 +22,25 @@ import { HarnessCredentialForm } from "./agentConfigControls";
  */
 describe("HarnessCredentialForm", () => {
   beforeEach(() => {
-    status.mockReset().mockResolvedValue({ configured: false });
+    status.mockReset().mockResolvedValue({ configured: false } as Status);
     setCredential.mockReset().mockResolvedValue(undefined);
   });
   afterEach(cleanup);
 
   it("says a key is saved, rather than only implying it", async () => {
+    status.mockResolvedValue({ configured: true });
+    render(<HarnessCredentialForm harnessId="openrouter" name="OpenRouter" />);
+    expect(await screen.findByText(/a key is saved/i)).toBeTruthy();
+  });
+
+  it("names WHICH key is saved, so a stale one is recognisable", async () => {
+    status.mockResolvedValue({ configured: true, hint: "sk-or…9f2c" });
+    render(<HarnessCredentialForm harnessId="openrouter" name="OpenRouter" />);
+    expect(await screen.findByText("sk-or…9f2c")).toBeTruthy();
+  });
+
+  it("falls back to the plain wording when the backend sends no hint", async () => {
+    // A short secret gets no hint at all, and an older backend sends no field.
     status.mockResolvedValue({ configured: true });
     render(<HarnessCredentialForm harnessId="openrouter" name="OpenRouter" />);
     expect(await screen.findByText(/a key is saved/i)).toBeTruthy();
