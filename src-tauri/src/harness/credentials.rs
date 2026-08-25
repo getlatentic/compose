@@ -18,9 +18,10 @@ use serde::Serialize;
 
 use super::secret_store::{Opened, SecretStore};
 
-/// The process-wide store. `None` until [`init_from_dir`] runs at boot, and
-/// again if the master key was lost — in which case reads return nothing and
-/// writes mint a fresh store, which is exactly "re-enter your keys".
+/// The process-wide store. `None` until something first needs a credential —
+/// boot only records the directory, because opening this reads the keychain.
+/// It stays `None` when the master key was lost, in which case reads return
+/// nothing and writes mint a fresh store, which is exactly "re-enter your keys".
 static STORE: OnceLock<Mutex<Option<SecretStore>>> = OnceLock::new();
 static CONFIG_DIR: OnceLock<PathBuf> = OnceLock::new();
 
@@ -28,19 +29,52 @@ fn store() -> &'static Mutex<Option<SecretStore>> {
     STORE.get_or_init(|| Mutex::new(None))
 }
 
-/// Load the store and fold in any keys written by the per-entry scheme.
-/// Returns whether the previous secrets were unrecoverable, so the host can
-/// say so rather than leaving the user wondering where their key went.
-pub fn init_from_dir(config_dir: &std::path::Path) -> Result<bool, String> {
+/// Record where the store lives. Deliberately no I/O.
+///
+/// Opening it reads the OS keychain, and this runs inside Tauri's `setup`,
+/// before `app.run()`. A keychain read there is not merely slow: on a machine
+/// whose login keychain locks, it raises a modal unlock prompt with no window
+/// behind it yet. The launches that need a credential at all are the minority —
+/// an agent with its own auth (Claude, Codex) or none (Ollama) never asks — so
+/// the store opens on first use instead. See `loaded_for_read` / `loaded_for_write`.
+pub fn set_config_dir(config_dir: &std::path::Path) {
     let _ = CONFIG_DIR.set(config_dir.to_path_buf());
-    match SecretStore::load(config_dir)? {
-        Opened::Ready(mut loaded) => {
-            migrate_legacy_entries(&mut loaded);
-            *store().lock().map_err(|_| "credential store lock poisoned")? = Some(loaded);
-            Ok(false)
+}
+
+/// Open the store for a READ, migrating anything the old per-harness scheme
+/// left behind.
+///
+/// A lost key yields `None` rather than recovering: recovery mints a master key
+/// and moves a file aside, and a read must not do either. Saving is where that
+/// belongs, because there the user has said what to put in the new store.
+fn loaded_for_read(guard: &mut Option<SecretStore>) -> Option<&mut SecretStore> {
+    if guard.is_none() {
+        let dir = CONFIG_DIR.get()?;
+        match SecretStore::load(dir).ok()? {
+            Opened::Ready(mut fresh) => {
+                migrate_legacy_entries(&mut fresh);
+                *guard = Some(fresh);
+            }
+            Opened::KeyLost => return None,
         }
-        Opened::KeyLost => Ok(true),
     }
+    guard.as_mut()
+}
+
+/// Open the store for a WRITE, recovering from a lost master key rather than
+/// refusing — the caller is in the middle of saving a key.
+fn loaded_for_write(guard: &mut Option<SecretStore>) -> Result<&mut SecretStore, String> {
+    if guard.is_none() {
+        let dir = CONFIG_DIR.get().ok_or("credential store is not initialised")?;
+        *guard = Some(match SecretStore::load(dir)? {
+            Opened::Ready(mut fresh) => {
+                migrate_legacy_entries(&mut fresh);
+                fresh
+            }
+            Opened::KeyLost => SecretStore::recover(dir)?,
+        });
+    }
+    guard.as_mut().ok_or_else(|| "credential store is not initialised".to_owned())
 }
 
 /// Move keys written by the old one-entry-per-harness scheme into the store.
@@ -124,9 +158,9 @@ fn every_spec() -> Vec<CredentialSpec> {
 /// without passing through the environment, where the agent's own shell tool
 /// would inherit it.
 pub fn secret_for(provider_id: &str) -> Option<String> {
-    let guard = store().lock().ok()?;
-    let value = guard.as_ref()?.get(provider_id)?;
-    (!value.trim().is_empty()).then(|| value.to_owned())
+    let mut guard = store().lock().ok()?;
+    let value = loaded_for_read(&mut guard)?.get(provider_id)?.to_owned();
+    (!value.trim().is_empty()).then_some(value)
 }
 
 pub struct Credential {
@@ -153,9 +187,9 @@ impl Credential {
         if !self.host_managed() {
             return None;
         }
-        let guard = store().lock().ok()?;
-        let value = guard.as_ref()?.get(&self.spec.keychain_service)?;
-        (!value.trim().is_empty()).then(|| value.to_owned())
+        let mut guard = store().lock().ok()?;
+        let value = loaded_for_read(&mut guard)?.get(&self.spec.keychain_service)?.to_owned();
+        (!value.trim().is_empty()).then_some(value)
     }
 
     pub fn status(&self) -> CredentialStatus {
@@ -171,22 +205,7 @@ impl Credential {
         }
         let value = value.trim();
         let mut guard = store().lock().map_err(|_| "credential store lock poisoned")?;
-        // A lost master key leaves no store. Saving a key is the recovery, so
-        // build a fresh one rather than refusing the write.
-        if guard.is_none() {
-            let dir = CONFIG_DIR.get().ok_or("credential store is not initialised")?;
-            match SecretStore::load(dir)? {
-                Opened::Ready(fresh) => *guard = Some(fresh),
-                // Do what the comment above promises. The file cannot be
-                // opened by any key that exists, and the user is in the middle
-                // of saying "save this key" — refusing left them permanently
-                // unable to, with "Reset it in Settings" (which erases every
-                // workspace and conversation) as the only way out.
-                Opened::KeyLost => *guard = Some(SecretStore::recover(dir)?),
-            }
-        }
-        let store = guard.as_mut().ok_or("credential store is not initialised")?;
-        store.set(&self.spec.keychain_service, value)?;
+        loaded_for_write(&mut guard)?.set(&self.spec.keychain_service, value)?;
         // Deliberately not exported. The registry rebuilds each harness per
         // call and reads the value straight from the store, so a variable would
         // add nothing but reach — every child the agent spawns inherits it.
