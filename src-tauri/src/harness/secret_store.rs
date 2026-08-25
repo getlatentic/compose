@@ -25,6 +25,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use chacha20poly1305::aead::{Aead, KeyInit, OsRng};
@@ -104,6 +105,26 @@ impl SecretStore {
                 Opened::Ready(Self { path, key, secrets: BTreeMap::new() })
             }
         })
+    }
+
+    /// Start over after {@link Opened::KeyLost}: the file cannot be opened by
+    /// any key that exists, so a fresh one is minted and the store begins empty.
+    ///
+    /// The unreadable file is RENAMED, never overwritten. `decide` refuses to
+    /// mint over an existing file on the grounds that it would destroy the only
+    /// key that could open it — the concern is right, and moving the file aside
+    /// answers it: if the key ever reappears (a keychain restored from backup,
+    /// iCloud sync catching up) the ciphertext is still on disk to recover by
+    /// hand. What it must not do is leave the user unable to save anything,
+    /// which is what refusing did.
+    pub fn recover(config_dir: &Path) -> Result<Self, String> {
+        let path = config_dir.join(STORE_FILE);
+        if let Some(kept) = set_aside(config_dir)? {
+            eprintln!("credential store could not be unlocked; kept at {}", kept.display());
+        }
+        let key = new_master_key();
+        write_master_key(&key)?;
+        Ok(Self { path, key, secrets: BTreeMap::new() })
     }
 
     pub fn get(&self, id: &str) -> Option<&str> {
@@ -227,6 +248,25 @@ fn decrypt(key: &[u8; KEY_LEN], envelope: &Envelope) -> Result<BTreeMap<String, 
     serde_json::from_slice(&plaintext).map_err(|e| e.to_string())
 }
 
+/// Move an unreadable store out of the way, returning where it went.
+///
+/// Renaming rather than deleting is the whole safety argument for recovering at
+/// all: the bytes survive, so a key that reappears later can still open them.
+fn set_aside(config_dir: &Path) -> Result<Option<PathBuf>, String> {
+    let path = config_dir.join(STORE_FILE);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let kept = config_dir.join(format!("{STORE_FILE}.unreadable-{stamp}"));
+    std::fs::rename(&path, &kept)
+        .map_err(|e| format!("could not set the unreadable store aside: {e}"))?;
+    Ok(Some(kept))
+}
+
 fn new_master_key() -> [u8; KEY_LEN] {
     let mut key = [0u8; KEY_LEN];
     OsRng.fill_bytes(&mut key);
@@ -288,6 +328,33 @@ mod tests {
     /// write to the developer's real keychain.
     fn store_at(dir: &Path, key: [u8; KEY_LEN]) -> SecretStore {
         SecretStore { path: dir.join(STORE_FILE), key, secrets: BTreeMap::new() }
+    }
+
+    /// The safety property of recovery, testable without the OS vault: the
+    /// unreadable file is preserved, never destroyed. `recover` itself mints a
+    /// master key and so cannot run in a test — but this is the half that could
+    /// lose someone's data, and the half `decide`'s "minting would overwrite the
+    /// only key that could ever open it" objection is really about.
+    #[test]
+    fn set_aside_keeps_the_unreadable_bytes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join(STORE_FILE);
+        std::fs::write(&path, b"unreadable ciphertext").expect("write");
+
+        let kept = set_aside(dir.path()).expect("no error").expect("a file was moved");
+
+        assert!(!path.exists(), "the store must be out of the way so a fresh one can mint");
+        assert_eq!(
+            std::fs::read(&kept).expect("kept file"),
+            b"unreadable ciphertext",
+            "the bytes must survive — a key that reappears can still open them",
+        );
+    }
+
+    #[test]
+    fn set_aside_is_a_no_op_with_nothing_to_keep() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert!(set_aside(dir.path()).expect("no error").is_none());
     }
 
     fn envelope_for(key: [u8; KEY_LEN], pairs: &[(&str, &str)]) -> Envelope {

@@ -177,9 +177,12 @@ impl Credential {
             let dir = CONFIG_DIR.get().ok_or("credential store is not initialised")?;
             match SecretStore::load(dir)? {
                 Opened::Ready(fresh) => *guard = Some(fresh),
-                Opened::KeyLost => {
-                    return Err("Could not unlock the credential store. Reset it in Settings.".to_owned())
-                }
+                // Do what the comment above promises. The file cannot be
+                // opened by any key that exists, and the user is in the middle
+                // of saying "save this key" — refusing left them permanently
+                // unable to, with "Reset it in Settings" (which erases every
+                // workspace and conversation) as the only way out.
+                Opened::KeyLost => *guard = Some(SecretStore::recover(dir)?),
             }
         }
         let store = guard.as_mut().ok_or("credential store is not initialised")?;
