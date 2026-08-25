@@ -17,7 +17,12 @@ mod macos {
     use std::ptr::NonNull;
 
     /// The de-facto UTI for Markdown documents (declared by CoreTypes).
-    const MARKDOWN_UTI: &str = "net.daring-fireball.markdown";
+    ///
+    /// No hyphen. The blog is "Daring Fireball" and the reverse-DNS identifier
+    /// is not — `net.daring-fireball.markdown` is a UTI that has never existed,
+    /// and passing it made LaunchServices reject the call with `paramErr`,
+    /// which the UI reported as an unexplained "could not set the default app".
+    const MARKDOWN_UTI: &str = "net.daringfireball.markdown";
     const K_LS_ROLES_ALL: u32 = 0xFFFF_FFFF;
 
     // Deprecated since 12.0 in favor of NSWorkspace's async API, but still
@@ -55,6 +60,31 @@ mod macos {
             "LaunchServices could not set the default app (OSStatus {status}). \
              In Finder: Get Info on a .md file → Open with → Compose → Change All."
         ))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{CFString, MARKDOWN_UTI};
+
+        #[link(name = "CoreServices", kind = "framework")]
+        extern "C" {
+            fn UTTypeIsDeclared(uti: &CFString) -> u8;
+        }
+
+        /// The constant has to name a UTI the system actually declares. A typo
+        /// is invisible everywhere except at runtime, where LaunchServices
+        /// answers `paramErr` and the UI can only report the number — which is
+        /// exactly how a hyphenated `net.daring-fireball.markdown` shipped and
+        /// made the feature fail for every user on every machine.
+        #[test]
+        fn markdown_uti_is_one_the_system_declares() {
+            let uti = CFString::from_str(MARKDOWN_UTI);
+            assert_eq!(
+                unsafe { UTTypeIsDeclared(&uti) },
+                1,
+                "{MARKDOWN_UTI} is not declared on this system",
+            );
+        }
     }
 }
 
