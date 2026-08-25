@@ -25,6 +25,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use chacha20poly1305::aead::{Aead, KeyInit, OsRng};
@@ -104,6 +105,26 @@ impl SecretStore {
                 Opened::Ready(Self { path, key, secrets: BTreeMap::new() })
             }
         })
+    }
+
+    /// Start over after {@link Opened::KeyLost}: the file cannot be opened by
+    /// any key that exists, so a fresh one is minted and the store begins empty.
+    ///
+    /// The unreadable file is RENAMED, never overwritten. `decide` refuses to
+    /// mint over an existing file on the grounds that it would destroy the only
+    /// key that could open it — the concern is right, and moving the file aside
+    /// answers it: if the key ever reappears (a keychain restored from backup,
+    /// iCloud sync catching up) the ciphertext is still on disk to recover by
+    /// hand. What it must not do is leave the user unable to save anything,
+    /// which is what refusing did.
+    pub fn recover(config_dir: &Path) -> Result<Self, String> {
+        let path = config_dir.join(STORE_FILE);
+        if let Some(kept) = set_aside(config_dir)? {
+            eprintln!("credential store could not be unlocked; kept at {}", kept.display());
+        }
+        let key = new_master_key();
+        write_master_key(&key)?;
+        Ok(Self { path, key, secrets: BTreeMap::new() })
     }
 
     pub fn get(&self, id: &str) -> Option<&str> {
@@ -227,14 +248,78 @@ fn decrypt(key: &[u8; KEY_LEN], envelope: &Envelope) -> Result<BTreeMap<String, 
     serde_json::from_slice(&plaintext).map_err(|e| e.to_string())
 }
 
+/// Move an unreadable store out of the way, returning where it went.
+///
+/// Renaming rather than deleting is the whole safety argument for recovering at
+/// all: the bytes survive, so a key that reappears later can still open them.
+fn set_aside(config_dir: &Path) -> Result<Option<PathBuf>, String> {
+    let path = config_dir.join(STORE_FILE);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let kept = config_dir.join(format!("{STORE_FILE}.unreadable-{stamp}"));
+    std::fs::rename(&path, &kept)
+        .map_err(|e| format!("could not set the unreadable store aside: {e}"))?;
+    Ok(Some(kept))
+}
+
 fn new_master_key() -> [u8; KEY_LEN] {
     let mut key = [0u8; KEY_LEN];
     OsRng.fill_bytes(&mut key);
     key
 }
 
+/// The keychain service the master key lives under.
+///
+/// A constant in the app. Under `cfg(test)` it can be pointed at a throwaway
+/// name, because the alternative is that `recover` — the whole recovery path —
+/// stays untestable: exercising it for real means minting a master key, and a
+/// test must never write to the developer's own `ai.latentic.compose` entry.
+#[cfg(not(test))]
+fn keyring_service() -> String {
+    KEYRING_SERVICE.to_owned()
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_SERVICE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn keyring_service() -> String {
+    TEST_SERVICE.with(|s| s.borrow().clone()).unwrap_or_else(|| KEYRING_SERVICE.to_owned())
+}
+
+/// Point the master key at a throwaway service for the current test, and delete
+/// whatever it left behind when the guard drops.
+#[cfg(test)]
+struct TestKeychain(String);
+
+#[cfg(test)]
+impl TestKeychain {
+    fn new(name: &str) -> Self {
+        TEST_SERVICE.with(|s| *s.borrow_mut() = Some(name.to_owned()));
+        Self(name.to_owned())
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestKeychain {
+    fn drop(&mut self) {
+        if let Ok(entry) = keyring::Entry::new(&self.0, KEYRING_ACCOUNT) {
+            let _ = entry.delete_credential();
+        }
+        TEST_SERVICE.with(|s| *s.borrow_mut() = None);
+    }
+}
+
 fn entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+    keyring::Entry::new(&keyring_service(), KEYRING_ACCOUNT)
         .map_err(|e| format!("no OS credential store available: {e}"))
 }
 
@@ -288,6 +373,79 @@ mod tests {
     /// write to the developer's real keychain.
     fn store_at(dir: &Path, key: [u8; KEY_LEN]) -> SecretStore {
         SecretStore { path: dir.join(STORE_FILE), key, secrets: BTreeMap::new() }
+    }
+
+    /// The safety property of recovery, testable without the OS vault: the
+    /// unreadable file is preserved, never destroyed. `recover` itself mints a
+    /// master key and so cannot run in a test — but this is the half that could
+    /// lose someone's data, and the half `decide`'s "minting would overwrite the
+    /// only key that could ever open it" objection is really about.
+    #[test]
+    fn set_aside_keeps_the_unreadable_bytes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join(STORE_FILE);
+        std::fs::write(&path, b"unreadable ciphertext").expect("write");
+
+        let kept = set_aside(dir.path()).expect("no error").expect("a file was moved");
+
+        assert!(!path.exists(), "the store must be out of the way so a fresh one can mint");
+        assert_eq!(
+            std::fs::read(&kept).expect("kept file"),
+            b"unreadable ciphertext",
+            "the bytes must survive — a key that reappears can still open them",
+        );
+    }
+
+    #[test]
+    fn set_aside_is_a_no_op_with_nothing_to_keep() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert!(set_aside(dir.path()).expect("no error").is_none());
+    }
+
+    /// The bug, end to end, against a real OS keychain.
+    ///
+    /// A store file whose master key does not exist is exactly the state a user
+    /// reached: `load` reported `KeyLost`, nothing could be saved, and no
+    /// amount of retrying changed it. This asserts the whole way out — the
+    /// unreadable file is kept, a new key is minted, and the secret the user
+    /// was trying to save is there afterwards and readable on a reopen.
+    #[test]
+    fn a_store_with_no_key_recovers_and_accepts_the_save_that_was_blocked() {
+        let _keychain = TestKeychain::new("ai.latentic.compose.test.recover");
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        // The wedged state: a file encrypted under a key the keychain has never
+        // heard of.
+        let stranded = envelope_for([9u8; KEY_LEN], &[("openrouter", "old-secret")]);
+        std::fs::write(
+            dir.path().join(STORE_FILE),
+            serde_json::to_vec(&stranded).expect("serialize"),
+        )
+        .expect("write");
+
+        assert!(
+            matches!(SecretStore::load(dir.path()).expect("load"), Opened::KeyLost),
+            "premise: this is the state that could not be escaped",
+        );
+
+        let mut recovered = SecretStore::recover(dir.path()).expect("recovery");
+        recovered.set("openrouter", "the-key-the-user-typed").expect("the save that used to fail");
+
+        // Readable on a fresh open — the master key really did persist.
+        match SecretStore::load(dir.path()).expect("reopen") {
+            Opened::Ready(reopened) => {
+                assert_eq!(reopened.get("openrouter"), Some("the-key-the-user-typed"));
+            }
+            Opened::KeyLost => panic!("still wedged after recovery"),
+        }
+
+        // And the old ciphertext was kept, not destroyed.
+        let kept: Vec<_> = std::fs::read_dir(dir.path())
+            .expect("read dir")
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().contains(".unreadable-"))
+            .collect();
+        assert_eq!(kept.len(), 1, "the unreadable store must be preserved");
     }
 
     fn envelope_for(key: [u8; KEY_LEN], pairs: &[(&str, &str)]) -> Envelope {

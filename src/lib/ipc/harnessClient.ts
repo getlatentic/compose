@@ -492,6 +492,10 @@ export async function harnessSetCredential(harnessId: string, value: string): Pr
 /** Whether a harness's API key is stored (or none is needed). */
 export interface HarnessCredentialStatus {
   configured: boolean;
+  /** `sk-or…9f2c` — enough to recognise WHICH key is stored, never enough to
+   *  use it. Absent when nothing is stored, or the value was too short to
+   *  show any of safely. */
+  hint?: string | null;
 }
 
 /** Read whether a harness's API key is stored (or none is needed). */

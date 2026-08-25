@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Button, InlineNotification, PasswordInput } from "@carbon/react";
+import { CheckmarkFilled } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
@@ -10,6 +11,7 @@ import {
   type HarnessRuntimeVerification,
 } from "../../lib/ipc/harnessClient";
 import { ModelPicker } from "./ModelPicker";
+import { errorMessage } from "../../app/store/internals";
 
 /**
  * The per-agent configuration controls shared by the Settings detail screen.
@@ -43,6 +45,7 @@ export function ModelSection({ harnessId }: { harnessId: string }) {
 export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; name: string }) {
   const [apiKey, setApiKey] = useState("");
   const [configured, setConfigured] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +54,10 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
     let active = true;
     void harnessCredentialStatus(harnessId)
       .then((status) => {
-        if (active) setConfigured(status.configured);
+        if (active) {
+          setConfigured(status.configured);
+          setHint(status.hint ?? null);
+        }
       })
       .catch(() => {
         if (active) setConfigured(false);
@@ -60,6 +66,26 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
       active = false;
     };
   }, [harnessId]);
+
+  // Clearing has to be its own action. It used to be reachable by submitting an
+  // empty field — a primary button, one careless click, and the key was gone
+  // with the same wording as storing one.
+  async function handleRemove() {
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await harnessSetCredential(harnessId, "");
+      setApiKey("");
+      const cleared = await harnessCredentialStatus(harnessId);
+      setConfigured(cleared.configured);
+      setHint(cleared.hint ?? null);
+    } catch (err) {
+      setError(errorMessage(err, `Could not remove the ${name} API key`));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,10 +97,11 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
       setApiKey("");
       const status = await harnessCredentialStatus(harnessId);
       setConfigured(status.configured);
+      setHint(status.hint ?? null);
       setSaved(true);
       window.setTimeout(() => setSaved(false), 4000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Could not save the ${name} API key`);
+      setError(errorMessage(err, `Could not save the ${name} API key`));
     } finally {
       setSaving(false);
     }
@@ -88,13 +115,29 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
         labelText={`${name} API key`}
         helperText={
           configured
-            ? "A key is saved. Paste a new one to replace it."
+            ? "Paste a new key to replace the saved one."
             : `Paste your ${name} API key. Stored locally in your OS keychain.`
         }
         value={apiKey}
         onChange={(event) => setApiKey(event.currentTarget.value)}
         placeholder={configured ? "Replace saved key" : `Paste ${name} API key`}
       />
+      {/* The resting state has to SAY it is configured. The success banner
+          clears itself after four seconds, and what remained was helper text
+          phrased as an instruction — so a saved key looked like an empty field
+          nobody had filled in yet. */}
+      {configured && !error && !saved ? (
+        <p className="settings-helper settings-helper--ok">
+          <CheckmarkFilled size={16} aria-hidden />{" "}
+          {hint ? (
+            <>
+              Saved key <code>{hint}</code> — {name} is ready to use.
+            </>
+          ) : (
+            <>A key is saved — {name} is ready to use.</>
+          )}
+        </p>
+      ) : null}
       {error ? (
         <InlineNotification
           hideCloseButton
@@ -113,9 +156,16 @@ export function HarnessCredentialForm({ harnessId, name }: { harnessId: string; 
         />
       ) : null}
       <div className="settings-actions">
-        <Button disabled={saving} size="sm" type="submit">
-          {saving ? "Saving" : "Save key"}
+        {/* Nothing typed is nothing to save. Enabled, this submitted an empty
+            value, which CLEARS the stored key. */}
+        <Button disabled={saving || apiKey.trim() === ""} size="sm" type="submit">
+          {saving ? "Saving" : configured ? "Replace key" : "Save key"}
         </Button>
+        {configured ? (
+          <Button disabled={saving} kind="ghost" size="sm" type="button" onClick={handleRemove}>
+            Remove key
+          </Button>
+        ) : null}
       </div>
     </form>
   );

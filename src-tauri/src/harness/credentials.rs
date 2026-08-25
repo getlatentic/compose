@@ -18,29 +18,98 @@ use serde::Serialize;
 
 use super::secret_store::{Opened, SecretStore};
 
-/// The process-wide store. `None` until [`init_from_dir`] runs at boot, and
-/// again if the master key was lost — in which case reads return nothing and
-/// writes mint a fresh store, which is exactly "re-enter your keys".
+/// The process-wide store. `None` until something first needs a credential —
+/// boot only records the directory, because opening this reads the keychain.
+/// It stays `None` when the master key was lost, in which case reads return
+/// nothing and writes mint a fresh store, which is exactly "re-enter your keys".
 static STORE: OnceLock<Mutex<Option<SecretStore>>> = OnceLock::new();
 static CONFIG_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+thread_local! {
+    /// True while THIS thread is opening the store.
+    ///
+    /// Opening migrates the old per-harness entries, and to know which entries
+    /// exist it asks the registry for every credential spec — which builds each
+    /// harness, and building one reads its key. That read cannot be served: the
+    /// store is mid-open and this thread already holds its lock, so attempting
+    /// it deadlocks rather than returning anything. It reports "no key", which
+    /// is what it meant anyway — the specs are wanted for their NAMES.
+    static OPENING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether a credential read must decline because the store is being built.
+fn opening() -> bool {
+    OPENING.with(std::cell::Cell::get)
+}
+
+/// Sets the flag for as long as the returned guard lives.
+struct OpeningGuard;
+
+impl OpeningGuard {
+    fn new() -> Self {
+        OPENING.with(|f| f.set(true));
+        Self
+    }
+}
+
+impl Drop for OpeningGuard {
+    fn drop(&mut self) {
+        OPENING.with(|f| f.set(false));
+    }
+}
 
 fn store() -> &'static Mutex<Option<SecretStore>> {
     STORE.get_or_init(|| Mutex::new(None))
 }
 
-/// Load the store and fold in any keys written by the per-entry scheme.
-/// Returns whether the previous secrets were unrecoverable, so the host can
-/// say so rather than leaving the user wondering where their key went.
-pub fn init_from_dir(config_dir: &std::path::Path) -> Result<bool, String> {
+/// Record where the store lives. Deliberately no I/O.
+///
+/// Opening it reads the OS keychain, and this runs inside Tauri's `setup`,
+/// before `app.run()`. A keychain read there is not merely slow: on a machine
+/// whose login keychain locks, it raises a modal unlock prompt with no window
+/// behind it yet. The launches that need a credential at all are the minority —
+/// an agent with its own auth (Claude, Codex) or none (Ollama) never asks — so
+/// the store opens on first use instead. See `loaded_for_read` / `loaded_for_write`.
+pub fn set_config_dir(config_dir: &std::path::Path) {
     let _ = CONFIG_DIR.set(config_dir.to_path_buf());
-    match SecretStore::load(config_dir)? {
-        Opened::Ready(mut loaded) => {
-            migrate_legacy_entries(&mut loaded);
-            *store().lock().map_err(|_| "credential store lock poisoned")? = Some(loaded);
-            Ok(false)
+}
+
+/// Open the store for a READ, migrating anything the old per-harness scheme
+/// left behind.
+///
+/// A lost key yields `None` rather than recovering: recovery mints a master key
+/// and moves a file aside, and a read must not do either. Saving is where that
+/// belongs, because there the user has said what to put in the new store.
+fn loaded_for_read(guard: &mut Option<SecretStore>) -> Option<&mut SecretStore> {
+    if guard.is_none() {
+        let dir = CONFIG_DIR.get()?;
+        match SecretStore::load(dir).ok()? {
+            Opened::Ready(mut fresh) => {
+                let _opening = OpeningGuard::new();
+                migrate_legacy_entries(&mut fresh);
+                *guard = Some(fresh);
+            }
+            Opened::KeyLost => return None,
         }
-        Opened::KeyLost => Ok(true),
     }
+    guard.as_mut()
+}
+
+/// Open the store for a WRITE, recovering from a lost master key rather than
+/// refusing — the caller is in the middle of saving a key.
+fn loaded_for_write(guard: &mut Option<SecretStore>) -> Result<&mut SecretStore, String> {
+    if guard.is_none() {
+        let dir = CONFIG_DIR.get().ok_or("credential store is not initialised")?;
+        *guard = Some(match SecretStore::load(dir)? {
+            Opened::Ready(mut fresh) => {
+                let _opening = OpeningGuard::new();
+                migrate_legacy_entries(&mut fresh);
+                fresh
+            }
+            Opened::KeyLost => SecretStore::recover(dir)?,
+        });
+    }
+    guard.as_mut().ok_or_else(|| "credential store is not initialised".to_owned())
 }
 
 /// Move keys written by the old one-entry-per-harness scheme into the store.
@@ -124,9 +193,12 @@ fn every_spec() -> Vec<CredentialSpec> {
 /// without passing through the environment, where the agent's own shell tool
 /// would inherit it.
 pub fn secret_for(provider_id: &str) -> Option<String> {
-    let guard = store().lock().ok()?;
-    let value = guard.as_ref()?.get(provider_id)?;
-    (!value.trim().is_empty()).then(|| value.to_owned())
+    if opening() {
+        return None;
+    }
+    let mut guard = store().lock().ok()?;
+    let value = loaded_for_read(&mut guard)?.get(provider_id)?.to_owned();
+    (!value.trim().is_empty()).then_some(value)
 }
 
 pub struct Credential {
@@ -137,6 +209,36 @@ pub struct Credential {
 #[serde(rename_all = "camelCase")]
 pub struct CredentialStatus {
     pub configured: bool,
+    /// Enough of the stored key to recognise WHICH one it is, and no more.
+    /// `None` when nothing is stored, or when the value is too short to show
+    /// any of without giving most of it away.
+    pub hint: Option<String>,
+}
+
+/// `sk-or…9f2c` — the shape every provider uses to list keys it will not show
+/// again. The point is telling a stale key from the current one; it is not a
+/// redaction of something the user may later reveal, because nothing here ever
+/// reveals it.
+///
+/// Short values get no characters at all. A hint is only safe while it is a
+/// small fraction of the secret, and "small fraction" stops being true fast.
+fn hint_for(secret: &str) -> Option<String> {
+    const HEAD: usize = 5;
+    const TAIL: usize = 4;
+    /// Below this, HEAD + TAIL would be most of the value.
+    const MIN_LEN: usize = 16;
+
+    let secret = secret.trim();
+    if secret.is_empty() {
+        return None;
+    }
+    let chars: Vec<char> = secret.chars().collect();
+    if chars.len() < MIN_LEN {
+        return Some("•".repeat(8));
+    }
+    let head: String = chars[..HEAD].iter().collect();
+    let tail: String = chars[chars.len() - TAIL..].iter().collect();
+    Some(format!("{head}…{tail}"))
 }
 
 impl Credential {
@@ -153,14 +255,19 @@ impl Credential {
         if !self.host_managed() {
             return None;
         }
-        let guard = store().lock().ok()?;
-        let value = guard.as_ref()?.get(&self.spec.keychain_service)?;
-        (!value.trim().is_empty()).then(|| value.to_owned())
+        if opening() {
+            return None;
+        }
+        let mut guard = store().lock().ok()?;
+        let value = loaded_for_read(&mut guard)?.get(&self.spec.keychain_service)?.to_owned();
+        (!value.trim().is_empty()).then_some(value)
     }
 
     pub fn status(&self) -> CredentialStatus {
+        let stored = self.read();
         CredentialStatus {
-            configured: !self.host_managed() || self.read().is_some(),
+            configured: !self.host_managed() || stored.is_some(),
+            hint: stored.as_deref().and_then(hint_for),
         }
     }
 
@@ -171,19 +278,7 @@ impl Credential {
         }
         let value = value.trim();
         let mut guard = store().lock().map_err(|_| "credential store lock poisoned")?;
-        // A lost master key leaves no store. Saving a key is the recovery, so
-        // build a fresh one rather than refusing the write.
-        if guard.is_none() {
-            let dir = CONFIG_DIR.get().ok_or("credential store is not initialised")?;
-            match SecretStore::load(dir)? {
-                Opened::Ready(fresh) => *guard = Some(fresh),
-                Opened::KeyLost => {
-                    return Err("Could not unlock the credential store. Reset it in Settings.".to_owned())
-                }
-            }
-        }
-        let store = guard.as_mut().ok_or("credential store is not initialised")?;
-        store.set(&self.spec.keychain_service, value)?;
+        loaded_for_write(&mut guard)?.set(&self.spec.keychain_service, value)?;
         // Deliberately not exported. The registry rebuilds each harness per
         // call and reads the value straight from the store, so a variable would
         // add nothing but reach — every child the agent spawns inherits it.
@@ -199,5 +294,82 @@ pub fn forget_all() {
             let _ = store.clear();
         }
         *guard = None;
+    }
+}
+
+#[cfg(test)]
+mod hint_tests {
+    use super::hint_for;
+
+    #[test]
+    fn shows_enough_to_tell_two_keys_apart() {
+        assert_eq!(
+            hint_for("sk-or-v1-0123456789abcdef9f2c").as_deref(),
+            Some("sk-or…9f2c"),
+        );
+    }
+
+    #[test]
+    fn a_short_value_gives_up_no_characters() {
+        // The guard that matters. Head + tail on a short secret is most of it,
+        // and a hint is only safe while it stays a small fraction.
+        for short in ["abc", "sk-1234", "123456789012345"] {
+            let hint = hint_for(short).expect("something");
+            assert!(
+                !hint.contains(|c: char| c.is_ascii_alphanumeric()),
+                "{short} leaked characters through its hint: {hint}",
+            );
+        }
+    }
+
+    #[test]
+    fn nothing_stored_is_nothing_to_hint_at() {
+        assert_eq!(hint_for(""), None);
+        assert_eq!(hint_for("   "), None);
+    }
+
+    #[test]
+    fn never_reveals_more_than_a_fraction() {
+        let secret = "sk-or-v1-".to_owned() + &"a".repeat(48);
+        let hint = hint_for(&secret).expect("a hint");
+        let revealed = hint.chars().filter(|c| *c != '…').count();
+        assert!(
+            revealed * 4 < secret.chars().count(),
+            "hint revealed {revealed} of {} characters",
+            secret.chars().count(),
+        );
+    }
+}
+
+#[cfg(test)]
+mod reentrancy_tests {
+    use super::{secret_for, store, OpeningGuard};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    /// Opening the store must never ask the store for anything.
+    ///
+    /// Migration needs the list of credential specs, and getting it builds every
+    /// harness — which reads that harness's key. Do that while the loader holds
+    /// the store lock and `std::sync::Mutex` deadlocks, because it is not
+    /// reentrant. The symptom is not an error: Settings sits on its loading
+    /// skeletons for ever.
+    ///
+    /// The failure is a hang, so the work runs on another thread and the
+    /// assertion is a deadline. Remove the `opening()` guard and this fails with
+    /// its message rather than wedging the suite.
+    #[test]
+    fn opening_the_store_never_reads_from_it() {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _held = store().lock().expect("store lock");
+            let _opening = OpeningGuard::new();
+            let _ = tx.send(secret_for("openrouter"));
+        });
+
+        let seen = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("a credential read while opening must return, not deadlock");
+        assert_eq!(seen, None, "the store is mid-build; it has nothing to report");
     }
 }
