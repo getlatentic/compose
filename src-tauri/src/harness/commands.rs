@@ -74,9 +74,28 @@ fn with_local_install_truth(mut readiness: Readiness, ollama_present: bool) -> R
     readiness
 }
 
+/// `with_auth` decides whether this may open the credential store.
+///
+/// The composer and the default-model pick call this at boot, and resolving a
+/// hosted harness reads its stored key — which is a keychain access at launch
+/// for anyone who has one. Most model endpoints (OpenRouter's among them) list
+/// publicly, and a listing that fails leaves the picker on free-text, which it
+/// already handles. Settings, where someone is choosing a model and an
+/// authenticated endpoint must work, opts in.
 #[tauri::command(async)]
-pub fn harness_list_models(harness_id: String) -> Result<Vec<ModelChoice>, String> {
-    resolve(&harness_id)?.list_models().map_err(|e| e.to_string())
+pub fn harness_list_models(
+    harness_id: String,
+    with_auth: Option<bool>,
+) -> Result<Vec<ModelChoice>, String> {
+    let secrets = if with_auth.unwrap_or(false) {
+        crate::harness::registry::Secrets::Resolve
+    } else {
+        crate::harness::registry::Secrets::Skip
+    };
+    crate::harness::registry::compose_harness_by_id_with(&harness_id, secrets)
+        .ok_or_else(|| format!("Unknown assistant: {harness_id}"))?
+        .list_models()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]

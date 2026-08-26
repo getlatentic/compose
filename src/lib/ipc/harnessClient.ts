@@ -380,11 +380,18 @@ export async function ollamaInstalled(): Promise<boolean> {
  * because discovery is dynamic. Best-effort: `[]` in the browser preview or on
  * any backend error (the free-text model field still applies).
  */
-export async function harnessListModels(harnessId: string): Promise<HarnessModel[]> {
+export async function harnessListModels(
+  harnessId: string,
+  /** Allow reading the stored key to authenticate the listing. Off by default:
+   *  the composer and the default-model pick run at boot, and a hosted harness
+   *  resolves its key when built — a keychain access at launch. Settings opts
+   *  in, where an authenticated endpoint has to work. */
+  withAuth = false,
+): Promise<HarnessModel[]> {
   if (!isTauriRuntime()) {
     return [];
   }
-  return invoke<HarnessModel[]>("harness_list_models", { harnessId });
+  return invoke<HarnessModel[]>("harness_list_models", { harnessId, withAuth });
 }
 
 /**

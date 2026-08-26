@@ -69,7 +69,7 @@ export function ModelPicker({ harnessId }: { harnessId: string }) {
   const refresh = async () => {
     setRefreshing(true);
     try {
-      await loadHarnessModels(harnessId);
+      await loadHarnessModels(harnessId, true);
     } finally {
       setRefreshing(false);
     }

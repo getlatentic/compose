@@ -84,14 +84,11 @@ pub fn set_config_dir(config_dir: &std::path::Path) {
 fn loaded_for_read(guard: &mut Option<SecretStore>) -> Option<&mut SecretStore> {
     if guard.is_none() {
         let dir = CONFIG_DIR.get()?;
-        match SecretStore::load(dir).ok()? {
-            Opened::Ready(mut fresh) => {
-                let _opening = OpeningGuard::new();
-                migrate_legacy_entries(&mut fresh);
-                *guard = Some(fresh);
-            }
-            Opened::KeyLost => return None,
-        }
+        // `open_existing`, not `load`: reading must not mint a master key.
+        let mut fresh = SecretStore::open_existing(dir).ok()??;
+        let _opening = OpeningGuard::new();
+        migrate_legacy_entries(&mut fresh);
+        *guard = Some(fresh);
     }
     guard.as_mut()
 }

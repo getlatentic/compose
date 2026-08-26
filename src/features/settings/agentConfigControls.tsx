@@ -31,7 +31,7 @@ export function ModelSection({ harnessId }: { harnessId: string }) {
 
   useEffect(() => {
     if (caps.models.length === 0) {
-      void loadHarnessModels(harnessId);
+      void loadHarnessModels(harnessId, true);
     }
   }, [harnessId, caps.models.length, loadHarnessModels]);
 

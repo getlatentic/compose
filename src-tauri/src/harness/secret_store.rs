@@ -107,6 +107,33 @@ impl SecretStore {
         })
     }
 
+    /// Open the store only if it already exists — never mint.
+    ///
+    /// Minting is a WRITE, and a read must not perform one. Without this, merely
+    /// asking "is a key configured?" created the master key: on a fresh install
+    /// the answer is no, `decide` saw no key and no file, and minted an empty
+    /// vault before the user had typed anything. A keychain item should appear
+    /// when someone saves a key, not when something asks about one.
+    ///
+    /// `None` means "nothing stored" — whether because no key was ever minted or
+    /// because the one that opens the file is gone. A reader cannot tell those
+    /// apart and does not need to: both mean it has nothing to hand over.
+    pub fn open_existing(config_dir: &Path) -> Result<Option<Self>, String> {
+        let Some(key) = read_master_key()? else {
+            return Ok(None);
+        };
+        let path = config_dir.join(STORE_FILE);
+        let secrets = match read_envelope(&path)? {
+            Some(envelope) => match decrypt(&key, &envelope) {
+                Ok(secrets) => secrets,
+                // The key does not open this file: same as lost, for a reader.
+                Err(_) => return Ok(None),
+            },
+            None => BTreeMap::new(),
+        };
+        Ok(Some(Self { path, key, secrets }))
+    }
+
     /// Start over after {@link Opened::KeyLost}: the file cannot be opened by
     /// any key that exists, so a fresh one is minted and the store begins empty.
     ///
@@ -275,10 +302,10 @@ fn new_master_key() -> [u8; KEY_LEN] {
 
 /// The keychain service the master key lives under.
 ///
-/// A constant in the app. Under `cfg(test)` it can be pointed at a throwaway
-/// name, because the alternative is that `recover` — the whole recovery path —
-/// stays untestable: exercising it for real means minting a master key, and a
-/// test must never write to the developer's own `ai.latentic.compose` entry.
+/// A constant in the app. Under `cfg(test)` there is no route back to it: a
+/// test runs against a throwaway service or it panics. `ai.latentic.compose`
+/// belongs to whoever is running the suite, and `clear` deletes what this
+/// points at — a default of "the real one" costs them every key they had saved.
 #[cfg(not(test))]
 fn keyring_service() -> String {
     KEYRING_SERVICE.to_owned()
@@ -292,29 +319,45 @@ thread_local! {
 
 #[cfg(test)]
 fn keyring_service() -> String {
-    TEST_SERVICE.with(|s| s.borrow().clone()).unwrap_or_else(|| KEYRING_SERVICE.to_owned())
+    TEST_SERVICE.with(|s| s.borrow().clone()).unwrap_or_else(|| {
+        panic!(
+            "this test reached the master key with no TestKeychain installed; \
+             add `let _keychain = TestKeychain::new();`"
+        )
+    })
 }
 
-/// Point the master key at a throwaway service for the current test, and delete
-/// whatever it left behind when the guard drops.
+/// Point the master key at a service unique to this test, and delete whatever
+/// it left behind when the guard drops.
 #[cfg(test)]
-struct TestKeychain(String);
+struct TestKeychain {
+    service: String,
+    /// Restored on drop, so an inner guard cannot leave an outer one pointing
+    /// at nothing — which would panic somewhere unrelated to the mistake.
+    outer: Option<String>,
+}
 
 #[cfg(test)]
 impl TestKeychain {
-    fn new(name: &str) -> Self {
-        TEST_SERVICE.with(|s| *s.borrow_mut() = Some(name.to_owned()));
-        Self(name.to_owned())
+    fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let service = format!(
+            "{KEYRING_SERVICE}.test.{}.{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
+        let outer = TEST_SERVICE.with(|s| s.replace(Some(service.clone())));
+        Self { service, outer }
     }
 }
 
 #[cfg(test)]
 impl Drop for TestKeychain {
     fn drop(&mut self) {
-        if let Ok(entry) = keyring::Entry::new(&self.0, KEYRING_ACCOUNT) {
+        if let Ok(entry) = keyring::Entry::new(&self.service, KEYRING_ACCOUNT) {
             let _ = entry.delete_credential();
         }
-        TEST_SERVICE.with(|s| *s.borrow_mut() = None);
+        TEST_SERVICE.with(|s| *s.borrow_mut() = self.outer.take());
     }
 }
 
@@ -375,6 +418,28 @@ mod tests {
         SecretStore { path: dir.join(STORE_FILE), key, secrets: BTreeMap::new() }
     }
 
+    /// Guarding the guard. A missing `TestKeychain` used to fall back to the
+    /// real service, so `clear` in a test deleted the master key of whoever ran
+    /// it — every saved API key with it, and a keychain prompt on the way out.
+    /// Failing loudly is the only fallback that cannot cost someone their data.
+    #[test]
+    #[should_panic(expected = "TestKeychain")]
+    fn reaching_the_keychain_without_a_guard_is_a_test_failure() {
+        keyring_service();
+    }
+
+    #[test]
+    fn a_guard_never_names_the_service_the_app_uses() {
+        let outer = TestKeychain::new();
+        assert_ne!(keyring_service(), KEYRING_SERVICE);
+
+        {
+            let inner = TestKeychain::new();
+            assert_ne!(inner.service, outer.service, "two guards must not collide");
+        }
+        assert_eq!(keyring_service(), outer.service, "the outer guard still holds");
+    }
+
     /// The safety property of recovery, testable without the OS vault: the
     /// unreadable file is preserved, never destroyed. `recover` itself mints a
     /// master key and so cannot run in a test — but this is the half that could
@@ -411,7 +476,7 @@ mod tests {
     /// was trying to save is there afterwards and readable on a reopen.
     #[test]
     fn a_store_with_no_key_recovers_and_accepts_the_save_that_was_blocked() {
-        let _keychain = TestKeychain::new("ai.latentic.compose.test.recover");
+        let _keychain = TestKeychain::new();
         let dir = tempfile::tempdir().expect("tempdir");
 
         // The wedged state: a file encrypted under a key the keychain has never
@@ -446,6 +511,27 @@ mod tests {
             .filter(|e| e.file_name().to_string_lossy().contains(".unreadable-"))
             .collect();
         assert_eq!(kept.len(), 1, "the unreadable store must be preserved");
+    }
+
+    /// A read must never create a keychain item.
+    ///
+    /// On a fresh install, asking "is a key configured?" used to mint the master
+    /// key — so installing Compose and opening Settings put an item in the
+    /// keychain before the user had typed anything. `open_existing` answers
+    /// "nothing stored" without writing.
+    #[test]
+    fn reading_an_empty_store_mints_nothing() {
+        let _keychain = TestKeychain::new();
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        assert!(
+            SecretStore::open_existing(dir.path()).expect("no error").is_none(),
+            "nothing is stored, so there is nothing to open",
+        );
+        assert!(
+            read_master_key().expect("no error").is_none(),
+            "a read created a master key — the thing it must never do",
+        );
     }
 
     fn envelope_for(key: [u8; KEY_LEN], pairs: &[(&str, &str)]) -> Envelope {
@@ -567,6 +653,10 @@ mod tests {
     fn clearing_removes_the_file_as_well_as_the_secrets() {
         // "Reset all data". `set("")` on the last secret also removes the file,
         // so only `clear` covers the case where several remain.
+        //
+        // `clear` deletes the master key, and the keychain is not scoped to the
+        // temp dir the way the file is.
+        let _keychain = TestKeychain::new();
         let dir = tempfile::tempdir().expect("tempdir");
         let mut store = store_at(dir.path(), [5u8; KEY_LEN]);
         store.set("openrouter", "sk-a").expect("write");
