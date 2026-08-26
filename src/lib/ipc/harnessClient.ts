@@ -330,11 +330,18 @@ export async function harnessList(): Promise<HarnessInfo[]> {
 }
 
 /** Probe one harness's readiness (installed / version / auth). */
-export async function harnessReadiness(harnessId: string): Promise<HarnessReadiness | null> {
+export async function harnessReadiness(
+  harnessId: string,
+  /** Include auth state — which for a hosted provider means READING the stored
+   *  key. Off by default: the boot probe wants `installed`, and asking for auth
+   *  there made launching the app open the keychain. Settings, which displays
+   *  auth state, opts in. */
+  withAuth = false,
+): Promise<HarnessReadiness | null> {
   if (!isTauriRuntime()) {
     return null;
   }
-  return invoke<HarnessReadiness>("harness_readiness", { harnessId });
+  return invoke<HarnessReadiness>("harness_readiness", { harnessId, withAuth });
 }
 
 /** Probe every registered harness's readiness in one pass, so the picker

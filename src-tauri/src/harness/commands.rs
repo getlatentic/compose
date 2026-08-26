@@ -32,9 +32,21 @@ pub fn harness_discover() -> Result<Vec<Readiness>, String> {
         .collect())
 }
 
+/// `with_auth` decides whether this may open the credential store.
+///
+/// The boot probe wants `installed` — that is what gates the composer — and
+/// asking for auth state there made LAUNCHING the app read the keychain. Only
+/// callers that display auth state (Settings) pass true.
 #[tauri::command(async)]
-pub fn harness_readiness(harness_id: String) -> Result<Readiness, String> {
-    let readiness = resolve(&harness_id)?.readiness();
+pub fn harness_readiness(harness_id: String, with_auth: Option<bool>) -> Result<Readiness, String> {
+    let secrets = if with_auth.unwrap_or(false) {
+        crate::harness::registry::Secrets::Resolve
+    } else {
+        crate::harness::registry::Secrets::Skip
+    };
+    let readiness = crate::harness::registry::compose_harness_by_id_with(&harness_id, secrets)
+        .ok_or_else(|| format!("Unknown assistant: {harness_id}"))?
+        .readiness();
     let present = crate::harness::ollama_runtime::ollama_installed();
     Ok(with_local_install_truth(readiness, present))
 }

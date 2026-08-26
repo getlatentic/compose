@@ -48,7 +48,7 @@ export function useHarnessSetup(harnessId: string) {
     }
   };
   const refreshReadiness = async () => {
-    applyReadiness(await harnessReadiness(harnessId).catch(() => null));
+    applyReadiness(await harnessReadiness(harnessId, true).catch(() => null));
   };
 
   // Probe readiness + managed-key status whenever the opened agent changes, and
@@ -60,7 +60,7 @@ export function useHarnessSetup(harnessId: string) {
     setRuntimeCheck(null);
     setApiKey("");
     setError(null);
-    void harnessReadiness(harnessId)
+    void harnessReadiness(harnessId, true)
       .then((next) => {
         if (!active) return;
         setReadiness(next);

@@ -11,6 +11,7 @@
 //! load, so nobody re-enters anything.
 
 use std::path::PathBuf;
+use super::registry::Secrets;
 use std::sync::{Mutex, OnceLock};
 
 use harness::{CredentialSpec, Harness};
@@ -174,13 +175,16 @@ fn legacy_accounts(spec: &CredentialSpec) -> Vec<String> {
 /// Every harness that can hold a host-stored key: the configured providers plus
 /// the user's own OpenAI-compatible agents.
 fn every_spec() -> Vec<CredentialSpec> {
-    let mut specs: Vec<CredentialSpec> = super::registry::extra_harnesses()
+    // `Skip`: this wants each spec's NAMES. Resolving keys here would read the
+    // store while the store is being built, and would make migration a reason to
+    // open the keychain — the opposite of the point.
+    let mut specs: Vec<CredentialSpec> = super::registry::extra_harnesses(Secrets::Skip)
         .iter()
         .map(|harness| harness.credential())
         .collect();
     specs.extend(
         super::custom::custom_agent_store()
-            .build_harnesses()
+            .build_harnesses(Secrets::Skip)
             .iter()
             .map(|harness| harness.credential()),
     );

@@ -9,6 +9,7 @@
 //! sees the change without a restart.
 
 use std::path::{Path, PathBuf};
+use super::registry::Secrets;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use harness::{
@@ -174,18 +175,22 @@ impl CustomAgentStore {
 
     /// A live [`Harness`] for each record — what `compose_registry()` folds in.
     /// A poisoned lock yields no agents rather than panicking the registry.
-    pub fn build_harnesses(&self) -> Vec<Box<dyn Harness>> {
+    pub fn build_harnesses(&self, secrets: Secrets) -> Vec<Box<dyn Harness>> {
         let agents = match self.lock() {
             Ok(state) => state.agents.clone(),
             Err(_) => return Vec::new(),
         };
-        agents.into_iter().map(build_harness).collect()
+        agents.into_iter().map(|record| build_harness_with(record, secrets)).collect()
     }
 }
 
 /// Construct a live [`Harness`] from one record (the registry + the remove
 /// command's keychain cleanup both build from a record).
 pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
+    build_harness_with(record, Secrets::Resolve)
+}
+
+pub fn build_harness_with(record: CustomAgentRecord, secrets: Secrets) -> Box<dyn Harness> {
     match record.kind {
         CustomAgentKind::Acp { command, args } => Box::new(AcpHarness::custom(AcpHarnessConfig {
             id: record.id,
@@ -220,8 +225,7 @@ pub fn build_harness(record: CustomAgentRecord) -> Box<dyn Harness> {
             // One field, three states: no key wanted, wanted and missing (so
             // Settings offers the slot), or the secret itself.
             let api_key = if requires_key {
-                crate::harness::credentials::secret_for(&record.id)
-                    .map_or(ApiKey::Required, ApiKey::Value)
+                secrets.resolve_for(&record.id)
             } else {
                 ApiKey::NotNeeded
             };
@@ -367,7 +371,7 @@ mod tests {
         store.add(acp("custom:gem")).unwrap();
         store.add(openai("custom:gw")).unwrap();
 
-        let built = store.build_harnesses();
+        let built = store.build_harnesses(Secrets::Resolve);
         let ids: Vec<String> = built.iter().map(|harness| harness.info().id).collect();
         assert_eq!(ids, vec!["custom:gem", "custom:gw"]);
 

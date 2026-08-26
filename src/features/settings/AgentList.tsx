@@ -51,7 +51,7 @@ export function AgentList({
     async function worker() {
       while (active && next < ids.length) {
         const id = ids[next++];
-        const result = await harnessReadiness(id).catch(() => null);
+        const result = await harnessReadiness(id, true).catch(() => null);
         if (!active) return;
         cachedReadiness = { ...cachedReadiness, [id]: result };
         setReadiness((prev) => ({ ...prev, [id]: result }));
