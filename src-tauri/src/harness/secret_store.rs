@@ -107,6 +107,33 @@ impl SecretStore {
         })
     }
 
+    /// Open the store only if it already exists — never mint.
+    ///
+    /// Minting is a WRITE, and a read must not perform one. Without this, merely
+    /// asking "is a key configured?" created the master key: on a fresh install
+    /// the answer is no, `decide` saw no key and no file, and minted an empty
+    /// vault before the user had typed anything. A keychain item should appear
+    /// when someone saves a key, not when something asks about one.
+    ///
+    /// `None` means "nothing stored" — whether because no key was ever minted or
+    /// because the one that opens the file is gone. A reader cannot tell those
+    /// apart and does not need to: both mean it has nothing to hand over.
+    pub fn open_existing(config_dir: &Path) -> Result<Option<Self>, String> {
+        let Some(key) = read_master_key()? else {
+            return Ok(None);
+        };
+        let path = config_dir.join(STORE_FILE);
+        let secrets = match read_envelope(&path)? {
+            Some(envelope) => match decrypt(&key, &envelope) {
+                Ok(secrets) => secrets,
+                // The key does not open this file: same as lost, for a reader.
+                Err(_) => return Ok(None),
+            },
+            None => BTreeMap::new(),
+        };
+        Ok(Some(Self { path, key, secrets }))
+    }
+
     /// Start over after {@link Opened::KeyLost}: the file cannot be opened by
     /// any key that exists, so a fresh one is minted and the store begins empty.
     ///
@@ -446,6 +473,27 @@ mod tests {
             .filter(|e| e.file_name().to_string_lossy().contains(".unreadable-"))
             .collect();
         assert_eq!(kept.len(), 1, "the unreadable store must be preserved");
+    }
+
+    /// A read must never create a keychain item.
+    ///
+    /// On a fresh install, asking "is a key configured?" used to mint the master
+    /// key — so installing Compose and opening Settings put an item in the
+    /// keychain before the user had typed anything. `open_existing` answers
+    /// "nothing stored" without writing.
+    #[test]
+    fn reading_an_empty_store_mints_nothing() {
+        let _keychain = TestKeychain::new("ai.latentic.compose.test.readonly");
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        assert!(
+            SecretStore::open_existing(dir.path()).expect("no error").is_none(),
+            "nothing is stored, so there is nothing to open",
+        );
+        assert!(
+            read_master_key().expect("no error").is_none(),
+            "a read created a master key — the thing it must never do",
+        );
     }
 
     fn envelope_for(key: [u8; KEY_LEN], pairs: &[(&str, &str)]) -> Envelope {
