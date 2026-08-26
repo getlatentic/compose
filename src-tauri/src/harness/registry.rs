@@ -10,7 +10,7 @@ use serde::Serialize;
 
 use crate::harness::custom::CustomAgentKind;
 
-fn openrouter() -> OpenHarness {
+fn openrouter(secrets: Secrets) -> OpenHarness {
     OpenHarness::custom(OpenHarnessConfig {
         id: "openrouter".to_owned(),
         display_name: "OpenRouter".to_owned(),
@@ -21,8 +21,7 @@ fn openrouter() -> OpenHarness {
         // encrypted store exists to protect. `ApiKey` also carries "needed but
         // absent" in the same field, so Settings still offers the slot when the
         // vault has nothing yet, and the two cannot contradict each other.
-        api_key: crate::harness::credentials::secret_for("openrouter")
-            .map_or(ApiKey::Required, ApiKey::Value),
+        api_key: secrets.resolve("openrouter"),
         ..Default::default()
     })
     .with_models_dev("openrouter")
@@ -31,10 +30,10 @@ fn openrouter() -> OpenHarness {
 /// The non-built-in providers, also the set whose keys are exported to the env at
 /// boot (built-ins are exported per-run — a boot keychain read on a re-signed
 /// build can block on a permission prompt).
-pub(crate) fn extra_harnesses() -> Vec<Box<dyn Harness>> {
+pub(crate) fn extra_harnesses(secrets: Secrets) -> Vec<Box<dyn Harness>> {
     vec![
         Box::new(OpenHarness::ollama()),
-        Box::new(openrouter()),
+        Box::new(openrouter(secrets)),
         Box::new(AcpHarness::opencode()),
     ]
 }
@@ -43,24 +42,59 @@ pub(crate) fn extra_harnesses() -> Vec<Box<dyn Harness>> {
 /// display + default-preference order: the first available harness here is the
 /// recommended default, so reordering this list reorders the picker and the
 /// auto-pick. The single source for resolution, the catalog, and discovery.
-pub fn compose_registry() -> Registry {
+/// Whether building a harness should resolve the API key it would run with.
+///
+/// Listing agents does not need one. `credentialRequired` is a capability —
+/// "does this agent take a key" — not a report of what is stored, and the
+/// picker asks for stored state separately. Reading keys anyway meant OPENING
+/// the app touched the keychain, which on a machine whose keychain guards the
+/// item is a modal password prompt before the user has asked for anything.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Secrets {
+    /// Running: the harness needs the key it will authenticate with.
+    Resolve,
+    /// Listing: identity and capability only.
+    Skip,
+}
+
+impl Secrets {
+    /// Public twin of [`Self::resolve`], for the custom-agent builder.
+    pub fn resolve_for(self, provider_id: &str) -> ApiKey {
+        self.resolve(provider_id)
+    }
+
+    fn resolve(self, provider_id: &str) -> ApiKey {
+        match self {
+            Self::Resolve => crate::harness::credentials::secret_for(provider_id)
+                .map_or(ApiKey::Required, ApiKey::Value),
+            // "Needed, and this is not the question being asked."
+            Self::Skip => ApiKey::Required,
+        }
+    }
+}
+
+fn compose_registry_with(secrets: Secrets) -> Registry {
     // Ollama (local, free, private) leads — the local-first pick for this app;
     // the first *available* harness here is the recommended auto-pick default.
     let mut registry = Registry::new()
         .register(OpenHarness::ollama())
         .register(Claude::new())
         .register(Codex::new())
-        .register(openrouter())
+        .register(openrouter(secrets))
         .register(AcpHarness::opencode());
     // User-registered agents rank after the built-in providers.
-    for harness in crate::harness::custom::custom_agent_store().build_harnesses() {
+    for harness in crate::harness::custom::custom_agent_store().build_harnesses(secrets) {
         registry = registry.register_boxed(harness);
     }
     registry
 }
 
 pub fn compose_harness_by_id(id: &str) -> Option<Box<dyn Harness>> {
-    compose_registry().into_by_id(id)
+    compose_harness_by_id_with(id, Secrets::Resolve)
+}
+
+pub fn compose_harness_by_id_with(id: &str, secrets: Secrets) -> Option<Box<dyn Harness>> {
+    compose_registry_with(secrets).into_by_id(id)
 }
 
 /// The registry's own listing shape — identity plus capability per agent.
@@ -71,7 +105,7 @@ pub fn compose_harness_by_id(id: &str) -> Option<Box<dyn Harness>> {
 /// that through rather than defining a near-copy; the front end flattens it in
 /// its own IPC client.
 pub fn compose_harness_catalog() -> Vec<Listing> {
-    compose_registry().catalog()
+    compose_registry_with(Secrets::Skip).catalog()
 }
 
 /// The built-in agent's providers, and whether each is served from this machine.

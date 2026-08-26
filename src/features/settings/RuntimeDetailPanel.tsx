@@ -45,7 +45,7 @@ export function RuntimeDetailPanel({
   // expanded — this is the deferred probe; it runs on first mount of the section.
   useEffect(() => {
     let active = true;
-    void harnessReadiness(harnessId)
+    void harnessReadiness(harnessId, true)
       .catch(() => null)
       .then((result) => {
         if (!active) return;
