@@ -14,8 +14,12 @@ import {
   type ImageEditAltEventDetail,
 } from "@latentic/live-markdown";
 import { markBoot } from "../lib/perf";
+import { useAppZoom } from "../features/shared/useAppZoom";
 
 export function App() {
+  // At the root, not in MainApp: ⌘+ has to work on the setup screen too — the
+  // person most likely to need it is the one who can't read the setup screen.
+  useAppZoom();
   useEffect(() => {
     markBoot("shell");
   }, []);

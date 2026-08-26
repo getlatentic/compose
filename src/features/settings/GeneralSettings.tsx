@@ -5,6 +5,7 @@ import { useHarnessStore } from "../../app/store/harnessStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { revealErrorLog } from "../../lib/diagnostics/errorReporter";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
+import { AppearanceSection } from "./AppearanceSection";
 import { DefaultMarkdownAppSection } from "./DefaultMarkdownAppSection";
 import { ResetDataSection } from "./ResetDataSection";
 
@@ -22,6 +23,7 @@ const MAX_CUSTOM_INSTRUCTIONS_CHARS = 2000;
 export function GeneralSettings() {
   return (
     <>
+      <AppearanceSection />
       <NotificationsSection />
       <CustomInstructionsSection />
       {isTauriRuntime() ? (

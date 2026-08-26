@@ -1,8 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./app/App";
+import { INITIAL_UI_PREFS } from "./app/store/initialPrefs";
 import { installGlobalErrorReporter } from "./lib/diagnostics/errorReporter";
 import { markBoot } from "./lib/perf";
+import { applyZoom } from "./lib/zoom/zoom";
 import "./styles/global.scss";
 
 // First executed line: its timestamp is the boot bundle's parse+compile cost.
@@ -10,6 +12,11 @@ markBoot("entry");
 
 // Capture uncaught errors / rejections to the local log before anything renders.
 installGlobalErrorReporter();
+
+// The saved interface scale goes on before the first paint, not from a mount
+// effect — otherwise every launch renders once at 100% and jumps, and the
+// setup screen (which mounts before MainApp) would ignore the setting outright.
+applyZoom(INITIAL_UI_PREFS.zoom, document.documentElement);
 
 // react-scan note: its overlay is NOT wired here. It must initialize
 // before React evaluates, which a dynamic import in this module can't do
