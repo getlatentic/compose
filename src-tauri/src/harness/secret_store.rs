@@ -330,29 +330,34 @@ fn keyring_service() -> String {
 /// Point the master key at a service unique to this test, and delete whatever
 /// it left behind when the guard drops.
 #[cfg(test)]
-struct TestKeychain(String);
+struct TestKeychain {
+    service: String,
+    /// Restored on drop, so an inner guard cannot leave an outer one pointing
+    /// at nothing — which would panic somewhere unrelated to the mistake.
+    outer: Option<String>,
+}
 
 #[cfg(test)]
 impl TestKeychain {
     fn new() -> Self {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let name = format!(
+        let service = format!(
             "{KEYRING_SERVICE}.test.{}.{}",
             std::process::id(),
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         );
-        TEST_SERVICE.with(|s| *s.borrow_mut() = Some(name.clone()));
-        Self(name)
+        let outer = TEST_SERVICE.with(|s| s.replace(Some(service.clone())));
+        Self { service, outer }
     }
 }
 
 #[cfg(test)]
 impl Drop for TestKeychain {
     fn drop(&mut self) {
-        if let Ok(entry) = keyring::Entry::new(&self.0, KEYRING_ACCOUNT) {
+        if let Ok(entry) = keyring::Entry::new(&self.service, KEYRING_ACCOUNT) {
             let _ = entry.delete_credential();
         }
-        TEST_SERVICE.with(|s| *s.borrow_mut() = None);
+        TEST_SERVICE.with(|s| *s.borrow_mut() = self.outer.take());
     }
 }
 
@@ -425,9 +430,14 @@ mod tests {
 
     #[test]
     fn a_guard_never_names_the_service_the_app_uses() {
-        let first = TestKeychain::new();
+        let outer = TestKeychain::new();
         assert_ne!(keyring_service(), KEYRING_SERVICE);
-        assert_ne!(TestKeychain::new().0, first.0, "two guards must not collide");
+
+        {
+            let inner = TestKeychain::new();
+            assert_ne!(inner.service, outer.service, "two guards must not collide");
+        }
+        assert_eq!(keyring_service(), outer.service, "the outer guard still holds");
     }
 
     /// The safety property of recovery, testable without the OS vault: the
