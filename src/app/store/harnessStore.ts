@@ -56,7 +56,7 @@ export interface HarnessState {
    * Codex). Keyed by harness id; absent until loaded, `[]` when discovery finds
    * none (the picker then falls back to a free-text model field). */
   harnessModels: Record<string, HarnessModel[]>;
-  loadHarnessModels: (harnessId: string) => Promise<void>;
+  loadHarnessModels: (harnessId: string, withAuth?: boolean) => Promise<void>;
   /** Per-agent readiness for the picker's status dots, cached with a probe time
    * so the picker doesn't re-probe on every open. */
   harnessStatusById: Record<string, { ready: boolean; at: number }>;
@@ -244,9 +244,9 @@ export const useHarnessStore = create<HarnessState>((set, get) => {
     set({ harnessCatalog: catalog });
   },
   harnessModels: {},
-  loadHarnessModels: async (harnessId) => {
+  loadHarnessModels: async (harnessId, withAuth = false) => {
     // Best-effort; failures resolve to [] (the picker falls back to free-text).
-    const models = await harnessListModels(harnessId).catch(() => [] as HarnessModel[]);
+    const models = await harnessListModels(harnessId, withAuth).catch(() => [] as HarnessModel[]);
     set((state) => ({ harnessModels: { ...state.harnessModels, [harnessId]: models } }));
   },
   harnessStatusById: {},
