@@ -5,6 +5,7 @@
  * owns one concern.
  */
 
+import { DEFAULT_THEME, normalizeTheme, type ThemeChoice } from "../theme/theme";
 import { DEFAULT_ZOOM, clampZoom } from "../zoom/zoom";
 
 const UI_PREFS_KEY = "compose.uiPrefs.v1";
@@ -23,6 +24,8 @@ export interface UiPrefs {
   chatWidthPx: number | null;
   /** Interface scale (⌘+ / ⌘− / ⌘0). 1 = the system text size, untouched. */
   zoom: number;
+  /** Light, dark, or follow the system. */
+  theme: ThemeChoice;
 }
 
 const FALLBACK: UiPrefs = {
@@ -32,6 +35,7 @@ const FALLBACK: UiPrefs = {
   sidebarWidthPx: null,
   chatWidthPx: null,
   zoom: DEFAULT_ZOOM,
+  theme: DEFAULT_THEME,
 };
 
 function widthOrNull(value: unknown): number | null {
@@ -61,6 +65,7 @@ export function loadUiPrefs(): UiPrefs {
       sidebarWidthPx: widthOrNull(parsed.sidebarWidthPx),
       chatWidthPx: widthOrNull(parsed.chatWidthPx),
       zoom: clampZoom(parsed.zoom),
+      theme: normalizeTheme(parsed.theme),
     };
   } catch {
     return FALLBACK;

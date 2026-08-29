@@ -18,6 +18,7 @@
 // @carbon/styles) because only @carbon/react is hoisted by pnpm — sass's
 // bare-import resolver looks in *our* node_modules, not the deps of a
 // transitive package.
+@use "tokens";
 @use "@carbon/react/scss/config" with (
   $css--font-face: false
 );
@@ -60,63 +61,6 @@ $ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
 // fallbacks stay as last-resort safety (they only fire if a variable is unset,
 // which never happens here). Interactive / support / link / focus tokens are
 // Carbon-standard; the neutral scale is Carbon's default warm-neutral gray.
-:root {
-  // Backgrounds + layers (gray-10 / 20)
-  --cds-background: #ffffff;
-  --cds-background-hover: rgba(141, 141, 141, 0.12);
-  --cds-background-active: rgba(141, 141, 141, 0.5);
-  --cds-background-selected: rgba(141, 141, 141, 0.2);
-  --cds-background-selected-hover: rgba(141, 141, 141, 0.32);
-  --cds-background-inverse: #393939;            // gray-80
-  --cds-background-inverse-hover: #525252;      // gray-70
-  --cds-layer-01: #f4f4f4;                      // gray-10
-  --cds-layer-02: #ffffff;
-  --cds-layer-03: #f4f4f4;
-  --cds-layer-hover-01: #e8e8e8;
-  --cds-layer-hover-02: #e8e8e8;
-  --cds-layer-accent-01: #e0e0e0;               // gray-20
-  --cds-layer-accent-02: #e0e0e0;
-  --cds-layer-selected-01: #e0e0e0;
-  --cds-layer-selected-02: #e0e0e0;
-  --cds-layer-selected-hover-01: #c6c6c6;       // gray-30
-  --cds-field-01: #f4f4f4;
-  --cds-field-02: #ffffff;
-  --cds-field-hover-01: #e8e8e8;
-  --cds-field-hover-02: #e8e8e8;
-  // Borders (subtler — gray-20)
-  --cds-border-subtle-00: #e0e0e0;
-  --cds-border-subtle-01: #e0e0e0;
-  --cds-border-subtle-02: #e0e0e0;
-  --cds-border-strong-01: #8d8d8d;              // gray-50
-  --cds-border-strong-02: #8d8d8d;
-  --cds-border-tile-01: #c6c6c6;                // gray-30
-  --cds-border-inverse: #161616;                // gray-100
-  --cds-border-interactive: #0f62fe;            // interactive stays Carbon blue
-  // Text (gray-100 / 70 / 60)
-  --cds-text-primary: #161616;
-  --cds-text-secondary: #525252;
-  --cds-text-placeholder: rgba(22, 22, 22, 0.4);
-  --cds-text-on-color: #ffffff;
-  --cds-text-helper: #6f6f6f;
-  --cds-text-disabled: rgba(22, 22, 22, 0.25);
-  --cds-text-inverse: #ffffff;
-  // Icons follow text
-  --cds-icon-primary: #161616;
-  --cds-icon-secondary: #525252;
-  --cds-icon-disabled: rgba(22, 22, 22, 0.25);
-  --cds-icon-on-color: #ffffff;
-  --cds-icon-on-color-disabled: rgba(255, 255, 255, 0.25);
-  --cds-icon-interactive: #0f62fe;
-  --cds-icon-inverse: #ffffff;
-  // Focus + link stay Carbon-standard
-  --cds-focus: #0f62fe;
-  --cds-link-primary: #0f62fe;
-  --cds-link-primary-hover: #0043ce;
-  --cds-link-secondary: #0043ce;
-  --cds-link-visited: #8a3ffc;
-  // Pale-blue highlight used by selected rows + the assistant-suggestion tile
-  --cds-highlight: #edf5ff;                     // Carbon blue-10
-}
 
 :root {
   color: var(--cds-text-primary, #161616);
@@ -231,7 +175,7 @@ select {
 // selectors). A light gray (gray-30) reads clearly on the dark bar without
 // the harshness of pure white; disabled stays dimmer.
 .app-shell .cds--header__action svg {
-  fill: #c6c6c6 !important;
+  fill: var(--cds-icon-disabled, #c6c6c6) !important;
 }
 
 .app-shell .header-action--disabled svg {
@@ -549,7 +493,7 @@ select {
   padding-inline: 0.25rem;
   // Inactive tab: a light gray-50 at regular weight, well below the active tab's
   // dark semibold.
-  color: #8d8d8d;
+  color: var(--cds-text-placeholder, #8d8d8d);
   font-size: 0.875rem;
   font-weight: 400;
   border-radius: 0;
@@ -620,14 +564,14 @@ select {
   inset-inline-end: 0;
   inline-size: 246px;
   background: var(--cds-layer-02, #ffffff);
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
   z-index: 100;
 }
 
 // A neutral divider between the file-system group and chat.
 .new-menu__group + .new-menu__group {
-  border-block-start: 1px solid #e0e0e0;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
 // Item: a 46px row — 16px icon, 12px gap, label, right-aligned mono shortcut.
@@ -649,7 +593,7 @@ select {
 
 // Neutral hover — the spec background-hover overlay.
 .new-menu__item:hover {
-  background: #f4f4f4;
+  background: var(--cds-layer-01, #f4f4f4);
 }
 
 .new-menu__item-icon {
@@ -2343,7 +2287,7 @@ body.pane-resizing {
 
 .selection-composer__primary {
   background: var(--cds-button-primary, #0f62fe);
-  color: #ffffff;
+  color: var(--cds-text-on-color, #ffffff);
 }
 
 .selection-composer__primary:hover:not(:disabled) {
@@ -2516,7 +2460,7 @@ body.pane-resizing {
   block-size: 3rem;
   border-radius: 0.75rem;
   // The dark brand tile the cyan ComposeMark glyph is designed to sit on.
-  background: #0f1419;
+  background: var(--brand-mark-bg, #0f1419);
 }
 
 .welcome__title {
@@ -2567,7 +2511,7 @@ body.pane-resizing {
 .welcome__action--primary {
   border-color: var(--cds-button-primary, #0f62fe);
   background: var(--cds-button-primary, #0f62fe);
-  color: #ffffff;
+  color: var(--cds-text-on-color, #ffffff);
 }
 
 .welcome__action--primary:hover {
@@ -3557,18 +3501,18 @@ body.pane-resizing {
 }
 
 .applied__badge--create {
-  color: #0e6027;
-  background: #defbe6;
+  color: var(--pill-green-fg, #0e6027);
+  background: var(--pill-green-bg, #defbe6);
 }
 
 .applied__badge--rewrite {
-  color: #0043ce;
-  background: #d0e2ff;
+  color: var(--pill-blue-fg, #0043ce);
+  background: var(--pill-blue-bg, #d0e2ff);
 }
 
 .applied__badge--delete {
-  color: #a2191f;
-  background: #ffd7d9;
+  color: var(--pill-red-fg, #a2191f);
+  background: var(--pill-red-bg, #ffd7d9);
 }
 
 .applied__path {
@@ -3640,18 +3584,18 @@ body.pane-resizing {
 }
 
 .suggestion__status--accepted {
-  color: var(--cds-support-success, #198038);
-  background: #defbe6;
+  color: var(--cds-text-success, #198038);
+  background: var(--pill-green-bg, #defbe6);
 }
 
 .suggestion__status--rejected {
   color: var(--cds-text-secondary, #525252);
-  background: #e0e0e0;
+  background: var(--pill-gray-bg, #e0e0e0);
 }
 
 .suggestion__status--stale {
-  color: var(--cds-support-warning, #f1c21b);
-  background: #fcf4d6;
+  color: var(--cds-text-warning, #b28600);
+  background: var(--pill-yellow-bg, #fcf4d6);
 }
 
 /* Collapsible unified diff (replaces the side-by-side before/after). */
@@ -3696,7 +3640,7 @@ body.pane-resizing {
 }
 
 .diff__added {
-  color: var(--cds-support-success, #198038);
+  color: var(--cds-text-success, #198038);
   font-weight: 600;
 }
 
@@ -3761,7 +3705,7 @@ body.pane-resizing {
 }
 
 .diff__line--add .diff__sign {
-  color: var(--cds-support-success, #198038);
+  color: var(--cds-text-success, #198038);
 }
 
 .diff__line--remove {
@@ -3851,7 +3795,7 @@ body.pane-resizing {
   padding: 0.25rem 0.625rem;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--cds-text-on-color, #ffffff);
   background: var(--cds-button-primary, #0f62fe);
   border: none;
   border-radius: 4px;
@@ -4692,7 +4636,7 @@ body.pane-resizing {
   border: 0;
   padding: 0.25rem 0.75rem;
   background: var(--cds-button-primary, #0f62fe);
-  color: #ffffff;
+  color: var(--cds-text-on-color, #ffffff);
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
@@ -4961,7 +4905,7 @@ body.pane-resizing {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  color: var(--cds-support-success, #24a148);
+  color: var(--cds-text-success, #198038);
   font-size: 0.6875rem;
   font-weight: 600;
 }
@@ -5098,7 +5042,7 @@ body.pane-resizing {
 
     svg {
       flex: none;
-      color: var(--cds-support-success, #24a148);
+      color: var(--cds-text-success, #198038);
     }
   }
 
@@ -5275,7 +5219,7 @@ body.pane-resizing {
 }
 
 .settings-install-log__line--stderr {
-  color: var(--cds-support-warning, #b28600);
+  color: var(--cds-text-warning, #b28600);
 }
 
 // ----- Settings shell: vertical category rail + content pane -----------------
@@ -5458,7 +5402,7 @@ body.pane-resizing {
   gap: 0.25rem;
   margin-block-start: 0.375rem;
   font-size: 0.75rem;
-  color: var(--cds-support-success, #24a148);
+  color: var(--cds-text-success, #198038);
 
   svg {
     fill: currentColor;
@@ -5864,7 +5808,7 @@ body.pane-resizing {
   block-size: 3.5rem;
   border-radius: 1rem;
   margin-block-end: 0.5rem;
-  background: #0f1419;
+  background: var(--brand-mark-bg, #0f1419);
 }
 
 // Pre-React three-pane skeleton (sidebar | editor | chat), empty but for the
@@ -6095,7 +6039,7 @@ body.pane-resizing {
 
 .setup-step--done {
   border-color: var(--cds-support-success, #24a148);
-  background: #f6fcf8;
+  background: var(--pill-green-bg, #f6fcf8);
 }
 
 .setup-step--pending {
@@ -6311,7 +6255,7 @@ body.pane-resizing {
 // treatment as the kebab menus below.
 .cds--menu {
   background-color: var(--cds-layer-02, #ffffff);
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
 // Context/kebab menu polish (interaction spec §02).
@@ -6319,7 +6263,7 @@ body.pane-resizing {
 // light-gray layer-01, so pin it to the white layer.
 .cds--overflow-menu-options {
   background-color: var(--cds-layer-02, #ffffff);
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
 // Options match the "+ New" menu's type exactly: 14px regular gray-100 in
@@ -6455,7 +6399,7 @@ body.pane-resizing {
   padding-inline: 0.1875rem;
   border-radius: 0.4375rem;
   background: var(--cds-button-primary, #0f62fe);
-  color: #ffffff;
+  color: var(--cds-text-on-color, #ffffff);
   font-size: 0.5625rem;
   font-weight: 600;
   line-height: 0.875rem;

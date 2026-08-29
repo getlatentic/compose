@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persistUiPrefs } from "../../lib/prefs/uiPrefs";
+import { normalizeTheme, type ThemeChoice } from "../../lib/theme/theme";
 import { clampZoom } from "../../lib/zoom/zoom";
 import { INITIAL_UI_PREFS } from "./initialPrefs";
 import { useWorkspaceStore } from "../workspaceStore";
@@ -68,6 +69,9 @@ export interface UiState {
   /** Interface scale (⌘+ / ⌘− / ⌘0); 1 leaves the system text size alone. */
   zoom: number;
   setZoom: (scale: number) => void;
+  /** Light, dark, or follow the system. */
+  theme: ThemeChoice;
+  setTheme: (choice: ThemeChoice) => void;
 }
 
 function persistAll(get: () => UiState): void {
@@ -79,6 +83,7 @@ function persistAll(get: () => UiState): void {
     sidebarWidthPx: state.sidebarWidthPx,
     chatWidthPx: state.chatWidthPx,
     zoom: state.zoom,
+    theme: state.theme,
   });
 }
 
@@ -181,6 +186,15 @@ export const useUiStore = create<UiState>((set, get) => ({
   chatPulseSignal: 0,
   pulseChatPanel: () => {
     set((state) => ({ chatOpen: true, chatPulseSignal: state.chatPulseSignal + 1 }));
+  },
+  theme: INITIAL_UI_PREFS.theme,
+  setTheme: (choice) => {
+    const next = normalizeTheme(choice);
+    if (next === get().theme) {
+      return;
+    }
+    set({ theme: next });
+    persistAll(get);
   },
   zoom: INITIAL_UI_PREFS.zoom,
   setZoom: (scale) => {

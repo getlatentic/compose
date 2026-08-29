@@ -232,6 +232,18 @@ pub fn run() {
                 // makes the view visible so the WebView starts; once running,
                 // `backgroundThrottling: disabled` keeps it alive if the window
                 // is later occluded mid-boot.
+                // The window paints its configured background before the web
+                // view has anything to show — ~300ms, which is why the static
+                // splash exists at all. Configured white, that is a white flash
+                // on every launch for a dark-mode user. The OS appearance is
+                // the best answer available this early: the front end has not
+                // run, so a stored "always light" override is not readable yet,
+                // and it corrects itself as soon as the splash paints.
+                if window.theme().is_ok_and(|theme| theme == tauri::Theme::Dark) {
+                    let _ = window.set_background_color(Some(tauri::window::Color(
+                        0x16, 0x16, 0x16, 0xff,
+                    )));
+                }
                 boot_native_mark("pre-focus");
                 let _ = window.set_focus();
                 if want_devtools {
