@@ -36,8 +36,8 @@ importers:
         specifier: ^6.43.0
         version: 6.43.0
       '@latentic/live-markdown':
-        specifier: ^0.3.0
-        version: 0.3.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.3.1
+        version: 0.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tanstack/react-virtual':
         specifier: ^3.14.3
         version: 3.14.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -828,8 +828,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@latentic/live-markdown@0.3.0':
-    resolution: {integrity: sha512-Z5VW6vtSfrOZv6kkaQONB67PhBcwka3pf1QA3hLcI9gk0q0XCHgQ3JhW6fJ9tu/+kEY7oKCg3eE7j2Nglqc0GQ==}
+  '@latentic/live-markdown@0.3.1':
+    resolution: {integrity: sha512-Q59fdRstttSoWiQ35IzleYd89JHBpqOIbcxGsCWJxicaz8DP3XkVFxzx2KENQnoZTAeFFDi/v4Ms7mH3i0au3A==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -4970,7 +4970,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@latentic/live-markdown@0.3.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@latentic/live-markdown@0.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@codemirror/commands': 6.10.3
       '@codemirror/lang-markdown': 6.5.0
