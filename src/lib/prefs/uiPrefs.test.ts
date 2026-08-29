@@ -24,6 +24,7 @@ describe("uiPrefs", () => {
       focusMode: true,
       sidebarWidthPx: 320,
       chatWidthPx: 480,
+      zoom: 1.25,
     });
     expect(loadUiPrefs()).toEqual({
       soundOnComplete: false,
@@ -31,6 +32,7 @@ describe("uiPrefs", () => {
       focusMode: true,
       sidebarWidthPx: 320,
       chatWidthPx: 480,
+      zoom: 1.25,
     });
   });
 
@@ -42,6 +44,7 @@ describe("uiPrefs", () => {
       focusMode: false,
       sidebarWidthPx: null,
       chatWidthPx: null,
+      zoom: 1,
     });
   });
 
@@ -53,6 +56,7 @@ describe("uiPrefs", () => {
       focusMode: false,
       sidebarWidthPx: null,
       chatWidthPx: null,
+      zoom: 1,
     });
   });
 
@@ -64,5 +68,15 @@ describe("uiPrefs", () => {
     const prefs = loadUiPrefs();
     expect(prefs.sidebarWidthPx).toBeNull();
     expect(prefs.chatWidthPx).toBeNull();
+  });
+
+  it("clamps a stored zoom instead of trusting it", () => {
+    // Everything is sized off the root font size, so a bad scale here is not a
+    // cosmetic problem — it is an app nobody can read.
+    localStorage.setItem("compose.uiPrefs.v1", JSON.stringify({ zoom: 12 }));
+    expect(loadUiPrefs().zoom).toBe(2);
+
+    localStorage.setItem("compose.uiPrefs.v1", JSON.stringify({ zoom: "big" }));
+    expect(loadUiPrefs().zoom).toBe(1);
   });
 });

@@ -5,6 +5,8 @@
  * owns one concern.
  */
 
+import { DEFAULT_ZOOM, clampZoom } from "../zoom/zoom";
+
 const UI_PREFS_KEY = "compose.uiPrefs.v1";
 
 export interface UiPrefs {
@@ -19,6 +21,8 @@ export interface UiPrefs {
   /** User-dragged pane widths in px (#119); null = the default grid width. */
   sidebarWidthPx: number | null;
   chatWidthPx: number | null;
+  /** Interface scale (⌘+ / ⌘− / ⌘0). 1 = the system text size, untouched. */
+  zoom: number;
 }
 
 const FALLBACK: UiPrefs = {
@@ -27,6 +31,7 @@ const FALLBACK: UiPrefs = {
   focusMode: false,
   sidebarWidthPx: null,
   chatWidthPx: null,
+  zoom: DEFAULT_ZOOM,
 };
 
 function widthOrNull(value: unknown): number | null {
@@ -55,6 +60,7 @@ export function loadUiPrefs(): UiPrefs {
       focusMode: typeof parsed.focusMode === "boolean" ? parsed.focusMode : FALLBACK.focusMode,
       sidebarWidthPx: widthOrNull(parsed.sidebarWidthPx),
       chatWidthPx: widthOrNull(parsed.chatWidthPx),
+      zoom: clampZoom(parsed.zoom),
     };
   } catch {
     return FALLBACK;

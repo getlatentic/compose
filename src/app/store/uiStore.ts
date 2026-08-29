@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persistUiPrefs } from "../../lib/prefs/uiPrefs";
+import { clampZoom } from "../../lib/zoom/zoom";
 import { INITIAL_UI_PREFS } from "./initialPrefs";
 import { useWorkspaceStore } from "../workspaceStore";
 
@@ -64,6 +65,9 @@ export interface UiState {
   chatPulseSignal: number;
   /** Reveal the chat pane and pulse its border (sidebar → open conversation). */
   pulseChatPanel: () => void;
+  /** Interface scale (⌘+ / ⌘− / ⌘0); 1 leaves the system text size alone. */
+  zoom: number;
+  setZoom: (scale: number) => void;
 }
 
 function persistAll(get: () => UiState): void {
@@ -74,6 +78,7 @@ function persistAll(get: () => UiState): void {
     focusMode: state.focusMode,
     sidebarWidthPx: state.sidebarWidthPx,
     chatWidthPx: state.chatWidthPx,
+    zoom: state.zoom,
   });
 }
 
@@ -176,5 +181,14 @@ export const useUiStore = create<UiState>((set, get) => ({
   chatPulseSignal: 0,
   pulseChatPanel: () => {
     set((state) => ({ chatOpen: true, chatPulseSignal: state.chatPulseSignal + 1 }));
+  },
+  zoom: INITIAL_UI_PREFS.zoom,
+  setZoom: (scale) => {
+    const next = clampZoom(scale);
+    if (next === get().zoom) {
+      return;
+    }
+    set({ zoom: next });
+    persistAll(get);
   },
 }));

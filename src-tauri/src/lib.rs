@@ -10,6 +10,7 @@ pub mod files;
 mod harness;
 pub mod index;
 pub mod logging;
+mod menu;
 mod open_with;
 mod profile_migration;
 pub mod review;
@@ -95,62 +96,7 @@ pub fn run() {
         // flash on launch): the platform defaults plus File → Print (⌘P). Print
         // emits `menu://print` (routed in `setup`) → the editor opens the system
         // print panel (a printer, or Save as PDF from the panel).
-        .menu(|handle| {
-            use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-            let menu = Menu::default(handle)?;
-            let print =
-                MenuItem::with_id(handle, "print", "Print…", true, Some("CmdOrCtrl+P"))?;
-            let open_file =
-                MenuItem::with_id(handle, "open-file", "Open File…", true, Some("CmdOrCtrl+O"))?;
-            let focus = MenuItem::with_id(
-                handle,
-                "focus-mode",
-                "Focus Mode",
-                true,
-                Some("CmdOrCtrl+Shift+D"),
-            )?;
-            let settings =
-                MenuItem::with_id(handle, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
-            // `Menu::default` already has the app, File and View submenus — add
-            // to them rather than inserting duplicates. The app submenu is the
-            // FIRST item (its title is the app name); Settings… sits after
-            // About + its separator, per the macOS convention.
-            let mut print_added = false;
-            let mut focus_added = false;
-            for (index, item) in menu.items()?.iter().enumerate() {
-                let Some(submenu) = item.as_submenu() else {
-                    continue;
-                };
-                if index == 0 {
-                    submenu.insert(&settings, 2)?;
-                    submenu.insert(&PredefinedMenuItem::separator(handle)?, 3)?;
-                    continue;
-                }
-                match submenu.text().as_deref() {
-                    Ok("File") => {
-                        submenu.prepend(&PredefinedMenuItem::separator(handle)?)?;
-                        submenu.prepend(&open_file)?;
-                        submenu.append(&print)?;
-                        print_added = true;
-                    }
-                    Ok("View") => {
-                        submenu.prepend(&focus)?;
-                        focus_added = true;
-                    }
-                    _ => {}
-                }
-            }
-            if !print_added {
-                menu.insert(
-                    &Submenu::with_items(handle, "File", true, &[&open_file, &print])?,
-                    1,
-                )?;
-            }
-            if !focus_added {
-                menu.append(&Submenu::with_items(handle, "View", true, &[&focus])?)?;
-            }
-            Ok(menu)
-        })
+        .menu(menu::build)
         .setup(|app| {
             boot_native_mark("setup-start");
             let app_handle = app.handle().clone();
@@ -174,18 +120,15 @@ pub fn run() {
             // File → Print (⌘P) lives on the builder menu (set at construction so
             // there's no menu-bar flash). Here we only route its event: Print emits
             // `menu://print`, which the editor turns into a system print-panel run.
+            // Every item the menu builds forwards as `menu://<id>`; the front
+            // end decides what each one means. Driven off the same list the
+            // menu is built from, so an item can't ship with nothing listening.
             app.on_menu_event(|app, event| {
-                if event.id() == "print" {
-                    let _ = app.emit("menu://print", ());
-                }
-                if event.id() == "focus-mode" {
-                    let _ = app.emit("menu://focus-mode", ());
-                }
-                if event.id() == "settings" {
-                    let _ = app.emit("menu://settings", ());
-                }
-                if event.id() == "open-file" {
-                    let _ = app.emit("menu://open-file", ());
+                for id in menu::MENU_EVENT_IDS {
+                    if event.id() == id {
+                        let _ = app.emit(&format!("menu://{id}"), ());
+                        return;
+                    }
                 }
             });
 

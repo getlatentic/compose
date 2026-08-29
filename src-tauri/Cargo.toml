@@ -54,6 +54,9 @@ keyring = { version = "3", features = ["windows-native"] }
 keyring = { version = "3", features = ["linux-native", "sync-secret-service"] }
 
 [dev-dependencies]
+# The accelerator parser Tauri hands menu shortcut strings to. Pinned to the
+# version Tauri already pulls in, so the test checks the real parser.
+muda = "0.19"
 tauri = { version = "2", features = ["test"] }
 
 # `orphan_runs::kill` signals a stranded agent process, and is `cfg(unix)` —

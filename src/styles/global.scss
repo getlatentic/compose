@@ -127,6 +127,16 @@ $ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
+  // App zoom (⌘+ / ⌘− / ⌘0). Chrome and document text are sized in `rem`/`em`
+  // — the editor package included — so one root font size scales all of it.
+  // `100%` is the browser's own root size, so this multiplies whatever text
+  // size the user's system already asks for instead of replacing it.
+  //
+  // Deliberately NOT scaled: hairlines, radii and shadows stay in `px`. A 1px
+  // border is a 1px border at any zoom; growing it just looks broken.
+  --ui-zoom: 1;
+  font-size: calc(100% * var(--ui-zoom));
+
   // Single source of truth for the macOS title-bar zone.
   //
   // We pick the **HIG regular toolbar height** (38pt) so tabs and buttons
@@ -141,8 +151,15 @@ $ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
   //
   // Both the sidebar title row and the editor tab strip read these so
   // the whole top strip stays one visual line.
-  --titlebar-height: 2.375rem;
-  --titlebar-btn-size: 1.5rem;
+  //
+  // In `px`, NOT `rem`, so app zoom leaves this strip alone. macOS draws the
+  // traffic lights itself at a position fixed when the window is built, and
+  // Tauri 2.11 exposes no way to move them afterwards — a row that grew with
+  // zoom would slide out from under lights that stayed put. The horizontal
+  // reservation (`--traffic-lights-inset`) is fixed for the same reason. Tab
+  // labels inside the strip still scale; only the strip itself is pinned.
+  --titlebar-height: 38px;
+  --titlebar-btn-size: 24px;
 }
 
 html,
@@ -475,6 +492,9 @@ select {
   padding-inline: var(--traffic-lights-inset, 78px) 0.5rem;
   background: var(--cds-layer-01, #f4f4f4);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  // Chrome, like the tab strip it lines up with — pinned so zoom cannot push
+  // its contents out of a row whose height the traffic lights fix.
+  font-size: 13px;
 }
 
 .sidebar-titlebar__btn {
@@ -560,13 +580,13 @@ select {
 .new-menu__trigger {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  block-size: 34px;
-  padding: 0 9px 0 12px;
+  gap: 0.4375rem;
+  block-size: 2.125rem;
+  padding: 0 0.5625rem 0 0.75rem;
   border: 0;
   background: var(--cds-button-primary, #0f62fe);
   color: var(--cds-text-on-color, #ffffff);
-  font-size: 14px;
+  font-size: 0.875rem;
   // "New" is regular weight — the same as the leading "+" and the chevron.
   font-weight: 400;
   cursor: pointer;
@@ -582,7 +602,7 @@ select {
 }
 
 .new-menu__plus {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 400;
   line-height: 1;
 }
@@ -616,12 +636,12 @@ select {
   align-items: center;
   gap: 12px;
   inline-size: 100%;
-  block-size: 46px;
-  padding-inline: 16px;
+  block-size: 2.875rem;
+  padding-inline: 1rem;
   border: 0;
   background: transparent;
   color: var(--cds-text-primary, #161616);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 400;
   text-align: start;
   cursor: pointer;
@@ -648,7 +668,7 @@ select {
 .new-menu__item-shortcut {
   flex: 0 0 auto;
   font-family: var(--cds-code-01-font-family, ui-monospace, "SF Mono", monospace);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--cds-text-placeholder, #8d8d8d);
 }
 
@@ -1599,6 +1619,11 @@ body.pane-resizing {
   overflow: hidden;
   background: var(--cds-layer-02, #ffffff);
   border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  // Window chrome, so it holds its size under app zoom — same rule browsers
+  // apply to their own toolbars. The strip's height is pinned to keep the
+  // macOS traffic lights centred in it, and text that kept growing inside a
+  // pinned row would simply clip. `px` on purpose: `rem` would scale.
+  font-size: 13px;
 }
 
 // Only the tabs scroll; the leading traffic-light spacer + show-sidebar toggle
@@ -1944,7 +1969,7 @@ body.pane-resizing {
   min-block-size: 0;
   padding: 2rem 3rem;
   font-family: $ui-font;
-  font-size: 17px;
+  font-size: 1.0625rem;
   line-height: 1.6;
   color: var(--cds-text-primary, #161616);
 
@@ -2083,7 +2108,7 @@ body.pane-resizing {
   min-inline-size: 0;
   padding: 2rem 3rem;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.65;
   color: var(--cds-text-primary, #161616);
   background: transparent;
@@ -5038,6 +5063,24 @@ body.pane-resizing {
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.25rem;
+  color: var(--cds-text-primary, #161616);
+}
+
+// Text size (Settings → General). The value sits between the two steppers and
+// is announced on change, so the control reads as one unit rather than two
+// buttons with a number that happens to be nearby.
+.text-size {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-end: 0.5rem;
+}
+
+.text-size__value {
+  min-inline-size: 3.5rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
   color: var(--cds-text-primary, #161616);
 }
 
