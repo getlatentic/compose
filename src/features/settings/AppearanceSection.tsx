@@ -1,8 +1,9 @@
 import { useCallback } from "react";
-import { Button } from "@carbon/react";
+import { Button, RadioButton, RadioButtonGroup } from "@carbon/react";
 import { Add, Subtract } from "@carbon/react/icons";
 
 import { useUiStore } from "../../app/store/uiStore";
+import { normalizeTheme, type ThemeChoice } from "../../lib/theme/theme";
 import {
   DEFAULT_ZOOM,
   ZOOM_STEPS,
@@ -15,13 +16,58 @@ import {
 const SMALLEST = ZOOM_STEPS[0];
 const LARGEST = ZOOM_STEPS[ZOOM_STEPS.length - 1];
 
+/** Appearance: how the app looks, as opposed to how it behaves. */
+export function AppearanceSection() {
+  return (
+    <>
+      <ThemeControl />
+      <TextSizeControl />
+    </>
+  );
+}
+
 /**
- * Text size lives in Settings as well as the View menu. The menu is the macOS
+ * Three choices, not a toggle. "System" has to be a state of its own — a
+ * light/dark switch cannot express "follow the Mac", and picking Light must
+ * survive the machine going dark at sunset.
+ */
+function ThemeControl() {
+  const theme = useUiStore((state) => state.theme);
+  const setTheme = useUiStore((state) => state.setTheme);
+
+  const handleChange = useCallback(
+    (value: string | number | undefined) => setTheme(normalizeTheme(value)),
+    [setTheme],
+  );
+
+  return (
+    <div className="settings-section">
+      <h3 id="appearance-label">Appearance</h3>
+      <RadioButtonGroup
+        name="theme"
+        legendText=""
+        aria-labelledby="appearance-label"
+        valueSelected={theme satisfies ThemeChoice}
+        onChange={handleChange}
+      >
+        <RadioButton labelText="System" value="system" id="theme-system" />
+        <RadioButton labelText="Light" value="light" id="theme-light" />
+        <RadioButton labelText="Dark" value="dark" id="theme-dark" />
+      </RadioButtonGroup>
+      <p className="settings-helper">
+        System follows your Mac, including when it changes at sunset.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Text size lives here as well as on the View menu. The menu is the macOS
  * convention and carries the shortcuts, but someone who needs bigger text is
  * exactly the person least likely to go hunting through a menu bar for it — so
  * it is visible, labelled, and shows the current value.
  */
-export function AppearanceSection() {
+function TextSizeControl() {
   const zoom = useUiStore((state) => state.zoom);
   const setZoom = useUiStore((state) => state.setZoom);
 

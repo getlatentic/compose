@@ -14,6 +14,7 @@ import { AppearanceSection } from "./AppearanceSection";
 describe("AppearanceSection", () => {
   beforeEach(() => {
     useUiStore.getState().setZoom(1);
+    useUiStore.getState().setTheme("system");
     localStorage.clear();
   });
   afterEach(cleanup);
@@ -70,5 +71,23 @@ describe("AppearanceSection", () => {
     render(<AppearanceSection />);
     const value = screen.getByText("100%");
     expect(value.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("offers System as a choice of its own, not a light/dark toggle", () => {
+    // A toggle cannot express "follow the Mac", and picking Light has to
+    // survive the machine going dark at sunset.
+    render(<AppearanceSection />);
+    for (const name of [/system/i, /light/i, /dark/i]) {
+      expect(screen.getByRole("radio", { name })).toBeTruthy();
+    }
+    expect((screen.getByRole("radio", { name: /system/i }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("records an explicit theme choice", async () => {
+    const user = userEvent.setup();
+    render(<AppearanceSection />);
+
+    await user.click(screen.getByRole("radio", { name: /dark/i }));
+    expect(useUiStore.getState().theme).toBe("dark");
   });
 });

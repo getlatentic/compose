@@ -25,6 +25,7 @@ describe("uiPrefs", () => {
       sidebarWidthPx: 320,
       chatWidthPx: 480,
       zoom: 1.25,
+      theme: "dark",
     });
     expect(loadUiPrefs()).toEqual({
       soundOnComplete: false,
@@ -33,6 +34,7 @@ describe("uiPrefs", () => {
       sidebarWidthPx: 320,
       chatWidthPx: 480,
       zoom: 1.25,
+      theme: "dark",
     });
   });
 
@@ -45,6 +47,7 @@ describe("uiPrefs", () => {
       sidebarWidthPx: null,
       chatWidthPx: null,
       zoom: 1,
+      theme: "system",
     });
   });
 
@@ -57,6 +60,7 @@ describe("uiPrefs", () => {
       sidebarWidthPx: null,
       chatWidthPx: null,
       zoom: 1,
+      theme: "system",
     });
   });
 
@@ -68,6 +72,11 @@ describe("uiPrefs", () => {
     const prefs = loadUiPrefs();
     expect(prefs.sidebarWidthPx).toBeNull();
     expect(prefs.chatWidthPx).toBeNull();
+  });
+
+  it("falls back to following the system for an unusable theme", () => {
+    localStorage.setItem("compose.uiPrefs.v1", JSON.stringify({ theme: "solarized" }));
+    expect(loadUiPrefs().theme).toBe("system");
   });
 
   it("clamps a stored zoom instead of trusting it", () => {

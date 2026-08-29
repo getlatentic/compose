@@ -4,6 +4,7 @@ import { App } from "./app/App";
 import { INITIAL_UI_PREFS } from "./app/store/initialPrefs";
 import { installGlobalErrorReporter } from "./lib/diagnostics/errorReporter";
 import { markBoot } from "./lib/perf";
+import { applyTheme } from "./lib/theme/theme";
 import { applyZoom } from "./lib/zoom/zoom";
 import "./styles/global.scss";
 
@@ -17,6 +18,7 @@ installGlobalErrorReporter();
 // effect — otherwise every launch renders once at 100% and jumps, and the
 // setup screen (which mounts before MainApp) would ignore the setting outright.
 applyZoom(INITIAL_UI_PREFS.zoom, document.documentElement);
+applyTheme(INITIAL_UI_PREFS.theme, document.documentElement);
 
 // react-scan note: its overlay is NOT wired here. It must initialize
 // before React evaluates, which a dynamic import in this module can't do
