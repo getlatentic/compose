@@ -133,6 +133,27 @@
 @mixin dark {
   color-scheme: dark;
 
+  // ── Fenced-code syntax (@latentic/live-markdown) ──────────────────────────
+  // The editor paints `var(--md-code-…, <One Light value>)`, so setting these
+  // restyles code for dark and leaving them alone keeps the light palette.
+  // One Dark, the counterpart to the light theme's One Light.
+  //
+  // The CLIPBOARD deliberately ignores these: pasted HTML carries no
+  // stylesheet, so it renders literal One Light colours — correct, because the
+  // document being pasted into is white whatever theme the editor was in.
+  --md-code-keyword: #c678dd;
+  --md-code-string: #98c379;
+  --md-code-comment: #7f848e;
+  --md-code-literal: #d19a66;
+  --md-code-function: #61afef;
+  --md-code-type: #e5c07b;
+  --md-code-variable: #e06c75;
+  --md-code-property: #61afef;
+  --md-code-tag: #e06c75;
+  --md-code-attribute: #d19a66;
+  --md-code-regexp: #56b6c2;
+  --md-code-invalid: #be5046;
+
   --cds-background: #161616;
   --cds-background-active: rgba(141, 141, 141, 0.4);
   --cds-background-hover: rgba(141, 141, 141, 0.16);
