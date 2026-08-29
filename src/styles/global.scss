@@ -88,10 +88,14 @@ $ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
   // traffic lights at a fixed Y from the window top (~8pt by default),
   // which is *top-aligned* in a 38pt row. To put them at the row's
   // vertical center we use `trafficLightPosition` in tauri.conf.json
-  // (Tauri 2.4+ official API). With ~14pt lights and a 38pt row,
-  // y=14 lands the lights at the row's center. This is the standard
-  // pattern for any non-native-toolbar macOS app — Obsidian does the
-  // same thing.
+  // (Tauri 2.4+ official API), currently `{ x: 8, y: 21 }`. This is the
+  // standard pattern for any non-native-toolbar macOS app — Obsidian does
+  // the same thing.
+  //
+  // That setting moves the buttons and nothing else: macOS draws them, and
+  // measured against Finder on the same machine they come out pixel-identical
+  // (28x26 device px on a 2x display, with or without the setting). Their
+  // shape is not ours to change.
   //
   // Both the sidebar title row and the editor tab strip read these so
   // the whole top strip stays one visual line.
