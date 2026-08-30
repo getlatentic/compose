@@ -14,6 +14,11 @@ use tauri::{AppHandle, Runtime};
 /// a runtime error — the item simply appears with no shortcut, which nobody
 /// notices until a user reports that a key "does nothing".
 const ITEMS: &[(&str, &str, &str)] = &[
+    // The sidebar's New menu has advertised these two since it was built, with
+    // nothing bound to them — the shortcut column was decoration. On the File
+    // menu they work wherever focus is, including inside the editor.
+    ("new-note", "New Note", "CmdOrCtrl+N"),
+    ("new-folder", "New Folder", "CmdOrCtrl+Shift+N"),
     ("print", "Print…", "CmdOrCtrl+P"),
     ("open-file", "Open File…", "CmdOrCtrl+O"),
     ("focus-mode", "Focus Mode", "CmdOrCtrl+Shift+D"),
@@ -29,6 +34,8 @@ const ITEMS: &[(&str, &str, &str)] = &[
 
 /// Ids whose menu event the front end listens for.
 pub const MENU_EVENT_IDS: &[&str] = &[
+    "new-note",
+    "new-folder",
     "print",
     "open-file",
     "focus-mode",
@@ -54,6 +61,8 @@ fn item<R: Runtime>(handle: &AppHandle<R>, id: &str) -> tauri::Result<MenuItem<R
 pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let menu = Menu::default(handle)?;
 
+    let new_note = item(handle, "new-note")?;
+    let new_folder = item(handle, "new-folder")?;
     let print = item(handle, "print")?;
     let open_file = item(handle, "open-file")?;
     let focus = item(handle, "focus-mode")?;
@@ -79,6 +88,9 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             Ok("File") => {
                 submenu.prepend(&PredefinedMenuItem::separator(handle)?)?;
                 submenu.prepend(&open_file)?;
+                submenu.prepend(&PredefinedMenuItem::separator(handle)?)?;
+                submenu.prepend(&new_folder)?;
+                submenu.prepend(&new_note)?;
                 submenu.append(&print)?;
                 print_added = true;
             }
@@ -97,7 +109,18 @@ pub fn build<R: Runtime>(handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
     if !print_added {
         menu.insert(
-            &Submenu::with_items(handle, "File", true, &[&open_file, &print])?,
+            &Submenu::with_items(
+                handle,
+                "File",
+                true,
+                &[
+                    &new_note,
+                    &new_folder,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &open_file,
+                    &print,
+                ],
+            )?,
             1,
         )?;
     }

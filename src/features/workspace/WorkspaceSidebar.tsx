@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo } from "react";
 import { InlineNotification } from "@carbon/react";
-import { useTextPrompt } from "../dialogs/TextPromptProvider";
+import { useNewItemActions } from "./useNewItemActions";
 import { PanelLeft, Search, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
@@ -46,10 +46,6 @@ export const MAC_TRAFFIC_LIGHTS_INSET = 78;
  * symmetrically.
  */
 export function WorkspaceSidebar() {
-  const createNote = useWorkspaceStore((state) => state.createNote);
-  const createFolder = useWorkspaceStore((state) => state.createFolder);
-  const newNoteDir = useWorkspaceStore((state) => state.newNoteDir);
-  const promptText = useTextPrompt();
   const newChat = useWorkspaceStore((state) => state.newChat);
   const deleteFile = useWorkspaceStore((state) => state.deleteFile);
   const renameActiveFile = useWorkspaceStore((state) => state.renameActiveFile);
@@ -140,28 +136,9 @@ export function WorkspaceSidebar() {
     [selectFile, renameActiveFile],
   );
 
-  // Stable menu-item handlers for the single "+ New" button. Not a hot-path row
-  // (the shell re-renders rarely), but kept off inline arrows for consistency.
-  const handleNewNote = useCallback(() => void createNote(), [createNote]);
+  // Shared with the File menu's ⌘N / ⌘⇧N, so the two cannot drift apart.
+  const { newNote: handleNewNote, newFolder: handleNewFolder } = useNewItemActions();
   const handleNewChat = useCallback(() => void newChat(), [newChat]);
-
-  // A "New folder" create action so the first/top-level folder can be created
-  // even in an empty workspace (the tree's "New folder here" needs an existing
-  // folder row). Lands in the selected folder (newNoteDir) or the root (#56).
-  const handleNewFolder = useCallback(() => {
-    void (async () => {
-      const name = await promptText({
-        title: "New folder",
-        label: "Folder name",
-        submitLabel: "Create",
-      });
-      const trimmed = name?.trim();
-      if (!trimmed) {
-        return;
-      }
-      await createFolder(newNoteDir ? `${newNoteDir}/${trimmed}` : trimmed);
-    })();
-  }, [promptText, createFolder, newNoteDir]);
 
   if (sidebarCollapsed) {
     return null;
