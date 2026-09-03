@@ -42,15 +42,25 @@ pub fn run(harness: &dyn Harness) -> HarnessRuntimeVerification {
         };
     }
 
+    // Ask for no tools only where the adapter can honour it: the prompt carries
+    // everything needed to answer "OK", and offered tools only give a model
+    // somewhere else to go inside a 45-second check. An adapter that cannot
+    // withhold its agent's tools refuses the request outright rather than
+    // pretend, so ask before making it — otherwise the Test button fails on
+    // exactly the harnesses it is meant to check.
+    let tools = if harness.features().withheld_tools {
+        ToolAccess::None
+    } else {
+        ToolAccess::Default
+    };
+
     let request = RunRequest {
         run_id: "compose-runtime-check".to_owned(),
         prompt: PROMPT.to_owned(),
         attachments: Vec::new(),
         cwd: scratch_dir(),
         mode: RunMode::Ask,
-        // The prompt carries everything this needs. Offered tools only give a
-        // model somewhere else to go, and the run has 45 seconds to say OK.
-        tools: ToolAccess::None,
+        tools,
         tuning: RunTuning::default(),
         resume: None,
     };
