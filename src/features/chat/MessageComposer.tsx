@@ -285,7 +285,7 @@ export function MessageComposer({
                 : `Add ${activeFilePath} to the chat context`
             }
             onClick={() =>
-              // An absolute path = an external file (#113): the chip shows its
+              // An absolute path = an external file: the chip shows its
               // name (the full path stays on this button's tooltip) and is
               // marked so presence/content resolve against the external list.
               onAddFileContext(

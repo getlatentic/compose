@@ -24,7 +24,7 @@ export async function collectFileContextContent(
   const unique = Array.from(new Set(filePaths));
   await Promise.all(
     unique.map(async (path) => {
-      // Absolute path = an external file (#113) or a spilled attachment: the
+      // Absolute path = an external file or a spilled attachment: the
       // loose buffer first (live edits), then the external registry; a spill
       // matches neither and stays a read-on-demand reference.
       if (path.startsWith("/")) {

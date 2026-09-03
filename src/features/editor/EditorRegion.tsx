@@ -39,7 +39,7 @@ export function EditorRegion() {
     markBoot("editor");
   }, []);
   // The editor surface follows the FOCUSED container — the loose
-  // pseudo-workspace while an external file is showing (#113).
+  // pseudo-workspace while an external file is showing.
   const focusedArea = useWorkspaceStore((state) => state.focusedArea);
   const activeFilePath = useWorkspaceStore(
     (state) => selectFocusedWorkspace(state)?.activeFilePath ?? "",
@@ -122,7 +122,7 @@ export function EditorRegion() {
     (filePath: string, area: TabArea) => {
       // Pull the editor's live content into the buffer first — keystrokes
       // still inside the 500ms editor debounce must reach the dirty check, or
-      // closing right after typing skips the confirm and drops them (#43).
+      // closing right after typing skips the confirm and drops them.
       flushActiveEditor();
       const state = useWorkspaceStore.getState();
       const container = area === "loose" ? selectLooseWorkspace(state) : state.activeWorkspace();
@@ -166,7 +166,7 @@ export function EditorRegion() {
   return (
     <main id="main-content" className="editor-region">
       {focusMode ? (
-        // Deeper focus (#143): no tabs, no chrome — just a quiet strip that
+        // Deeper focus: no tabs, no chrome — just a quiet strip that
         // keeps the document clear of the traffic lights and still drags the
         // window. Exits stay discoverable: ⌘⇧D, Esc, and View → Focus Mode.
         <div className="focus-titlebar" data-tauri-drag-region onMouseDown={onTitlebarMouseDown} />

@@ -338,7 +338,7 @@ export async function runSendChatPrompt(
     // map the toggle onto the run mode: allow → "code" (Edit),
     // otherwise "plan" (Ask). Capability-driven, not `id === "bob"`.
     const chatMode = capabilities.previewsEdits ? "plan" : allowEdits ? "code" : "plan";
-    // "Currently viewing" follows the EDITOR's focus (#113): an external file's
+    // "Currently viewing" follows the EDITOR's focus: an external file's
     // path is already absolute, so no workspace-root join — pointing the agent
     // at the workspace's background active file instead sends it off to read
     // (and answer about) a document the user isn't even looking at.

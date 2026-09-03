@@ -14,7 +14,7 @@ a folder you choose — readable in any other app, forever.
 > files are plain markdown, so Time Machine or any sync folder covers you).
 > macOS only for now, Apple Silicon and Intel. [Install below.](#install)
 
-<!-- #123: 20-second demo GIF of the core loop goes here (write → ask →
+<!-- TODO: 20-second demo GIF of the core loop goes here (write → ask →
      review diff → accept → restore). Until it lands, the screenshot stands in. -->
 ![Compose — a rich markdown editor with an AI assistant editing your documents alongside you](.github/screenshot.png)
 

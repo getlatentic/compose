@@ -57,7 +57,7 @@ const EMPTY_COMMENTS: Workspace["comments"] = [];
  */
 function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () => void }) {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
-  // What this document supports (#113): an external file is a plain document,
+  // What this document supports: an external file is a plain document,
   // so the workspace-scoped affordances below read these flags (primitives —
   // stable across store ticks), never `kind` directly.
   const commentsEnabled = useWorkspaceStore(
@@ -103,7 +103,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
   const updateActiveContent = useWorkspaceStore((state) => state.updateActiveContent);
 
   const editorMode = useUiStore((state) => state.editorMode);
-  // Deeper focus (#143): the formatting toolbar is part of the room — omit
+  // Deeper focus: the formatting toolbar is part of the room — omit
   // the slot entirely so the editor renders chromeless.
   const focusMode = useUiStore((state) => state.focusMode);
   const commentsOpen = useUiStore((state) => state.commentsOpen);
@@ -226,7 +226,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
       return;
     }
     // The HTML/PDF renderer resolves the document (and its images) against a
-    // registered workspace root — external files have none (#113 v1).
+    // registered workspace root — external files have none (v1).
     if (!documentCapabilities(workspace).richExport) {
       showToast({
         kind: "error",
@@ -334,7 +334,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
   // The selection comment bubble, handed to the editor as a slot. The editor
   // supplies the live selection + a `dismiss` that collapses it. External
   // files get no bubble — comments and agent context are workspace-scoped
-  // (#113 v1).
+  // (v1).
   const selectionActions = useCallback(
     ({
       selection,
@@ -452,7 +452,7 @@ export function ActiveDocument() {
   // Active file ⇒ its buffer loads. `selectFile` reads on a tab click, but
   // closing or deleting a tab (and tab restore on open) repoints the active file
   // without a read — load it here so the editor never strands on "Loading file…"
-  // (#50). The store guards against a double read racing `selectFile`.
+  //. The store guards against a double read racing `selectFile`.
   useEffect(() => {
     if (activeFilePath && !bufferLoaded) {
       void ensureActiveBuffer();

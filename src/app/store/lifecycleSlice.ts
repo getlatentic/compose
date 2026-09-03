@@ -64,7 +64,7 @@ export const createLifecycleSlice = (
     return workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
   },
   activeWorkspaceId: null,
-  // The loose pseudo-workspace (external files, #113) is always present and
+  // The loose pseudo-workspace (external files) is always present and
   // always LAST; `activeWorkspaceId` never points at it — `focusedArea` says
   // whether the editor is showing one of its files.
   workspaces: [createLooseWorkspace()],
@@ -278,7 +278,7 @@ export const createLifecycleSlice = (
   },
   rebuildWorkspaceIndex: async (workspaceId?: string) => {
     const targetWorkspaceId = workspaceId ?? get().activeWorkspaceId;
-    // External files are plain documents — no search index (#113 v1).
+    // External files are plain documents — no search index (v1).
     if (!targetWorkspaceId || targetWorkspaceId === LOOSE_WORKSPACE_ID) {
       return;
     }
@@ -286,7 +286,7 @@ export const createLifecycleSlice = (
     if (inFlight) {
       // A crawl is running: remember that the workspace changed again and let
       // ONE trailing run pick everything up — a burst of saves must not queue
-      // a burst of full crawls (#106).
+      // a burst of full crawls.
       inFlight.trailing = true;
       return inFlight.current;
     }
@@ -320,5 +320,5 @@ export const createLifecycleSlice = (
 
 /** One in-flight index crawl per workspace plus at most one coalesced
  * trailing run — rebuilds are requested on every save/rename/delete, watcher
- * event, and search open, and each is a full-vault crawl (#106). */
+ * event, and search open, and each is a full-vault crawl. */
 const indexRebuildFlights = new Map<string, { current: Promise<void>; trailing: boolean }>();

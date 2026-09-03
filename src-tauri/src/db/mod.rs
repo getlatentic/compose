@@ -1772,7 +1772,7 @@ fn validate_relative_metadata_path(relative_path: &str) -> Result<(), String> {
 
 /// LLM context snapshots record the path as an AUDIT IDENTIFIER — never
 /// resolved against a workspace root (doc linkage is a best-effort lookup) —
-/// so absolute paths are legal here: external files (#113) and spilled-paste
+/// so absolute paths are legal here: external files and spilled-paste
 /// attachments live outside the workspace by design. Still rejects blank,
 /// backslashes, and traversal so the stored identifier stays canonical.
 fn validate_llm_context_path(path: &str) -> Result<(), String> {

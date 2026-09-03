@@ -20,7 +20,7 @@ import { useConfirm } from "../dialogs/ConfirmProvider";
  * in global.scss. The virtualizer needs it to place rows without measuring each. */
 const ROW_HEIGHT = 28;
 
-/** dataTransfer MIME for a file path dragged to move it into a folder (#28). */
+/** dataTransfer MIME for a file path dragged to move it into a folder. */
 const DRAG_FILE_MIME = "application/x-compose-file-path";
 
 /** The path of the file row being dragged, tracked here rather than read back
@@ -568,7 +568,7 @@ function FileTreeInner({
   });
 
   // Open a workspace fully collapsed — only top-level folders and files show,
-  // plus the ancestor chain of the active file so it stays revealed (#52). Runs
+  // plus the ancestor chain of the active file so it stays revealed. Runs
   // once per workspace (keyed by workspaceRoot) when its tree first loads; the
   // user's later expand/collapse is left untouched. Because folders default
   // collapsed, a subfolder that loads late can't spring the tree open.

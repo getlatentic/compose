@@ -403,7 +403,7 @@ fn flush_pending<R: tauri::Runtime>(
         // FSEvents coalesces a path's recent flags (create + rename in one
         // event). The debounce has settled by now, so EXISTENCE is the ground
         // truth: any kind for a path that is gone is a removal — otherwise the
-        // tree keeps (or even grows) a row for a nonexistent file (#105).
+        // tree keeps (or even grows) a row for a nonexistent file.
         let kind = if kind != "removed" && metadata.is_none() {
             "removed"
         } else {

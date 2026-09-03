@@ -1089,14 +1089,14 @@ select {
   inline-size: 100%;
 }
 
-// Deeper focus (#143): the strip that replaces the tab strip — clears the
+// Deeper focus: the strip that replaces the tab strip — clears the
 // macOS traffic lights, drags the window, shows nothing.
 .focus-titlebar {
   flex: none;
   block-size: 2.5rem;
 }
 
-// Pane resize handles (#119). Thin strips straddling the pane edge; the
+// Pane resize handles. Thin strips straddling the pane edge; the
 // hosting panes get a positioning context below. Hidden on the single-column
 // mobile layout where the grid has no adjustable tracks.
 .pane-splitter {
@@ -1143,7 +1143,7 @@ body.pane-resizing {
   }
 }
 
-// Focus mode (#126): the document narrows to a comfortable reading measure,
+// Focus mode: the document narrows to a comfortable reading measure,
 // centered. Applied to the workspace container (not the editor internals) so
 // CM6's own metrics/theme stay untouched — the column just gets narrower.
 .workspace--focus .document-workspace {
@@ -1152,7 +1152,7 @@ body.pane-resizing {
   margin-inline: auto;
 }
 
-// ── External files (#113) — the sidebar group above the tree ───────────────
+// ── External files — the sidebar group above the tree ───────────────
 // Files opened from outside any workspace. Rows echo `.file-row`'s metrics
 // (28px, same hover/active layers) but are NOT tree rows — no folder
 // indentation, no kebab; a hover-revealed ✕ removes the entry instead.
@@ -1616,7 +1616,7 @@ body.pane-resizing {
   background: var(--cds-layer-01, #f4f4f4);
 }
 
-// Drop indicator while dragging a tab to reorder (#29): a left bar marks where
+// Drop indicator while dragging a tab to reorder: a left bar marks where
 // the dragged tab will land (just before this one).
 .editor-tab--drop {
   box-shadow: inset 2px 0 0 0 var(--cds-border-interactive, #0f62fe);
@@ -2839,7 +2839,7 @@ body.pane-resizing {
 
 .excerpt-card__file {
   // Shrink below content width so a long name ellipsizes instead of forcing a
-  // horizontal scroll (#33); the full path stays on hover (title).
+  // horizontal scroll; the full path stays on hover (title).
   flex: 1 1 auto;
   min-inline-size: 0;
   overflow: hidden;
@@ -3908,7 +3908,7 @@ body.pane-resizing {
 }
 
 // "Add this file" — the explicit way to put the current file in context now that
-// switching tabs doesn't (#30). A dashed chip-button; it and the chip removes are
+// switching tabs doesn't. A dashed chip-button; it and the chip removes are
 // disabled while a response streams, so context only changes when the chat is idle.
 .chat-context-add {
   display: inline-flex;
@@ -5249,7 +5249,7 @@ $theme-dark-line: #525252;
   line-height: 1.125rem;
   color: var(--cds-text-secondary, #525252);
 
-  // Status variants (default Markdown app, #113).
+  // Status variants (default Markdown app).
   &--ok {
     display: flex;
     align-items: center;
@@ -6330,7 +6330,7 @@ $theme-dark-line: #525252;
   }
 
   // editor-only (the resting layout) OR chat-only: sidebar + one pane.
-  // Column widths read the #119 resize vars (drag-set, persisted) and fall
+  // Column widths read the resize vars (drag-set, persisted) and fall
   // back to the original defaults.
   .workspace--editor-open,
   .workspace--chat-open {
@@ -6353,7 +6353,7 @@ $theme-dark-line: #525252;
     grid-template-columns: minmax(17rem, 1fr) var(--chat-w, 22rem);
   }
 
-  // Focus mode (#126): the editor alone. AppShell applies ONLY this modifier
+  // Focus mode: the editor alone. AppShell applies ONLY this modifier
   // (no pane classes), so the single column needs no specificity fight; the
   // tab strip owns the traffic-lights inset like the collapsed-sidebar mode.
   .workspace--focus {
@@ -6446,7 +6446,7 @@ $theme-dark-line: #525252;
   white-space: nowrap;
 }
 
-// Drop target while dragging a file onto a folder (#28): a tinted fill + ring so
+// Drop target while dragging a file onto a folder: a tinted fill + ring so
 // the folder clearly reads as the destination.
 .file-row-wrapper--drop {
   background: var(--cds-highlight, #d0e2ff);
@@ -6789,7 +6789,7 @@ $theme-dark-line: #525252;
   font-size: 0.75rem;
 }
 
-/* Blank loading panel (#105): nothing paints for fast reads; the hint fades in
+/* Blank loading panel: nothing paints for fast reads; the hint fades in
    only when a read runs genuinely long (iCloud download, cold disk). */
 .editor-body__loading {
   align-items: center;

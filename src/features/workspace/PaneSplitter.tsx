@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useUiStore, type ResizablePane } from "../../app/store/uiStore";
 
 /**
- * The drag handle on a pane edge (#119) — sidebar's right, chat's left.
+ * The drag handle on a pane edge — sidebar's right, chat's left.
  *
  * Per-pixel updates write the grid's CSS variable DIRECTLY on the
  * `.workspace` element: no store write, no React render, so dragging never

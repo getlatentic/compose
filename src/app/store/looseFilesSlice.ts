@@ -26,7 +26,7 @@ import { persistTabs } from "./persistence";
 import { pruneNavHistory, pushNavEntry } from "./navigation";
 
 /**
- * External files (#113): documents opened from outside any workspace, edited
+ * External files: documents opened from outside any workspace, edited
  * at their real absolute path. They live in the loose pseudo-workspace —
  * present in `workspaces[]` so buffers/tabs/save reuse the workspace
  * machinery, but never the ACTIVE workspace: `focusedArea` says whether the
@@ -186,7 +186,7 @@ export const createLooseFilesSlice = (
         const withoutTab = closeWorkspaceFileTab(item, absolutePath);
         return { ...withoutTab, files: looseEntries(registered.files) };
       }),
-      // Back/Forward must not resurrect the removed file (#45) — a loose nav
+      // Back/Forward must not resurrect the removed file — a loose nav
       // entry re-adds on apply, which would undo the removal.
       ...pruneNavHistory(
         state,

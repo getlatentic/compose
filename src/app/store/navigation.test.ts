@@ -4,7 +4,7 @@ import type { NavEntry } from "./types";
 
 const file = (id: string): NavEntry => ({ kind: "file", id, workspaceId: "w1" });
 
-describe("pruneNavHistory (#45)", () => {
+describe("pruneNavHistory", () => {
   it("removes matching entries and keeps the cursor on the same surviving entry", () => {
     const result = pruneNavHistory(
       { navHistory: [file("a"), file("b"), file("c")], navIndex: 2 },

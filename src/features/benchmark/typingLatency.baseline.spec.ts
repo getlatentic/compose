@@ -4,7 +4,7 @@
  * Measures a single-character insert dispatched into a mounted CM6 editor
  * with the production decoration stack: document update + plugin/decoration
  * recompute, i.e. everything on the keystroke path except the final paint
- * (jsdom has no layout). The #70 budget is p50 ≤ 8ms / p95 ≤ 16.7ms — one
+ * (jsdom has no layout). The budget is p50 ≤ 8ms / p95 ≤ 16.7ms — one
  * 60Hz frame with headroom for WebKit's paint slice.
  *
  * Sizes span 256B → 1MB to assert the property that makes the budget
@@ -40,7 +40,7 @@ const JSON_PATH = path.join(process.cwd(), "docs", "benchmarks", "typing-latency
 
 const SIZES: DocumentSizeLabel[] = ["small", "large", "xxlarge"];
 
-/** The #70 budget for the keystroke path (reported, not hard-asserted). */
+/** The budget for the keystroke path (reported, not hard-asserted). */
 const BUDGET_P50_MS = 8;
 const BUDGET_P95_MS = 16.7;
 /** CI-safe hard gate: an order of magnitude past budget = a real regression. */
@@ -105,7 +105,7 @@ describe("typing latency baseline", () => {
           p95Ms: BUDGET_P95_MS,
           hardGateMedianMs: HARD_GATE_MEDIAN_MS,
           why:
-            "#70: keystroke -> paint within one 60Hz frame on a 4GB machine. " +
+            "keystroke -> paint within one 60Hz frame on a 4GB machine. " +
             "jsdom measures the model + decoration slice (no layout/paint); " +
             "budget leaves the paint headroom. Keystroke cost must be " +
             "O(viewport): the xxlarge row staying with the others is the " +

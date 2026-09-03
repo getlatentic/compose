@@ -33,7 +33,7 @@ const ICON_SIZE = 16;
 
 export interface EditorFileActionsProps {
   onSave: () => void;
-  /** Absent for documents without version history (external files, #113). */
+  /** Absent for documents without version history (external files). */
   onShowVersionHistory?: () => void;
   onExport: (format: DocumentExportFormat) => void;
   /** Toggle the per-file comments side panel. Absent for documents without

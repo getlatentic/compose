@@ -6,7 +6,7 @@ import { useConfirm } from "../dialogs/ConfirmProvider";
 import { basename } from "../../lib/workspace/displayPath";
 
 /**
- * The "External files" sidebar group (#113) — files opened from outside any
+ * The "External files" sidebar group — files opened from outside any
  * workspace, listed above the tree and OUTSIDE it: they belong to no folder
  * here, so they never mix with workspace rows. Each row opens the original
  * file in place; the ✕ stops tracking it (the file on disk is untouched).

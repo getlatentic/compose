@@ -16,10 +16,10 @@ export interface UiPrefs {
   /** Send an anonymous app-open signal so active users can be counted. Opt-out
    *  (defaults on); honoured only when a build also carries GA4 credentials. */
   analyticsEnabled: boolean;
-  /** Focus mode (#126): sidebar + chat hidden, the document centered. A
+  /** Focus mode: sidebar + chat hidden, the document centered. A
    *  writing posture worth keeping across restarts. */
   focusMode: boolean;
-  /** User-dragged pane widths in px (#119); null = the default grid width. */
+  /** User-dragged pane widths in px; null = the default grid width. */
   sidebarWidthPx: number | null;
   chatWidthPx: number | null;
   /** Interface scale (⌘+ / ⌘− / ⌘0). 1 = the system text size, untouched. */

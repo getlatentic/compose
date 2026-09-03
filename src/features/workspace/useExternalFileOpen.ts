@@ -9,7 +9,7 @@ const EXTERNAL_FILE_OPEN_EVENT = "compose:open-external-file";
 const DRAIN_PENDING_URLS_CMD = "drain_pending_open_urls";
 
 /**
- * Route OS-opened files (Finder Open-With, `open -a Compose file.md`) — #113.
+ * Route OS-opened files (Finder Open-With, `open -a Compose file.md`).
  *
  * A file inside a registered workspace opens IN PLACE: switch to that
  * workspace and select it — never mount a new workspace. Anything else joins

@@ -133,7 +133,7 @@ describe("workspace model", () => {
 
     expect(secondOpen.openFilePaths).toEqual([first, second]);
     expect(secondOpen.activeFilePath).toBe(second);
-    // Opening / switching tabs must NOT repoint the chat context (#30); the
+    // Opening / switching tabs must NOT repoint the chat context; the
     // user controls it explicitly, and it's seeded at load / new chat instead.
     expect(secondOpen.chatThread.contextItems).toHaveLength(0);
   });
@@ -212,7 +212,7 @@ describe("workspace model", () => {
     const closed = closeWorkspaceFileTab(pinned, c);
     expect(closed.openFilePaths).toEqual([a, b]);
     expect(closed.activeFilePath).toBe(b);
-    // Closing a tab is navigation only — the pinned chat context is untouched (#30).
+    // Closing a tab is navigation only — the pinned chat context is untouched.
     expect(closed.chatThread.contextItems.map((item) => item.path)).toEqual([a]);
     expect(Object.keys(closed.fileContents).sort()).toEqual([a, b]);
   });
@@ -289,7 +289,7 @@ describe("workspace model", () => {
 
     // The rendered tab strip + the active-document gate must ALSO survive: both
     // key off the open paths / buffer, not `files` membership, so a tab whose
-    // file is transiently absent from the scan keeps rendering (bug #14).
+    // file is transiently absent from the scan keeps rendering.
     expect(resolveOpenTabs(rescanned).map((entry) => entry.relativePath)).toEqual([
       "a.md",
       "b.md",
@@ -1484,13 +1484,13 @@ describe("workspace model", () => {
     );
     expect(prompt).toContain("Context files (attached for reference");
     expect(prompt).toContain("### notes/a.md\nthe file body");
-    // Edit-scope guardrail so the agent only touches the intended files (#31).
+    // Edit-scope guardrail so the agent only touches the intended files.
     expect(prompt).toContain("only modify the Context files listed above");
     expect(prompt.endsWith("summarize this")).toBe(true);
   });
 });
 
-describe("renameContextItemPath comment items (#32)", () => {
+describe("renameContextItemPath comment items", () => {
   it("re-points a comment context item's filePath so the agent reads the new path", () => {
     const thread = {
       activeLlmThreadId: null,
@@ -1526,7 +1526,7 @@ describe("renameContextItemPath comment items (#32)", () => {
   });
 });
 
-describe("removeWorkspaceFolder (#55)", () => {
+describe("removeWorkspaceFolder", () => {
   it("prunes files, folders, buffers, tabs, context, and comments under the path", () => {
     const buffer = { content: "", lastModifiedMs: 0, dirty: false, conflict: false, pendingChanges: [] };
     const workspace = {
@@ -1560,7 +1560,7 @@ describe("removeWorkspaceFolder (#55)", () => {
   });
 });
 
-describe("reorderOpenTabs (#29)", () => {
+describe("reorderOpenTabs", () => {
   it("moves a tab to sit just before the drop target", () => {
     expect(reorderOpenTabs(["a", "b", "c"], "a", "c")).toEqual(["b", "a", "c"]);
     expect(reorderOpenTabs(["a", "b", "c"], "c", "a")).toEqual(["c", "a", "b"]);

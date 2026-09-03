@@ -1,4 +1,4 @@
-// The clipboard HTML renderer (#135): built on the app's single sanitized
+// The clipboard HTML renderer: built on the app's single sanitized
 // pipeline, so what lands in Docs/Slack is exactly the grammar the app
 // renders everywhere else.
 import { describe, expect, it } from "vitest";

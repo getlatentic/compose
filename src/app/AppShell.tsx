@@ -30,7 +30,7 @@ export function AppShell() {
   // Boolean selector: reads `workspaces` but returns a primitive, so it only
   // re-renders the shell when the active-workspace existence flips, not when a
   // workspace object changes (e.g. on every edit). A focused external file
-  // (#113) also earns the shell — with zero workspaces, an OS-opened file must
+  // also earns the shell — with zero workspaces, an OS-opened file must
   // still get an editor, not vanish behind the welcome card.
   const hasActiveWorkspace = useWorkspaceStore(
     (state) =>
@@ -40,12 +40,12 @@ export function AppShell() {
   const editorOpen = useUiStore((state) => state.editorOpen);
   const chatOpen = useUiStore((state) => state.chatOpen);
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
-  // Focus mode (#126) is a LAYOUT OVERRIDE: the pane flags above stay
+  // Focus mode is a LAYOUT OVERRIDE: the pane flags above stay
   // untouched while it's on, so leaving focus restores the exact previous
   // layout — including across restarts (the flag persists, the panes don't
   // need to).
   const focusMode = useUiStore((state) => state.focusMode);
-  // Committed pane widths (#119). Live dragging writes the CSS var on the
+  // Committed pane widths. Live dragging writes the CSS var on the
   // element directly; these only change on release, so the shell re-renders
   // once per drag, not per pixel.
   const sidebarWidthPx = useUiStore((state) => state.sidebarWidthPx);

@@ -1,7 +1,7 @@
 //! Files opened individually from outside any workspace (Finder Open-With,
 //! `open -a Compose file.md`). They are edited at their real absolute path —
 //! nothing is mounted or copied — and tracked in a persisted list so the
-//! sidebar's "External files" section survives restarts (#113).
+//! sidebar's "External files" section survives restarts.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

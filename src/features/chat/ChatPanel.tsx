@@ -57,7 +57,7 @@ function ChatPanelInner() {
   const removeChatContextItem = useWorkspaceStore((state) => state.removeChatContextItem);
   // The file the EDITOR is showing, so the composer can offer "add this file"
   // to context — the explicit way to set context now that switching tabs no
-  // longer does (#30). Follows the focused container (#113): an external
+  // longer does. Follows the focused container: an external
   // file's chip carries its absolute path — tool-native agents read it on
   // demand; the inline path resolves it from the loose buffer.
   const activeFilePath = useWorkspaceStore(

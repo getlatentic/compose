@@ -61,7 +61,7 @@ pub fn workspace_rebuild_index(
     metadata: State<'_, MetadataStore>,
     store: State<'_, WorkspaceIndexStore>,
 ) -> Result<WorkspaceIndexSnapshot, String> {
-    // Single-flight per workspace (#106): rebuilds are triggered from many
+    // Single-flight per workspace: rebuilds are triggered from many
     // places (every save/rename/delete, watcher events, opening search) and a
     // crawl over a big vault takes real time — concurrent rebuilds multiply
     // the I/O and contend on the metadata store that history and saves need.
@@ -86,7 +86,7 @@ pub fn workspace_rebuild_index(
         let absolute = root.join(&entry.relative_path);
         // Never read a dataless iCloud placeholder: the read BLOCKS while the
         // bytes download (it does not fail fast), turning the rebuild into a
-        // network crawl (#106). Skip it, nudge the download, and let a later
+        // network crawl. Skip it, nudge the download, and let a later
         // rebuild index it once local.
         if icloud::is_dataless(&absolute) {
             icloud::start_download(&absolute);

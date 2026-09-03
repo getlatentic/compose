@@ -7,7 +7,7 @@ import { selectLooseWorkspace } from "../../app/store/activeWorkspace";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
 import { markTabSwitchStart } from "../../lib/perf";
 
-/** dataTransfer MIME for a tab dragged to reorder it (#29). */
+/** dataTransfer MIME for a tab dragged to reorder it. */
 const TAB_DRAG_MIME = "application/x-compose-tab-path";
 /** The path + area of the tab being dragged, tracked out-of-band because WebKit
  *  hides a custom dataTransfer type during `dragover` (see the file-tree drag
@@ -17,7 +17,7 @@ let draggedTabPath: string | null = null;
 let draggedTabArea: TabArea | null = null;
 
 /** Which container a tab's file lives in: the active workspace, or the loose
- *  pseudo-workspace of external files (#113). */
+ *  pseudo-workspace of external files. */
 export type TabArea = "workspace" | "loose";
 
 /** A file tab: the file entry plus its container. The dirty flag is deliberately
@@ -46,7 +46,7 @@ function TabDirtyDot({ path, area }: { path: string; area: TabArea }) {
 }
 
 /**
- * One editor tab, memoised. Draggable to reorder (#29): `data-no-drag` stops the
+ * One editor tab, memoised. Draggable to reorder: `data-no-drag` stops the
  * strip's window-drag from stealing the mousedown, and the dragged path is
  * tracked in a module variable (WebKit doesn't expose the custom dataTransfer
  * type during `dragover`). The active tab registers its element so the strip can

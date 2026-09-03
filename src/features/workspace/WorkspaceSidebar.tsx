@@ -147,7 +147,7 @@ export function WorkspaceSidebar() {
 
   // A "New folder" create action so the first/top-level folder can be created
   // even in an empty workspace (the tree's "New folder here" needs an existing
-  // folder row). Lands in the selected folder (newNoteDir) or the root (#56).
+  // folder row). Lands in the selected folder (newNoteDir) or the root.
   const handleNewFolder = useCallback(() => {
     void (async () => {
       const name = await promptText({
@@ -318,7 +318,7 @@ const FilesTab = memo(function FilesTab({
   const files = useStableFileList();
   const folders = useFolderList();
   // While an external file is focused the editor shows THAT document — the
-  // tree drops its highlight so exactly one row ever reads as "open" (#113).
+  // tree drops its highlight so exactly one row ever reads as "open".
   const activeFilePath = useWorkspaceStore((state) => {
     if (state.focusedArea === "loose") {
       return "";

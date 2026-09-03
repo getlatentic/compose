@@ -132,7 +132,7 @@ export function MainApp() {
         openSearch();
         return;
       }
-      // ⌘⇧D toggles focus mode (#126). In the packaged app the native View
+      // ⌘⇧D toggles focus mode. In the packaged app the native View
       // menu's accelerator normally consumes this first; this handler is the
       // browser-preview path and the fallback.
       if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === "d") {

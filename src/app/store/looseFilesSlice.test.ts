@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// External files (#113): the loose pseudo-workspace's lifecycle against the
+// External files: the loose pseudo-workspace's lifecycle against the
 // real store, with the IPC layer mocked. Covers the acceptance points that
 // belong to the store: open-registers-and-focuses, IO routed by container,
 // focus handoff on select/close, removal (incl. nav pruning), and boot
@@ -159,7 +159,7 @@ describe("editor routing while a loose file is focused", () => {
     const state = useWorkspaceStore.getState();
     expect(state.focusedArea).toBe("workspace");
     expect(state.activeWorkspace()?.activeFilePath).toBe("a.md");
-    // The dirty loose buffer was flushed to disk on the way out (#43).
+    // The dirty loose buffer was flushed to disk on the way out.
     expect(externalFiles.externalWriteFile).toHaveBeenCalledWith(NOTE, "# edited", 10);
   });
 

@@ -69,7 +69,7 @@ export function writeBufferFor(workspace: Workspace, path: string, buffer: Works
 }
 
 /** Save the outgoing focused file before the editor swaps documents — the
- *  no-data-loss dance of #43 (flush the 500ms editor debounce, then write if
+ *  no-data-loss dance on close (flush the 500ms editor debounce, then write if
  *  dirty), shared by workspace and loose selects so the two switch paths can
  *  never drift. `saveActiveFile` captures the focused path synchronously
  *  before its first await, so firing it un-awaited saves the outgoing file in
@@ -103,7 +103,7 @@ export function settleLooseFocus(set: WorkspaceStoreSet, get: WorkspaceStoreGet)
  *  loaded yet. `selectFile` uses it on a tab click; an editor effect uses it for
  *  every other path that points `activeFilePath` at an unread file — closing or
  *  deleting a tab, restoring tabs on open — which used to strand the editor on
- *  "Loading file…" because only `selectFile` ever read (#50). */
+ *  "Loading file…" because only `selectFile` ever read. */
 export async function loadBufferIfMissing(
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
@@ -134,7 +134,7 @@ export async function loadBufferIfMissing(
     // not strand on a forever-blank editor: when the file list agrees the file
     // no longer exists — or the read itself says NotFound, which is
     // authoritative — close the tab; otherwise (transient read hiccup) keep it
-    // and surface the error (#105). The workspace list is only trustworthy
+    // and surface the error. The workspace list is only trustworthy
     // once its scan has SETTLED: an OS-open racing the boot scan of a large
     // vault must not get its tab silently closed by a still-empty list. The
     // loose list is the registry itself, current by construction.
@@ -185,7 +185,7 @@ export const createFilesSlice = (
 
     // Persist the OUTGOING file — whatever the editor shows, possibly an
     // external one — before switching, so a quick tab switch (before the ~1s
-    // autosave fires) never strands its edits off-disk (#43).
+    // autosave fires) never strands its edits off-disk.
     commitOutgoingFile(get, { id: workspace.id, path });
 
     set((state) => {
@@ -317,7 +317,7 @@ export const createFilesSlice = (
           removeWorkspaceFolder(item, folderPath),
         ),
         // Prune the folder's files from nav history so Back/Forward can't
-        // resurrect them (#45).
+        // resurrect them.
         ...pruneNavHistory(
           state,
           (entry) =>
@@ -355,7 +355,7 @@ export const createFilesSlice = (
 
     // Persist any unsaved edits first, so the trashed copy — and the history
     // snapshot the backend takes on soft-delete — hold the user's latest work
-    // (#44). The active file's buffer lags the editor by the 500ms debounce, so
+    //. The active file's buffer lags the editor by the 500ms debounce, so
     // flush it; a background tab's buffer is already current. Best-effort: a
     // write failure must not block the deletion the user asked for.
     if (workspace.activeFilePath === relativePath) {
@@ -380,12 +380,12 @@ export const createFilesSlice = (
       await deleteFileIpc(workspace.id, relativePath);
       set((state) => ({
         // Deleting a BACKGROUND file never steals focus: the tab (if any)
-        // closes in place and the active tab stays put (#105).
+        // closes in place and the active tab stays put.
         workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
           removeDeletedFile(item, relativePath),
         ),
         // Drop the deleted file from nav history so Back/Forward can't
-        // resurrect it as a dangling error tab (#45).
+        // resurrect it as a dangling error tab.
         ...pruneNavHistory(
           state,
           (entry) =>
@@ -405,7 +405,7 @@ export const createFilesSlice = (
   },
   renameActiveFile: async (toRelativePath: string) => {
     // External files are other apps' documents at their own paths — renaming
-    // them belongs to Finder, not Compose (#113 v1).
+    // them belongs to Finder, not Compose (v1).
     if (get().focusedArea === "loose") {
       showErrorToast("External files can't be renamed from Compose.");
       return;
@@ -493,7 +493,7 @@ export const createFilesSlice = (
     }
     // An IMPLICIT save (autosave, quit flush) must never re-create a file that
     // was deleted under the tab — that resurrection made deletes look like
-    // no-ops (#105). An explicit Cmd+S on a kept dirty tab still writes: that
+    // no-ops. An explicit Cmd+S on a kept dirty tab still writes: that
     // is the user deliberately bringing the note back. For external files the
     // list entry plays the same role: removing one stops its implicit saves.
     if (
@@ -529,7 +529,7 @@ export const createFilesSlice = (
     // EVERY dirty buffer across all workspaces — including background tabs that
     // never autosave on their own, and external files in the loose workspace.
     // This is the flush-on-quit so closing the app doesn't drop unsaved edits
-    // (#43). Best-effort per file: one failure (e.g. a disk conflict) must not
+    //. Best-effort per file: one failure (e.g. a disk conflict) must not
     // block the others or trap the user's quit.
     flushActiveEditor();
     const writes: Promise<unknown>[] = [];
@@ -539,7 +539,7 @@ export const createFilesSlice = (
           continue;
         }
         // Quit-flush is an implicit save: a buffer whose file was deleted
-        // (externally or by us) must not resurrect it on exit (#105).
+        // (externally or by us) must not resurrect it on exit.
         if (!workspace.files.some((entry) => entry.relativePath === filePath)) {
           continue;
         }

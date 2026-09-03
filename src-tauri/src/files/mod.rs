@@ -405,7 +405,7 @@ pub(crate) fn read_at(absolute: &Path) -> Result<WorkspaceFileContent, FileError
         Err(error) => {
             // A dataless iCloud file (evicted locally) can fail to read; kick its
             // download so a reopen materializes it instead of leaving it stuck
-            // blank (#26). Best-effort — a no-op for non-iCloud files.
+            // blank. Best-effort — a no-op for non-iCloud files.
             icloud::start_download(absolute);
             return Err(error.into());
         }
@@ -664,7 +664,7 @@ pub(crate) fn document_inventory_for_entries(
         // A dataless iCloud placeholder must be skipped BEFORE the read: with a
         // network available the read doesn't fail, it BLOCKS while macOS
         // downloads the file — a bulk crawl over a big vault wedges for minutes
-        // (#106). Nudge the download so a later pass picks the file up.
+        //. Nudge the download so a later pass picks the file up.
         if icloud::is_dataless(&absolute) {
             icloud::start_download(&absolute);
             skipped.push(entry.relative_path.clone());
@@ -878,7 +878,7 @@ mod tests {
     fn document_inventory_skips_an_unreadable_file_but_keeps_the_rest() {
         // A dataless iCloud placeholder (evicted / offline / removed from iCloud)
         // fails `std::fs::read`; it must be reported as skipped, not sink the whole
-        // index build alongside its readable neighbours (#26).
+        // index build alongside its readable neighbours.
         let dir = tempdir().expect("tempdir");
         fs::write(dir.path().join("present.md"), "# Present\n").expect("write present");
 
@@ -1127,7 +1127,7 @@ mod scan_bench {
     use std::time::Instant;
     use tempfile::tempdir;
 
-    /// Report-only baseline for the #70 budget (1k-note walk ≤ 300ms): builds a
+    /// Report-only baseline for the performance budget (1k-note walk ≤ 300ms): builds a
     /// 1,000-note vault across 50 folders and times the production walk. The
     /// assert is a generous ceiling so CI noise can't flake it; the printed
     /// number is what PERF.md cites.
