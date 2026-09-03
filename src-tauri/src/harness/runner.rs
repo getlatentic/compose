@@ -25,7 +25,9 @@ use crate::harness::{ApprovalMode, ChatMode};
 use crate::review::{prepare_edit_guard, EditGuard, ReviewSessionStore};
 use crate::workspace::WorkspaceRegistry;
 use crate::harness::orphan_runs;
-use harness::{ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode, RunRequest, RunTuning};
+use harness::{
+    ReasoningEffort, RunCallback, RunControl, RunEvent, RunMode, RunRequest, RunTuning, ToolAccess,
+};
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -406,6 +408,7 @@ fn run_via_harness(
         prompt: request.prompt,
         cwd: Some(cwd),
         mode,
+        tools: ToolAccess::Default,
         tuning,
         // Conversation continuity is still history-in-prompt today; native
         // `--resume` wiring is a follow-up. Fresh session each run for now.

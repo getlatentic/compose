@@ -2,7 +2,7 @@
 //! install + credential actually work end to end. Routed through the adapter, so
 //! it works for any harness with no CLI knowledge duplicated host-side.
 
-use harness::{Harness, RunEvent, RunHandle, RunMode, RunRequest, RunTuning};
+use harness::{Harness, RunEvent, RunHandle, RunMode, RunRequest, RunTuning, ToolAccess};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
@@ -48,6 +48,9 @@ pub fn run(harness: &dyn Harness) -> HarnessRuntimeVerification {
         attachments: Vec::new(),
         cwd: scratch_dir(),
         mode: RunMode::Ask,
+        // The prompt carries everything this needs. Offered tools only give a
+        // model somewhere else to go, and the run has 45 seconds to say OK.
+        tools: ToolAccess::None,
         tuning: RunTuning::default(),
         resume: None,
     };
