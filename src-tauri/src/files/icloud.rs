@@ -5,10 +5,10 @@
 //! bytes, then succeeds. Bulk crawls (index rebuild, inventory) must therefore
 //! detect datalessness BEFORE reading (`is_dataless`, stat-only) and skip, or
 //! one rebuild turns into a minutes-long network crawl that wedges everything
-//! sharing its stores (#106). Reads only fail when materialization is
+//! sharing its stores. Reads only fail when materialization is
 //! impossible (offline, removed from iCloud).
 //!
-//! `start_download` (#26) is the complement: nudge a wanted file to
+//! `start_download` is the complement: nudge a wanted file to
 //! materialize so the NEXT read succeeds. Best-effort, idempotent, and
 //! non-blocking — a no-op for files that aren't in iCloud.
 

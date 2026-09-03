@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-/** LaunchServices state for the Markdown content type (#113). Off-macOS (and
+/** LaunchServices state for the Markdown content type. Off-macOS (and
  *  in the browser preview) the commands reject — callers treat that as
  *  "unavailable" and hide the affordance. */
 export interface MarkdownHandlerStatus {

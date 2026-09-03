@@ -50,10 +50,10 @@ export interface UiState {
   closeSettings: () => void;
   soundOnComplete: boolean;
   setSoundOnComplete: (enabled: boolean) => void;
-  /** Focus mode (#126): sidebar + chat hidden, document centered. Persisted. */
+  /** Focus mode: sidebar + chat hidden, document centered. Persisted. */
   focusMode: boolean;
   toggleFocusMode: () => void;
-  /** User-dragged pane widths (#119); null = default. Committed on drag
+  /** User-dragged pane widths; null = default. Committed on drag
    *  release, never per-move (the splitter writes the CSS var directly). */
   sidebarWidthPx: number | null;
   chatWidthPx: number | null;

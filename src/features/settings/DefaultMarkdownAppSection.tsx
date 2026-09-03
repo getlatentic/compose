@@ -9,7 +9,7 @@ import {
 } from "../../lib/ipc/defaultHandlerClient";
 
 /**
- * "Default app for Markdown" (#113): shows which app opens `.md` files today
+ * "Default app for Markdown": shows which app opens `.md` files today
  * and offers to make it Compose, via LaunchServices. Setting can fail (e.g. a
  * dev build LaunchServices has never seen) — the error keeps the manual
  * Finder path visible so the user is never stuck.

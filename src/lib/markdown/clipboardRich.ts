@@ -2,7 +2,7 @@ import { getCachedMermaidPng, highlightFenceSpans } from "@latentic/live-markdow
 
 /**
  * Enrich the clipboard's sanitized hast tree so a copy keeps its richness in
- * Docs/Word (#149): code fences get inline-styled highlight spans, mermaid
+ * Docs/Word: code fences get inline-styled highlight spans, mermaid
  * fences become the rendered diagram as a PNG `<img>`.
  *
  * Runs AFTER `rehype-sanitize`, deliberately: sanitize strips `style`

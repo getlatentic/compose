@@ -602,7 +602,7 @@ describe("workspace store", () => {
       );
     });
 
-    it("a tab whose file is GONE closes instead of stranding on a blank editor (#105)", async () => {
+    it("a tab whose file is GONE closes instead of stranding on a blank editor", async () => {
       // The backend reports a gone file as NotFound — authoritative, unlike a
       // transient read failure.
       vi.mocked(readFile).mockRejectedValue(new FileNotFoundError("no such file"));
@@ -618,7 +618,7 @@ describe("workspace store", () => {
       expect(useToastStore.getState().toasts).toHaveLength(0);
     });
 
-    it("saveAllDirtyBuffers never resurrects a deleted file (#105)", async () => {
+    it("saveAllDirtyBuffers never resurrects a deleted file", async () => {
       vi.mocked(writeFile).mockResolvedValue({ lastModifiedMs: 500 });
       const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
       useWorkspaceStore.setState((state) => ({
@@ -670,7 +670,7 @@ describe("workspace store", () => {
       expect(writeFile).toHaveBeenCalledTimes(1);
     });
 
-    it("ensureActiveBuffer loads the active file's buffer when it is missing (#50)", async () => {
+    it("ensureActiveBuffer loads the active file's buffer when it is missing", async () => {
       vi.mocked(readFile).mockResolvedValue({ content: "# Recovered", lastModifiedMs: 7 });
       const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
       // The post-close/delete state: a tab is active but its buffer was never
@@ -724,7 +724,7 @@ describe("workspace store", () => {
       expect(useToastStore.getState().toasts).toHaveLength(0);
     });
 
-    it("saveAllDirtyBuffers writes every dirty buffer and skips clean/conflicted ones (#43)", async () => {
+    it("saveAllDirtyBuffers writes every dirty buffer and skips clean/conflicted ones", async () => {
       vi.mocked(writeFile).mockResolvedValue({ lastModifiedMs: 500 });
       const workspaceId = useWorkspaceStore.getState().addWorkspace("/tmp/vault");
       useWorkspaceStore.setState((state) => ({
@@ -844,7 +844,7 @@ describe("workspace store", () => {
       expect(deleteFile).toHaveBeenCalledWith(workspaceId, "a.md");
     });
 
-    it("switching tabs leaves the chat context where the user pinned it (#30)", async () => {
+    it("switching tabs leaves the chat context where the user pinned it", async () => {
       vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
       useWorkspaceStore.getState().addWorkspace("/tmp/vault");
       await useWorkspaceStore.getState().selectFile("a.md");
@@ -857,7 +857,7 @@ describe("workspace store", () => {
       expect(ws?.chatThread.contextItems.map((item) => item.path)).toEqual(["a.md"]);
     });
 
-    it("a new chat defaults its context to the active file (#30)", async () => {
+    it("a new chat defaults its context to the active file", async () => {
       vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
       useWorkspaceStore.getState().addWorkspace("/tmp/vault");
       await useWorkspaceStore.getState().selectFile("a.md");
@@ -870,7 +870,7 @@ describe("workspace store", () => {
       expect(ctx?.map((item) => item.path)).toEqual(["b.md"]);
     });
 
-    it("deleting a file removes only its context item, keeping the rest (#30)", async () => {
+    it("deleting a file removes only its context item, keeping the rest", async () => {
       vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
       vi.mocked(deleteFile).mockResolvedValue(undefined);
       useWorkspaceStore.getState().addWorkspace("/tmp/vault");
@@ -885,7 +885,7 @@ describe("workspace store", () => {
       expect(ctx?.map((item) => item.path)).toEqual(["a.md"]);
     });
 
-    it("renaming a context file re-points its context item to the new path (#30)", async () => {
+    it("renaming a context file re-points its context item to the new path", async () => {
       vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
       useWorkspaceStore.getState().addWorkspace("/tmp/vault");
       await useWorkspaceStore.getState().selectFile("a.md");
@@ -897,7 +897,7 @@ describe("workspace store", () => {
       expect(ctx?.map((item) => item.path)).toEqual(["c.md"]);
     });
 
-    it("moving a file = renaming it into another folder, carrying its open tab (#28)", async () => {
+    it("moving a file = renaming it into another folder, carrying its open tab", async () => {
       vi.mocked(readFile).mockResolvedValue({ content: "x", lastModifiedMs: 1 });
       useWorkspaceStore.getState().addWorkspace("/tmp/vault");
       await useWorkspaceStore.getState().selectFile("a.md");
@@ -1178,7 +1178,7 @@ describe("workspace store", () => {
   });
 });
 
-describe("index rebuild coalescing (#106)", () => {
+describe("index rebuild coalescing", () => {
   const WS = "ws-index";
 
   function deferredSnapshot() {

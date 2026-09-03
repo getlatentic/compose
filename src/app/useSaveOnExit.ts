@@ -4,7 +4,7 @@ import { isTauriRuntime } from "../lib/runtime/desktopRuntime";
 import { useWorkspaceStore } from "./workspaceStore";
 
 /**
- * Persist every dirty buffer before the app closes (#43).
+ * Persist every dirty buffer before the app closes.
  *
  * On desktop we intercept the window's close request, write all unsaved edits
  * (active and background tabs), then destroy the window — so quitting never

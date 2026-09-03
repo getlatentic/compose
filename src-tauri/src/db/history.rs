@@ -519,7 +519,7 @@ mod tests {
     fn llm_thread_records_absolute_context_paths() {
         let (_dir, store, vault_id) = store_with_doc();
 
-        // External files (#113) and spilled-paste attachments carry absolute
+        // External files and spilled-paste attachments carry absolute
         // paths — the audit snapshot records them as identifiers (doc linkage
         // is best-effort), it must not reject the send.
         store

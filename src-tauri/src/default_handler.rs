@@ -1,4 +1,4 @@
-//! "Make Compose the default Markdown editor" (#113): reads and sets the
+//! "Make Compose the default Markdown editor": reads and sets the
 //! LaunchServices default-role handler for the Markdown content type.
 
 use serde::Serialize;

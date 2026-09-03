@@ -63,7 +63,7 @@ export interface WorkspaceState {
   activeWorkspaceId: string | null;
   /**
    * Which container's active file the EDITOR is showing: the active (real)
-   * workspace, or the loose pseudo-workspace of external files (#113). The
+   * workspace, or the loose pseudo-workspace of external files. The
    * sidebar tree, chat, and workspace switcher always follow the real
    * workspace; only the editor surface (tabs, document, status bar) follows
    * this discriminator.
@@ -141,11 +141,11 @@ export interface WorkspaceState {
    */
   regenerateLastTurn: () => Promise<void>;
   closeFileTab: (filePath: string) => void;
-  /** Drag-to-reorder: move an open tab to sit just before another (#29). */
+  /** Drag-to-reorder: move an open tab to sit just before another. */
   reorderTab: (fromPath: string, toPath: string) => void;
   createNote: (seed?: { relativePath?: string; content?: string; dir?: string }) => Promise<void>;
   createFolder: (relativePath: string) => Promise<void>;
-  /** Move a folder + its contents to trash and prune all state under it (#55). */
+  /** Move a folder + its contents to trash and prune all state under it. */
   deleteFolder: (folderPath: string) => Promise<void>;
   /**
    * Directory a plain "New note" lands in — set by selecting a folder (or a
@@ -210,7 +210,7 @@ export interface WorkspaceState {
   saveActiveFile: (options?: { implicit?: boolean }) => Promise<void>;
   /** Flush the active editor and write every dirty buffer (all workspaces, incl.
    *  background tabs) — the flush-on-quit that keeps closing the app from
-   *  dropping unsaved edits (#43). */
+   *  dropping unsaved edits. */
   saveAllDirtyBuffers: () => Promise<void>;
   selectFile: (path: string) => Promise<void>;
   /** Read the active file's buffer if it isn't loaded — the invariant that keeps
@@ -227,7 +227,7 @@ export interface WorkspaceState {
   /** Attach a file as chat context (a chip in the context row). Used by the
    * large-paste handler (spills the text to a scratch file and adds its path)
    * and by the composer's "Add this file" — with `origin: "external"` for a
-   * #113 external file (absolute path, resolved from the loose buffer). */
+   * An external file (absolute path, resolved from the loose buffer). */
   addChatFileContext: (input: { label: string; path: string; origin?: "external" }) => void;
   /** Remove a chat context item by id (the chip's ✕). */
   removeChatContextItem: (id: string) => void;

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The UI-prefs store behind small persisted toggles. Focus mode (#126) rides
+// The UI-prefs store behind small persisted toggles. Focus mode rides
 // here: the AC says the writing posture survives restarts, which means one
 // load/persist round trip plus graceful handling of older payloads that
 // predate the field.
