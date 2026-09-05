@@ -489,6 +489,11 @@ fn tuning_for(request: &HarnessRunRequest) -> RunTuning {
         // Per-harness custom instructions (openai-compatible adapter appends
         // them to the system prompt; trimmed-empty is treated as unset).
         extra_instructions: request.extra_instructions.clone().filter(|s| !s.trim().is_empty()),
+        // The agent, not the bare model. Replacing the system prompt also drops
+        // the project files and settings that make it a coding agent, which is
+        // the whole reason a chat run picks one.
+        system_prompt: None,
+        max_thinking_tokens: None,
         // Explicit binary override — the CLI adapters spawn this path instead of
         // resolving the bare name on PATH (trimmed-empty is treated as unset).
         binary_path: request
