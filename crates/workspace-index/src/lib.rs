@@ -1307,7 +1307,7 @@ mod tests {
         let memo_rank = hits.iter().position(|h| h.doc_id == "doc-memo");
         assert_eq!(target_rank, Some(0));
         assert!(
-            memo_rank.map_or(true, |memo| memo > 0),
+            memo_rank.is_none_or(|memo| memo > 0),
             "the year-`2026` `02` substring must not outrank the named file",
         );
     }
