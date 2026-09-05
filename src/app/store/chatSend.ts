@@ -30,6 +30,7 @@ import {
 import {
   editGuardFor,
   harnessCapabilitiesOf,
+  inlinesFileContent,
   harnessExtraArgs,
 } from "./harnessConfig";
 import {
@@ -175,13 +176,11 @@ export async function runSendChatPrompt(
       });
     }
   }
-  // Tool-native CLI agents (claude/codex/bob) read context files on demand via
-  // their own tools, so we send a PATH REFERENCE — keeping the prompt small,
-  // current, and cache-stable rather than inlining a snapshot. The openai-
-  // compatible adapter (Ollama / OpenRouter, capability `customInstructions`)
-  // gets the file CONTENT inlined (budgeted), since a weak local model may not
-  // reliably read on its own. Only that path needs the IO.
-  const inlineContext = harnessCapabilitiesOf(harnessCatalog, harnessId).customInstructions;
+  // Standalone agents read context files on demand, so they get a PATH
+  // REFERENCE — small, current, and cache-stable rather than a snapshot. Models
+  // on Compose's own runtime get the CONTENT inlined (budgeted), since a small
+  // one may not reliably fetch it. Only that path needs the IO.
+  const inlineContext = inlinesFileContent(harnessCatalog, harnessId);
   const fileContextContent = inlineContext
     ? await collectFileContextContent(
         workspace,
