@@ -9,7 +9,7 @@ vi.mock("../../lib/runtime/desktopRuntime", () => ({
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
-import { resolveDisplaySrc } from "./imageDisplaySrc";
+import { imageWritePath, resolveDisplaySrc } from "./imagePaths";
 
 const tauri = vi.mocked(isTauriRuntime);
 const convert = vi.mocked(convertFileSrc);
@@ -67,5 +67,39 @@ describe("resolveDisplaySrc", () => {
 
   it("leaves an empty src empty", () => {
     expect(resolveDisplaySrc("", ctx)).toBe("");
+  });
+});
+
+describe("where a pasted image is written", () => {
+  // The editor computes this itself: dirname(join(workspaceRoot, filePath)).
+  // Reproduced rather than imported so the test fails if either side moves.
+  function editorFileDir(workspaceRoot: string, docPath: string): string {
+    const full = `${workspaceRoot}/${docPath}`;
+    return full.slice(0, full.lastIndexOf("/"));
+  }
+
+  it("keeps a root document's images where they already are", () => {
+    expect(imageWritePath("Compose Bugs.md", "images/pasted-x.png")).toBe("images/pasted-x.png");
+  });
+
+  it("puts a subfolder document's images beside it", () => {
+    expect(imageWritePath("Courses/Tonative/untitled-1.md", "images/pasted-x.png")).toBe(
+      "Courses/Tonative/images/pasted-x.png",
+    );
+  });
+
+  it("writes to the path the editor will look in, at any depth", () => {
+    // The bug this covers: bytes landed at <root>/images while the editor
+    // resolved the reference against the document's own directory, so every
+    // note outside the workspace root referenced an image that was never
+    // written there. Nothing errored — the reference was inserted because the
+    // write succeeded, just not where the reference pointed.
+    const root = "/vault";
+    const relPath = "images/pasted-x.png";
+    for (const doc of ["note.md", "Courses/untitled-1.md", "Courses/Tonative/untitled-1.md"]) {
+      const written = `${root}/${imageWritePath(doc, relPath)}`;
+      const readBack = `${editorFileDir(root, doc)}/${relPath}`;
+      expect(written).toBe(readBack);
+    }
   });
 });
