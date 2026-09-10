@@ -627,7 +627,9 @@ select {
   // off the text baseline, which read as tiny mismatched emoji. The system font
   // has them, and draws them the way the menu bar does.
   font-family: inherit;
-  font-size: 0.8125rem;
+  // The same size as the label, as the menu bar sets them — a smaller shortcut
+  // reads as a different kind of thing rather than as the row's other half.
+  font-size: 0.875rem;
   line-height: 1;
   color: var(--cds-text-placeholder, #8d8d8d);
   // The two shortcuts differ by a modifier (⌘N vs ⌘⇧N); aligning their ends
