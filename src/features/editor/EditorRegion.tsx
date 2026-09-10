@@ -18,6 +18,7 @@ import { isActiveFilePresent, resolveOpenTabs } from "../../app/workspaceModel";
 import { flushActiveEditor } from "../../lib/editor/editorFlush";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
 import { ActiveDocument } from "./ActiveDocument";
+import { PerfProfiler } from "../../lib/perf/PerfProfiler";
 
 
 /**
@@ -168,6 +169,7 @@ export function EditorRegion() {
         // window. Exits stay discoverable: ⌘⇧D, Esc, and View → Focus Mode.
         <div className="focus-titlebar" data-tauri-drag-region onMouseDown={onTitlebarMouseDown} />
       ) : (
+        <PerfProfiler id="tabs">
         <PaneTabs
           files={openTabs}
           activeFilePath={activeFilePath}
@@ -178,9 +180,12 @@ export function EditorRegion() {
           leadingInsetPx={sidebarCollapsed ? MAC_TRAFFIC_LIGHTS_INSET : 0}
           onShowSidebar={sidebarCollapsed ? toggleSidebar : undefined}
         />
+        </PerfProfiler>
       )}
       {activeFileExists ? (
-        <ActiveDocument />
+        <PerfProfiler id="document">
+          <ActiveDocument />
+        </PerfProfiler>
       ) : scanPending ? (
         <div className="editor-body" />
       ) : (

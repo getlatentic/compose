@@ -4,6 +4,7 @@ import { App } from "./app/App";
 import { INITIAL_UI_PREFS } from "./app/store/initialPrefs";
 import { installGlobalErrorReporter } from "./lib/diagnostics/errorReporter";
 import { markBoot } from "./lib/perf";
+import { PerfProfiler } from "./lib/perf/PerfProfiler";
 import { startBootTrace } from "./lib/perf/bootTrace";
 import { applyTheme } from "./lib/theme/theme";
 import { applyZoom } from "./lib/zoom/zoom";
@@ -33,7 +34,9 @@ applyTheme(INITIAL_UI_PREFS.theme, document.documentElement);
 markBoot("render");
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <PerfProfiler id="app">
+      <App />
+    </PerfProfiler>
   </React.StrictMode>,
 );
 

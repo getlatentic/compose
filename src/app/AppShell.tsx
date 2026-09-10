@@ -1,5 +1,6 @@
 import { type CSSProperties } from "react";
 import { EditorRegion } from "../features/editor/EditorRegion";
+import { PerfProfiler } from "../lib/perf/PerfProfiler";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import { NoWorkspaceWelcome } from "../features/workspace/NoWorkspaceWelcome";
 import { WorkspaceSearchPopover } from "../features/workspace/WorkspaceSearchPopover";
@@ -74,9 +75,21 @@ export function AppShell() {
               } as CSSProperties
             }
           >
-            {focusMode ? null : <WorkspaceSidebar />}
-            {editorOpen || focusMode ? <EditorRegion /> : null}
-            {chatOpen && !focusMode ? <ChatRegion /> : null}
+            {focusMode ? null : (
+              <PerfProfiler id="sidebar">
+                <WorkspaceSidebar />
+              </PerfProfiler>
+            )}
+            {editorOpen || focusMode ? (
+              <PerfProfiler id="editor">
+                <EditorRegion />
+              </PerfProfiler>
+            ) : null}
+            {chatOpen && !focusMode ? (
+              <PerfProfiler id="chat">
+                <ChatRegion />
+              </PerfProfiler>
+            ) : null}
           </div>
         )}
       </div>

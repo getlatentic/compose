@@ -48,6 +48,12 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "decode-named-character-reference": workerSafeCharacterDecoder,
+      // `<Profiler>` reports zero in a production react-dom. The profiling
+      // build keeps the timers, and costs enough that only a COMPOSE_PERF
+      // build gets it.
+      ...(process.env.COMPOSE_PERF === "1"
+        ? { "react-dom/client": "react-dom/profiling" }
+        : {}),
     },
   },
   // Build-time perf gate — symmetric with the Rust-side

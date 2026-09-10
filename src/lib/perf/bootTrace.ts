@@ -131,7 +131,9 @@ export function startBootTrace(): void {
   window.setTimeout(() => {
     window.clearInterval(timer);
     const paints = [...documentMilestones(), ...blockingResources(), ...prerenderMark(), ...paintEntries()];
-    const trace = [...paints, ...frames];
+    const marks = (globalThis as unknown as { __BOOT_MARKS__?: string[] }).__BOOT_MARKS__ ?? [];
+    marks.push(`DOM nodes: ${document.getElementsByTagName("*").length}`);
+    const trace = [...marks.map((m) => `      -  ${m}`), ...paints, ...frames];
     // eslint-disable-next-line no-console
     console.log(["[boot-trace] distinct screens this launch:", ...trace].join("\n"));
     // Also to the local log: a launch is the one moment a devtools session
