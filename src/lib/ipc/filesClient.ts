@@ -79,6 +79,23 @@ export async function scanWorkspace(workspaceId: string): Promise<WorkspaceFileE
   return invokeFile<WorkspaceFileEntry[]>("workspace_scan", { workspaceId });
 }
 
+/**
+ * The file list the workspace persisted at its last scan, so the tree can paint
+ * before the walk finishes.
+ *
+ * Stale by construction — anything changed outside the app since that scan is
+ * wrong here until {@link scanWorkspace} lands and replaces the list. The
+ * browser preview keeps no inventory, so it has nothing to paint early with.
+ */
+export async function snapshotWorkspaceFiles(
+  workspaceId: string,
+): Promise<WorkspaceFileEntry[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+  return invokeFile<WorkspaceFileEntry[]>("workspace_files_snapshot", { workspaceId });
+}
+
 /** The workspace's directories, so the tree can show folders that hold no
  *  markdown file yet. The browser preview has no real empty folders → []. */
 export async function scanFolders(workspaceId: string): Promise<string[]> {

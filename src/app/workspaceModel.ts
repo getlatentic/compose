@@ -762,6 +762,30 @@ export function isActiveFilePresent(workspace: Workspace): boolean {
   );
 }
 
+/**
+ * Paint the tree from the last scan's inventory while the real one runs.
+ *
+ * Deliberately not {@link applyScanResult}: that reports the list as
+ * authoritative (`scanState: "ready"`), and this one is not — it is what was
+ * true when the workspace was last scanned. The state stays `loading` so the
+ * walk still owns the answer, and only the empty tree is avoided.
+ *
+ * A workspace that already has files keeps them: a snapshot arriving after a
+ * real scan would be a step backwards in freshness.
+ */
+export function applyFileSnapshot(
+  workspace: Workspace,
+  entries: WorkspaceFileEntry[],
+): Workspace {
+  if (entries.length === 0 || workspace.files.length > 0) {
+    return workspace;
+  }
+  return {
+    ...workspace,
+    files: [...entries].sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
+  };
+}
+
 export function applyScanResult(
   workspace: Workspace,
   entries: WorkspaceFileEntry[],

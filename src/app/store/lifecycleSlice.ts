@@ -4,6 +4,7 @@ import { useUiStore } from "./uiStore";
 import {
   LOOSE_WORKSPACE_ID,
   applyFileBuffer,
+  applyFileSnapshot,
   applyScanResult,
   createLooseWorkspace,
   createWorkspaceFromPath,
@@ -33,6 +34,7 @@ import {
   readFile as readFileIpc,
   scanFolders,
   scanWorkspace,
+  snapshotWorkspaceFiles,
 } from "../../lib/ipc/filesClient";
 import {
   rebuildWorkspaceIndex as rebuildWorkspaceIndexIpc,
@@ -172,6 +174,22 @@ export const createLifecycleSlice = (
         item.scanState === "loading" ? item : { ...item, scanState: "loading", scanError: null },
       ),
     }));
+
+    // Paint the tree from the last scan's inventory the moment it lands, and
+    // never hold the walk behind it: the two race, and the walk always wins the
+    // final say. Losing the race is fine — `applyFileSnapshot` declines to
+    // overwrite a list the real scan already produced. No snapshot at all is a
+    // normal first launch, which is why the failure here is silent rather than
+    // surfaced: the walk below is the answer either way.
+    void snapshotWorkspaceFiles(workspaceId)
+      .then((snapshot) => {
+        set((state) => ({
+          workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
+            applyFileSnapshot(item, snapshot),
+          ),
+        }));
+      })
+      .catch(() => {});
 
     // The file already open (a reopened workspace) is known before the scan —
     // read its content CONCURRENTLY with the scan/comments/conversation so the

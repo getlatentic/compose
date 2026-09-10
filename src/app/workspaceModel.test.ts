@@ -32,6 +32,7 @@ import {
   applyFileBuffer,
   applyFsEvent,
   removeDeletedFile,
+  applyFileSnapshot,
   applyScanResult,
   closeWorkspaceFileTab,
   isActiveFilePresent,
@@ -268,6 +269,34 @@ describe("workspace model", () => {
       role: "assistant",
       runId,
     });
+  });
+
+  it("applyFileSnapshot paints an empty tree but never claims the scan finished", () => {
+    // The whole point: rows on screen before the walk lands, with the state
+    // still saying the walk owns the answer.
+    const fresh = createWorkspaceFromPath("/tmp/alpha");
+    expect(fresh.files).toEqual([]);
+
+    const painted = applyFileSnapshot(fresh, [makeEntry("b.md"), makeEntry("a.md")]);
+
+    expect(painted.files.map((entry) => entry.relativePath)).toEqual(["a.md", "b.md"]);
+    expect(painted.scanState).not.toBe("ready");
+  });
+
+  it("applyFileSnapshot loses the race rather than winning it", () => {
+    // The snapshot is last session's truth. Arriving after a real scan it must
+    // decline — otherwise a slow inventory read would quietly replace fresh
+    // rows with stale ones, and nothing would look wrong.
+    const scanned = workspaceWithFiles("/tmp/alpha", ["current.md"]);
+
+    const late = applyFileSnapshot(scanned, [makeEntry("deleted-last-week.md")]);
+
+    expect(late.files.map((entry) => entry.relativePath)).toEqual(["current.md"]);
+  });
+
+  it("applyFileSnapshot with no inventory leaves the workspace exactly as it was", () => {
+    const fresh = createWorkspaceFromPath("/tmp/alpha");
+    expect(applyFileSnapshot(fresh, [])).toBe(fresh);
   });
 
   it("applyScanResult refreshes the file list without dropping open tabs (a scan miss isn't a deletion)", () => {

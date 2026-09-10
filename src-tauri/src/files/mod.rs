@@ -92,6 +92,32 @@ impl From<std::io::Error> for FileError {
     }
 }
 
+/// The file list from this vault's persisted inventory, so a launch can paint
+/// the tree without waiting on the walk.
+///
+/// True as of the last completed scan, not as of now: a file added or removed
+/// outside the app since then is stale here until [`workspace_scan`] lands and
+/// replaces the list wholesale. That staleness window is the price of painting
+/// early, and it is bounded by the scan the caller is expected to run anyway.
+///
+/// Deliberately does no filesystem work — the point is to answer from what is
+/// already known, in one indexed read.
+#[tauri::command(async)]
+pub fn workspace_files_snapshot(
+    workspace_id: String,
+    metadata: State<'_, MetadataStore>,
+) -> Result<Vec<WorkspaceFileEntry>, FileError> {
+    let rows = metadata.document_inventory(&workspace_id)?;
+    Ok(rows
+        .into_iter()
+        .map(|(relative_path, last_modified_ms, size_bytes)| WorkspaceFileEntry {
+            relative_path,
+            last_modified_ms,
+            size_bytes: size_bytes.max(0) as u64,
+        })
+        .collect())
+}
+
 #[tauri::command(async)]
 pub fn workspace_scan(
     workspace_id: String,

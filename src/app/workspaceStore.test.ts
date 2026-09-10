@@ -41,6 +41,7 @@ vi.mock("../lib/ipc/filesClient", () => ({
   renameFile: vi.fn(),
   scanWorkspace: vi.fn(),
   scanFolders: vi.fn(() => Promise.resolve([])),
+  snapshotWorkspaceFiles: vi.fn(() => Promise.resolve([])),
   writeFile: vi.fn(),
 }));
 

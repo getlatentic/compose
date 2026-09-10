@@ -310,6 +310,7 @@ pub fn run() {
             files::workspace_rename_file,
             files::workspace_restore_version,
             files::workspace_scan,
+            files::workspace_files_snapshot,
             files::workspace_scan_folders,
             files::workspace_write_binary_file,
             files::workspace_write_file,

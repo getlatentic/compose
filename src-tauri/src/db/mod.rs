@@ -835,6 +835,39 @@ impl MetadataStore {
             .map_err(|error| format!("could not decode document ids: {error}"))
     }
 
+    /// The file list this vault already persisted, for painting the tree before
+    /// the filesystem walk finishes.
+    ///
+    /// Only what the tree needs — path, mtime, size — and only rows carrying
+    /// both. A row missing either is skipped rather than defaulted: a made-up
+    /// mtime would make the editor believe a buffer is fresh when it is not.
+    ///
+    /// Empty is a normal answer (a vault never scanned, or one whose first scan
+    /// was interrupted), and the caller paints nothing extra. A query that
+    /// genuinely fails is an error, not an empty list — the two must not arrive
+    /// looking the same.
+    pub fn document_inventory(&self, vault_id: &str) -> Result<Vec<(String, i64, i64)>, String> {
+        validate_storage_id(vault_id, "vault id")?;
+        let connection = self.vault_connection(vault_id)?;
+        let mut statement = connection
+            .prepare(
+                "select current_path, last_seen_mtime, last_seen_size
+                 from documents
+                 where deleted_at is null
+                   and last_seen_mtime is not null
+                   and last_seen_size is not null",
+            )
+            .map_err(|error| format!("could not prepare inventory query: {error}"))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?))
+            })
+            .map_err(|error| format!("could not load inventory: {error}"))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("could not decode inventory: {error}"))
+    }
+
     pub fn replace_search_index_records(
         &self,
         vault_id: &str,
@@ -2104,6 +2137,49 @@ mod tests {
             Some(before),
             "a retained (unreadable) path must keep its live metadata row"
         );
+    }
+
+    /// The tree paints from this, so it has to carry what the tree needs and
+    /// nothing invented. The positive arm matters: an inventory that returned
+    /// nothing would satisfy "no wrong rows" while being useless.
+    #[test]
+    fn the_inventory_carries_what_the_tree_needs_to_paint() {
+        let (_dir, store, vault_id) = synced_store();
+
+        let rows = store.document_inventory(vault_id).expect("inventory");
+
+        assert_eq!(
+            rows,
+            vec![("notes/a.md".to_owned(), 10, 9)],
+            "path, mtime and size, exactly as the last scan recorded them"
+        );
+    }
+
+    #[test]
+    fn a_deleted_path_is_not_painted_from_the_inventory() {
+        let (_dir, store, vault_id) = synced_store();
+        store
+            .sync_documents(vault_id, Vec::new())
+            .expect("empty sync");
+
+        assert!(
+            store.document_inventory(vault_id).expect("inventory").is_empty(),
+            "a path the scan stopped seeing must not come back on the next launch"
+        );
+    }
+
+    /// A vault nobody has scanned answers "nothing yet", which is a normal
+    /// launch and not a failure — the caller falls through to the walk.
+    #[test]
+    fn an_unscanned_vault_has_an_empty_inventory_rather_than_an_error() {
+        let dir = tempdir().expect("temp dir");
+        let store = MetadataStore::default();
+        store.init_from_dir(dir.path()).expect("init metadata");
+        store
+            .ensure_vault("vault-2", "Fresh", Path::new("/tmp/fresh"))
+            .expect("ensure vault");
+
+        assert_eq!(store.document_inventory("vault-2").expect("inventory"), Vec::new());
     }
 
     #[test]
