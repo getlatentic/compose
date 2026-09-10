@@ -43,6 +43,8 @@ pub struct BootPayload {
     external_files: Option<crate::external::ExternalFilesList>,
     files: Vec<WorkspaceFileEntry>,
     folders: Vec<String>,
+    /// The screen the app last drew, for the page to put up before React runs.
+    shell: Option<String>,
     active_file: Option<ActiveFile>,
 }
 
@@ -72,22 +74,40 @@ pub fn init_script(profile_dir: Option<PathBuf>) -> String {
     let Some(profile_dir) = profile_dir else {
         return String::new();
     };
-    let payload = read_within_deadline(profile_dir);
+    let mut payload = read_within_deadline(profile_dir);
     if payload.workspaces.is_none() {
         return String::new();
     }
-    match serde_json::to_string(&payload) {
-        Ok(json) => format!("window.__COMPOSE_BOOT__ = JSON.parse({});", js_string(&json)),
-        Err(_) => String::new(),
+    // The screen is carried alongside rather than inside: everything in the
+    // JSON is escaped twice — once into JSON, once into the JavaScript string
+    // literal `JSON.parse` reads — and it is by far the largest field. Escaped
+    // once as its own literal, it costs a fraction of that.
+    let shell = payload.shell.take();
+    let Ok(json) = serde_json::to_string(&payload) else {
+        return String::new();
+    };
+    let mut script = format!("window.__COMPOSE_BOOT__ = JSON.parse({});", js_string(&json));
+    if let Some(shell) = shell {
+        script.push_str(&format!(
+            "window.__COMPOSE_BOOT__.shell = {};",
+            js_string(&shell)
+        ));
     }
+    script
 }
 
 /// A JavaScript string literal holding `value`. JSON's own string escaping is a
 /// subset of JavaScript's, except for the two line separators that are legal
 /// inside a JSON string and (before ES2019) were not legal inside a JS one.
 fn js_string(value: &str) -> String {
-    serde_json::to_string(value)
-        .unwrap_or_else(|_| "\"\"".to_owned())
+    let encoded = serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_owned());
+    // Two allocating passes over a few hundred kilobytes for characters almost
+    // no document contains. Scan first; rewrite only when there is something to
+    // rewrite.
+    if !encoded.contains('\u{2028}') && !encoded.contains('\u{2029}') {
+        return encoded;
+    }
+    encoded
         .replace('\u{2028}', "\\u2028")
         .replace('\u{2029}', "\\u2029")
 }
@@ -128,6 +148,7 @@ pub(crate) fn read(profile_dir: &Path) -> BootPayload {
         .and_then(|id| open_document(&registry, &list, id));
 
     BootPayload {
+        shell: crate::boot_shell::read(profile_dir),
         workspaces: Some(list),
         external_files,
         files,

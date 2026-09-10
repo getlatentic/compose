@@ -8,6 +8,7 @@ import { MainApp } from "./MainApp";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useHarnessStore } from "./store/harnessStore";
 import { useUiStore } from "./store/uiStore";
+import { scheduleBootShellCapture } from "../lib/bootShell";
 import { markLaunchWindowReady } from "../lib/ipc/launchWindow";
 import { trackAppLaunch } from "../lib/analytics/track";
 import { markBoot } from "../lib/perf";
@@ -48,14 +49,19 @@ function useCompleteAppReveal(waitForFrame: boolean): boolean {
   const [revealed, setRevealed] = useState(!waitForFrame);
   useEffect(function showWindowWhenNothingIsWaitedOn() {
     if (!waitForFrame) {
+      document.getElementById("boot-shell")?.remove();
       void markLaunchWindowReady();
+      scheduleBootShellCapture();
     }
   }, [waitForFrame]);
   const reveal = useCallback(() => {
     setRevealed(true);
-    // The window is still hidden at this point — this is what puts it on
-    // screen, with a finished app already in it.
+    // Take down the screen the window opened on and hand over to the live app.
+    // Both are complete, so the swap is not a visible change.
+    document.getElementById("boot-shell")?.remove();
+    // A no-op when the replayed screen already asked for the window.
     void markLaunchWindowReady();
+    scheduleBootShellCapture();
   }, []);
   useEffect(() => {
     if (revealed) {

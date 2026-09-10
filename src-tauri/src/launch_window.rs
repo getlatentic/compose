@@ -39,10 +39,16 @@ fn show_once(app: &AppHandle, reason: &str) {
     let _ = window.set_focus();
 }
 
-/// The front end has drawn a complete first screen.
+/// There is something worth looking at. `reason` says what — the replayed
+/// screen going up, or the live app finishing — because which of the two wins
+/// the race is the whole question.
 #[tauri::command]
-pub fn launch_window_ready(app: AppHandle) {
-    show_once(&app, "window-shown-by-frontend");
+pub fn launch_window_ready(app: AppHandle, reason: Option<String>) {
+    let label = match reason.as_deref() {
+        Some("shell") => "window-shown-by-replayed-screen",
+        _ => "window-shown-by-live-app",
+    };
+    show_once(&app, label);
 }
 
 /// Start the deadline the front end is racing.

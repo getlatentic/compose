@@ -1,4 +1,5 @@
 mod boot_payload;
+mod boot_shell;
 mod launch_window;
 mod stale_state;
 mod user_tool_dirs;
@@ -59,11 +60,14 @@ pub fn run() {
     // A "Reset all data" requested last session is applied here — before the
     // migration below or the webview can repopulate anything — so the app comes
     // up as a clean first-run.
+    boot_native_mark("analytics-runtime");
     data_reset::apply_pending_reset();
+    boot_native_mark("data-reset");
     // Before Tauri creates the webview (which would make its own empty data
     // dirs under the new bundle id), carry a previous identity's profile
     // forward so a rename doesn't reset the user's workspaces or settings.
     profile_migration::migrate_legacy_profile();
+    boot_native_mark("profile-migration");
 
     // The launch screen's data, read from disk before the web view exists and
     // handed to the page as a global so its first render is the finished app
@@ -71,6 +75,7 @@ pub fn run() {
     // say, which injects nothing and leaves the front end's own IPC fan-out —
     // still the source of truth — to do exactly what it did before.
     let boot_script = boot_payload::init_script(profile_migration::profile_dir());
+    boot_native_mark("boot-payload");
 
     let mut builder = tauri::Builder::default()
         .plugin(boot_payload::plugin(boot_script))
@@ -101,6 +106,7 @@ pub fn run() {
         }
     }
 
+    boot_native_mark("builder-constructed");
     let app = builder
         // A native menu set at construction (so there's no default→custom menu-bar
         // flash on launch): the platform defaults plus File → Print (⌘P). Print
@@ -108,6 +114,7 @@ pub fn run() {
         // print panel (a printer, or Save as PDF from the panel).
         .menu(menu::build)
         .setup(|app| {
+            boot_native_mark("setup-entered");
             boot_native_mark("setup-start");
             let app_handle = app.handle().clone();
             // Capture back-end panics into the local error log (best-effort),
@@ -324,6 +331,7 @@ pub fn run() {
             files::workspace_scan,
             files::workspace_files_snapshot,
             launch_window::launch_window_ready,
+            boot_shell::boot_shell_store,
             files::workspace_scan_folders,
             files::workspace_write_binary_file,
             files::workspace_write_file,
@@ -354,7 +362,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    boot_native_mark("pre-run-loop");
+    boot_native_mark("app-built");
     app.run(|app_handle, event| match event {
         // Tauri defines this variant on macOS only — it is the
         // `application:openURLs:` delegate callback, which no other platform

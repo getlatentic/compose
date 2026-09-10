@@ -60,9 +60,11 @@ export default defineConfig(async () => ({
     __COMPOSE_PERF__: JSON.stringify(process.env.COMPOSE_PERF === "1"),
   },
   build: {
-    // Don't even prefetch the lazy editor's heavy vendors (CodeMirror, KaTeX) at
-    // boot — they load when a document opens, keeping the initial parse to the
-    // shell. On a local desktop app the on-open fetch is a disk read.
+    // The editor's heavy vendors (CodeMirror, KaTeX) are static dependencies of
+    // the entry now, so they load either way; this only decides whether the HTML
+    // declares them. Measured both ways over three launches: declaring them made
+    // the webview phase 689ms against 655ms — no better, and 2MB more markup for
+    // the parser to walk. Left undeclared.
     modulePreload: {
       resolveDependencies(_filename: string, deps: string[]) {
         return deps.filter((dep) => !/(codemirror|katex)-[A-Za-z0-9_]+\.js$/.test(dep));
