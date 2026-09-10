@@ -489,6 +489,11 @@ select {
 .sidebar-tab {
   display: inline-flex;
   align-items: center;
+  // Shrinkable, so a narrow pane takes width from the labels rather than
+  // overflowing the row — an overflowing row eats its own end padding, and the
+  // New button ends up flush against the sidebar border.
+  min-inline-size: 0;
+  flex: 0 1 auto;
   border: 0;
   border-block-end: 2px solid transparent;
   margin-block-end: -1px;
@@ -517,6 +522,8 @@ select {
 // the end of the tab row.
 .new-menu {
   position: relative;
+  // Never shrink, never grow: the button keeps its size while the tabs give way.
+  flex: 0 0 auto;
   // Centre the button on the row's mid-line — the same line the tab labels sit
   // on — with symmetric breathing room from the fixed row height.
   align-self: center;
@@ -615,9 +622,17 @@ select {
 
 .new-menu__item-shortcut {
   flex: 0 0 auto;
-  font-family: var(--cds-code-01-font-family, ui-monospace, "SF Mono", monospace);
-  font-size: 0.75rem;
+  // NOT a mono font: `SF Mono` has no glyph for ⌘ (U+2318) or ⇧ (U+21E7), so
+  // each fell back on its own to a symbol face — drawn at a different size and
+  // off the text baseline, which read as tiny mismatched emoji. The system font
+  // has them, and draws them the way the menu bar does.
+  font-family: inherit;
+  font-size: 0.8125rem;
+  line-height: 1;
   color: var(--cds-text-placeholder, #8d8d8d);
+  // The two shortcuts differ by a modifier (⌘N vs ⌘⇧N); aligning their ends
+  // keeps the column straight rather than ragged.
+  font-variant-numeric: tabular-nums;
 }
 
 // Both panes (Files / Chat) stay mounted to make Notes <-> Chat switching
