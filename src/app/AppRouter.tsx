@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { harnessReadiness } from "../lib/ipc/harnessClient";
 import { externalList } from "../lib/ipc/externalFilesClient";
 import { getOnboarding, listWorkspaces } from "../lib/ipc/workspaceClient";
@@ -23,6 +23,43 @@ import { bootPayload } from "./store/bootPayload";
  * settle, the main app's document subscriptions and effects don't exist during
  * splash/onboarding.
  */
+/**
+ * How long to wait for the frame that completes the app before showing it
+ * anyway. `requestAnimationFrame` is the signal; this is the backstop, because
+ * WKWebView throttles RAF whenever the window isn't frontmost — a launch behind
+ * another app would otherwise never reveal.
+ */
+const REVEAL_DEADLINE_MS = 200;
+
+/**
+ * Whether the app is ready to be looked at.
+ *
+ * CodeMirror's constructor ends in `requestMeasure()`, so its real viewport
+ * lands one animation frame after the app renders: the first painted frame
+ * shows a few lines of the document and the next shows the rest. Nothing can
+ * make that measurement synchronous, so the app is mounted — laid out, and
+ * therefore measurable — but not shown until that frame has been and gone.
+ *
+ * Only a launch with a document to draw waits; anything else is ready as it
+ * renders.
+ */
+function useCompleteAppReveal(waitForFrame: boolean): boolean {
+  const [revealed, setRevealed] = useState(!waitForFrame);
+  const reveal = useCallback(() => setRevealed(true), []);
+  useEffect(() => {
+    if (revealed) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => requestAnimationFrame(reveal));
+    const deadline = window.setTimeout(reveal, REVEAL_DEADLINE_MS);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(deadline);
+    };
+  }, [revealed, reveal]);
+  return revealed;
+}
+
 export function AppRouter() {
   // Boot-time hydration gate. `loadSetupState` fans out IPC calls (the selected
   // harness's readiness, workspace list, onboarding flag) that take ~1s. Holding
@@ -33,6 +70,7 @@ export function AppRouter() {
   // before this bundle ran, so it opens the gate on the first render and never
   // shows the splash at all. The fan-out below still runs and still decides.
   const [bootHydrated, setBootHydrated] = useState(() => bootPayload() !== null);
+  const appRevealed = useCompleteAppReveal(Boolean(bootPayload()?.activeFile));
   // Read the field, not `onboardingComplete()` — calling the method inside a
   // selector re-runs its body on every store mutation and masks future logic
   // changes behind a no-op re-render. Reading the boolean lets the store bail
@@ -132,5 +170,16 @@ export function AppRouter() {
   if (!onboardingComplete) {
     return <SetupScreen />;
   }
-  return <MainApp />;
+  // Mounted but hidden until complete — `visibility`, not `display`, so the
+  // layout the editor measures itself against is the real one.
+  return (
+    <>
+      {appRevealed ? null : <SplashScreen />}
+      <div className="app-reveal" style={appRevealed ? undefined : HIDDEN_UNTIL_COMPLETE}>
+        <MainApp />
+      </div>
+    </>
+  );
 }
+
+const HIDDEN_UNTIL_COMPLETE = { visibility: "hidden" } as const;

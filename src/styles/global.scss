@@ -6032,6 +6032,10 @@ $theme-dark-line: #525252;
 // while the boot IPC settles. The column template + divider colour match
 // `.workspace--editor-open.workspace--chat-open` so the real panes' content
 // fills into the same structure with no shift. Keep the two in sync.
+.app-reveal {
+  block-size: 100%;
+}
+
 .app-skeleton {
   position: fixed;
   inset: 0;

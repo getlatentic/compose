@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitForElementToBeRemoved } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/ipc/workspaceClient", () => ({
@@ -70,11 +70,19 @@ afterEach(() => {
 });
 
 describe("the first render of a launch", () => {
-  it("is the app itself when the payload already answered the boot questions", async () => {
+  // Two claims. The app is MOUNTED on the first render — every IPC client here
+  // never settles, so its presence proves the payload alone released the boot
+  // gate. And it is not yet SHOWN: it is laid out behind the skeleton until the
+  // frame that completes it, so the first screen anyone sees is the finished
+  // app rather than one still measuring itself.
+  it("mounts the app on the first render and shows it once it is complete", async () => {
     await renderRouter(PAYLOAD);
 
     expect(screen.getByTestId("main-app")).toBeTruthy();
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("status")).toBeTruthy();
+
+    await waitForElementToBeRemoved(() => screen.queryByRole("status"));
+    expect(screen.getByTestId("main-app")).toBeTruthy();
   });
 
   // The control: without a payload the same render must still be the splash,
