@@ -9,6 +9,7 @@ import { createChatSlice } from "./store/chatSlice";
 import { createConversationsSlice } from "./store/conversationsSlice";
 import { createNavSlice } from "./store/navSlice";
 import { createOnboardingSlice } from "./store/onboardingSlice";
+import { bootSeed } from "./store/bootPayload";
 
 // Public surface preserved for existing importers of this module.
 export type { HarnessRunOptions, NavEntry } from "./store/types";
@@ -36,4 +37,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   ...createConversationsSlice(set, get),
   ...createNavSlice(set, get),
   ...createOnboardingSlice(set, get),
+  // Last, so the launch payload's workspaces / tree / open document override
+  // the slices' empty defaults and are present at the first render.
+  ...bootSeed(),
 }));

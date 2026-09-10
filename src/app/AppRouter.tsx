@@ -10,6 +10,7 @@ import { useHarnessStore } from "./store/harnessStore";
 import { useUiStore } from "./store/uiStore";
 import { trackAppLaunch } from "../lib/analytics/track";
 import { markBoot } from "../lib/perf";
+import { bootPayload } from "./store/bootPayload";
 
 /**
  * Top-level screen router. Owns boot hydration and picks exactly one screen:
@@ -27,7 +28,11 @@ export function AppRouter() {
   // harness's readiness, workspace list, onboarding flag) that take ~1s. Holding
   // the splash until they settle stops the cold-launch flash (SetupScreen →
   // empty workspace → real workspace) — the user sees the correct view first.
-  const [bootHydrated, setBootHydrated] = useState(false);
+  //
+  // A launch that arrived with a boot payload has already answered all of that
+  // before this bundle ran, so it opens the gate on the first render and never
+  // shows the splash at all. The fan-out below still runs and still decides.
+  const [bootHydrated, setBootHydrated] = useState(() => bootPayload() !== null);
   // Read the field, not `onboardingComplete()` — calling the method inside a
   // selector re-runs its body on every store mutation and masks future logic
   // changes behind a no-op re-render. Reading the boolean lets the store bail

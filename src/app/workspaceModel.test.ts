@@ -30,6 +30,7 @@ import {
   serializeChatMessages,
   CONVERSATION_REPLAY_LIMIT,
   applyFileBuffer,
+  applyUneditedFileBuffer,
   applyFsEvent,
   removeDeletedFile,
   applyFileSnapshot,
@@ -1599,5 +1600,45 @@ describe("reorderOpenTabs (#29)", () => {
     expect(reorderOpenTabs(["a", "b"], "a", "a")).toEqual(["a", "b"]);
     expect(reorderOpenTabs(["a", "b"], "a", "z")).toEqual(["a", "b"]);
     expect(reorderOpenTabs(["a", "b"], "z", "a")).toEqual(["a", "b"]);
+  });
+});
+
+describe("a re-read racing the first keystrokes of a launch", () => {
+  const workspace = createWorkspaceFromPath("/vault");
+
+  it("takes the fresh read when nothing has been typed", () => {
+    const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {
+      content: "on screen",
+      lastModifiedMs: 1,
+    });
+
+    const updated = applyUneditedFileBuffer(opened, "a.md", {
+      content: "from disk",
+      lastModifiedMs: 2,
+    });
+
+    expect(updated.fileContents["a.md"].content).toBe("from disk");
+  });
+
+  it("leaves unsaved edits alone", () => {
+    const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {
+      content: "on screen",
+      lastModifiedMs: 1,
+    });
+    const edited = {
+      ...opened,
+      fileContents: {
+        ...opened.fileContents,
+        "a.md": { ...opened.fileContents["a.md"], content: "typed", dirty: true },
+      },
+    };
+
+    const updated = applyUneditedFileBuffer(edited, "a.md", {
+      content: "from disk",
+      lastModifiedMs: 2,
+    });
+
+    expect(updated.fileContents["a.md"].content).toBe("typed");
+    expect(updated.fileContents["a.md"].dirty).toBe(true);
   });
 });

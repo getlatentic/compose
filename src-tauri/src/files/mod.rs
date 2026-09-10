@@ -107,15 +107,20 @@ pub fn workspace_files_snapshot(
     workspace_id: String,
     metadata: State<'_, MetadataStore>,
 ) -> Result<Vec<WorkspaceFileEntry>, FileError> {
-    let rows = metadata.document_inventory(&workspace_id)?;
-    Ok(rows
-        .into_iter()
+    Ok(inventory_entries(metadata.document_inventory(&workspace_id)?))
+}
+
+/// Inventory rows as tree entries. Shared with the launch payload
+/// (`crate::boot_payload`), which answers the same question before the web view
+/// exists and must answer it identically.
+pub(crate) fn inventory_entries(rows: Vec<(String, i64, i64)>) -> Vec<WorkspaceFileEntry> {
+    rows.into_iter()
         .map(|(relative_path, last_modified_ms, size_bytes)| WorkspaceFileEntry {
             relative_path,
             last_modified_ms,
             size_bytes: size_bytes.max(0) as u64,
         })
-        .collect())
+        .collect()
 }
 
 #[tauri::command(async)]

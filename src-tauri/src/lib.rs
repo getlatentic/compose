@@ -1,3 +1,4 @@
+mod boot_payload;
 mod stale_state;
 mod user_tool_dirs;
 mod data_reset;
@@ -63,7 +64,15 @@ pub fn run() {
     // forward so a rename doesn't reset the user's workspaces or settings.
     profile_migration::migrate_legacy_profile();
 
+    // The launch screen's data, read from disk before the web view exists and
+    // handed to the page as a global so its first render is the finished app
+    // rather than an empty shell that fills in. Empty when there is nothing to
+    // say, which injects nothing and leaves the front end's own IPC fan-out —
+    // still the source of truth — to do exactly what it did before.
+    let boot_script = boot_payload::init_script(profile_migration::profile_dir());
+
     let mut builder = tauri::Builder::default()
+        .plugin(boot_payload::plugin(boot_script))
         .manage(workspace::WorkspaceRegistry::default())
         .manage(db::MetadataStore::default())
         .manage(files::watcher::WatcherManager::default())

@@ -8,6 +8,7 @@ import {
   type SourceRange,
   type WorkspaceCommentThread,
 } from "../features/comments/commentModel";
+import type { ExternalFilesList } from "../lib/ipc/externalFilesClient";
 import type { HarnessReadiness, ToolKind } from "../lib/ipc/harnessClient";
 import type {
   ConversationMessageRecord,
@@ -786,6 +787,34 @@ export function applyFileSnapshot(
   };
 }
 
+/** Registry records → tree entries. mtime/size are placeholders — the sidebar
+ *  shows names only, and buffers stat on read. */
+export function looseEntries(files: { path: string }[]): WorkspaceFileEntry[] {
+  return files.map((record) => ({
+    relativePath: record.path,
+    lastModifiedMs: 0,
+    sizeBytes: 0,
+  }));
+}
+
+/** The external-files registry laid onto the loose pseudo-workspace: its tree,
+ *  its open tabs, and which of them is showing. Tabs whose file left the
+ *  registry are dropped rather than left pointing at nothing. */
+export function applyExternalFiles(
+  workspace: Workspace,
+  list: ExternalFilesList,
+): Workspace {
+  const files = looseEntries(list.files);
+  const known = new Set(files.map((entry) => entry.relativePath));
+  const openFilePaths = list.openPaths.filter((path) => known.has(path));
+  return {
+    ...workspace,
+    activeFilePath: openFilePaths.includes(list.activePath) ? list.activePath : "",
+    files,
+    openFilePaths,
+  };
+}
+
 export function applyScanResult(
   workspace: Workspace,
   entries: WorkspaceFileEntry[],
@@ -822,6 +851,21 @@ export function applyFileBuffer(
       },
     },
   };
+}
+
+
+/** A freshly-read buffer, unless the one in hand has unsaved edits. The launch
+ *  now paints the open document before the read that confirms it lands, so the
+ *  first keystrokes after a launch must not be overwritten by the read they
+ *  raced. */
+export function applyUneditedFileBuffer(
+  workspace: Workspace,
+  relativePath: string,
+  buffer: { content: string; lastModifiedMs: number },
+): Workspace {
+  return workspace.fileContents[relativePath]?.dirty
+    ? workspace
+    : applyFileBuffer(workspace, relativePath, buffer);
 }
 
 

@@ -6,6 +6,7 @@ import {
   applyFileBuffer,
   applyFileSnapshot,
   applyScanResult,
+  applyUneditedFileBuffer,
   createLooseWorkspace,
   createWorkspaceFromPath,
   hydrateChatThread,
@@ -223,7 +224,7 @@ export const createLifecycleSlice = (
           );
           // Apply the concurrently-read buffer if its file survived the scan.
           if (knownActiveFile && knownBuffer && scanned.activeFilePath === knownActiveFile) {
-            scanned = applyFileBuffer(scanned, knownActiveFile, knownBuffer);
+            scanned = applyUneditedFileBuffer(scanned, knownActiveFile, knownBuffer);
           }
           // Open the seeded Welcome note (or the first note) as PART of the scan
           // result — a freshly opened folder (the onboarding starter, or any

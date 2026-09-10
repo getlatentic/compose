@@ -6,12 +6,13 @@ import {
 } from "../../lib/ipc/externalFilesClient";
 import {
   LOOSE_WORKSPACE_ID,
+  applyExternalFiles,
   closeWorkspaceFileTab,
+  looseEntries,
   markBufferSaved,
   openWorkspaceFile,
   reorderOpenTabs,
   type Workspace,
-  type WorkspaceFileEntry,
 } from "../workspaceModel";
 import { flushActiveEditor } from "../../lib/editor/editorFlush";
 import {
@@ -38,16 +39,6 @@ function looseWorkspaceOf(get: WorkspaceStoreGet): Workspace | null {
   return selectLooseWorkspace(get());
 }
 
-/** Registry records → tree entries. mtime/size are placeholders — the sidebar
- *  shows names only, and buffers stat on read. */
-function looseEntries(files: { path: string }[]): WorkspaceFileEntry[] {
-  return files.map((record) => ({
-    relativePath: record.path,
-    lastModifiedMs: 0,
-    sizeBytes: 0,
-  }));
-}
-
 export const createLooseFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
@@ -69,17 +60,9 @@ export const createLooseFilesSlice = (
   },
   hydrateExternalFiles: (list) => {
     set((state) => ({
-      workspaces: updateWorkspace(state.workspaces, LOOSE_WORKSPACE_ID, (item) => {
-        const files = looseEntries(list.files);
-        const known = new Set(files.map((entry) => entry.relativePath));
-        const openFilePaths = list.openPaths.filter((path) => known.has(path));
-        return {
-          ...item,
-          files,
-          openFilePaths,
-          activeFilePath: openFilePaths.includes(list.activePath) ? list.activePath : "",
-        };
-      }),
+      workspaces: updateWorkspace(state.workspaces, LOOSE_WORKSPACE_ID, (item) =>
+        applyExternalFiles(item, list),
+      ),
     }));
   },
   openLooseFile: async (absolutePath: string) => {
