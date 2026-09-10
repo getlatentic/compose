@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { Menu, MenuItem, MenuItemDivider } from "@carbon/react";
-import { CaretDown, CaretRight, Document } from "@carbon/react/icons";
+import { CaretDown, CaretRight } from "@carbon/react/icons";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useWorkspaceStore } from "../../app/workspaceStore";
@@ -197,7 +197,9 @@ const FileRow = memo(function FileRow({
         style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
         title={path}
       >
-        <Document size={16} />
+        {/* No icon: the caret is what tells a folder from a file, and the
+          * column is kept so names line up under a folder's label. */}
+        <span aria-hidden />
         <span className="truncate">{name}</span>
         <FileRowDirtyDot path={path} />
       </button>

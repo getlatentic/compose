@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo } from "react";
-import { Close, Document } from "@carbon/react/icons";
+import { Close } from "@carbon/react/icons";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { selectLooseWorkspace } from "../../app/store/activeWorkspace";
 import { useConfirm } from "../dialogs/ConfirmProvider";
@@ -58,7 +58,7 @@ const ExternalFileRow = memo(function ExternalFileRow({
         title={path}
         onClick={handleSelect}
       >
-        <Document size={16} aria-hidden />
+        <span aria-hidden />
         <span className="truncate">{name}</span>
         <LooseRowDirtyDot path={path} />
       </button>
