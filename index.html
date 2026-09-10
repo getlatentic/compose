@@ -7,20 +7,35 @@
     <title>Compose</title>
     <script>
       /*
-       * Theme, set before the first pixel. The stylesheet below and the native
-       * window both paint before any module runs, so a dark-mode user would see
-       * a white skeleton flash on every launch without this. Mirrors
-       * `applyTheme` in src/lib/theme/theme.ts; the key is UI_PREFS_KEY in
-       * src/lib/prefs/uiPrefs.ts. Absent/`system` deliberately sets nothing, so
-       * the `prefers-color-scheme` rules below decide.
+       * The saved appearance, set before the first pixel. The stylesheet below
+       * and the native window both paint before any module runs, so without
+       * this a dark-mode user sees a white skeleton flash on every launch, and
+       * anyone who has zoomed or dragged a pane sees the layout jump the moment
+       * React takes over. Mirrors `applyTheme` / `applyZoom` and the pane
+       * widths in src/app/store/uiStore.ts; the key is UI_PREFS_KEY in
+       * src/lib/prefs/uiPrefs.ts. An absent value deliberately sets nothing, so
+       * the defaults below decide.
        */
       try {
-        var t = JSON.parse(localStorage.getItem("compose.uiPrefs.v1") || "{}").theme;
-        if (t === "dark" || t === "light") {
-          document.documentElement.setAttribute("data-theme", t);
+        var prefs = JSON.parse(localStorage.getItem("compose.uiPrefs.v1") || "{}");
+        var root = document.documentElement;
+        if (prefs.theme === "dark" || prefs.theme === "light") {
+          root.setAttribute("data-theme", prefs.theme);
+        }
+        if (typeof prefs.zoom === "number" && prefs.zoom > 0) {
+          root.style.setProperty("--ui-zoom", String(prefs.zoom));
+        }
+        if (typeof prefs.sidebarWidthPx === "number" && prefs.sidebarWidthPx > 0) {
+          root.style.setProperty("--splash-sidebar-w", prefs.sidebarWidthPx + "px");
+        }
+        if (typeof prefs.chatWidthPx === "number" && prefs.chatWidthPx > 0) {
+          root.style.setProperty("--splash-chat-w", prefs.chatWidthPx + "px");
+        }
+        if (prefs.focusMode === true) {
+          root.setAttribute("data-splash-focus", "");
         }
       } catch (e) {
-        /* private mode, cleared storage — fall through to the system theme */
+        /* private mode, cleared storage — fall through to the defaults */
       }
     </script>
     <style>
@@ -40,6 +55,7 @@
        */
       :root {
         color-scheme: light;
+        --ui-zoom: 1;
         --splash-bg: #ffffff;
         --splash-fg: #161616;
         --splash-divider: #c6c6c6;
@@ -57,6 +73,11 @@
         --splash-bg: #161616;
         --splash-fg: #f4f4f4;
         --splash-divider: #525252;
+      }
+      html {
+        /* Same rule global.scss applies, so the skeleton's rem-based columns
+           are already at the user's interface scale. */
+        font-size: calc(100% * var(--ui-zoom));
       }
       html, body {
         margin: 0;
@@ -76,8 +97,18 @@
         position: fixed;
         inset: 0;
         display: grid;
-        grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
+        grid-template-columns:
+          var(--splash-sidebar-w, 15rem) minmax(17rem, 1fr) var(--splash-chat-w, 22rem);
         background: var(--splash-bg);
+      }
+      /* Focus mode hides both side panes, so a skeleton showing three would
+         collapse to one as React takes over. */
+      :root[data-splash-focus] .app-skeleton {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      :root[data-splash-focus] .app-skeleton__pane--sidebar,
+      :root[data-splash-focus] .app-skeleton__pane--chat {
+        display: none;
       }
       .app-skeleton__pane {
         min-inline-size: 0;

@@ -6036,8 +6036,20 @@ $theme-dark-line: #525252;
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-columns: 15rem minmax(17rem, 1fr) minmax(18rem, 22rem);
+  // The same columns index.html's inline skeleton uses, seeded from the saved
+  // pane widths there — so React taking over is not a layout change.
+  grid-template-columns:
+    var(--splash-sidebar-w, 15rem) minmax(17rem, 1fr) var(--splash-chat-w, 22rem);
   background: var(--cds-background, #ffffff);
+}
+
+:root[data-splash-focus] .app-skeleton {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:root[data-splash-focus] .app-skeleton__pane--sidebar,
+:root[data-splash-focus] .app-skeleton__pane--chat {
+  display: none;
 }
 
 .app-skeleton__pane {
