@@ -1,5 +1,4 @@
 mod boot_payload;
-mod boot_shell;
 mod launch_window;
 mod stale_state;
 mod user_tool_dirs;
@@ -331,7 +330,7 @@ pub fn run() {
             files::workspace_scan,
             files::workspace_files_snapshot,
             launch_window::launch_window_ready,
-            boot_shell::boot_shell_store,
+            launch_window::launch_document_parsed,
             files::workspace_scan_folders,
             files::workspace_write_binary_file,
             files::workspace_write_file,

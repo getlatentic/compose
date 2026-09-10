@@ -93,7 +93,8 @@
       #root {
         height: 100%;
       }
-      /* Above React's root, and gone the moment the app is drawn. */
+      /* Above React's root, and removed the moment the window opens. Only ever
+         seen if a launch runs past the deadline in launch_window.rs. */
       #boot-shell {
         position: fixed;
         inset: 0;
@@ -140,9 +141,9 @@
   </head>
 
   <body>
-    <!-- What the window opens on, above React's root until the app is drawn.
-      Either the screen the app drew last time (see boot_shell.rs) or, failing
-      that, the empty three-pane skeleton. -->
+    <!-- Shown only if a launch runs past the deadline in launch_window.rs and
+      the window has to open before the app is drawn. On a normal launch the
+      window does not open until React is ready, and this is never seen. -->
     <div id="boot-shell">
       <div class="app-skeleton" aria-hidden="true">
         <div class="app-skeleton__pane app-skeleton__pane--sidebar"></div>
@@ -153,39 +154,14 @@
     <div id="root"></div>
     <script>
       /*
-       * Put last session's screen up and ask for the window. The web view can't
-       * paint anything of its own for ~650ms, and the launch payload restores
-       * the same workspace and document — so the same screen is what it is
-       * about to draw again. Inert markup; React replaces it wholesale.
-       *
-       * The window is asked for as soon as the markup is in the document, not
-       * after a frame: a hidden window's animation frames are throttled by
-       * WKWebView, so waiting for one is waiting for the thing being asked for.
-       * The markup is already there, so the window's first painted frame has
-       * it. Rust shows the window on its own deadline regardless, which covers
-       * this failing or the internals moving.
+       * Tell the native side the document is parsing. It is what marks the
+       * moment the web view actually started, which is otherwise invisible
+       * from the Rust side of the launch.
        */
       try {
-        var boot = window.__COMPOSE_BOOT__;
-        if (boot && typeof boot.shell === "string" && boot.shell) {
-          var shell = document.getElementById("boot-shell");
-          shell.innerHTML = boot.shell;
-          /* Scroll offsets don't survive serialisation; they were stamped on
-             the way out, so put them back before the window opens on this. */
-          var scrolled = shell.querySelectorAll("[data-boot-scroll]");
-          for (var i = 0; i < scrolled.length; i++) {
-            var at = scrolled[i].getAttribute("data-boot-scroll").split(",");
-            scrolled[i].scrollTop = parseInt(at[0], 10) || 0;
-            scrolled[i].scrollLeft = parseInt(at[1], 10) || 0;
-          }
-          try {
-            window.__TAURI_INTERNALS__.invoke("launch_window_ready", { reason: "shell" });
-          } catch (e) {
-            /* the deadline on the Rust side is the guarantee */
-          }
-        }
+        window.__TAURI_INTERNALS__.invoke("launch_document_parsed");
       } catch (e) {
-        /* no payload, or no screen recorded yet — the skeleton stands */
+        /* nothing depends on this */
       }
     </script>
     <script type="module" src="/src/main.tsx"></script>

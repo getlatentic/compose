@@ -44,22 +44,6 @@ function firstLineTop(): number {
   return line ? Math.round(line.getBoundingClientRect().top) : -1;
 }
 
-/** The replayed screen's own shape, so it can be compared against what React
- *  draws over it: if the two agree, the handoff is not a visible change. */
-function replayedScreen(): string {
-  const shell = document.getElementById("boot-shell");
-  if (!shell) {
-    return "gone";
-  }
-  const tree = shell.querySelector(".file-tree");
-  return [
-    `rows=${shell.querySelectorAll(".file-row").length}`,
-    `tabs=${shell.querySelectorAll(".tab-button").length}`,
-    `chars=${shell.querySelector(".cm-content")?.textContent?.length ?? -1}`,
-    `treeScroll=${tree ? Math.round(tree.scrollTop) : -1}`,
-  ].join(" ");
-}
-
 function screenSignature(): string {
   const skeleton = document.querySelector(".app-skeleton") ? "skeleton" : "app";
   const rows = document.querySelectorAll(".file-row").length;
@@ -74,7 +58,6 @@ function screenSignature(): string {
   const tree = document.querySelector("#root .file-tree");
   return [
     skeleton,
-    `replay[${replayedScreen()}]`,
     `liveTreeScroll=${tree ? Math.round(tree.scrollTop) : -1}`,
     paneGeometry(),
     `rows=${rows}`,

@@ -39,16 +39,18 @@ fn show_once(app: &AppHandle, reason: &str) {
     let _ = window.set_focus();
 }
 
-/// There is something worth looking at. `reason` says what — the replayed
-/// screen going up, or the live app finishing — because which of the two wins
-/// the race is the whole question.
+/// The app has drawn a complete first screen.
 #[tauri::command]
-pub fn launch_window_ready(app: AppHandle, reason: Option<String>) {
-    let label = match reason.as_deref() {
-        Some("shell") => "window-shown-by-replayed-screen",
-        _ => "window-shown-by-live-app",
-    };
-    show_once(&app, label);
+pub fn launch_window_ready(app: AppHandle) {
+    show_once(&app, "window-shown-by-live-app");
+}
+
+/// The web view has begun parsing the document. Nothing waits on this; it marks
+/// the moment the web view actually started, which is otherwise invisible from
+/// the Rust side of the launch.
+#[tauri::command]
+pub fn launch_document_parsed() {
+    crate::boot_native_mark("document-parsing");
 }
 
 /// Start the deadline the front end is racing.

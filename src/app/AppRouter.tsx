@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { harnessReadiness } from "../lib/ipc/harnessClient";
 import { externalList } from "../lib/ipc/externalFilesClient";
 import { getOnboarding, listWorkspaces } from "../lib/ipc/workspaceClient";
@@ -8,7 +8,7 @@ import { MainApp } from "./MainApp";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useHarnessStore } from "./store/harnessStore";
 import { useUiStore } from "./store/uiStore";
-import { scheduleBootShellCapture } from "../lib/bootShell";
+import { documentSurfaceReady } from "../features/editor/documentSurface";
 import { markLaunchWindowReady } from "../lib/ipc/launchWindow";
 import { trackAppLaunch } from "../lib/analytics/track";
 import { markBoot } from "../lib/perf";
@@ -26,55 +26,39 @@ import { bootPayload } from "./store/bootPayload";
  * splash/onboarding.
  */
 /**
- * How long to wait for the frame that completes the app before showing it
- * anyway. `requestAnimationFrame` is the signal; this is the backstop, because
- * WKWebView throttles RAF whenever the window isn't frontmost — a launch behind
- * another app would otherwise never reveal.
+ * Hold the window until the app has drawn, then open it.
+ *
+ * A hidden window's animation frames never run, and the editor measures its
+ * viewport on one — so the last stroke of drawing can only land once the window
+ * is up. Waiting for it while hidden waits forever. Everything else IS drawn by
+ * then: the tree, the tabs, the document's text. So the window opens on that,
+ * and the editor's measure lands in the frame after.
+ *
+ * The deadline is the backstop for a launch where the surface never mounts —
+ * an empty workspace, or one that failed — and Rust has a longer one behind it.
  */
-const REVEAL_DEADLINE_MS = 200;
+const OPEN_DEADLINE_MS = 400;
 
-/**
- * Whether the app is ready to be looked at.
- *
- * CodeMirror's constructor ends in `requestMeasure()`, so its real viewport
- * lands one animation frame after the app renders: the first painted frame
- * shows a few lines of the document and the next shows the rest. Nothing can
- * make that measurement synchronous, so the app is mounted — laid out, and
- * therefore measurable — but not shown until that frame has been and gone.
- *
- * Only a launch with a document to draw waits; anything else is ready as it
- * renders.
- */
-function useCompleteAppReveal(waitForFrame: boolean): boolean {
-  const [revealed, setRevealed] = useState(!waitForFrame);
-  useEffect(function showWindowWhenNothingIsWaitedOn() {
-    if (!waitForFrame) {
+function useOpenWindowWhenDrawn(waitForSurface: boolean): void {
+  useEffect(() => {
+    let live = true;
+    const open = () => {
+      if (!live) return;
+      live = false;
       document.getElementById("boot-shell")?.remove();
       void markLaunchWindowReady();
-      scheduleBootShellCapture();
-    }
-  }, [waitForFrame]);
-  const reveal = useCallback(() => {
-    setRevealed(true);
-    // Take down the screen the window opened on and hand over to the live app.
-    // Both are complete, so the swap is not a visible change.
-    document.getElementById("boot-shell")?.remove();
-    // A no-op when the replayed screen already asked for the window.
-    void markLaunchWindowReady();
-    scheduleBootShellCapture();
-  }, []);
-  useEffect(() => {
-    if (revealed) {
+    };
+    if (!waitForSurface) {
+      open();
       return;
     }
-    const frame = requestAnimationFrame(() => requestAnimationFrame(reveal));
-    const deadline = window.setTimeout(reveal, REVEAL_DEADLINE_MS);
+    void documentSurfaceReady().then(open);
+    const deadline = window.setTimeout(open, OPEN_DEADLINE_MS);
     return () => {
-      cancelAnimationFrame(frame);
+      live = false;
       window.clearTimeout(deadline);
     };
-  }, [revealed, reveal]);
-  return revealed;
+  }, [waitForSurface]);
 }
 
 export function AppRouter() {
@@ -87,7 +71,7 @@ export function AppRouter() {
   // before this bundle ran, so it opens the gate on the first render and never
   // shows the splash at all. The fan-out below still runs and still decides.
   const [bootHydrated, setBootHydrated] = useState(() => bootPayload() !== null);
-  const appRevealed = useCompleteAppReveal(Boolean(bootPayload()?.activeFile));
+  useOpenWindowWhenDrawn(Boolean(bootPayload()?.activeFile));
   // Read the field, not `onboardingComplete()` — calling the method inside a
   // selector re-runs its body on every store mutation and masks future logic
   // changes behind a no-op re-render. Reading the boolean lets the store bail
@@ -187,16 +171,5 @@ export function AppRouter() {
   if (!onboardingComplete) {
     return <SetupScreen />;
   }
-  // Mounted but hidden until complete — `visibility`, not `display`, so the
-  // layout the editor measures itself against is the real one.
-  return (
-    <>
-      {appRevealed ? null : <SplashScreen />}
-      <div className="app-reveal" style={appRevealed ? undefined : HIDDEN_UNTIL_COMPLETE}>
-        <MainApp />
-      </div>
-    </>
-  );
+  return <MainApp />;
 }
-
-const HIDDEN_UNTIL_COMPLETE = { visibility: "hidden" } as const;

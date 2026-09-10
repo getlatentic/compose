@@ -14,7 +14,7 @@ export async function markLaunchWindowReady(): Promise<void> {
     return;
   }
   try {
-    await invoke("launch_window_ready", { reason: "app" });
+    await invoke("launch_window_ready");
   } catch {
     // The deadline on the Rust side is the guarantee, not this call.
   }

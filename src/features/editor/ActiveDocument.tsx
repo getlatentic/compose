@@ -28,6 +28,7 @@ import { markBoot, markTabSwitchEnd } from "../../lib/perf";
 import { registerActiveEditorFlush } from "../../lib/editor/editorFlush";
 import { showToast } from "../toast/toastStore";
 import { useConfirm } from "../dialogs/ConfirmProvider";
+import { markDocumentSurfaceMounted } from "./documentSurface";
 import { useImageAltPrompt } from "./useImageAltPrompt";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
@@ -138,6 +139,8 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
   // screen now (the last boot phase). No-op outside COMPOSE_PERF builds.
   useEffect(() => {
     markBoot("doc");
+    // The launch is holding the window for this.
+    markDocumentSurfaceMounted();
   }, []);
 
   // Debounced autosave-to-disk. When the active file is dirty, write it ~1s
