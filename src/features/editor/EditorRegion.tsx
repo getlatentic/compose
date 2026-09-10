@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { PaneTabs, type EditorTab, type TabArea } from "./PaneTabs";
 import { DocumentStatusBar } from "./DocumentStatusBar";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_NAME } from "./welcomeNote";
@@ -17,15 +17,8 @@ import {
 import { isActiveFilePresent, resolveOpenTabs } from "../../app/workspaceModel";
 import { flushActiveEditor } from "../../lib/editor/editorFlush";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
+import { ActiveDocument } from "./ActiveDocument";
 
-// CodeMirror, KaTeX and the markdown decoration stack are by far the heaviest
-// code in the app, and only the document surface needs them. Deferring the
-// surface alone — not this whole region — lets the tab strip, the status bar
-// and the empty states paint with the rest of the shell, so a launch fills in
-// one pane's text rather than swapping in the pane.
-const ActiveDocument = lazy(() =>
-  import("./ActiveDocument").then((module) => ({ default: module.ActiveDocument })),
-);
 
 /**
  * The editor region — a LAYOUT SHELL: the tab strip, the editor body (which
@@ -187,9 +180,7 @@ export function EditorRegion() {
         />
       )}
       {activeFileExists ? (
-        <Suspense fallback={<div className="editor-body" />}>
-          <ActiveDocument />
-        </Suspense>
+        <ActiveDocument />
       ) : scanPending ? (
         <div className="editor-body" />
       ) : (

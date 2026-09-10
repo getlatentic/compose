@@ -354,6 +354,21 @@ export function flatten(nodes: TreeNode[], expanded: Set<string>, out: TreeNode[
   return out;
 }
 
+/** The document whose folders should be open. The `activePath` prop is blank
+ *  while an external file holds focus — the tree drops its highlight then — but
+ *  the workspace's own open file is still what the folders should be showing,
+ *  so collapsing them on that blank is a jump with nothing behind it. */
+function revealedPath(activePath: string): string {
+  if (activePath) {
+    return activePath;
+  }
+  const state = useWorkspaceStore.getState();
+  return (
+    state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId)
+      ?.activeFilePath ?? ""
+  );
+}
+
 /** The folder paths leading to a file, outermost first — the ancestors that
  *  must be expanded for the file's row to appear in the flattened tree. */
 export function ancestorFolders(path: string): string[] {
@@ -391,19 +406,9 @@ function FileTreeInner({
   // Seeded from the open file rather than left to the effect that reveals it:
   // a launch already knows which file is open, and expanding it a frame later
   // moves every row below it — the scrollbar included.
-  //
-  // Read from the store, not the `activePath` prop: that prop is blank while an
-  // external file holds focus (the tree drops its highlight then), and the
-  // folders still have to be open around the workspace's own document.
-  const [expanded, setExpanded] = useState<Set<string>>(() => {
-    const state = useWorkspaceStore.getState();
-    const openPath =
-      activePath ||
-      state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId)
-        ?.activeFilePath ||
-      "";
-    return new Set(openPath ? ancestorFolders(openPath) : []);
-  });
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(ancestorFolders(revealedPath(activePath))),
+  );
   const rows = useMemo(() => flatten(tree, expanded), [tree, expanded]);
   // The active workspace's scan runs in the background (MainApp no longer gates
   // the app on it), so an empty tree means "still scanning", not "no notes".
@@ -587,15 +592,16 @@ function FileTreeInner({
   // once per workspace (keyed by workspaceRoot) when its tree first loads; the
   // user's later expand/collapse is left untouched. Because folders default
   // collapsed, a subfolder that loads late can't spring the tree open.
-  // Already initialized when the seed above did it, so the effect doesn't
-  // re-run and hand back an equal-but-new Set.
-  const initializedForWorkspace = useRef<string | null>(activePath ? workspaceRoot : null);
+  // The open-folder state above IS the initialisation, so this starts marked
+  // done for the workspace mounted with. The effect below then fires only on an
+  // actual switch, never a beat after the launch to undo the seed.
+  const initializedForWorkspace = useRef<string | null>(workspaceRoot ?? null);
   useEffect(() => {
     if (initializedForWorkspace.current === workspaceRoot || tree.length === 0) {
       return;
     }
     initializedForWorkspace.current = workspaceRoot;
-    setExpanded(new Set(activePath ? ancestorFolders(activePath) : []));
+    setExpanded(new Set(ancestorFolders(revealedPath(activePath))));
   }, [tree, workspaceRoot, activePath]);
 
   // Reveal the active file: expand its ancestor folders so its row exists in the

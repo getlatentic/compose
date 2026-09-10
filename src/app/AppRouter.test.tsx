@@ -64,6 +64,7 @@ async function renderRouter(payload: unknown) {
   render(<AppRouter />);
 }
 
+
 afterEach(() => {
   delete (window as { __COMPOSE_BOOT__?: unknown }).__COMPOSE_BOOT__;
 });
@@ -84,4 +85,5 @@ describe("the first render of a launch", () => {
     expect(screen.getByRole("status")).toBeTruthy();
     expect(screen.queryByTestId("main-app")).toBeNull();
   });
+
 });
