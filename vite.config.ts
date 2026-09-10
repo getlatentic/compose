@@ -48,12 +48,13 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "decode-named-character-reference": workerSafeCharacterDecoder,
-      // `<Profiler>` reports zero in a production react-dom. The profiling
-      // build keeps the timers, and costs enough that only a COMPOSE_PERF
-      // build gets it: it puts ~250KB into the eager chunk (1,962KB release
-      // against 2,210KB instrumented), which is worth ~25ms of `entry`. Every
-      // COMPOSE_PERF measurement is that much pessimistic against what ships.
-      ...(process.env.COMPOSE_PERF === "1"
+      // `<Profiler>` reports zero against a production react-dom, so a
+      // component profile needs the profiling build. It puts ~250KB into the
+      // eager chunk — 1,962KB against 2,210KB — which is worth ~25ms of
+      // `entry`, so it is its OWN flag rather than riding on COMPOSE_PERF:
+      // timing a launch and profiling one are different questions, and a
+      // COMPOSE_PERF build has to weigh what ships or its numbers are fiction.
+      ...(process.env.COMPOSE_PROFILE === "1"
         ? { "react-dom/client": "react-dom/profiling" }
         : {}),
     },

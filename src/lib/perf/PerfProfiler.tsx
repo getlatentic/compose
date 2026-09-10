@@ -8,7 +8,8 @@ import { bootMarks } from "./index";
  * Timing marks say when a component's render body ran; they cannot say how long
  * its subtree took, because the work interleaves. `actualDuration` can. Needs
  * the profiling build of react-dom, which `vite.config.ts` aliases in only for
- * `COMPOSE_PERF` builds — a release build renders `children` and nothing else.
+ * `COMPOSE_PROFILE=1` — that build is ~250KB heavier, so it answers "what did
+ * each region cost" and never "how fast is the launch".
  */
 export function PerfProfiler({ id, children }: { id: string; children: ReactNode }) {
   if (!__COMPOSE_PERF__) {
