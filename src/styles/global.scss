@@ -575,6 +575,8 @@ select {
 .new-menu__panel {
   position: fixed;
   z-index: 9000;
+  // A menu is as wide as its widest row needs, not a fixed slab.
+  padding-block: 0.25rem;
   background: var(--cds-layer-02, #ffffff);
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
@@ -582,6 +584,8 @@ select {
 
 // A neutral divider between the file-system group and chat.
 .new-menu__group + .new-menu__group {
+  margin-block-start: 0.25rem;
+  padding-block-start: 0.25rem;
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
@@ -589,10 +593,13 @@ select {
 .new-menu__item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  // macOS menu proportions. At the previous 46px the 16px icon and the 14px
+  // label floated in a lot of empty height, which read as loose rather than
+  // roomy — and it left the icon looking stranded beside its own label.
+  gap: 0.5rem;
   inline-size: 100%;
-  block-size: 2.875rem;
-  padding-inline: 1rem;
+  block-size: 1.875rem;
+  padding-inline: 0.75rem;
   border: 0;
   background: transparent;
   color: var(--cds-text-primary, #161616);

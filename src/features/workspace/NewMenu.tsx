@@ -25,15 +25,19 @@ interface NewMenuProps {
 
 /**
  * The single "+ New" create menu at the end of the sidebar tab row. A custom
- * dropdown (not Carbon's `MenuButton`) so it hits the interaction spec exactly:
- * a 246px panel of 46px rows — 16px icon, label, right-aligned mono shortcut —
- * with neutral (not blue-tinted) hover, and a trigger whose caret sits right
- * after the label with no boxed divider. The menu leads with the current tab's
- * subject: New note on Notes, New chat on Chat.
+ * dropdown (not Carbon's `MenuButton`) so it can hold macOS menu proportions —
+ * 30px rows in a panel sized to its widest row, 16px icon, label, right-aligned
+ * shortcut in the system font — with neutral (not blue-tinted) hover, and a
+ * trigger whose caret sits right after the label with no boxed divider. The
+ * menu leads with the current tab's subject: New note on Notes, New chat on
+ * Chat.
+ *
+ * It was originally specified at 246x46; the rows read as loose at that height,
+ * with the icon stranded beside its label in the spare space.
  */
 export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: NewMenuProps) {
   // Portaled and fixed-positioned, not absolute inside the sidebar: the sidebar
-  // clips its overflow, so a 246px panel anchored in it lost its left edge as
+  // clips its overflow, so a fixed-width panel anchored in it lost its left edge as
   // soon as the pane was dragged narrower than the panel. Anchored to the
   // trigger's RIGHT edge, which is where it has always appeared to hang from.
   const { open, setOpen, coords, triggerRef, popoverRef } = useAnchoredPopover<
@@ -42,7 +46,8 @@ export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: Ne
   >({
     placement: "below",
     align: "end",
-    maxWidth: 246,
+    // Sized to the widest row ("New folder" + ⌘⇧N), not a fixed slab.
+    maxWidth: 208,
     gap: 6,
     getInitialFocus: (pop) => pop.querySelector<HTMLButtonElement>(".new-menu__item"),
   });
