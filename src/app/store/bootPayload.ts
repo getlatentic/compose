@@ -36,6 +36,7 @@ export interface BootPayload {
   activeFile: BootActiveFile | null;
   externalFiles: ExternalFilesList | null;
   files: WorkspaceFileEntry[];
+  folders: string[];
   workspaces: WorkspaceListResult;
 }
 
@@ -56,6 +57,7 @@ function readGlobal(): BootPayload | null {
     activeFile: payload.activeFile ?? null,
     externalFiles: payload.externalFiles ?? null,
     files: Array.isArray(payload.files) ? payload.files : [],
+    folders: Array.isArray(payload.folders) ? payload.folders : [],
     workspaces: payload.workspaces,
   };
 }
@@ -95,7 +97,12 @@ export function bootSeed(): Partial<WorkspaceState> {
  *  The buffer is applied only when it is still the file the tabs point at — a
  *  payload can only ever be as fresh as the moment it was read. */
 function seedActiveWorkspace(workspace: Workspace, payload: BootPayload): Workspace {
-  const seeded = applyFileSnapshot(workspace, payload.files);
+  // Folders as well as files: a folder with no markdown file in it is invisible
+  // to the file list, and those rows arriving late are a visible reflow.
+  const seeded = applyFileSnapshot(
+    payload.folders.length > 0 ? { ...workspace, folders: payload.folders } : workspace,
+    payload.files,
+  );
   const active = payload.activeFile;
   if (!active || active.workspaceId !== seeded.id || active.relativePath !== seeded.activeFilePath) {
     return seeded;

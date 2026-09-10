@@ -175,9 +175,16 @@ pub fn workspace_scan(
 pub fn workspace_scan_folders(
     workspace_id: String,
     registry: State<'_, WorkspaceRegistry>,
+    metadata: State<'_, MetadataStore>,
 ) -> Result<Vec<String>, FileError> {
     let root = registry.workspace_root(&workspace_id)?;
-    scan_folders(&root)
+    let folders = scan_folders(&root)?;
+    // Persisted so the next launch can paint these rows in its first frame.
+    // A write failure costs freshness on that launch, never this answer.
+    if let Err(error) = metadata.replace_folders(&workspace_id, &folders) {
+        eprintln!("folder inventory sync failed for {workspace_id}: {error}");
+    }
+    Ok(folders)
 }
 
 /// Create an empty directory in the workspace (a real "New folder").

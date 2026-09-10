@@ -388,7 +388,22 @@ function FileTreeInner({
   const tree = useMemo(() => buildTree(files, folders), [files, folders]);
   // Folders open by presence in this set — default (absent) is COLLAPSED, so the
   // tree opens showing only top-level rows plus whatever the effects below add.
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Seeded from the open file rather than left to the effect that reveals it:
+  // a launch already knows which file is open, and expanding it a frame later
+  // moves every row below it — the scrollbar included.
+  //
+  // Read from the store, not the `activePath` prop: that prop is blank while an
+  // external file holds focus (the tree drops its highlight then), and the
+  // folders still have to be open around the workspace's own document.
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const state = useWorkspaceStore.getState();
+    const openPath =
+      activePath ||
+      state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId)
+        ?.activeFilePath ||
+      "";
+    return new Set(openPath ? ancestorFolders(openPath) : []);
+  });
   const rows = useMemo(() => flatten(tree, expanded), [tree, expanded]);
   // The active workspace's scan runs in the background (MainApp no longer gates
   // the app on it), so an empty tree means "still scanning", not "no notes".
@@ -572,7 +587,9 @@ function FileTreeInner({
   // once per workspace (keyed by workspaceRoot) when its tree first loads; the
   // user's later expand/collapse is left untouched. Because folders default
   // collapsed, a subfolder that loads late can't spring the tree open.
-  const initializedForWorkspace = useRef<string | null>(null);
+  // Already initialized when the seed above did it, so the effect doesn't
+  // re-run and hand back an equal-but-new Set.
+  const initializedForWorkspace = useRef<string | null>(activePath ? workspaceRoot : null);
   useEffect(() => {
     if (initializedForWorkspace.current === workspaceRoot || tree.length === 0) {
       return;

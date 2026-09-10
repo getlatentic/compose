@@ -42,6 +42,7 @@ pub struct BootPayload {
     workspaces: Option<crate::workspace::WorkspaceList>,
     external_files: Option<crate::external::ExternalFilesList>,
     files: Vec<WorkspaceFileEntry>,
+    folders: Vec<String>,
     active_file: Option<ActiveFile>,
 }
 
@@ -118,7 +119,7 @@ pub(crate) fn read(profile_dir: &Path) -> BootPayload {
         .and_then(|_| external_registry.list().ok());
 
     let active_id = list.active_workspace_id.clone();
-    let files = active_id
+    let (files, folders) = active_id
         .as_deref()
         .map(|id| inventory(profile_dir, id))
         .unwrap_or_default();
@@ -130,21 +131,26 @@ pub(crate) fn read(profile_dir: &Path) -> BootPayload {
         workspaces: Some(list),
         external_files,
         files,
+        folders,
         active_file,
     }
 }
 
-/// The active vault's file tree as the last scan recorded it. Identical to what
-/// `workspace_files_snapshot` serves, read here through the same query.
-fn inventory(profile_dir: &Path, workspace_id: &str) -> Vec<WorkspaceFileEntry> {
+/// The active vault's tree as the last scan recorded it — its files, and the
+/// folders those files can't reveal. A folder holding no markdown file is
+/// invisible to the document inventory, and those are precisely the rows that
+/// used to appear a beat after the rest of the tree.
+fn inventory(profile_dir: &Path, workspace_id: &str) -> (Vec<WorkspaceFileEntry>, Vec<String>) {
     let metadata = MetadataStore::default();
     if metadata.init_from_dir(profile_dir).is_err() {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
-    metadata
+    let files = metadata
         .document_inventory(workspace_id)
         .map(crate::files::inventory_entries)
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let folders = metadata.folder_inventory(workspace_id).unwrap_or_default();
+    (files, folders)
 }
 
 /// The document the last session left open, read through the same path the
@@ -235,6 +241,9 @@ mod tests {
                 }],
             )
             .expect("sync docs");
+        metadata
+            .replace_folders(&workspace_id, &["images".to_owned()])
+            .expect("record folders");
 
         Profile {
             dir: profile.path().to_owned(),
@@ -259,6 +268,11 @@ mod tests {
             payload.files.iter().map(|entry| entry.relative_path.as_str()).collect::<Vec<_>>(),
             vec!["note.md"],
             "the tree, from the inventory the last scan wrote"
+        );
+        assert_eq!(
+            payload.folders,
+            vec!["images".to_owned()],
+            "a folder with no markdown file in it can only come from here"
         );
         let active = payload.active_file.expect("the open document");
         assert_eq!(active.relative_path, "note.md");
