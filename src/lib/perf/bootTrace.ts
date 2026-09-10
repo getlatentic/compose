@@ -32,6 +32,18 @@ function paneGeometry(): string {
   return columns.replace(/[\d.]+px/g, (px) => `${Math.round(parseFloat(px))}px`);
 }
 
+function boxHeight(selector: string): number {
+  const element = document.querySelector(selector);
+  return element ? Math.round(element.getBoundingClientRect().height) : -1;
+}
+
+/** Where the document's first line sits. A number that moves is the editor
+ *  shifting under the reader, which a character count cannot show. */
+function firstLineTop(): number {
+  const line = document.querySelector(".cm-content .cm-line");
+  return line ? Math.round(line.getBoundingClientRect().top) : -1;
+}
+
 function screenSignature(): string {
   const skeleton = document.querySelector(".app-skeleton") ? "skeleton" : "app";
   const rows = document.querySelectorAll(".file-row").length;
@@ -39,9 +51,22 @@ function screenSignature(): string {
   const editor = document.querySelector(".cm-content");
   const chars = editor ? (editor.textContent ?? "").length : -1;
   const region = document.querySelector(".editor-region") ? "region" : "no-region";
-  return [skeleton, paneGeometry(), `rows=${rows}`, `tabs=${tabs}`, region, `chars=${chars}`].join(
-    " | ",
-  );
+  // Content height vs rendered window: the first is what moves a scrollbar, the
+  // second is only virtualisation filling in. They look identical in a row count.
+  const treeContent = boxHeight(".file-tree__sizer");
+  const treeViewport = boxHeight(".file-tree");
+  return [
+    skeleton,
+    paneGeometry(),
+    `rows=${rows}`,
+    `treeContent=${treeContent}`,
+    `treeViewport=${treeViewport}`,
+    `tabs=${tabs}`,
+    region,
+    `chars=${chars}`,
+    `docHeight=${boxHeight(".cm-content")}`,
+    `line1Top=${firstLineTop()}`,
+  ].join(" | ");
 }
 
 

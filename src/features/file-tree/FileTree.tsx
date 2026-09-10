@@ -585,6 +585,13 @@ function FileTreeInner({
     estimateSize: () => ROW_HEIGHT,
     overscan: 12,
     getItemKey: (index) => rowKey(rows[index]),
+    // Without an initial rect the first render sizes its window against a
+    // height of zero and fills the rest in once the element is measured — rows
+    // appearing under the reader a beat after the launch drew them. The tree
+    // can never be taller than the window, so that is the estimate: too many
+    // rows render below the fold for one frame, where nobody can see them, and
+    // are trimmed on measurement.
+    initialRect: { width: 0, height: typeof window === "undefined" ? 0 : window.innerHeight },
   });
 
   // Open a workspace fully collapsed — only top-level folders and files show,
