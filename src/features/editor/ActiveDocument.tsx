@@ -19,7 +19,7 @@ import { markdownToClipboardHtml } from "../../lib/markdown/markdownToClipboardH
 import { exportDocumentToPdf } from "../../lib/export/pdfExport";
 import { exportDocumentToHtml } from "../../lib/export/htmlExport";
 import { printDocument } from "../../lib/export/printDocument";
-import { resolveDisplaySrc } from "./imageDisplaySrc";
+import { imageWritePath, resolveDisplaySrc } from "./imagePaths";
 import { writeBinaryFile } from "../../lib/ipc/filesClient";
 import { openExternalUrl } from "../../lib/links/openExternal";
 import { listen } from "@tauri-apps/api/event";
@@ -176,9 +176,13 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
         });
         throw new Error("image insert unavailable for external files");
       }
-      await writeBinaryFile(activeWorkspaceId ?? "preview", relPath, bytes);
+      await writeBinaryFile(
+        activeWorkspaceId ?? "preview",
+        imageWritePath(activeFilePath, relPath),
+        bytes,
+      );
     },
-    [activeWorkspaceId, imageInsertEnabled],
+    [activeFilePath, activeWorkspaceId, imageInsertEnabled],
   );
   // Stabilize the editor's Ask callback so React.memo on the editor can
   // short-circuit re-renders.

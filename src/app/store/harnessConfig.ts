@@ -109,6 +109,20 @@ export function persistHarnessPrefs(prefs: HarnessPrefs) {
  * loads (browser preview, pre-bootstrap) it returns conservative no-capability
  * defaults; the loaded catalog then supplies the real ones.
  */
+/**
+ * Whether to inline file CONTENT into the prompt instead of a path reference.
+ *
+ * A trust policy about the model, not a capability of the adapter. Every
+ * adapter that offers tools carries `read`/`glob`/`grep`/`list` — the
+ * openai-compatible runtime included — so "can it fetch its own context" is
+ * true everywhere and decides nothing. What varies is whether the model
+ * reliably will, so this asks whether the run goes through Compose's own
+ * runtime rather than a standalone agent that brought its own.
+ */
+export function inlinesFileContent(catalog: HarnessInfo[], harnessId: string): boolean {
+  return catalog.find((entry) => entry.id === harnessId)?.provider != null;
+}
+
 export function harnessCapabilitiesOf(
   catalog: HarnessInfo[],
   harnessId: string,

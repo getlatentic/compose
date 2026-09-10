@@ -4,13 +4,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   editGuardFor,
   harnessExtraArgs,
+  inlinesFileContent,
   loadHarnessPrefs,
   persistHarnessPrefs,
   HARNESS_PREFS_KEY,
   supportsPermissionMode,
   type HarnessPrefs,
 } from "./harnessConfig";
-import type { HarnessCapabilities } from "../../lib/ipc/harnessClient";
+import type { HarnessCapabilities, HarnessInfo } from "../../lib/ipc/harnessClient";
 
 function caps(over: Partial<HarnessCapabilities> = {}): HarnessCapabilities {
   return {
@@ -25,6 +26,46 @@ function caps(over: Partial<HarnessCapabilities> = {}): HarnessCapabilities {
     ...over,
   };
 }
+
+function agent(id: string, provider: HarnessInfo["provider"], over: Partial<HarnessCapabilities> = {}): HarnessInfo {
+  return {
+    id,
+    displayName: id,
+    description: "",
+    installHint: null,
+    capabilities: caps(over),
+    provider,
+  };
+}
+
+describe("whether a run gets file content inlined or a path reference", () => {
+  const catalog: HarnessInfo[] = [
+    agent("ollama", { local: true }),
+    agent("openrouter", { local: false }),
+    // A standalone agent that honours custom instructions — which is what
+    // agent-harness 0.6.0-alpha.2 makes true for claude and codex.
+    agent("claude", null, { customInstructions: true }),
+  ];
+
+  it("inlines for models on Compose's own runtime", () => {
+    expect(inlinesFileContent(catalog, "ollama")).toBe(true);
+    expect(inlinesFileContent(catalog, "openrouter")).toBe(true);
+  });
+
+  it("sends a path reference to a standalone agent even when it takes custom instructions", () => {
+    // The predicate used to be `capabilities.customInstructions`, which meant
+    // an upstream flag flipping true silently switched claude and codex to
+    // inlined snapshots: bigger prompts, IO that was skipped by design, and the
+    // cache-stability the path reference exists to protect, gone. Nothing
+    // errored. The capability answers a different question.
+    expect(catalog.find((a) => a.id === "claude")?.capabilities.customInstructions).toBe(true);
+    expect(inlinesFileContent(catalog, "claude")).toBe(false);
+  });
+
+  it("does not inline for an agent the catalog has never heard of", () => {
+    expect(inlinesFileContent(catalog, "nope")).toBe(false);
+  });
+});
 
 describe("which guard stands between an agent and the user's files", () => {
   it("covers every combination, because the wrong one edits real files unguarded", () => {
