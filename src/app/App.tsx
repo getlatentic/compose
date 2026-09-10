@@ -1,18 +1,13 @@
-import "katex/dist/katex.min.css";
 import { useEffect } from "react";
 
 import { AppRouter } from "./AppRouter";
 import { ToastViewport } from "../features/toast/ToastViewport";
 import { UpdateBanner } from "../features/updater/UpdateBanner";
 import { useUpdaterStore } from "./store/updaterStore";
-import { TextPromptProvider, useTextPrompt } from "../features/dialogs/TextPromptProvider";
+import { TextPromptProvider } from "../features/dialogs/TextPromptProvider";
 import { LinkInsertProvider } from "../features/dialogs/LinkInsertProvider";
 import { ConfirmProvider } from "../features/dialogs/ConfirmProvider";
 import { RenameProvider } from "../features/dialogs/RenameProvider";
-import {
-  IMAGE_EDIT_ALT_EVENT,
-  type ImageEditAltEventDetail,
-} from "@latentic/live-markdown";
 import { markBoot } from "../lib/perf";
 import { useAppTheme } from "../features/shared/useAppTheme";
 import { useAppZoom } from "../features/shared/useAppZoom";
@@ -31,7 +26,6 @@ export function App() {
       <LinkInsertProvider>
         <ConfirmProvider>
           <RenameProvider>
-            <ImageEditAltListener />
             <UpdateChecker />
             <ToastViewport />
             <UpdateBanner />
@@ -55,30 +49,3 @@ function UpdateChecker() {
   return null;
 }
 
-function ImageEditAltListener() {
-  const promptText = useTextPrompt();
-  useEffect(function bindImageEditAltListener() {
-    function onEdit(event: Event) {
-      const detail = (event as CustomEvent<ImageEditAltEventDetail>).detail;
-      void (async () => {
-        const newAlt = await promptText({
-          title: "Edit image alt text",
-          label: "Alt text",
-          defaultValue: detail.currentAlt,
-          allowEmpty: true,
-        });
-        if (newAlt === null) return;
-        const next = `![${newAlt}](${detail.rawSrc})`;
-        detail.view.dispatch({
-          changes: { from: detail.sourceFrom, to: detail.sourceTo, insert: next },
-          userEvent: "input.edit.image-alt",
-        });
-      })();
-    }
-    window.addEventListener(IMAGE_EDIT_ALT_EVENT, onEdit);
-    return function unbind() {
-      window.removeEventListener(IMAGE_EDIT_ALT_EVENT, onEdit);
-    };
-  }, [promptText]);
-  return null;
-}

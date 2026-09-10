@@ -9,12 +9,13 @@ import {
   useState,
 } from "react";
 import { Menu, MenuItem, MenuItemDivider } from "@carbon/react";
-import { CaretDown, CaretRight, Document } from "@carbon/react/icons";
+import { CaretDown, CaretRight } from "@carbon/react/icons";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { useConfirm } from "../dialogs/ConfirmProvider";
+import { persistTreeScroll, readTreeScroll } from "./treeScroll";
 
 /** Fixed row height in px — must match `.file-row` `block-size: 1.75rem` (28px)
  * in global.scss. The virtualizer needs it to place rows without measuring each. */
@@ -196,7 +197,9 @@ const FileRow = memo(function FileRow({
         style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
         title={path}
       >
-        <Document size={16} />
+        {/* No icon: the caret is what tells a folder from a file, and the
+          * column is kept so names line up under a folder's label. */}
+        <span aria-hidden />
         <span className="truncate">{name}</span>
         <FileRowDirtyDot path={path} />
       </button>
@@ -354,6 +357,21 @@ export function flatten(nodes: TreeNode[], expanded: Set<string>, out: TreeNode[
   return out;
 }
 
+/** The document whose folders should be open. The `activePath` prop is blank
+ *  while an external file holds focus — the tree drops its highlight then — but
+ *  the workspace's own open file is still what the folders should be showing,
+ *  so collapsing them on that blank is a jump with nothing behind it. */
+function revealedPath(activePath: string): string {
+  if (activePath) {
+    return activePath;
+  }
+  const state = useWorkspaceStore.getState();
+  return (
+    state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId)
+      ?.activeFilePath ?? ""
+  );
+}
+
 /** The folder paths leading to a file, outermost first — the ancestors that
  *  must be expanded for the file's row to appear in the flattened tree. */
 export function ancestorFolders(path: string): string[] {
@@ -388,7 +406,12 @@ function FileTreeInner({
   const tree = useMemo(() => buildTree(files, folders), [files, folders]);
   // Folders open by presence in this set — default (absent) is COLLAPSED, so the
   // tree opens showing only top-level rows plus whatever the effects below add.
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Seeded from the open file rather than left to the effect that reveals it:
+  // a launch already knows which file is open, and expanding it a frame later
+  // moves every row below it — the scrollbar included.
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(ancestorFolders(revealedPath(activePath))),
+  );
   const rows = useMemo(() => flatten(tree, expanded), [tree, expanded]);
   // The active workspace's scan runs in the background (MainApp no longer gates
   // the app on it), so an empty tree means "still scanning", not "no notes".
@@ -565,6 +588,19 @@ function FileTreeInner({
     estimateSize: () => ROW_HEIGHT,
     overscan: 12,
     getItemKey: (index) => rowKey(rows[index]),
+    // Without an initial rect the first render sizes its window against a
+    // height of zero and fills the rest in once the element is measured — rows
+    // appearing under the reader a beat after the launch drew them. The tree
+    // can never be taller than the window, so that is the estimate: too many
+    // rows render below the fold for one frame, where nobody can see them, and
+    // are trimmed on measurement.
+    initialRect: { width: 0, height: typeof window === "undefined" ? 0 : window.innerHeight },
+    // Start where the tree was left. The reveal below scrolls to the open file
+    // in a passive effect — after the paint — and that scroll is the sidebar
+    // jump. Last session's offset already has that file in view, so restoring
+    // it makes the first frame right and leaves the reveal nothing to do.
+    initialOffset: () => readTreeScroll(workspaceRoot),
+    onChange: (instance) => persistTreeScroll(workspaceRoot, instance.scrollOffset ?? 0),
   });
 
   // Open a workspace fully collapsed — only top-level folders and files show,
@@ -572,13 +608,16 @@ function FileTreeInner({
   // once per workspace (keyed by workspaceRoot) when its tree first loads; the
   // user's later expand/collapse is left untouched. Because folders default
   // collapsed, a subfolder that loads late can't spring the tree open.
-  const initializedForWorkspace = useRef<string | null>(null);
+  // The open-folder state above IS the initialisation, so this starts marked
+  // done for the workspace mounted with. The effect below then fires only on an
+  // actual switch, never a beat after the launch to undo the seed.
+  const initializedForWorkspace = useRef<string | null>(workspaceRoot ?? null);
   useEffect(() => {
     if (initializedForWorkspace.current === workspaceRoot || tree.length === 0) {
       return;
     }
     initializedForWorkspace.current = workspaceRoot;
-    setExpanded(new Set(activePath ? ancestorFolders(activePath) : []));
+    setExpanded(new Set(ancestorFolders(revealedPath(activePath))));
   }, [tree, workspaceRoot, activePath]);
 
   // Reveal the active file: expand its ancestor folders so its row exists in the

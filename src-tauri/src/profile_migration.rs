@@ -22,6 +22,26 @@ pub(crate) const LEGACY_BUNDLE_IDS: &[&str] = &["com.compose.app"];
 #[cfg(target_os = "macos")]
 pub(crate) const PROFILE_SUBDIRS: &[&str] = &["Application Support", "WebKit"];
 
+/// Where this app's state lives, resolved without an `AppHandle` so code that
+/// runs before Tauri starts can read it. Matches what `app.path()` resolves
+/// `app_config_dir` and `app_data_dir` to on macOS — the same directory.
+#[cfg(target_os = "macos")]
+pub fn profile_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(|home| {
+        std::path::PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join(CURRENT_BUNDLE_ID)
+    })
+}
+
+/// Only macOS keys its per-app directories by bundle identifier, and only macOS
+/// ships today. Elsewhere the callers fall back to asking Tauri once it is up.
+#[cfg(not(target_os = "macos"))]
+pub fn profile_dir() -> Option<std::path::PathBuf> {
+    None
+}
+
 #[cfg(target_os = "macos")]
 pub fn migrate_legacy_profile() {
     use std::path::PathBuf;

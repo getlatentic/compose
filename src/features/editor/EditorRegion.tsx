@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { PaneTabs, type EditorTab, type TabArea } from "./PaneTabs";
-import { ActiveDocument } from "./ActiveDocument";
 import { DocumentStatusBar } from "./DocumentStatusBar";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_NAME } from "./welcomeNote";
 import { WorkspaceWelcome } from "../workspace/WorkspaceWelcome";
@@ -18,7 +17,9 @@ import {
 import { isActiveFilePresent, resolveOpenTabs } from "../../app/workspaceModel";
 import { flushActiveEditor } from "../../lib/editor/editorFlush";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
-import { markBoot } from "../../lib/perf";
+import { ActiveDocument } from "./ActiveDocument";
+import { PerfProfiler } from "../../lib/perf/PerfProfiler";
+
 
 /**
  * The editor region — a LAYOUT SHELL: the tab strip, the editor body (which
@@ -35,9 +36,6 @@ const FIRST_NOTE_PROMPT =
   "Create my first note — a short Hello World that shows what Compose can do.";
 
 export function EditorRegion() {
-  useEffect(() => {
-    markBoot("editor");
-  }, []);
   // The editor surface follows the FOCUSED container — the loose
   // pseudo-workspace while an external file is showing (#113).
   const focusedArea = useWorkspaceStore((state) => state.focusedArea);
@@ -171,6 +169,7 @@ export function EditorRegion() {
         // window. Exits stay discoverable: ⌘⇧D, Esc, and View → Focus Mode.
         <div className="focus-titlebar" data-tauri-drag-region onMouseDown={onTitlebarMouseDown} />
       ) : (
+        <PerfProfiler id="tabs">
         <PaneTabs
           files={openTabs}
           activeFilePath={activeFilePath}
@@ -181,9 +180,12 @@ export function EditorRegion() {
           leadingInsetPx={sidebarCollapsed ? MAC_TRAFFIC_LIGHTS_INSET : 0}
           onShowSidebar={sidebarCollapsed ? toggleSidebar : undefined}
         />
+        </PerfProfiler>
       )}
       {activeFileExists ? (
-        <ActiveDocument />
+        <PerfProfiler id="document">
+          <ActiveDocument />
+        </PerfProfiler>
       ) : scanPending ? (
         <div className="editor-body" />
       ) : (

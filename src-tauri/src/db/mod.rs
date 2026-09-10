@@ -835,6 +835,81 @@ impl MetadataStore {
             .map_err(|error| format!("could not decode document ids: {error}"))
     }
 
+    /// The file list this vault already persisted, for painting the tree before
+    /// the filesystem walk finishes.
+    ///
+    /// Only what the tree needs — path, mtime, size — and only rows carrying
+    /// both. A row missing either is skipped rather than defaulted: a made-up
+    /// mtime would make the editor believe a buffer is fresh when it is not.
+    ///
+    /// Empty is a normal answer (a vault never scanned, or one whose first scan
+    /// was interrupted), and the caller paints nothing extra. A query that
+    /// genuinely fails is an error, not an empty list — the two must not arrive
+    /// looking the same.
+    /// Replace this vault's folder list with what the scan just walked.
+    pub fn replace_folders(&self, vault_id: &str, folders: &[String]) -> Result<(), String> {
+        validate_storage_id(vault_id, "vault id")?;
+        let now = now_ms();
+        let mut connection = self.vault_connection(vault_id)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("could not start folder sync transaction: {error}"))?;
+        transaction
+            .execute("delete from vault_folders", [])
+            .map_err(|error| format!("could not clear folders: {error}"))?;
+        {
+            let mut statement = transaction
+                .prepare("insert into vault_folders (relative_path, updated_at) values (?1, ?2)")
+                .map_err(|error| format!("could not prepare folder insert: {error}"))?;
+            for folder in folders {
+                validate_relative_metadata_path(folder)?;
+                statement
+                    .execute(rusqlite::params![folder, now])
+                    .map_err(|error| format!("could not record folder: {error}"))?;
+            }
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("could not commit folder sync: {error}"))
+    }
+
+    /// The folder list the last scan recorded. Empty for a vault nobody has
+    /// scanned yet, which is a normal first launch rather than a failure.
+    pub fn folder_inventory(&self, vault_id: &str) -> Result<Vec<String>, String> {
+        validate_storage_id(vault_id, "vault id")?;
+        let connection = self.vault_connection(vault_id)?;
+        let mut statement = connection
+            .prepare("select relative_path from vault_folders")
+            .map_err(|error| format!("could not prepare folder query: {error}"))?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| format!("could not load folders: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("could not decode folders: {error}"))
+    }
+
+    pub fn document_inventory(&self, vault_id: &str) -> Result<Vec<(String, i64, i64)>, String> {
+        validate_storage_id(vault_id, "vault id")?;
+        let connection = self.vault_connection(vault_id)?;
+        let mut statement = connection
+            .prepare(
+                "select current_path, last_seen_mtime, last_seen_size
+                 from documents
+                 where deleted_at is null
+                   and last_seen_mtime is not null
+                   and last_seen_size is not null",
+            )
+            .map_err(|error| format!("could not prepare inventory query: {error}"))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?))
+            })
+            .map_err(|error| format!("could not load inventory: {error}"))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("could not decode inventory: {error}"))
+    }
+
     pub fn replace_search_index_records(
         &self,
         vault_id: &str,
@@ -1178,6 +1253,13 @@ fn migrate_vault_database(db_path: &Path) -> Result<(), String> {
             create unique index if not exists idx_documents_current_path
               on documents(current_path)
               where deleted_at is null;
+            -- The folders the last scan walked, so a launch can paint the tree
+            -- complete. Folders holding no markdown file are not derivable from
+            -- `documents`, and they are exactly the rows that appeared late.
+            create table if not exists vault_folders (
+              relative_path text primary key,
+              updated_at integer not null
+            );
             create table if not exists document_path_history (
               doc_id text not null,
               path text not null,
@@ -2104,6 +2186,87 @@ mod tests {
             Some(before),
             "a retained (unreadable) path must keep its live metadata row"
         );
+    }
+
+    /// The tree paints from this, so it has to carry what the tree needs and
+    /// nothing invented. The positive arm matters: an inventory that returned
+    /// nothing would satisfy "no wrong rows" while being useless.
+    #[test]
+    fn the_inventory_carries_what_the_tree_needs_to_paint() {
+        let (_dir, store, vault_id) = synced_store();
+
+        let rows = store.document_inventory(vault_id).expect("inventory");
+
+        assert_eq!(
+            rows,
+            vec![("notes/a.md".to_owned(), 10, 9)],
+            "path, mtime and size, exactly as the last scan recorded them"
+        );
+    }
+
+    #[test]
+    fn a_deleted_path_is_not_painted_from_the_inventory() {
+        let (_dir, store, vault_id) = synced_store();
+        store
+            .sync_documents(vault_id, Vec::new())
+            .expect("empty sync");
+
+        assert!(
+            store.document_inventory(vault_id).expect("inventory").is_empty(),
+            "a path the scan stopped seeing must not come back on the next launch"
+        );
+    }
+
+    /// The positive arm: a folder holding no markdown file cannot be derived
+    /// from `documents`, so the launch has to read it from here or the row
+    /// appears a frame late.
+    #[test]
+    fn the_folders_a_file_list_cannot_reveal_survive_a_relaunch() {
+        let (_dir, store, vault_id) = synced_store();
+
+        store
+            .replace_folders(vault_id, &["images".to_owned(), "notes".to_owned()])
+            .expect("record folders");
+
+        let mut folders = store.folder_inventory(vault_id).expect("folders");
+        folders.sort();
+        assert_eq!(folders, vec!["images".to_owned(), "notes".to_owned()]);
+    }
+
+    #[test]
+    fn a_folder_the_scan_stopped_seeing_is_not_painted_again() {
+        let (_dir, store, vault_id) = synced_store();
+        store
+            .replace_folders(vault_id, &["gone".to_owned()])
+            .expect("record folders");
+
+        store.replace_folders(vault_id, &[]).expect("empty rescan");
+
+        assert!(
+            store.folder_inventory(vault_id).expect("folders").is_empty(),
+            "the list is replaced wholesale, never merged"
+        );
+    }
+
+    #[test]
+    fn an_unscanned_vault_has_no_folders_rather_than_an_error() {
+        let (_dir, store, vault_id) = synced_store();
+
+        assert_eq!(store.folder_inventory(vault_id).expect("folders"), Vec::<String>::new());
+    }
+
+    /// A vault nobody has scanned answers "nothing yet", which is a normal
+    /// launch and not a failure — the caller falls through to the walk.
+    #[test]
+    fn an_unscanned_vault_has_an_empty_inventory_rather_than_an_error() {
+        let dir = tempdir().expect("temp dir");
+        let store = MetadataStore::default();
+        store.init_from_dir(dir.path()).expect("init metadata");
+        store
+            .ensure_vault("vault-2", "Fresh", Path::new("/tmp/fresh"))
+            .expect("ensure vault");
+
+        assert_eq!(store.document_inventory("vault-2").expect("inventory"), Vec::new());
     }
 
     #[test]

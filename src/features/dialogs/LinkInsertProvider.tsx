@@ -110,94 +110,99 @@ export function LinkInsertProvider({ children }: { children: ReactNode }) {
   return (
     <LinkPromptContext.Provider value={promptLink}>
       {children}
-      <Modal
-        open={pending !== null}
-        modalHeading={pending?.title ?? "Insert link"}
-        primaryButtonText="Insert"
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={!canSubmit}
-        size="md"
-        onRequestSubmit={submit}
-        onRequestClose={() => settle(null)}
-      >
-        <Tabs
-          selectedIndex={activeTab === "url" ? 0 : 1}
-          onChange={({ selectedIndex }) => setActiveTab(selectedIndex === 0 ? "url" : "file")}
+      {/* Mounted only while it is needed. Carbon's Modal is not cheap,
+        * and four of these render at every launch for dialogs that are
+        * almost never open. */}
+      {pending === null ? null : (
+        <Modal
+          open={pending !== null}
+          modalHeading={pending?.title ?? "Insert link"}
+          primaryButtonText="Insert"
+          secondaryButtonText="Cancel"
+          primaryButtonDisabled={!canSubmit}
+          size="md"
+          onRequestSubmit={submit}
+          onRequestClose={() => settle(null)}
         >
-          <TabList aria-label="Link source" contained>
-            <Tab>URL</Tab>
-            <Tab>File</Tab>
-          </TabList>
-          <TabPanels>
-            <TabPanel>
-              <Stack gap={5}>
-                <TextInput
-                  id="link-insert-url"
-                  labelText="URL"
-                  placeholder="https://example.com"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && canSubmit) {
-                      e.preventDefault();
-                      submit();
-                    }
-                  }}
-                />
-                <TextInput
-                  id="link-insert-text"
-                  labelText="Display text"
-                  helperText="Optional — defaults to the URL"
-                  placeholder=""
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                />
-              </Stack>
-            </TabPanel>
-            <TabPanel>
-              <Stack gap={5}>
-                <Search
-                  id="link-insert-file-search"
-                  labelText="Search workspace files"
-                  placeholder="Type to filter…"
-                  size="md"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                />
-                <div className="file-picker" role="listbox" aria-label="Workspace files">
-                  {filtered.length === 0 ? (
-                    <p className="file-picker__empty">No files match.</p>
-                  ) : (
-                    filtered.map((path) => {
-                      const dir = parentDir(path);
-                      const isActive = highlight === path;
-                      return (
-                        <button
-                          key={path}
-                          type="button"
-                          role="option"
-                          aria-selected={isActive}
-                          className={`file-picker__item${
-                            isActive ? " file-picker__item--active" : ""
-                          }`}
-                          onClick={() => setHighlight(path)}
-                          onDoubleClick={() => {
-                            setHighlight(path);
-                            settle({ type: "wikilink", path: stripMdExtension(path) });
-                          }}
-                        >
-                          <span className="file-picker__name">{basename(path)}</span>
-                          {dir ? <span className="file-picker__dir">{dir}</span> : null}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </Stack>
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
-      </Modal>
+          <Tabs
+            selectedIndex={activeTab === "url" ? 0 : 1}
+            onChange={({ selectedIndex }) => setActiveTab(selectedIndex === 0 ? "url" : "file")}
+          >
+            <TabList aria-label="Link source" contained>
+              <Tab>URL</Tab>
+              <Tab>File</Tab>
+            </TabList>
+            <TabPanels>
+              <TabPanel>
+                <Stack gap={5}>
+                  <TextInput
+                    id="link-insert-url"
+                    labelText="URL"
+                    placeholder="https://example.com"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && canSubmit) {
+                        e.preventDefault();
+                        submit();
+                      }
+                    }}
+                  />
+                  <TextInput
+                    id="link-insert-text"
+                    labelText="Display text"
+                    helperText="Optional — defaults to the URL"
+                    placeholder=""
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                </Stack>
+              </TabPanel>
+              <TabPanel>
+                <Stack gap={5}>
+                  <Search
+                    id="link-insert-file-search"
+                    labelText="Search workspace files"
+                    placeholder="Type to filter…"
+                    size="md"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                  />
+                  <div className="file-picker" role="listbox" aria-label="Workspace files">
+                    {filtered.length === 0 ? (
+                      <p className="file-picker__empty">No files match.</p>
+                    ) : (
+                      filtered.map((path) => {
+                        const dir = parentDir(path);
+                        const isActive = highlight === path;
+                        return (
+                          <button
+                            key={path}
+                            type="button"
+                            role="option"
+                            aria-selected={isActive}
+                            className={`file-picker__item${
+                              isActive ? " file-picker__item--active" : ""
+                            }`}
+                            onClick={() => setHighlight(path)}
+                            onDoubleClick={() => {
+                              setHighlight(path);
+                              settle({ type: "wikilink", path: stripMdExtension(path) });
+                            }}
+                          >
+                            <span className="file-picker__name">{basename(path)}</span>
+                            {dir ? <span className="file-picker__dir">{dir}</span> : null}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </Stack>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
+        </Modal>
+      )}
     </LinkPromptContext.Provider>
   );
 }

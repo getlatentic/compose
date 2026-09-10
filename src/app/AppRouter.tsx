@@ -8,8 +8,11 @@ import { MainApp } from "./MainApp";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useHarnessStore } from "./store/harnessStore";
 import { useUiStore } from "./store/uiStore";
+import { documentSurfaceReady } from "../features/editor/documentSurface";
+import { markLaunchWindowReady } from "../lib/ipc/launchWindow";
 import { trackAppLaunch } from "../lib/analytics/track";
 import { markBoot } from "../lib/perf";
+import { bootPayload } from "./store/bootPayload";
 
 /**
  * Top-level screen router. Owns boot hydration and picks exactly one screen:
@@ -22,12 +25,53 @@ import { markBoot } from "../lib/perf";
  * settle, the main app's document subscriptions and effects don't exist during
  * splash/onboarding.
  */
+/**
+ * Hold the window until the app has drawn, then open it.
+ *
+ * A hidden window's animation frames never run, and the editor measures its
+ * viewport on one — so the last stroke of drawing can only land once the window
+ * is up. Waiting for it while hidden waits forever. Everything else IS drawn by
+ * then: the tree, the tabs, the document's text. So the window opens on that,
+ * and the editor's measure lands in the frame after.
+ *
+ * The deadline is the backstop for a launch where the surface never mounts —
+ * an empty workspace, or one that failed — and Rust has a longer one behind it.
+ */
+const OPEN_DEADLINE_MS = 400;
+
+function useOpenWindowWhenDrawn(waitForSurface: boolean): void {
+  useEffect(() => {
+    let live = true;
+    const open = () => {
+      if (!live) return;
+      live = false;
+      document.getElementById("boot-shell")?.remove();
+      void markLaunchWindowReady();
+    };
+    if (!waitForSurface) {
+      open();
+      return;
+    }
+    void documentSurfaceReady().then(open);
+    const deadline = window.setTimeout(open, OPEN_DEADLINE_MS);
+    return () => {
+      live = false;
+      window.clearTimeout(deadline);
+    };
+  }, [waitForSurface]);
+}
+
 export function AppRouter() {
   // Boot-time hydration gate. `loadSetupState` fans out IPC calls (the selected
   // harness's readiness, workspace list, onboarding flag) that take ~1s. Holding
   // the splash until they settle stops the cold-launch flash (SetupScreen →
   // empty workspace → real workspace) — the user sees the correct view first.
-  const [bootHydrated, setBootHydrated] = useState(false);
+  //
+  // A launch that arrived with a boot payload has already answered all of that
+  // before this bundle ran, so it opens the gate on the first render and never
+  // shows the splash at all. The fan-out below still runs and still decides.
+  const [bootHydrated, setBootHydrated] = useState(() => bootPayload() !== null);
+  useOpenWindowWhenDrawn(Boolean(bootPayload()?.activeFile));
   // Read the field, not `onboardingComplete()` — calling the method inside a
   // selector re-runs its body on every store mutation and masks future logic
   // changes behind a no-op re-render. Reading the boolean lets the store bail

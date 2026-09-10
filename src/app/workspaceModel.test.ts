@@ -30,8 +30,10 @@ import {
   serializeChatMessages,
   CONVERSATION_REPLAY_LIMIT,
   applyFileBuffer,
+  applyUneditedFileBuffer,
   applyFsEvent,
   removeDeletedFile,
+  applyFileSnapshot,
   applyScanResult,
   closeWorkspaceFileTab,
   isActiveFilePresent,
@@ -268,6 +270,34 @@ describe("workspace model", () => {
       role: "assistant",
       runId,
     });
+  });
+
+  it("applyFileSnapshot paints an empty tree but never claims the scan finished", () => {
+    // The whole point: rows on screen before the walk lands, with the state
+    // still saying the walk owns the answer.
+    const fresh = createWorkspaceFromPath("/tmp/alpha");
+    expect(fresh.files).toEqual([]);
+
+    const painted = applyFileSnapshot(fresh, [makeEntry("b.md"), makeEntry("a.md")]);
+
+    expect(painted.files.map((entry) => entry.relativePath)).toEqual(["a.md", "b.md"]);
+    expect(painted.scanState).not.toBe("ready");
+  });
+
+  it("applyFileSnapshot loses the race rather than winning it", () => {
+    // The snapshot is last session's truth. Arriving after a real scan it must
+    // decline — otherwise a slow inventory read would quietly replace fresh
+    // rows with stale ones, and nothing would look wrong.
+    const scanned = workspaceWithFiles("/tmp/alpha", ["current.md"]);
+
+    const late = applyFileSnapshot(scanned, [makeEntry("deleted-last-week.md")]);
+
+    expect(late.files.map((entry) => entry.relativePath)).toEqual(["current.md"]);
+  });
+
+  it("applyFileSnapshot with no inventory leaves the workspace exactly as it was", () => {
+    const fresh = createWorkspaceFromPath("/tmp/alpha");
+    expect(applyFileSnapshot(fresh, [])).toBe(fresh);
   });
 
   it("applyScanResult refreshes the file list without dropping open tabs (a scan miss isn't a deletion)", () => {
@@ -1570,5 +1600,45 @@ describe("reorderOpenTabs (#29)", () => {
     expect(reorderOpenTabs(["a", "b"], "a", "a")).toEqual(["a", "b"]);
     expect(reorderOpenTabs(["a", "b"], "a", "z")).toEqual(["a", "b"]);
     expect(reorderOpenTabs(["a", "b"], "z", "a")).toEqual(["a", "b"]);
+  });
+});
+
+describe("a re-read racing the first keystrokes of a launch", () => {
+  const workspace = createWorkspaceFromPath("/vault");
+
+  it("takes the fresh read when nothing has been typed", () => {
+    const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {
+      content: "on screen",
+      lastModifiedMs: 1,
+    });
+
+    const updated = applyUneditedFileBuffer(opened, "a.md", {
+      content: "from disk",
+      lastModifiedMs: 2,
+    });
+
+    expect(updated.fileContents["a.md"].content).toBe("from disk");
+  });
+
+  it("leaves unsaved edits alone", () => {
+    const opened = applyFileBuffer(openWorkspaceFile(workspace, "a.md"), "a.md", {
+      content: "on screen",
+      lastModifiedMs: 1,
+    });
+    const edited = {
+      ...opened,
+      fileContents: {
+        ...opened.fileContents,
+        "a.md": { ...opened.fileContents["a.md"], content: "typed", dirty: true },
+      },
+    };
+
+    const updated = applyUneditedFileBuffer(edited, "a.md", {
+      content: "from disk",
+      lastModifiedMs: 2,
+    });
+
+    expect(updated.fileContents["a.md"].content).toBe("typed");
+    expect(updated.fileContents["a.md"].dirty).toBe(true);
   });
 });

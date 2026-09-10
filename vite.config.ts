@@ -36,6 +36,7 @@ function reactScanInjectPlugin(): Plugin {
   };
 }
 
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [reactScanInjectPlugin(), react()],
@@ -47,6 +48,15 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "decode-named-character-reference": workerSafeCharacterDecoder,
+      // `<Profiler>` reports zero against a production react-dom, so a
+      // component profile needs the profiling build. It puts ~250KB into the
+      // eager chunk — 1,962KB against 2,210KB — which is worth ~25ms of
+      // `entry`, so it is its OWN flag rather than riding on COMPOSE_PERF:
+      // timing a launch and profiling one are different questions, and a
+      // COMPOSE_PERF build has to weigh what ships or its numbers are fiction.
+      ...(process.env.COMPOSE_PROFILE === "1"
+        ? { "react-dom/client": "react-dom/profiling" }
+        : {}),
     },
   },
   // Build-time perf gate — symmetric with the Rust-side
@@ -60,46 +70,27 @@ export default defineConfig(async () => ({
     __COMPOSE_PERF__: JSON.stringify(process.env.COMPOSE_PERF === "1"),
   },
   build: {
-    // Don't even prefetch the lazy editor's heavy vendors (CodeMirror, KaTeX) at
-    // boot — they load when a document opens, keeping the initial parse to the
-    // shell. On a local desktop app the on-open fetch is a disk read.
+    // The editor's heavy vendors (CodeMirror, KaTeX) are static dependencies of
+    // the entry now, so they load either way; this only decides whether the HTML
+    // declares them. Measured both ways over three launches: declaring them made
+    // the webview phase 689ms against 655ms — no better, and 2MB more markup for
+    // the parser to walk. Left undeclared.
     modulePreload: {
       resolveDependencies(_filename: string, deps: string[]) {
         return deps.filter((dep) => !/(codemirror|katex)-[A-Za-z0-9_]+\.js$/.test(dep));
       },
     },
-    rollupOptions: {
-      output: {
-        manualChunks(id: string) {
-          if (!id.includes("node_modules")) {
-            return undefined;
-          }
-
-          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
-            return "react";
-          }
-
-          if (id.includes("node_modules/hast-util-to-jsx-runtime")) {
-            return "markdown";
-          }
-
-          // Heavy editor-only vendors. Splitting them keeps the lazy-loaded
-          // EditorRegion chunk from pulling them into the initial parse — they
-          // download only when a document opens.
-          if (id.includes("node_modules/@codemirror") || id.includes("node_modules/@lezer")) {
-            return "codemirror";
-          }
-          if (id.includes("node_modules/katex")) {
-            return "katex";
-          }
-          if (id.includes("node_modules/@carbon")) {
-            return "carbon";
-          }
-
-          return undefined;
-        },
-      },
-    },
+    // No vendor split. Every eager asset is one more request through Tauri's
+    // custom protocol, and each of those measured ~20ms here: six assets put
+    // `entry` at 286ms, two put it at 166ms. Splitting react/carbon/codemirror
+    // into their own chunks buys cache granularity across deploys, which a
+    // desktop app that ships its assets inside the binary has no use for.
+    // Dynamic imports still split; only the eager graph is one file.
+    //
+    // The stylesheet keeps its own request. Inlining it into the HTML was tried
+    // and measured worse (entry 171-250ms against 166ms): 430KB of markup ahead
+    // of the script tag costs more than the round-trip it saves.
+    rollupOptions: {},
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

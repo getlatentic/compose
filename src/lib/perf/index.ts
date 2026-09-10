@@ -14,7 +14,6 @@
  * A typical perf session uses both:
  *   COMPOSE_DEVTOOLS=1 COMPOSE_PERF=1 pnpm tauri build
  */
-import { reportClientError } from "../diagnostics/errorReporter";
 
 export function perfMark(label: string): void {
   if (!__COMPOSE_PERF__) return;
@@ -41,22 +40,28 @@ export function perfMeasure(label: string, start: string, end: string): number |
  *   entry  → time to fetch+parse+compile the boot bundle (everything before
  *            the first executed line: the shell entry + its static vendors).
  *   render → just before React mounts (delta from `entry` ≈ module-exec).
- *   shell  → the shell tree committed (delta ≈ React's first render); the
- *            lazy editor is still a Suspense fallback at this point.
- *   editor → the lazy EditorRegion chunk loaded + its EditorView mounted
- *            (delta from `shell` = the deferred editor cost).
+ *   shell  → the shell tree committed (delta ≈ React's first render); with a
+ *            launch payload this is already the finished app but for the
+ *            document surface, which is still a Suspense fallback.
+ *   doc    → the deferred ActiveDocument chunk loaded and its EditorView
+ *            mounted (delta from `shell` = the cost of deferring it).
  *
  * Tree-shakes to nothing in release (the `__COMPOSE_PERF__` guard).
  */
+/** Marks gathered during the launch, written out together by `bootTrace`. */
+export const bootMarks: string[] = [];
+(globalThis as unknown as Record<string, unknown>).__BOOT_MARKS__ = bootMarks;
+
 export function markBoot(phase: string): void {
   if (!__COMPOSE_PERF__) return;
   const now = performance.now();
   performance.mark(`boot:${phase}`);
   // eslint-disable-next-line no-console
   console.log(`[perf] boot:${phase} @ ${now.toFixed(0)}ms`);
-  // Persist to the local error log too, so a boot profile is readable from a
-  // COMPOSE_PERF build without attaching the Web Inspector.
-  void reportClientError("bootperf", `${phase} @ ${now.toFixed(0)}ms`);
+  // Collected, not sent. Writing each mark to the local log costs an IPC round
+  // trip — about 3ms — which lands inside the launch the marks are measuring.
+  // `bootTrace` writes the whole set once, at the end.
+  bootMarks.push(`${phase} @ ${now.toFixed(0)}ms`);
 }
 
 /**

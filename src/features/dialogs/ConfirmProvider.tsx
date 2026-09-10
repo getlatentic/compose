@@ -77,18 +77,23 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
-      <Modal
-        open={pending !== null}
-        modalHeading={pending?.title ?? ""}
-        primaryButtonText={pending?.confirmLabel ?? "OK"}
-        secondaryButtonText={pending?.cancelLabel ?? "Cancel"}
-        danger={pending?.danger ?? false}
-        size="sm"
-        onRequestSubmit={() => settle(true)}
-        onRequestClose={() => settle(false)}
-      >
-        <p className="confirm-modal__message">{pending?.message ?? ""}</p>
-      </Modal>
+      {/* Mounted only while it is needed. Carbon's Modal is not cheap,
+        * and four of these render at every launch for dialogs that are
+        * almost never open. */}
+      {pending === null ? null : (
+        <Modal
+          open={pending !== null}
+          modalHeading={pending?.title ?? ""}
+          primaryButtonText={pending?.confirmLabel ?? "OK"}
+          secondaryButtonText={pending?.cancelLabel ?? "Cancel"}
+          danger={pending?.danger ?? false}
+          size="sm"
+          onRequestSubmit={() => settle(true)}
+          onRequestClose={() => settle(false)}
+        >
+          <p className="confirm-modal__message">{pending?.message ?? ""}</p>
+        </Modal>
+      )}
     </ConfirmContext.Provider>
   );
 }

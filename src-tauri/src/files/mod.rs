@@ -92,6 +92,37 @@ impl From<std::io::Error> for FileError {
     }
 }
 
+/// The file list from this vault's persisted inventory, so a launch can paint
+/// the tree without waiting on the walk.
+///
+/// True as of the last completed scan, not as of now: a file added or removed
+/// outside the app since then is stale here until [`workspace_scan`] lands and
+/// replaces the list wholesale. That staleness window is the price of painting
+/// early, and it is bounded by the scan the caller is expected to run anyway.
+///
+/// Deliberately does no filesystem work — the point is to answer from what is
+/// already known, in one indexed read.
+#[tauri::command(async)]
+pub fn workspace_files_snapshot(
+    workspace_id: String,
+    metadata: State<'_, MetadataStore>,
+) -> Result<Vec<WorkspaceFileEntry>, FileError> {
+    Ok(inventory_entries(metadata.document_inventory(&workspace_id)?))
+}
+
+/// Inventory rows as tree entries. Shared with the launch payload
+/// (`crate::boot_payload`), which answers the same question before the web view
+/// exists and must answer it identically.
+pub(crate) fn inventory_entries(rows: Vec<(String, i64, i64)>) -> Vec<WorkspaceFileEntry> {
+    rows.into_iter()
+        .map(|(relative_path, last_modified_ms, size_bytes)| WorkspaceFileEntry {
+            relative_path,
+            last_modified_ms,
+            size_bytes: size_bytes.max(0) as u64,
+        })
+        .collect()
+}
+
 #[tauri::command(async)]
 pub fn workspace_scan(
     workspace_id: String,
@@ -144,9 +175,16 @@ pub fn workspace_scan(
 pub fn workspace_scan_folders(
     workspace_id: String,
     registry: State<'_, WorkspaceRegistry>,
+    metadata: State<'_, MetadataStore>,
 ) -> Result<Vec<String>, FileError> {
     let root = registry.workspace_root(&workspace_id)?;
-    scan_folders(&root)
+    let folders = scan_folders(&root)?;
+    // Persisted so the next launch can paint these rows in its first frame.
+    // A write failure costs freshness on that launch, never this answer.
+    if let Err(error) = metadata.replace_folders(&workspace_id, &folders) {
+        eprintln!("folder inventory sync failed for {workspace_id}: {error}");
+    }
+    Ok(folders)
 }
 
 /// Create an empty directory in the workspace (a real "New folder").

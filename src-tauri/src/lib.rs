@@ -1,3 +1,5 @@
+mod boot_payload;
+mod launch_window;
 mod stale_state;
 mod user_tool_dirs;
 mod data_reset;
@@ -25,7 +27,7 @@ use crate::open_with::PendingOpenUrls;
 /// pre-JS launch phases correlate with the front-end `markBoot` marks. Compiles
 /// out of a normal release build (`option_env!` is `None` → dead-code-eliminated).
 #[inline]
-fn boot_native_mark(label: &str) {
+pub(crate) fn boot_native_mark(label: &str) {
     if option_env!("COMPOSE_PERF").is_some() {
         let ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -57,13 +59,25 @@ pub fn run() {
     // A "Reset all data" requested last session is applied here — before the
     // migration below or the webview can repopulate anything — so the app comes
     // up as a clean first-run.
+    boot_native_mark("analytics-runtime");
     data_reset::apply_pending_reset();
+    boot_native_mark("data-reset");
     // Before Tauri creates the webview (which would make its own empty data
     // dirs under the new bundle id), carry a previous identity's profile
     // forward so a rename doesn't reset the user's workspaces or settings.
     profile_migration::migrate_legacy_profile();
+    boot_native_mark("profile-migration");
+
+    // The launch screen's data, read from disk before the web view exists and
+    // handed to the page as a global so its first render is the finished app
+    // rather than an empty shell that fills in. Empty when there is nothing to
+    // say, which injects nothing and leaves the front end's own IPC fan-out —
+    // still the source of truth — to do exactly what it did before.
+    let boot_script = boot_payload::init_script(profile_migration::profile_dir());
+    boot_native_mark("boot-payload");
 
     let mut builder = tauri::Builder::default()
+        .plugin(boot_payload::plugin(boot_script))
         .manage(workspace::WorkspaceRegistry::default())
         .manage(db::MetadataStore::default())
         .manage(files::watcher::WatcherManager::default())
@@ -91,6 +105,7 @@ pub fn run() {
         }
     }
 
+    boot_native_mark("builder-constructed");
     let app = builder
         // A native menu set at construction (so there's no default→custom menu-bar
         // flash on launch): the platform defaults plus File → Print (⌘P). Print
@@ -98,6 +113,7 @@ pub fn run() {
         // print panel (a printer, or Save as PDF from the panel).
         .menu(menu::build)
         .setup(|app| {
+            boot_native_mark("setup-entered");
             boot_native_mark("setup-start");
             let app_handle = app.handle().clone();
             // Capture back-end panics into the local error log (best-effort),
@@ -245,7 +261,9 @@ pub fn run() {
                     )));
                 }
                 boot_native_mark("pre-focus");
-                let _ = window.set_focus();
+                // Not shown yet: `launch_window` shows it when the front end
+                // says the first screen is complete, or on its own deadline.
+                launch_window::arm_deadline(app_handle.clone());
                 if want_devtools {
                     window.open_devtools();
                 }
@@ -310,6 +328,9 @@ pub fn run() {
             files::workspace_rename_file,
             files::workspace_restore_version,
             files::workspace_scan,
+            files::workspace_files_snapshot,
+            launch_window::launch_window_ready,
+            launch_window::launch_document_parsed,
             files::workspace_scan_folders,
             files::workspace_write_binary_file,
             files::workspace_write_file,
@@ -340,7 +361,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    boot_native_mark("pre-run-loop");
+    boot_native_mark("app-built");
     app.run(|app_handle, event| match event {
         // Tauri defines this variant on macOS only — it is the
         // `application:openURLs:` delegate callback, which no other platform
