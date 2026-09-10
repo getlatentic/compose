@@ -6,6 +6,7 @@ import { AppShell } from "./AppShell";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useUiStore } from "./store/uiStore";
 import { openPathFromOs, useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
+import { useNewItemActions } from "../features/workspace/useNewItemActions";
 import { useSaveOnExit } from "./useSaveOnExit";
 
 /** The extensions File → Open File… offers — mirrors the fileAssociations. */
@@ -27,6 +28,7 @@ export function MainApp() {
   const openSearch = useUiStore((state) => state.openSearch);
 
   useSaveOnExit();
+  useNewItemMenu();
   // OS-opened files (Finder Open-With). Mounted HERE — after boot hydration —
   // so the cold-start drain routes against the real workspace list; earlier
   // arrivals stay buffered on the Rust side until this mounts.
@@ -159,4 +161,32 @@ export function MainApp() {
   // which shows its own loading state. Gating the whole app on the scan made a
   // large iCloud vault wait seconds at launch (and stick if the scan stalled).
   return <AppShell />;
+}
+
+/**
+ * File → New Note (⌘N) and New Folder (⌘⇧N).
+ *
+ * Here rather than at the app root: both need a workspace to create into, and
+ * MainApp only mounts once there is one. The sidebar's "+ New" menu has
+ * advertised these two shortcuts since it was built with nothing bound to them.
+ */
+function useNewItemMenu(): void {
+  const { newNote, newFolder } = useNewItemActions();
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    const unlistens = [
+      listen("menu://new-note", () => newNote()),
+      listen("menu://new-folder", () => newFolder()),
+    ];
+    return () => {
+      void Promise.all(unlistens).then((fns) => {
+        for (const off of fns) {
+          off();
+        }
+      });
+    };
+  }, [newNote, newFolder]);
 }
