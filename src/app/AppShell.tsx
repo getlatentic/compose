@@ -1,4 +1,5 @@
-import { lazy, Suspense, type CSSProperties } from "react";
+import { type CSSProperties } from "react";
+import { EditorRegion } from "../features/editor/EditorRegion";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import { NoWorkspaceWelcome } from "../features/workspace/NoWorkspaceWelcome";
 import { WorkspaceSearchPopover } from "../features/workspace/WorkspaceSearchPopover";
@@ -6,17 +7,6 @@ import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { ChatRegion } from "../features/chat/ChatRegion";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useUiStore } from "./store/uiStore";
-
-// The editor (CodeMirror + KaTeX + the markdown decoration stack) is by far the
-// heaviest code and isn't needed to paint the shell. Lazy-load it so the sidebar
-// + chat render immediately on launch; the editor chunk fetches when a document
-// is open. The chat markdown pipeline has no math, so KaTeX rides along here —
-// off the boot path entirely.
-const EditorRegion = lazy(() =>
-  import("../features/editor/EditorRegion").then((module) => ({
-    default: module.EditorRegion,
-  })),
-);
 
 /**
  * The layout shell for the editor / chat / sidebar — the "main app" chrome.
@@ -85,11 +75,7 @@ export function AppShell() {
             }
           >
             {focusMode ? null : <WorkspaceSidebar />}
-            {editorOpen || focusMode ? (
-              <Suspense fallback={<div className="editor-region" aria-busy="true" />}>
-                <EditorRegion />
-              </Suspense>
-            ) : null}
+            {editorOpen || focusMode ? <EditorRegion /> : null}
             {chatOpen && !focusMode ? <ChatRegion /> : null}
           </div>
         )}

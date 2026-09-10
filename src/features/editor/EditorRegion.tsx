@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { lazy, Suspense, useCallback, useMemo } from "react";
 import { PaneTabs, type EditorTab, type TabArea } from "./PaneTabs";
-import { ActiveDocument } from "./ActiveDocument";
 import { DocumentStatusBar } from "./DocumentStatusBar";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_NAME } from "./welcomeNote";
 import { WorkspaceWelcome } from "../workspace/WorkspaceWelcome";
@@ -18,7 +17,15 @@ import {
 import { isActiveFilePresent, resolveOpenTabs } from "../../app/workspaceModel";
 import { flushActiveEditor } from "../../lib/editor/editorFlush";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
-import { markBoot } from "../../lib/perf";
+
+// CodeMirror, KaTeX and the markdown decoration stack are by far the heaviest
+// code in the app, and only the document surface needs them. Deferring the
+// surface alone — not this whole region — lets the tab strip, the status bar
+// and the empty states paint with the rest of the shell, so a launch fills in
+// one pane's text rather than swapping in the pane.
+const ActiveDocument = lazy(() =>
+  import("./ActiveDocument").then((module) => ({ default: module.ActiveDocument })),
+);
 
 /**
  * The editor region — a LAYOUT SHELL: the tab strip, the editor body (which
@@ -35,9 +42,6 @@ const FIRST_NOTE_PROMPT =
   "Create my first note — a short Hello World that shows what Compose can do.";
 
 export function EditorRegion() {
-  useEffect(() => {
-    markBoot("editor");
-  }, []);
   // The editor surface follows the FOCUSED container — the loose
   // pseudo-workspace while an external file is showing (#113).
   const focusedArea = useWorkspaceStore((state) => state.focusedArea);
@@ -183,7 +187,9 @@ export function EditorRegion() {
         />
       )}
       {activeFileExists ? (
-        <ActiveDocument />
+        <Suspense fallback={<div className="editor-body" />}>
+          <ActiveDocument />
+        </Suspense>
       ) : scanPending ? (
         <div className="editor-body" />
       ) : (

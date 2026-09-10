@@ -41,10 +41,11 @@ export function perfMeasure(label: string, start: string, end: string): number |
  *   entry  → time to fetch+parse+compile the boot bundle (everything before
  *            the first executed line: the shell entry + its static vendors).
  *   render → just before React mounts (delta from `entry` ≈ module-exec).
- *   shell  → the shell tree committed (delta ≈ React's first render); the
- *            lazy editor is still a Suspense fallback at this point.
- *   editor → the lazy EditorRegion chunk loaded + its EditorView mounted
- *            (delta from `shell` = the deferred editor cost).
+ *   shell  → the shell tree committed (delta ≈ React's first render); with a
+ *            launch payload this is already the finished app but for the
+ *            document surface, which is still a Suspense fallback.
+ *   doc    → the deferred ActiveDocument chunk loaded and its EditorView
+ *            mounted (delta from `shell` = the cost of deferring it).
  *
  * Tree-shakes to nothing in release (the `__COMPOSE_PERF__` guard).
  */
