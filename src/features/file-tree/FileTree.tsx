@@ -15,6 +15,7 @@ import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { useConfirm } from "../dialogs/ConfirmProvider";
+import { persistTreeScroll, readTreeScroll } from "./treeScroll";
 
 /** Fixed row height in px — must match `.file-row` `block-size: 1.75rem` (28px)
  * in global.scss. The virtualizer needs it to place rows without measuring each. */
@@ -592,6 +593,12 @@ function FileTreeInner({
     // rows render below the fold for one frame, where nobody can see them, and
     // are trimmed on measurement.
     initialRect: { width: 0, height: typeof window === "undefined" ? 0 : window.innerHeight },
+    // Start where the tree was left. The reveal below scrolls to the open file
+    // in a passive effect — after the paint — and that scroll is the sidebar
+    // jump. Last session's offset already has that file in view, so restoring
+    // it makes the first frame right and leaves the reveal nothing to do.
+    initialOffset: () => readTreeScroll(workspaceRoot),
+    onChange: (instance) => persistTreeScroll(workspaceRoot, instance.scrollOffset ?? 0),
   });
 
   // Open a workspace fully collapsed — only top-level folders and files show,
