@@ -44,6 +44,45 @@ function screenSignature(): string {
   );
 }
 
+
+function ms(value: number): string {
+  return `${value.toFixed(0).padStart(5)}ms`;
+}
+
+/** What the parser was doing, so a first paint that arrives late can be read
+ *  against the document it was waiting on rather than guessed at. */
+function documentMilestones(): string[] {
+  const [navigation] = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[];
+  if (!navigation) {
+    return [];
+  }
+  return [
+    `${ms(navigation.responseEnd)}  document received`,
+    `${ms(navigation.domInteractive)}  dom interactive`,
+    `${ms(navigation.domContentLoadedEventEnd)}  dom content loaded`,
+  ];
+}
+
+/** The eager assets. A stylesheet in <head> blocks every paint including the
+ *  skeleton's, so its arrival is the floor under everything the user sees. */
+function blockingResources(): string[] {
+  return (performance.getEntriesByType("resource") as PerformanceResourceTiming[])
+    .filter((entry) => /\/assets\/(index|react|carbon|markdown|katex|codemirror|ActiveDocument)-/.test(entry.name))
+    .map(
+      (entry) =>
+        `${ms(entry.responseEnd)}  loaded ${entry.name.replace(/^.*\/assets\//, "")} (started ${ms(entry.startTime).trim()}, ${Math.round(entry.decodedBodySize / 1024)}KB)`,
+    );
+}
+
+function prerenderMark(): string[] {
+  const at = (window as { __COMPOSE_PRERENDER_AT__?: number }).__COMPOSE_PRERENDER_AT__;
+  return typeof at === "number" ? [`${ms(at)}  payload text written to the DOM`] : [];
+}
+
+function paintEntries(): string[] {
+  return performance.getEntriesByType("paint").map((entry) => `${ms(entry.startTime)}  ${entry.name}`);
+}
+
 export function startBootTrace(): void {
   if (!__COMPOSE_PERF__) return;
 
@@ -64,9 +103,7 @@ export function startBootTrace(): void {
 
   window.setTimeout(() => {
     window.clearInterval(timer);
-    const paints = performance
-      .getEntriesByType("paint")
-      .map((entry) => `${entry.startTime.toFixed(0).padStart(5)}ms  ${entry.name}`);
+    const paints = [...documentMilestones(), ...blockingResources(), ...prerenderMark(), ...paintEntries()];
     const trace = [...paints, ...frames];
     // eslint-disable-next-line no-console
     console.log(["[boot-trace] distinct screens this launch:", ...trace].join("\n"));
