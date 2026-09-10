@@ -97,32 +97,37 @@ export function TextPromptProvider({ children }: { children: ReactNode }) {
   return (
     <TextPromptContext.Provider value={promptText}>
       {children}
-      <Modal
-        open={pending !== null}
-        modalHeading={pending?.title ?? ""}
-        primaryButtonText={pending?.submitLabel ?? "OK"}
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={!allowEmpty && trimmed === ""}
-        selectorPrimaryFocus={`#${INPUT_ID}`}
-        size="sm"
-        onRequestSubmit={submit}
-        onRequestClose={() => settle(null)}
-      >
-        <TextInput
-          id={INPUT_ID}
-          labelText={pending?.label ?? ""}
-          placeholder={pending?.placeholder}
-          value={value}
-          onFocus={(event) => event.currentTarget.select()}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              submit();
-            }
-          }}
-        />
-      </Modal>
+      {/* Mounted only while it is needed. Carbon's Modal is not cheap,
+        * and four of these render at every launch for dialogs that are
+        * almost never open. */}
+      {pending === null ? null : (
+        <Modal
+          open={pending !== null}
+          modalHeading={pending?.title ?? ""}
+          primaryButtonText={pending?.submitLabel ?? "OK"}
+          secondaryButtonText="Cancel"
+          primaryButtonDisabled={!allowEmpty && trimmed === ""}
+          selectorPrimaryFocus={`#${INPUT_ID}`}
+          size="sm"
+          onRequestSubmit={submit}
+          onRequestClose={() => settle(null)}
+        >
+          <TextInput
+            id={INPUT_ID}
+            labelText={pending?.label ?? ""}
+            placeholder={pending?.placeholder}
+            value={value}
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submit();
+              }
+            }}
+          />
+        </Modal>
+      )}
     </TextPromptContext.Provider>
   );
 }

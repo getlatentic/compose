@@ -73,48 +73,53 @@ export function RenameProvider({ children }: { children: ReactNode }) {
   return (
     <RenameContext.Provider value={requestRename}>
       {children}
-      <Modal
-        open={pending !== null}
-        modalHeading="Rename file"
-        primaryButtonText="Rename"
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={trimmed === ""}
-        selectorPrimaryFocus={`#${INPUT_ID}`}
-        size="sm"
-        onRequestSubmit={submit}
-        onRequestClose={cancel}
-      >
-        <div className="rename-field">
-          <label className="cds--label" htmlFor={INPUT_ID}>
-            Name
-          </label>
-          <div className="rename-field__row">
-            <input
-              id={INPUT_ID}
-              className="cds--text-input rename-field__input"
-              type="text"
-              value={value}
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => setValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  submit();
-                }
-              }}
-            />
-            {split?.ext ? (
-              <span className="rename-field__ext" title="The extension is kept">
-                {split.ext}
-              </span>
-            ) : null}
+      {/* Mounted only while it is needed. Carbon's Modal is not cheap,
+        * and four of these render at every launch for dialogs that are
+        * almost never open. */}
+      {pending === null ? null : (
+        <Modal
+          open={pending !== null}
+          modalHeading="Rename file"
+          primaryButtonText="Rename"
+          secondaryButtonText="Cancel"
+          primaryButtonDisabled={trimmed === ""}
+          selectorPrimaryFocus={`#${INPUT_ID}`}
+          size="sm"
+          onRequestSubmit={submit}
+          onRequestClose={cancel}
+        >
+          <div className="rename-field">
+            <label className="cds--label" htmlFor={INPUT_ID}>
+              Name
+            </label>
+            <div className="rename-field__row">
+              <input
+                id={INPUT_ID}
+                className="cds--text-input rename-field__input"
+                type="text"
+                value={value}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => setValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    submit();
+                  }
+                }}
+              />
+              {split?.ext ? (
+                <span className="rename-field__ext" title="The extension is kept">
+                  {split.ext}
+                </span>
+              ) : null}
+            </div>
+            <p className="rename-field__location">
+              <Folder size={14} />
+              <span>{location}</span>
+            </p>
           </div>
-          <p className="rename-field__location">
-            <Folder size={14} />
-            <span>{location}</span>
-          </p>
-        </div>
-      </Modal>
+        </Modal>
+      )}
     </RenameContext.Provider>
   );
 }
