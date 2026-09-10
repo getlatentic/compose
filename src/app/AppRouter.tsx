@@ -8,6 +8,7 @@ import { MainApp } from "./MainApp";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useHarnessStore } from "./store/harnessStore";
 import { useUiStore } from "./store/uiStore";
+import { markLaunchWindowReady } from "../lib/ipc/launchWindow";
 import { trackAppLaunch } from "../lib/analytics/track";
 import { markBoot } from "../lib/perf";
 import { bootPayload } from "./store/bootPayload";
@@ -45,7 +46,17 @@ const REVEAL_DEADLINE_MS = 200;
  */
 function useCompleteAppReveal(waitForFrame: boolean): boolean {
   const [revealed, setRevealed] = useState(!waitForFrame);
-  const reveal = useCallback(() => setRevealed(true), []);
+  useEffect(function showWindowWhenNothingIsWaitedOn() {
+    if (!waitForFrame) {
+      void markLaunchWindowReady();
+    }
+  }, [waitForFrame]);
+  const reveal = useCallback(() => {
+    setRevealed(true);
+    // The window is still hidden at this point — this is what puts it on
+    // screen, with a finished app already in it.
+    void markLaunchWindowReady();
+  }, []);
   useEffect(() => {
     if (revealed) {
       return;

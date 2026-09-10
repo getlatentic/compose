@@ -1,4 +1,5 @@
 mod boot_payload;
+mod launch_window;
 mod stale_state;
 mod user_tool_dirs;
 mod data_reset;
@@ -26,7 +27,7 @@ use crate::open_with::PendingOpenUrls;
 /// pre-JS launch phases correlate with the front-end `markBoot` marks. Compiles
 /// out of a normal release build (`option_env!` is `None` → dead-code-eliminated).
 #[inline]
-fn boot_native_mark(label: &str) {
+pub(crate) fn boot_native_mark(label: &str) {
     if option_env!("COMPOSE_PERF").is_some() {
         let ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -254,7 +255,9 @@ pub fn run() {
                     )));
                 }
                 boot_native_mark("pre-focus");
-                let _ = window.set_focus();
+                // Not shown yet: `launch_window` shows it when the front end
+                // says the first screen is complete, or on its own deadline.
+                launch_window::arm_deadline(app_handle.clone());
                 if want_devtools {
                     window.open_devtools();
                 }
@@ -320,6 +323,7 @@ pub fn run() {
             files::workspace_restore_version,
             files::workspace_scan,
             files::workspace_files_snapshot,
+            launch_window::launch_window_ready,
             files::workspace_scan_folders,
             files::workspace_write_binary_file,
             files::workspace_write_file,

@@ -26,7 +26,8 @@
           "y": 21
         },
         "decorations": true,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "visible": false
       }
     ],
     "security": {
