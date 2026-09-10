@@ -1,3 +1,6 @@
+// Math is rendered by the document surface and nowhere else, so its
+// stylesheet ships with this chunk instead of blocking every launch.
+import "katex/dist/katex.min.css";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { EditorView } from "@codemirror/view";
 import {
@@ -25,6 +28,7 @@ import { markBoot, markTabSwitchEnd } from "../../lib/perf";
 import { registerActiveEditorFlush } from "../../lib/editor/editorFlush";
 import { showToast } from "../toast/toastStore";
 import { useConfirm } from "../dialogs/ConfirmProvider";
+import { useImageAltPrompt } from "./useImageAltPrompt";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
@@ -127,6 +131,8 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
       (comment) => comment.filePath === activeFilePath && comment.status === "open",
     );
   }, [activeFilePath, comments]);
+
+  useImageAltPrompt();
 
   // Boot profile: the active note's editor leaf is mounting — the note is on
   // screen now (the last boot phase). No-op outside COMPOSE_PERF builds.
