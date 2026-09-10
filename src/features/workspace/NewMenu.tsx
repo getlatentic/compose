@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Chat, ChevronDown, Document, Folder } from "@carbon/react/icons";
+
+import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 
 type CarbonIcon = typeof Document;
 
@@ -29,34 +32,21 @@ interface NewMenuProps {
  * subject: New note on Notes, New chat on Chat.
  */
 export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: NewMenuProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  // Portaled and fixed-positioned, not absolute inside the sidebar: the sidebar
+  // clips its overflow, so a 246px panel anchored in it lost its left edge as
+  // soon as the pane was dragged narrower than the panel. Anchored to the
+  // trigger's RIGHT edge, which is where it has always appeared to hang from.
+  const { open, setOpen, coords, triggerRef, popoverRef } = useAnchoredPopover<
+    HTMLButtonElement,
+    HTMLDivElement
+  >({
+    placement: "below",
+    align: "end",
+    maxWidth: 246,
+    gap: 6,
+    getInitialFocus: (pop) => pop.querySelector<HTMLButtonElement>(".new-menu__item"),
+  });
 
-  // Close on outside click or Escape while open — the two ways out of a menu
-  // that isn't a modal. Listeners only live while the panel is open.
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onPointerDown = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  const toggle = useCallback(() => setOpen((value) => !value), []);
   const pick = useCallback((run: () => void) => {
     setOpen(false);
     run();
@@ -70,14 +60,15 @@ export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: Ne
   const groups: NewMenuItem[][] = tab === "files" ? [[note, folder], [chat]] : [[chat], [note, folder]];
 
   return (
-    <div className="new-menu" ref={rootRef}>
+    <div className="new-menu">
       <button
+        ref={triggerRef}
         type="button"
         className="new-menu__trigger"
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
-        onClick={toggle}
+        onClick={() => setOpen((value) => !value)}
       >
         <span className="new-menu__plus" aria-hidden>
           +
@@ -85,8 +76,14 @@ export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: Ne
         <span className="new-menu__label">New</span>
         <ChevronDown size={16} className="new-menu__caret" aria-hidden />
       </button>
-      {open ? (
-        <div className="new-menu__panel" role="menu">
+      {open && coords
+        ? createPortal(
+            <div
+              ref={popoverRef}
+              className="new-menu__panel"
+              role="menu"
+              style={{ top: coords.top, left: coords.left, inlineSize: coords.width }}
+            >
           {groups.map((group) => (
             <div className="new-menu__group" key={group[0].key} role="none">
               {group.map(({ key, label, shortcut, Icon, run }) => (
@@ -104,8 +101,10 @@ export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: Ne
               ))}
             </div>
           ))}
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

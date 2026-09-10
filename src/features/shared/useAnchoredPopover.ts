@@ -24,6 +24,8 @@ export interface AnchoredCoords {
 export interface UseAnchoredPopoverOptions<Popover extends HTMLElement> {
   /** "below" anchors under the trigger; "above" anchors over it. */
   placement: "above" | "below";
+  /** Which edge lines up with the trigger's. Default "start". */
+  align?: "start" | "end";
   /** Cap on the popover width before the viewport clamp. */
   maxWidth?: number;
   /** Gap in px between the trigger edge and the popover. */
@@ -49,10 +51,12 @@ function anchor(
   placement: "above" | "below",
   maxWidth: number,
   gap: number,
+  align: "start" | "end",
 ): AnchoredCoords {
   const rect = trigger.getBoundingClientRect();
   const width = Math.min(maxWidth, window.innerWidth - 16);
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+  const edge = align === "end" ? rect.right - width : rect.left;
+  const left = Math.max(8, Math.min(edge, window.innerWidth - width - 8));
   return placement === "below"
     ? { top: rect.bottom + gap, left, width }
     : { bottom: window.innerHeight - rect.top + gap, left, width };
@@ -73,6 +77,7 @@ export function useAnchoredPopover<
   placement,
   maxWidth = 320,
   gap = 4,
+  align = "start",
   getInitialFocus,
 }: UseAnchoredPopoverOptions<Popover>): UseAnchoredPopoverResult<Trigger, Popover> {
   const [open, setOpen] = useState(false);
@@ -93,7 +98,7 @@ export function useAnchoredPopover<
       setCoords(null);
       return;
     }
-    const reposition = () => setCoords(anchor(trigger, placement, maxWidth, gap));
+    const reposition = () => setCoords(anchor(trigger, placement, maxWidth, gap, align));
     reposition();
     window.addEventListener("resize", reposition);
     return () => window.removeEventListener("resize", reposition);

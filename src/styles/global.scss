@@ -562,15 +562,15 @@ select {
 // Panel: a 246px white surface anchored under the button's right edge. White +
 // a neutral #e0e0e0 border — the white layer-02, not the light-gray layer-01,
 // so the menu reads as a white surface (spec).
+// Portaled to <body> and fixed-positioned in JS — the sidebar clips its
+// overflow, so an absolutely-positioned panel lost its left edge the moment the
+// pane was narrower than the panel. Width and offsets come from the hook.
 .new-menu__panel {
-  position: absolute;
-  inset-block-start: calc(100% + 6px);
-  inset-inline-end: 0;
-  inline-size: 246px;
+  position: fixed;
+  z-index: 9000;
   background: var(--cds-layer-02, #ffffff);
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-  z-index: 100;
 }
 
 // A neutral divider between the file-system group and chat.
