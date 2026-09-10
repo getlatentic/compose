@@ -36,6 +36,7 @@ function reactScanInjectPlugin(): Plugin {
   };
 }
 
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [reactScanInjectPlugin(), react()],
@@ -70,38 +71,17 @@ export default defineConfig(async () => ({
         return deps.filter((dep) => !/(codemirror|katex)-[A-Za-z0-9_]+\.js$/.test(dep));
       },
     },
-    rollupOptions: {
-      output: {
-        manualChunks(id: string) {
-          if (!id.includes("node_modules")) {
-            return undefined;
-          }
-
-          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
-            return "react";
-          }
-
-          if (id.includes("node_modules/hast-util-to-jsx-runtime")) {
-            return "markdown";
-          }
-
-          // Heavy editor-only vendors. Splitting them keeps the lazy-loaded
-          // EditorRegion chunk from pulling them into the initial parse — they
-          // download only when a document opens.
-          if (id.includes("node_modules/@codemirror") || id.includes("node_modules/@lezer")) {
-            return "codemirror";
-          }
-          if (id.includes("node_modules/katex")) {
-            return "katex";
-          }
-          if (id.includes("node_modules/@carbon")) {
-            return "carbon";
-          }
-
-          return undefined;
-        },
-      },
-    },
+    // No vendor split. Every eager asset is one more request through Tauri's
+    // custom protocol, and each of those measured ~20ms here: six assets put
+    // `entry` at 286ms, two put it at 166ms. Splitting react/carbon/codemirror
+    // into their own chunks buys cache granularity across deploys, which a
+    // desktop app that ships its assets inside the binary has no use for.
+    // Dynamic imports still split; only the eager graph is one file.
+    //
+    // The stylesheet keeps its own request. Inlining it into the HTML was tried
+    // and measured worse (entry 171-250ms against 166ms): 430KB of markup ahead
+    // of the script tag costs more than the round-trip it saves.
+    rollupOptions: {},
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
