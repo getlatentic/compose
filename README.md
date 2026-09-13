@@ -37,7 +37,7 @@ Select text in any app and choose **Services → New Note in Compose** to drop i
 into a new note in the active workspace.
 
 Press Space on a `.md` file in the Finder and Quick Look shows the note
-rendered rather than its source.
+rendered rather than its source; its icon is a page rather than a text file.
 
 Links open a note, so scripts, Shortcuts, and other editors can point at one:
 
