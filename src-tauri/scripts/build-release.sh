@@ -91,6 +91,19 @@ build_one() {
   # the recompile.
   touch "$ROOT/src-tauri/src/lib.rs"
 
+  # The Quick Look extension is copied into Contents/PlugIns by Tauri
+  # (tauri.conf.json > bundle > macOS > files), so it has to exist — and be
+  # signed with its own entitlements — before the bundle is assembled. Built
+  # per target so the universal app carries a universal extension.
+  local ql_archs=()
+  case "$target" in
+    universal-apple-darwin) ql_archs=(arm64 x86_64) ;;
+    aarch64-*) ql_archs=(arm64) ;;
+    x86_64-*) ql_archs=(x86_64) ;;
+  esac
+  "$ROOT/src-tauri/extensions/quicklook/build.sh" \
+    "$ROOT/src-tauri/extensions/quicklook/build" "${ql_archs[@]}"
+
   # create-dmg (bundle_dmg.sh) is intermittently racy (hdiutil/DiskArbitration);
   # clean disk-image state and retry a few times — a transient race clears, a
   # real error (compile failure) fails every attempt fast.

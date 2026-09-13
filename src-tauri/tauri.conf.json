@@ -70,6 +70,11 @@
         "role": "Editor",
         "rank": "Alternate"
       }
-    ]
+    ],
+    "macOS": {
+      "files": {
+        "PlugIns/ComposeQuickLook.appex": "extensions/quicklook/build/ComposeQuickLook.appex"
+      }
+    }
   }
 }
