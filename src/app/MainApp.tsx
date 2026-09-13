@@ -6,6 +6,7 @@ import { AppShell } from "./AppShell";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useUiStore } from "./store/uiStore";
 import { openPathFromOs, useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
+import { useServiceNewNote } from "../features/workspace/useServiceNewNote";
 import { useNewItemActions } from "../features/workspace/useNewItemActions";
 import { useSaveOnExit } from "./useSaveOnExit";
 
@@ -33,6 +34,7 @@ export function MainApp() {
   // so the cold-start drain routes against the real workspace list; earlier
   // arrivals stay buffered on the Rust side until this mounts.
   useExternalFileOpen();
+  useServiceNewNote();
 
   // Native menu routing: View → Focus Mode (⌘⇧D), Compose → Settings… (⌘,),
   // and File → Open File… (⌘O, a picker routed exactly like a Finder open —
