@@ -7,7 +7,9 @@
 //! refused. Without that, a page could make the app display `~/.ssh/id_rsa`,
 //! and everything the app can then read, the assistant can read too.
 //!
-//!     compose://open?path=/Users/me/Notes/thesis/framework.md
+//! ```text
+//! compose://open?path=/Users/me/Notes/thesis/framework.md
+//! ```
 //!
 //! An absolute path rather than a workspace id + relative pair, because the
 //! path is what another tool already has — Obsidian, Shortcuts, a shell script.
