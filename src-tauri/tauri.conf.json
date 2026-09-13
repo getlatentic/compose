@@ -73,7 +73,8 @@
     ],
     "macOS": {
       "files": {
-        "PlugIns/ComposeQuickLook.appex": "extensions/quicklook/build/ComposeQuickLook.appex"
+        "PlugIns/ComposeQuickLook.appex": "extensions/quicklook/build/ComposeQuickLook.appex",
+        "PlugIns/ComposeThumbnail.appex": "extensions/quicklook/build/ComposeThumbnail.appex"
       }
     }
   }

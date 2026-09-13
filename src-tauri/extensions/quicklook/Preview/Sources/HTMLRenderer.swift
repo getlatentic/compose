@@ -70,8 +70,8 @@ private struct Writer {
     private mutating func body(run: AttributedString.Runs.Run, text: String) -> String {
         var text = text
         var prefix = ""
-        if atItemStart, let box = Checkbox(consuming: &text) {
-            prefix = box.html
+        if atItemStart, let task = TaskMarker.take(from: &text) {
+            prefix = "<input type=\"checkbox\" disabled\(task == .done ? " checked" : "")> "
         }
         atItemStart = false
         return prefix + Inline.render(run: run, text: text)
@@ -91,16 +91,3 @@ private struct Writer {
     }
 }
 
-private struct Checkbox {
-    let html: String
-
-    /// Strips a task marker off the front of an item's text, if it has one.
-    init?(consuming text: inout String) {
-        let checked = ["[x] ", "[X] "]
-        let unchecked = ["[ ] "]
-        guard let marker = (checked + unchecked).first(where: text.hasPrefix) else { return nil }
-        text.removeFirst(marker.count)
-        let isChecked = checked.contains(marker)
-        html = "<input type=\"checkbox\" disabled\(isChecked ? " checked" : "")> "
-    }
-}

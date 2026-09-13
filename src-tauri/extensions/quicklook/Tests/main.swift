@@ -116,6 +116,70 @@ expect("falls back to the first heading", untitled.title, equals: "First Heading
 let dashes = MarkdownDocument(source: "---\n\nnot frontmatter")
 expect("a lone rule is not frontmatter", dashes.body, equals: "---\n\nnot frontmatter")
 
+
+// --- thumbnail: the note as a stack of lines --------------------------------
+
+func lines(_ markdown: String) -> [ThumbnailPage.Line] {
+    ThumbnailPage(document: MarkdownDocument(source: markdown)).lines
+}
+
+func expect(_ name: String, _ actual: [String], equals expected: [String]) {
+    if actual == expected { return }
+    failures += 1
+    print("FAIL \(name)\n  expected: \(expected)\n  actual: \(actual)")
+}
+
+expect(
+  "a table row is one line, not one per cell",
+  lines("| a | b |\n|---|---|\n| 1 | 2 |").map(\.text),
+  equals: ["a b", "1 2"])
+
+expect(
+  "a fenced block becomes one line per line of code",
+  lines("```swift\nlet x = 1\nlet y = 2\n```").map(\.text),
+  equals: ["let x = 1", "let y = 2"])
+
+expect(
+  "heading level sets prominence",
+  lines("# One\n\n## Two\n\nbody").map { "\($0.weight)" },
+  equals: ["title", "heading", "body"])
+
+expect(
+  "code keeps its own weight",
+  lines("```\nx\n```").map { "\($0.weight)" },
+  equals: ["code"])
+
+expect(
+  "a note titled only in frontmatter still leads with its title",
+  lines("---\ntitle: Only Here\n---\n\njust a paragraph").map(\.text),
+  equals: ["Only Here", "just a paragraph"])
+
+expect(
+  "a note whose body opens with a heading does not repeat it",
+  lines("# Heading\n\nbody").map(\.text),
+  equals: ["Heading", "body"])
+
+expect(
+  "an unordered item is bulleted, an ordered one numbered",
+  lines("- a\n- b\n\n1. one\n2. two").map { "\($0.marker ?? "-")\($0.text)" },
+  equals: ["\u{2022}a", "\u{2022}b", "1.one", "2.two"])
+
+expect(
+  "a task shows a ballot box and loses its brackets",
+  lines("- [x] done\n- [ ] todo").map { "\($0.marker ?? "-")\($0.text)" },
+  equals: ["\u{2611}done", "\u{2610}todo"])
+
+expect(
+  "a paragraph carries no marker",
+  lines("plain text").map { $0.marker ?? "none" },
+  equals: ["none"])
+
+let long = (1...80).map { "paragraph \($0)" }.joined(separator: "\n\n")
+if lines(long).count > ThumbnailPage.lineLimit {
+    failures += 1
+    print("FAIL a long note is capped: \(lines(long).count) lines")
+}
+
 // ---------------------------------------------------------------------------
 
 if failures == 0 {
