@@ -1,6 +1,5 @@
 mod boot_payload;
 mod deep_link;
-#[cfg(target_os = "macos")]
 mod services;
 mod launch_window;
 mod stale_state;
@@ -384,7 +383,7 @@ pub fn run() {
                 // web page, so it is honoured only for a note inside one of
                 // the workspaces they opened.
                 let resolved = if url.scheme() == deep_link::SCHEME {
-                    deep_link::open_path(&app_handle, &url)
+                    deep_link::open_path(app_handle, &url)
                 } else {
                     url.to_file_path()
                         .ok()
