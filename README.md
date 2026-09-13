@@ -36,6 +36,9 @@ Apple Silicon and Intel are supported.
 Select text in any app and choose **Services → New Note in Compose** to drop it
 into a new note in the active workspace.
 
+Press Space on a `.md` file in the Finder and Quick Look shows the note
+rendered rather than its source.
+
 Links open a note, so scripts, Shortcuts, and other editors can point at one:
 
 ```
