@@ -6,6 +6,7 @@
 //! The frontend's only part is converting shared HTML with the converter a paste
 //! uses; everything that touches disk happens here.
 
+mod awake;
 mod contract;
 mod import;
 mod inbox;
@@ -31,8 +32,20 @@ pub struct ShareInboxState {
     /// Kept for the life of the app: dropping it ends the watch.
     #[cfg(target_os = "macos")]
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
+    #[cfg(target_os = "macos")]
+    awake: OnceLock<std::sync::Arc<awake::Awake<mac::Activity>>>,
     /// One import at a time, so no clip is filed twice.
     importing: Mutex<()>,
+}
+
+impl ShareInboxState {
+    /// The page found the inbox empty: nothing is left to keep the app awake for.
+    fn settled(&self) {
+        #[cfg(target_os = "macos")]
+        if let Some(awake) = self.awake.get() {
+            awake.release();
+        }
+    }
 }
 
 /// Find the inbox, publish where clips can go and keep that current, and watch
@@ -51,6 +64,9 @@ pub fn share_inbox_pending(state: State<'_, ShareInboxState>) -> Result<Vec<Pend
         return Ok(Vec::new());
     };
     let clips = inbox.pending().map_err(|error| error.to_string())?;
+    if clips.is_empty() {
+        state.settled();
+    }
     Ok(clips.into_iter().map(PendingClip::from).collect())
 }
 
