@@ -91,20 +91,21 @@ build_one() {
   # the recompile.
   touch "$ROOT/src-tauri/src/lib.rs"
 
-  # The Quick Look extensions are copied into Contents/PlugIns by Tauri, so they
-  # have to exist — and be signed with their own entitlements — before the
-  # bundle is assembled. Built per target so the universal app carries universal
-  # extensions. They are named in tauri.release.conf.json rather than
-  # tauri.conf.json: an extension only loads when signed with the team identity,
-  # so a development bundle has nothing to carry and must not need this output.
-  local ql_archs=()
+  # The app extensions (Quick Look, Share) are copied into Contents/PlugIns by
+  # Tauri, so they have to exist — each signed with its own entitlements —
+  # before the bundle is assembled; the same step writes the app's entitlements,
+  # which name the team's app group. Built per target so the universal app
+  # carries universal extensions. All of it is named in tauri.release.conf.json
+  # rather than tauri.conf.json: an extension only loads when signed with the
+  # team identity, so a development bundle has nothing to carry and must not
+  # need this output.
+  local ext_archs=()
   case "$target" in
-    universal-apple-darwin) ql_archs=(arm64 x86_64) ;;
-    aarch64-*) ql_archs=(arm64) ;;
-    x86_64-*) ql_archs=(x86_64) ;;
+    universal-apple-darwin) ext_archs=(arm64 x86_64) ;;
+    aarch64-*) ext_archs=(arm64) ;;
+    x86_64-*) ext_archs=(x86_64) ;;
   esac
-  "$ROOT/src-tauri/extensions/quicklook/build.sh" \
-    "$ROOT/src-tauri/extensions/quicklook/build" "${ql_archs[@]}"
+  "$ROOT/src-tauri/extensions/build.sh" "$ROOT/src-tauri/extensions/build" "${ext_archs[@]}"
 
   # create-dmg (bundle_dmg.sh) is intermittently racy (hdiutil/DiskArbitration);
   # clean disk-image state and retry a few times — a transient race clears, a

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
@@ -49,9 +49,14 @@ pub struct WorkspaceList {
     pub workspaces: Vec<WorkspaceRecord>,
 }
 
+/// Told the new list after every persisted change to it.
+type ListObserver = Box<dyn Fn(&WorkspaceList) + Send + Sync>;
+
 #[derive(Default)]
 pub struct WorkspaceRegistry {
     state: Mutex<WorkspaceRegistryState>,
+    /// Set once, at setup: the registry does not know who is listening.
+    list_observer: OnceLock<ListObserver>,
 }
 
 #[derive(Debug, Default)]
@@ -142,11 +147,23 @@ impl WorkspaceRegistry {
 
         let list = state.to_list();
         persist_state(&state)?;
+        drop(state);
+        self.notify_list(&list);
         Ok(list)
     }
 
     pub fn list(&self) -> Result<WorkspaceList, String> {
         Ok(self.lock_state()?.to_list())
+    }
+
+    pub fn observe_list(&self, observer: impl Fn(&WorkspaceList) + Send + Sync + 'static) {
+        let _ = self.list_observer.set(Box::new(observer));
+    }
+
+    fn notify_list(&self, list: &WorkspaceList) {
+        if let Some(observer) = self.list_observer.get() {
+            observer(list);
+        }
     }
 
     pub fn remove(&self, workspace_id: String) -> Result<WorkspaceList, String> {
@@ -170,6 +187,8 @@ impl WorkspaceRegistry {
 
         let list = state.to_list();
         persist_state(&state)?;
+        drop(state);
+        self.notify_list(&list);
         Ok(list)
     }
 
@@ -188,6 +207,8 @@ impl WorkspaceRegistry {
         state.active_workspace_id = Some(workspace_id);
         let list = state.to_list();
         persist_state(&state)?;
+        drop(state);
+        self.notify_list(&list);
         Ok(list)
     }
 
@@ -224,6 +245,8 @@ impl WorkspaceRegistry {
         workspace.last_opened_at = Some(now_ms());
         let list = state.to_list();
         persist_state(&state)?;
+        drop(state);
+        self.notify_list(&list);
         Ok(list)
     }
 
@@ -472,6 +495,24 @@ fn now_ms() -> i64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_observer_hears_every_change_to_the_list() {
+        let config = tempfile::tempdir().expect("config");
+        let vault = tempfile::tempdir().expect("vault");
+        let registry = WorkspaceRegistry::default();
+        registry.init_from_dir(config.path()).expect("init");
+        let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = heard.clone();
+        registry.observe_list(move |list| sink.lock().expect("sink").push(list.workspaces.len()));
+
+        let added = registry
+            .add(vault.path().to_string_lossy().into_owned())
+            .expect("add");
+        registry.remove(added.workspaces[0].id.clone()).expect("remove");
+
+        assert_eq!(*heard.lock().expect("heard"), [1, 0]);
+    }
+
     use super::*;
     use tempfile::tempdir;
 

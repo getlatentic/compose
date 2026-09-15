@@ -1,9 +1,11 @@
 {
   "bundle": {
     "macOS": {
+      "entitlements": "extensions/build/Compose.entitlements",
       "files": {
-        "PlugIns/ComposeQuickLook.appex": "extensions/quicklook/build/ComposeQuickLook.appex",
-        "PlugIns/ComposeThumbnail.appex": "extensions/quicklook/build/ComposeThumbnail.appex"
+        "PlugIns/ComposeQuickLook.appex": "extensions/build/ComposeQuickLook.appex",
+        "PlugIns/ComposeThumbnail.appex": "extensions/build/ComposeThumbnail.appex",
+        "PlugIns/ComposeShare.appex": "extensions/build/ComposeShare.appex"
       }
     }
   }
