@@ -91,10 +91,12 @@ build_one() {
   # the recompile.
   touch "$ROOT/src-tauri/src/lib.rs"
 
-  # The Quick Look extension is copied into Contents/PlugIns by Tauri
-  # (tauri.conf.json > bundle > macOS > files), so it has to exist — and be
-  # signed with its own entitlements — before the bundle is assembled. Built
-  # per target so the universal app carries a universal extension.
+  # The Quick Look extensions are copied into Contents/PlugIns by Tauri, so they
+  # have to exist — and be signed with their own entitlements — before the
+  # bundle is assembled. Built per target so the universal app carries universal
+  # extensions. They are named in tauri.release.conf.json rather than
+  # tauri.conf.json: an extension only loads when signed with the team identity,
+  # so a development bundle has nothing to carry and must not need this output.
   local ql_archs=()
   case "$target" in
     universal-apple-darwin) ql_archs=(arm64 x86_64) ;;
@@ -110,7 +112,7 @@ build_one() {
   local built=0 attempt
   for attempt in 1 2 3; do
     clean_dmg_state "$bundle"
-    if ( cd "$ROOT" && pnpm tauri build --target "$target" ${UPDATER_CONFIG[@]+"${UPDATER_CONFIG[@]}"} ); then
+    if ( cd "$ROOT" && pnpm tauri build --target "$target" --config "$ROOT/src-tauri/tauri.release.conf.json" ${UPDATER_CONFIG[@]+"${UPDATER_CONFIG[@]}"} ); then
       built=1; break
     fi
     echo "[release] $label attempt $attempt failed — cleaning disk-image state and retrying…" >&2
