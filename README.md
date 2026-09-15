@@ -31,6 +31,23 @@ brew install --cask getlatentic/tap/compose
 
 Apple Silicon and Intel are supported.
 
+## Open from elsewhere on your Mac
+
+Select text in any app and choose **Services → New Note in Compose** to drop it
+into a new note in the active workspace.
+
+Press Space on a `.md` file in the Finder and Quick Look shows the note
+rendered rather than its source; its icon is a page rather than a text file.
+
+Links open a note, so scripts, Shortcuts, and other editors can point at one:
+
+```
+compose://open?path=/Users/you/Notes/thesis/framework.md
+```
+
+The path must be inside a workspace you have opened — a link cannot reach the
+rest of your disk.
+
 ## Bring your AI harness
 
 Use the AI tools you already work with inside Compose.

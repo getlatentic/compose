@@ -45,3 +45,6 @@ docs/
 !packages/rich-editor/docs/
 AGENTS.md
 CLAUDE.md
+
+# Built by extensions/quicklook/build.sh
+src-tauri/extensions/quicklook/build/
