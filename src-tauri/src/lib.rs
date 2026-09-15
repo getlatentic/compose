@@ -1,6 +1,7 @@
 mod boot_payload;
 mod deep_link;
 mod services;
+mod share_inbox;
 mod launch_window;
 mod stale_state;
 mod user_tool_dirs;
@@ -91,6 +92,7 @@ pub fn run() {
         .manage(external::ExternalFilesRegistry::default())
         .manage(PendingOpenUrls::default())
         .manage(services::PendingServiceText::default())
+        .manage(share_inbox::ShareInboxState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Self-update: check a signed manifest, download + swap the bundle, and
@@ -160,6 +162,8 @@ pub fn run() {
             if let Err(error) = externals.init_from_app(&app_handle) {
                 eprintln!("external files registry init failed: {error}");
             }
+            // After the registry, whose workspaces it publishes to the share sheet.
+            share_inbox::start(&app_handle);
             // Load user-registered custom agents before export_all (below) reads
             // their keys. A plain JSON read, so safe inline (unlike the keychain).
             match app_handle.path().app_config_dir() {
@@ -356,6 +360,8 @@ pub fn run() {
             logging::open_error_log,
             open_with::drain_pending_open_urls,
             services::drain_pending_service_text,
+            share_inbox::share_inbox_pending,
+            share_inbox::share_inbox_import,
             external::external_list,
             external::external_add,
             external::external_remove,
