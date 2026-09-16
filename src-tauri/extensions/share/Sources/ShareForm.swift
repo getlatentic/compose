@@ -81,6 +81,8 @@ struct ShareForm: View {
             }
             if let excerpt = model.excerpt {
                 Text(excerpt).lineLimit(4)
+            } else if model.draft.page != nil {
+                Text("The article on this page")
             }
             if !model.draft.images.isEmpty {
                 let count = model.draft.images.count

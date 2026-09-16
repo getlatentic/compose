@@ -57,6 +57,9 @@ pub struct Clip {
     pub text: Option<String>,
     #[serde(default)]
     pub html: Option<String>,
+    /// A whole web page shared from Safari; the frontend files its article.
+    #[serde(default)]
+    pub page: Option<String>,
     #[serde(default)]
     pub images: Vec<String>,
 }
@@ -66,16 +69,21 @@ pub struct Clip {
 #[serde(rename_all = "camelCase")]
 pub struct PendingClip {
     pub id: String,
+    /// What a page's relative links resolve against.
+    pub url: Option<String>,
     pub html: Option<String>,
     pub text: Option<String>,
+    pub page: Option<String>,
 }
 
 impl From<StoredClip> for PendingClip {
     fn from(stored: StoredClip) -> Self {
         Self {
             id: stored.id,
+            url: stored.clip.url,
             html: stored.clip.html,
             text: stored.clip.text,
+            page: stored.clip.page,
         }
     }
 }
@@ -104,7 +112,21 @@ mod tests {
         assert_eq!(clip.created_at, 1_789_500_000_000);
         assert_eq!(clip.images, ["1-shot.png"]);
         assert_eq!(clip.html, None, "an absent key is a missing value");
+        assert!(clip.page.as_deref().is_some_and(|page| page.contains("<article>")));
         assert!(clip.workspace_id.is_some());
+    }
+
+    #[test]
+    fn a_pending_clip_hands_the_frontend_the_page_and_its_address() {
+        let clip: Clip = serde_json::from_str(CLIP_FIXTURE).expect("fixture decodes");
+        let pending = serde_json::to_value(PendingClip::from(StoredClip {
+            id: "c1".to_owned(),
+            clip,
+        }))
+        .expect("serializes");
+
+        assert_eq!(pending["url"], "https://www.latentic.ai/blog/proof-of-code-understanding");
+        assert!(pending["page"].as_str().is_some_and(|page| page.contains("<article>")));
     }
 
     #[test]

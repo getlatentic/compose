@@ -140,7 +140,8 @@ if let fixtures = ProcessInfo.processInfo.environment["SHARE_FIXTURES"] {
             Clip.self, from: Data(contentsOf: base.appendingPathComponent("clip.json")))
         check("the fixture clip decodes",
               clip.title == "Proof of Code Understanding" && clip.images == ["1-shot.png"]
-                  && clip.html == nil && clip.createdAt == 1_789_500_000_000)
+                  && clip.html == nil && clip.createdAt == 1_789_500_000_000
+                  && clip.page?.contains("<article>") == true)
         let again = try JSONDecoder().decode(Clip.self, from: JSONEncoder().encode(clip))
         check("a clip survives its own encoding", again == clip)
         let destinations = try JSONDecoder().decode(
@@ -157,6 +158,7 @@ if let fixtures = ProcessInfo.processInfo.environment["SHARE_FIXTURES"] {
 
 testDocumentFiles()
 testActivationRule()
+testWebPages()
 
 if failures == 0 {
     print("all share extension tests passed")

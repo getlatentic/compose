@@ -1,9 +1,9 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// When macOS offers Compose in a Share menu: for a link, text, images, and the
-/// files Compose opens — with every attachment one of those, so a selection
-/// holding anything else does not offer it.
+/// When macOS offers Compose in a Share menu: for a link, a web page, text,
+/// images, and the files Compose opens — with every attachment one of those, so
+/// a selection holding anything else does not offer it.
 ///
 /// Generated at build time from the file types Compose declares, which is what
 /// lets macOS hand those files to it at all.
@@ -16,7 +16,9 @@ enum ActivationRule {
         let supported =
             [conforms("public.image")]
             + documentTypes.map { #"ANY $attachment.registeredTypeIdentifiers UTI-EQUALS "\#($0)""# }
-            + ["((\(conforms("public.url")) OR \(conforms("public.text"))) AND NOT \(conforms("public.file-url")))"]
+            // A page Safari shares arrives as the property list ComposePage.js
+            // returns; a property-list *file* is not a page.
+            + ["((\(conforms("public.url")) OR \(conforms("public.text")) OR \(conforms("com.apple.property-list"))) AND NOT \(conforms("public.file-url")))"]
         return """
             extensionItems.@count >= 1 AND SUBQUERY(extensionItems, $item, \
             $item.attachments.@count >= 1 AND $item.attachments.@count <= \(maxAttachments) AND \

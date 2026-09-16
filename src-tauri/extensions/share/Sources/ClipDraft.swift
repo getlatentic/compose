@@ -7,12 +7,14 @@ struct ClipDraft: Equatable {
     var url: URL?
     var text: String?
     var html: String?
+    var page: String?
     var images: [ClipImage] = []
 
     private static let titleLimit = 120
 
     var isEmpty: Bool {
-        url == nil && (text ?? "").isEmpty && (html ?? "").isEmpty && images.isEmpty
+        url == nil && (text ?? "").isEmpty && (html ?? "").isEmpty && (page ?? "").isEmpty
+            && images.isEmpty
     }
 
     /// A clip is filed under a title, so one is always proposed: what the app
@@ -34,6 +36,7 @@ struct ClipDraft: Equatable {
             url: url?.absoluteString,
             text: text,
             html: html,
+            page: page,
             images: images.map(\.fileName)
         )
     }

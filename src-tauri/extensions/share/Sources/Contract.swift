@@ -31,6 +31,8 @@ struct Clip: Codable, Equatable {
     let url: String?
     let text: String?
     let html: String?
+    /// A whole web page shared from Safari: the app files its article.
+    let page: String?
     /// File names inside the clip's folder.
     let images: [String]
 }

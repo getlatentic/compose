@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { showErrorToast } from "../toast/toastStore";
+import { pageArticle } from "./pageArticle";
 
 const SHARE_INBOX_EVENT = "compose:share-inbox-changed";
 const PENDING_CMD = "share_inbox_pending";
@@ -11,11 +12,15 @@ const IMPORT_CMD = "share_inbox_import";
  *  can turn into Markdown. */
 export interface PendingClip {
   id: string;
+  url: string | null;
   html: string | null;
   text: string | null;
+  /** A whole web page shared from Safari, whose article becomes the note. */
+  page: string | null;
 }
 
 type Converter = (html: string) => string;
+type ArticleFinder = (page: string, url: string | null) => Promise<string | null>;
 type Invoke = typeof import("@tauri-apps/api/core").invoke;
 
 async function pasteConverter(): Promise<Converter> {
@@ -29,13 +34,19 @@ async function pasteConverter(): Promise<Converter> {
 
 /**
  * The Markdown a clip's shared content becomes. Rich text goes through the
- * converter a paste uses, so a clipped page reads the same as a pasted one.
+ * converter a paste uses, so a clipped page reads the same as a pasted one. A
+ * selection is taken as it is; a whole page, by its article.
  */
 export async function clipBody(
   clip: PendingClip,
   converter: () => Promise<Converter> = pasteConverter,
+  findArticle: ArticleFinder = pageArticle,
 ): Promise<string> {
   if (clip.html) return (await converter())(clip.html);
+  if (clip.page) {
+    const article = await findArticle(clip.page, clip.url);
+    if (article) return (await converter())(article);
+  }
   return clip.text ?? "";
 }
 
