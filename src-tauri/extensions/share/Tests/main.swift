@@ -77,25 +77,8 @@ try? FileManager.default.removeItem(at: temp)
 
 import UniformTypeIdentifiers
 
-/// Reads a draft the way the sheet does, from a synchronous test. The run loop
-/// keeps turning while it waits — an item provider calls back on it.
-final class Box: @unchecked Sendable { var draft: ClipDraft? }
-
 func draft(from items: [NSExtensionItem]) -> ClipDraft {
-    let box = Box()
-    Task { box.draft = await SharedItems.draft(from: items) }
-    let deadline = Date().addingTimeInterval(10)
-    while box.draft == nil, Date() < deadline {
-        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-    }
-    return box.draft ?? ClipDraft()
-}
-
-func item(_ provider: NSItemProvider, title: String? = nil) -> NSExtensionItem {
-    let item = NSExtensionItem()
-    item.attachments = [provider]
-    if let title { item.attributedTitle = NSAttributedString(string: title) }
-    return item
+    sharedContent(from: items).draft
 }
 
 let sharedURL = URL(string: "https://www.latentic.ai/blog/a-page")!
@@ -171,6 +154,9 @@ if let fixtures = ProcessInfo.processInfo.environment["SHARE_FIXTURES"] {
 } else {
     check("SHARE_FIXTURES names the fixture folder (extensions/test.sh sets it)", false)
 }
+
+testDocumentFiles()
+testActivationRule()
 
 if failures == 0 {
     print("all share extension tests passed")

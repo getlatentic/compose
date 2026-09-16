@@ -112,5 +112,25 @@ if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   write_group_entitlements "$SHARE_ENTITLEMENTS" sandboxed "$APP_GROUP"
   write_group_entitlements "$OUT_DIR/Compose.entitlements" unsandboxed "$APP_GROUP"
 fi
-build_extension ComposeShare "$HERE/share/Info.plist" "$SHARE_ENTITLEMENTS" "AppKit SwiftUI" \
+# Share hands over the files Compose opens, and macOS lets it only for the types
+# Compose declares — so the list the sheet checks, and the rule that makes macOS
+# offer Compose for those files, both come from tauri.conf.json.
+DOCUMENT_EXTENSIONS=()
+while IFS= read -r extension; do
+  DOCUMENT_EXTENSIONS+=("$extension")
+done < <(/usr/bin/python3 -c "
+import json, sys
+for association in json.load(open(sys.argv[1]))['bundle']['fileAssociations']:
+    print('\n'.join(association['ext']))
+" "$HERE/../tauri.conf.json")
+RULE_TOOL="$(mktemp -d)/activation-rule"
+xcrun --sdk macosx swiftc -O "$HERE"/share/Activation/*.swift -o "$RULE_TOOL"
+SHARE_PLIST="$(mktemp -d)/Info.plist"
+cp "$HERE/share/Info.plist" "$SHARE_PLIST"
+plutil -replace NSExtension.NSExtensionAttributes.NSExtensionActivationRule \
+  -string "$("$RULE_TOOL" "${DOCUMENT_EXTENSIONS[@]}")" "$SHARE_PLIST"
+plutil -replace ComposeDocumentExtensions -json \
+  "$(/usr/bin/python3 -c 'import json, sys; print(json.dumps(sys.argv[1:]))' "${DOCUMENT_EXTENSIONS[@]}")" \
+  "$SHARE_PLIST"
+build_extension ComposeShare "$SHARE_PLIST" "$SHARE_ENTITLEMENTS" "AppKit SwiftUI" \
   "$HERE/share/Sources"

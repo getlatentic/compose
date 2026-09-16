@@ -7,24 +7,35 @@ struct ShareForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            TextField("Title", text: $model.draft.title)
-                .textFieldStyle(.roundedBorder)
-                .font(.headline)
-            destination
-            preview
-            if let failure = model.failure {
-                Text(failure).font(.callout).foregroundStyle(.red)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
-                Button("Save", action: save)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!model.canSave)
+            if model.loading {
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+            } else {
+                form
             }
         }
         .padding(18)
         .frame(width: 420)
+    }
+
+    @ViewBuilder private var form: some View {
+        if let opened = model.opened {
+            Text("Opened \(opened) in Compose.").font(.callout).foregroundStyle(.secondary)
+        }
+        TextField("Title", text: $model.draft.title)
+            .textFieldStyle(.roundedBorder)
+            .font(.headline)
+        destination
+        preview
+        if let failure = model.failure {
+            Text(failure).font(.callout).foregroundStyle(.red)
+        }
+        HStack {
+            Spacer()
+            Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
+            Button("Save", action: save)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!model.canSave)
+        }
     }
 
     @ViewBuilder private var destination: some View {
@@ -41,24 +52,20 @@ struct ShareForm: View {
         }
     }
 
-    @ViewBuilder private var preview: some View {
-        if model.loading {
-            ProgressView().controlSize(.small)
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                if let url = model.draft.url {
-                    Text(url.absoluteString).lineLimit(1).truncationMode(.middle)
-                }
-                if let excerpt = model.excerpt {
-                    Text(excerpt).lineLimit(4)
-                }
-                if !model.draft.images.isEmpty {
-                    let count = model.draft.images.count
-                    Text(count == 1 ? "1 image" : "\(count) images")
-                }
+    private var preview: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let url = model.draft.url {
+                Text(url.absoluteString).lineLimit(1).truncationMode(.middle)
             }
-            .font(.callout)
-            .foregroundStyle(.secondary)
+            if let excerpt = model.excerpt {
+                Text(excerpt).lineLimit(4)
+            }
+            if !model.draft.images.isEmpty {
+                let count = model.draft.images.count
+                Text(count == 1 ? "1 image" : "\(count) images")
+            }
         }
+        .font(.callout)
+        .foregroundStyle(.secondary)
     }
 }
