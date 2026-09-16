@@ -73,6 +73,81 @@ do {
 }
 try? FileManager.default.removeItem(at: temp)
 
+// --- what a share host hands over ------------------------------------------------
+
+import UniformTypeIdentifiers
+
+/// Reads a draft the way the sheet does, from a synchronous test. The run loop
+/// keeps turning while it waits — an item provider calls back on it.
+final class Box: @unchecked Sendable { var draft: ClipDraft? }
+
+func draft(from items: [NSExtensionItem]) -> ClipDraft {
+    let box = Box()
+    Task { box.draft = await SharedItems.draft(from: items) }
+    let deadline = Date().addingTimeInterval(10)
+    while box.draft == nil, Date() < deadline {
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+    }
+    return box.draft ?? ClipDraft()
+}
+
+func item(_ provider: NSItemProvider, title: String? = nil) -> NSExtensionItem {
+    let item = NSExtensionItem()
+    item.attachments = [provider]
+    if let title { item.attributedTitle = NSAttributedString(string: title) }
+    return item
+}
+
+let sharedURL = URL(string: "https://www.latentic.ai/blog/a-page")!
+let fromURL = draft(from: [
+    item(NSItemProvider(item: sharedURL as NSURL, typeIdentifier: UTType.url.identifier))
+])
+check("a shared link is captured", fromURL.url == sharedURL, "\(String(describing: fromURL.url))")
+check("and names the clip after where it came from", fromURL.title == "www.latentic.ai", fromURL.title)
+check("so it can be saved", !fromURL.isEmpty)
+
+let fromPage = draft(from: [
+    item(
+        NSItemProvider(item: sharedURL as NSURL, typeIdentifier: UTType.url.identifier),
+        title: "A Page Title")
+])
+check("a page's own title wins", fromPage.title == "A Page Title", fromPage.title)
+
+let fromText = draft(from: [
+    item(NSItemProvider(item: "First line\nsecond line" as NSString, typeIdentifier: UTType.plainText.identifier))
+])
+check("shared text is captured", fromText.text == "First line\nsecond line", fromText.text ?? "nil")
+check("and titles the clip", fromText.title == "First line", fromText.title)
+
+let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+let imageProvider = NSItemProvider(item: png as NSData, typeIdentifier: UTType.png.identifier)
+imageProvider.suggestedName = "shot.png"
+let fromImage = draft(from: [item(imageProvider)])
+check("a shared image is captured", fromImage.images.count == 1, "\(fromImage.images.count)")
+check("named after what it was called", fromImage.images.first?.fileName == "1-shot.png",
+      fromImage.images.first?.fileName ?? "nil")
+
+let heic = NSItemProvider(item: png as NSData, typeIdentifier: UTType.heic.identifier)
+heic.suggestedName = "IMG_0001.HEIC"
+let fromPhoto = draft(from: [item(heic)])
+check("a photo keeps the type it really is", fromPhoto.images.first?.fileName == "1-IMG_0001.heic",
+      fromPhoto.images.first?.fileName ?? "nil")
+
+let imageFile = FileManager.default.temporaryDirectory
+    .appendingPathComponent("share-test-\(UUID().uuidString)")
+    .appendingPathComponent("Screen Shot.png")
+try! FileManager.default.createDirectory(
+    at: imageFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+try! png.write(to: imageFile)
+let fromFile = draft(from: [
+    item(NSItemProvider(item: imageFile as NSURL, typeIdentifier: UTType.fileURL.identifier))
+])
+check("an image shared as a file is read off disk", fromFile.images.first?.data == png,
+      "\(fromFile.images.first?.data.count ?? -1) bytes")
+check("under a name safe to write", fromFile.images.first?.fileName == "1-Screen-Shot.png",
+      fromFile.images.first?.fileName ?? "nil")
+try? FileManager.default.removeItem(at: imageFile.deletingLastPathComponent())
+
 // --- the contract, pinned by fixtures the Rust importer's tests read too ---------
 
 if let fixtures = ProcessInfo.processInfo.environment["SHARE_FIXTURES"] {

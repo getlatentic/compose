@@ -26,14 +26,14 @@ enum SharedItems {
                 draft.images.append(image)
             }
         } else if offered(provider, [.fileURL]) != nil {
-            if let file = await load(provider, .fileURL) as? URL,
+            if let file = await url(from: provider),
                 let image = imageFile(at: file, index: draft.images.count)
             {
                 draft.images.append(image)
             }
         } else if offered(provider, [.url]) != nil {
             if draft.url == nil {
-                draft.url = await load(provider, .url) as? URL
+                draft.url = await url(from: provider)
             }
         } else if let type = offered(provider, [.html, .rtf, .rtfd, .plainText]) {
             await readText(provider, type: type, into: &draft)
@@ -44,9 +44,11 @@ enum SharedItems {
         _ provider: NSItemProvider, type: UTType, into draft: inout ClipDraft
     ) async {
         let value = await load(provider, type)
-        if type == .html, let html = string(value) {
+        if type.conforms(to: .html), let html = string(value) {
             draft.html = joined(draft.html, html)
-        } else if type == .rtf || type == .rtfd, let html = RichText.html(from: value) {
+        } else if type.conforms(to: .rtf) || type.conforms(to: .rtfd),
+            let html = RichText.html(from: value)
+        {
             draft.html = joined(draft.html, html)
         } else if let text = string(value) {
             draft.text = joined(draft.text, text)
@@ -58,15 +60,16 @@ enum SharedItems {
     {
         let value = await load(provider, type)
         if let url = value as? URL { return imageFile(at: url, index: index) }
+        let stem = provider.suggestedName.map { ($0 as NSString).deletingPathExtension }
         if let data = value as? Data {
             let name = ImageNaming.name(
-                index: index, suggested: provider.suggestedName,
+                index: index, suggested: stem,
                 ext: type.preferredFilenameExtension ?? "png")
             return ClipImage(fileName: name, data: data)
         }
         guard let png = (value as? NSImage).flatMap(pngData) else { return nil }
-        let name = ImageNaming.name(index: index, suggested: provider.suggestedName, ext: "png")
-        return ClipImage(fileName: name, data: png)
+        return ClipImage(
+            fileName: ImageNaming.name(index: index, suggested: stem, ext: "png"), data: png)
     }
 
     private static func imageFile(at url: URL, index: Int) -> ClipImage? {
@@ -78,8 +81,29 @@ enum SharedItems {
         return ClipImage(fileName: name, data: data)
     }
 
+    /// The first of `types` the provider can supply, as the concrete type it
+    /// registered — `public.heic`, not the abstract `public.image` — so a clip's
+    /// file is loaded and named as what it actually is.
     private static func offered(_ provider: NSItemProvider, _ types: [UTType]) -> UTType? {
-        types.first { provider.hasItemConformingToTypeIdentifier($0.identifier) }
+        let registered = provider.registeredTypeIdentifiers.compactMap(UTType.init)
+        for wanted in types {
+            if let concrete = registered.first(where: { $0.conforms(to: wanted) }) {
+                return concrete
+            }
+            if provider.hasItemConformingToTypeIdentifier(wanted.identifier) { return wanted }
+        }
+        return nil
+    }
+
+    /// A shared link. `loadItem` answers a URL request with the raw bytes of the
+    /// address, so the URL has to be asked for as an object.
+    private static func url(from provider: NSItemProvider) async -> URL? {
+        guard provider.canLoadObject(ofClass: URL.self) else { return nil }
+        return await withCheckedContinuation { continuation in
+            _ = provider.loadObject(ofClass: URL.self) { value, _ in
+                continuation.resume(returning: value)
+            }
+        }
     }
 
     private static func load(_ provider: NSItemProvider, _ type: UTType) async -> NSSecureCoding? {
