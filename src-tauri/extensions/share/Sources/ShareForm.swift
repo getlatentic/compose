@@ -21,6 +21,28 @@ struct ShareForm: View {
         if let opened = model.opened {
             Text("Opened \(opened) in Compose.").font(.callout).foregroundStyle(.secondary)
         }
+        if model.draft.isEmpty {
+            nothingToSave
+        } else {
+            clip
+        }
+    }
+
+    /// A shared file that would not open, or a share with nothing readable in
+    /// it: the reason, and a way out — not an empty clip that cannot be saved.
+    @ViewBuilder private var nothingToSave: some View {
+        if let failure = model.failure {
+            Text(failure).font(.callout).foregroundStyle(.red)
+        } else {
+            Text("There is nothing here Compose can save.").font(.callout).foregroundStyle(.secondary)
+        }
+        HStack {
+            Spacer()
+            Button("Close", action: cancel).keyboardShortcut(.cancelAction)
+        }
+    }
+
+    @ViewBuilder private var clip: some View {
         TextField("Title", text: $model.draft.title)
             .textFieldStyle(.roundedBorder)
             .font(.headline)
