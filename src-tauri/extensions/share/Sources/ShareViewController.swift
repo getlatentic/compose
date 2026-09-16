@@ -32,6 +32,10 @@ final class ComposeShareViewController: NSViewController {
         Task { @MainActor in
             let content = await SharedItems.content(from: items, documents: .declared)
             model.draft = content.draft
+            if !content.ignoredFiles.isEmpty {
+                model.ignored = ListFormatter.localizedString(
+                    byJoining: content.ignoredFiles.map(\.lastPathComponent))
+            }
             if !content.documents.isEmpty {
                 let opened = await open(content.documents)
                 if opened && content.draft.isEmpty {

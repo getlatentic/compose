@@ -8,6 +8,8 @@ struct SharedContent {
     var documents: [URL] = []
     /// The title of a page Safari shared, which its item does not carry.
     var pageTitle: String?
+    /// Shared files Compose neither opens nor clips, named in the sheet.
+    var ignoredFiles: [URL] = []
 }
 
 /// Reads what the sharing app handed over.
@@ -43,6 +45,8 @@ enum SharedItems {
                 content.documents.append(file)
             } else if let image = imageFile(at: file, index: content.draft.images.count) {
                 content.draft.images.append(image)
+            } else {
+                content.ignoredFiles.append(file)
             }
         } else if offered(provider, [.propertyList]) != nil {
             await readWebPage(provider, into: &content)

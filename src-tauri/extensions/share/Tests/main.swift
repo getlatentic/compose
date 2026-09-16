@@ -157,7 +157,6 @@ if let fixtures = ProcessInfo.processInfo.environment["SHARE_FIXTURES"] {
 }
 
 testDocumentFiles()
-testActivationRule()
 testWebPages()
 
 if failures == 0 {

@@ -9,6 +9,8 @@ final class ShareModel: ObservableObject {
     @Published var failure: String?
     /// The files that opened in Compose, when a clip came with them.
     @Published var opened: String?
+    /// Shared files Compose does not open, when that is all there was.
+    @Published var ignored: String?
 
     var canSave: Bool { !loading && !draft.isEmpty }
 

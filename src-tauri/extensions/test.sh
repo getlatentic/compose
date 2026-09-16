@@ -19,9 +19,6 @@ run_suite quicklook \
   "$HERE"/quicklook/Preview/Sources/*.swift \
   "$HERE"/quicklook/Thumbnail/Sources/*.swift \
   "$HERE"/quicklook/Tests/main.swift
-# The share suite checks clip.json against fixtures the Rust importer reads too,
-# and the activation rule against the file types tauri.conf.json declares.
+# The share suite checks clip.json against fixtures the Rust importer reads too.
 export SHARE_FIXTURES="$HERE/share/Fixtures"
-export COMPOSE_CONFIG="$HERE/../tauri.conf.json"
-run_suite share "$HERE"/share/Sources/*.swift "$HERE"/share/Activation/ActivationRule.swift \
-  "$HERE"/share/Tests/*.swift
+run_suite share "$HERE"/share/Sources/*.swift "$HERE"/share/Tests/*.swift

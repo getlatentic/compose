@@ -33,6 +33,9 @@ struct ShareForm: View {
     @ViewBuilder private var nothingToSave: some View {
         if let failure = model.failure {
             Text(failure).font(.callout).foregroundStyle(.red)
+        } else if let ignored = model.ignored {
+            Text("Compose opens Markdown and text files, so it cannot open \(ignored).")
+                .font(.callout).foregroundStyle(.secondary)
         } else {
             Text("There is nothing here Compose can save.").font(.callout).foregroundStyle(.secondary)
         }
