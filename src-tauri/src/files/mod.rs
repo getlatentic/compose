@@ -607,7 +607,7 @@ pub(crate) fn scan_markdown_files(root: &Path) -> Result<Vec<WorkspaceFileEntry>
             continue;
         }
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+        if !path.to_str().is_some_and(workspace_index::is_markdown_path) {
             continue;
         }
         let relative_path = path
@@ -872,6 +872,9 @@ mod tests {
         fs::write(dir.path().join("README.md"), "hello").unwrap();
         fs::create_dir_all(dir.path().join("notes")).unwrap();
         fs::write(dir.path().join("notes/launch.md"), "hi").unwrap();
+        fs::write(dir.path().join("notes/plan.markdown"), "hi").unwrap();
+        fs::write(dir.path().join("notes/old.MDOWN"), "hi").unwrap();
+        fs::write(dir.path().join("x.mkd"), "hi").unwrap();
         fs::write(dir.path().join("plain.txt"), "x").unwrap();
         fs::create_dir_all(dir.path().join(".git")).unwrap();
         fs::write(dir.path().join(".git/HEAD"), "ref:").unwrap();
@@ -882,7 +885,10 @@ mod tests {
 
         let entries = scan_markdown_files(dir.path()).expect("scan");
         let paths: Vec<_> = entries.iter().map(|e| e.relative_path.clone()).collect();
-        assert_eq!(paths, vec!["README.md", "notes/launch.md"]);
+        assert_eq!(
+            paths,
+            vec!["README.md", "notes/launch.md", "notes/old.MDOWN", "notes/plan.markdown", "x.mkd"]
+        );
     }
 
     #[test]

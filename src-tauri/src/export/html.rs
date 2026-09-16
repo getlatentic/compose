@@ -37,6 +37,12 @@ pub fn render_markdown_to_html_with_mermaid(
     wrap_document(title, &body)
 }
 
+/// A plain-text document as a standalone page: its text exactly as written,
+/// spacing and line breaks kept, nothing read as Markdown.
+pub fn render_plain_text_to_html(text: &str, title: &str) -> String {
+    wrap_document(title, &format!("<div class=\"plain-text\">{}</div>", escape_html(text)))
+}
+
 /// comrak GFM render of the body: syntax-highlighted code fences, mermaid fences
 /// swapped for their SVG. Frontmatter skipped; raw HTML escaped.
 fn markdown_to_body(markdown: &str, mermaid_svgs: HashMap<String, String>) -> String {
@@ -402,10 +408,11 @@ fn wikilink_target_and_label(body: &str) -> (&str, &str) {
     (target, label)
 }
 
-/// Best-effort href for a wikilink target: strip any `#anchor`, ensure `.md`.
+/// Best-effort href for a wikilink target: strip any `#anchor`, and give it
+/// `.md` unless it already names a Markdown extension.
 fn wikilink_href(target: &str) -> String {
     let base = target.split('#').next().unwrap_or(target).trim().replace('\\', "/");
-    if base.to_ascii_lowercase().ends_with(".md") {
+    if workspace_index::is_markdown_path(&base) {
         base
     } else {
         format!("{base}.md")
@@ -538,8 +545,8 @@ fn body_css() -> &'static str {
     })
 }
 
-/// HTML-escape a short plain string (the title). Body HTML is comrak output and
-/// must not be re-escaped.
+/// HTML-escape plain text: a title, or a plain-text document's body. Markdown
+/// body HTML is comrak output and must not be re-escaped.
 fn escape_html(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -589,6 +596,14 @@ pre {
   page-break-inside: avoid;
 }
 pre code { background: none; padding: 0; font-size: 0.86em; line-height: 1.5; }
+/* Monospace, so text laid out in columns lines up on paper as it does on screen. */
+.plain-text {
+  font-family: "SF Mono", "JetBrains Mono", ui-monospace, "Menlo", monospace;
+  font-size: 10.5pt;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 blockquote {
   margin-left: 0;
   padding: 0.2em 1em;
@@ -654,6 +669,22 @@ mod tests {
         assert!(html.contains(">Daily Note</a>"), "{html}");
         assert!(html.contains(">the plan</a>"), "{html}");
         assert!(!html.contains("[[Daily Note]]"), "raw brackets must be gone: {html}");
+    }
+
+    #[test]
+    fn plain_text_keeps_every_character_and_line_break() {
+        let html = render_plain_text_to_html("# not a heading\n  *not emphasis*\n<b>tag</b> & more", "todo");
+
+        assert!(html.contains("<div class=\"plain-text\"># not a heading\n  *not emphasis*\n&lt;b&gt;tag&lt;/b&gt; &amp; more</div>"), "{html}");
+        assert!(!html.contains("<h1") && !html.contains("<em>"), "{html}");
+        assert!(html.contains("<title>todo</title>"));
+    }
+
+    #[test]
+    fn a_wikilink_that_names_a_markdown_extension_keeps_it() {
+        assert_eq!(wikilink_href("plan.mdown#part"), "plan.mdown");
+        assert_eq!(wikilink_href("Plan.MD"), "Plan.MD");
+        assert_eq!(wikilink_href("plan"), "plan.md");
     }
 
     #[test]

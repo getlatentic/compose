@@ -19,6 +19,7 @@ mod paged;
 mod pdf;
 mod print;
 
+use crate::document_kind::DocumentKind;
 use crate::external::ExternalFilesRegistry;
 use crate::workspace::WorkspaceRegistry;
 use serde::{Deserialize, Serialize};
@@ -163,18 +164,22 @@ fn resolve_document(
     }
 }
 
-/// Render a document's current markdown to a self-contained HTML document. Its
-/// own directory is what relative image references resolve against.
+/// Render a document's current content to a self-contained HTML document: a
+/// note as Markdown, whose relative images resolve against its own directory;
+/// a plain-text file exactly as written.
 fn document_html(
     source: &Path,
     content: &str,
     mermaid_svgs: HashMap<String, String>,
 ) -> String {
-    let doc_dir = source.parent().unwrap_or_else(|| Path::new("."));
     let title = source
         .file_stem()
         .and_then(|stem| stem.to_str())
         .unwrap_or("document");
+    if DocumentKind::of(source) == Some(DocumentKind::PlainText) {
+        return html::render_plain_text_to_html(content, title);
+    }
+    let doc_dir = source.parent().unwrap_or_else(|| Path::new("."));
     html::render_markdown_to_html_with_mermaid(content, title, doc_dir, mermaid_svgs)
 }
 
@@ -217,6 +222,14 @@ mod tests {
         assert!(html.contains("<strong>bold</strong>"));
         assert!(html.contains("<title>x</title>"));
         assert!(html.contains("<!doctype html>"));
+    }
+
+    #[test]
+    fn a_text_file_renders_as_written() {
+        let html = document_html(Path::new("/notes/todo.txt"), "# milk\n**eggs**", HashMap::new());
+        assert!(html.contains("# milk\n**eggs**"), "{html}");
+        assert!(!html.contains("<h1") && !html.contains("<strong>"), "{html}");
+        assert!(html.contains("<title>todo</title>"));
     }
 
     #[test]

@@ -362,18 +362,18 @@ fn classify_event_kind(kind: &EventKind) -> Option<&'static str> {
     }
 }
 
-/// Whether a path's event reaches the frontend. Notes (`.md`) always do.
+/// Whether a path's event reaches the frontend. Notes always do.
 /// Directory events matter too — the tree shows folders — but a removed path
 /// can't be stat'd, so removals pass through on the no-extension heuristic and
 /// the frontend resolves them against the files/folders it actually knows.
 /// (A removed folder NAMED like a file, e.g. `Notes.backup`, is missed here —
 /// the focus-refresh rescan reconciles those rare cases.)
 fn should_emit(kind: &str, path: &Path, is_dir: Option<bool>) -> bool {
-    let is_md = path.extension().and_then(|ext| ext.to_str()) == Some("md");
+    let is_note = path.to_str().is_some_and(workspace_index::is_markdown_path);
     match kind {
-        "modified" => is_md && is_dir != Some(true),
-        "created" => is_md || is_dir == Some(true),
-        "removed" => is_md || path.extension().is_none(),
+        "modified" => is_note && is_dir != Some(true),
+        "created" => is_note || is_dir == Some(true),
+        "removed" => is_note || path.extension().is_none(),
         _ => false,
     }
 }
@@ -495,7 +495,14 @@ mod tests {
         // A removed dir can't be stat'd — passes on the no-extension heuristic.
         assert!(should_emit("removed", dir, None));
 
-        // Non-md files stay invisible.
+        // A note saved under another Markdown extension is still a note.
+        let other_note = Path::new("/ws/plan.markdown");
+        assert!(should_emit("created", other_note, Some(false)));
+        assert!(should_emit("modified", other_note, Some(false)));
+        assert!(should_emit("removed", other_note, None));
+
+        // Everything else stays invisible, text files included.
+        assert!(!should_emit("modified", Path::new("/ws/notes.txt"), Some(false)));
         assert!(!should_emit("created", stray, Some(false)));
         assert!(!should_emit("modified", stray, Some(false)));
         assert!(!should_emit("removed", stray, None));
