@@ -30,17 +30,10 @@
 	<dict>
 		<key>NSExtensionAttributes</key>
 		<dict>
+			<!-- build.sh replaces this with the rule share/Activation generates from the
+			     fileAssociations in tauri.conf.json; unbuilt, the extension is offered for nothing. -->
 			<key>NSExtensionActivationRule</key>
-			<dict>
-				<key>NSExtensionActivationSupportsImageWithMaxCount</key>
-				<integer>10</integer>
-				<key>NSExtensionActivationSupportsText</key>
-				<true/>
-				<key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
-				<integer>1</integer>
-				<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
-				<integer>1</integer>
-			</dict>
+			<string>FALSEPREDICATE</string>
 		</dict>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.share-services</string>

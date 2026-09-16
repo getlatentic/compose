@@ -30,8 +30,30 @@ final class ComposeShareViewController: NSViewController {
             lastUsed: UserDefaults.standard.string(forKey: Self.lastWorkspaceKey))
         let items = extensionContext?.inputItems as? [NSExtensionItem] ?? []
         Task { @MainActor in
-            model.draft = await SharedItems.draft(from: items)
+            let content = await SharedItems.content(from: items, documents: .declared)
+            model.draft = content.draft
+            if !content.documents.isEmpty {
+                let opened = await open(content.documents)
+                if opened && content.draft.isEmpty {
+                    extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+                    return
+                }
+            }
             model.loading = false
+        }
+    }
+
+    /// A shared Markdown or text file opens in Compose where it is; the sheet
+    /// stays only for whatever else came with it, or to say why it could not.
+    private func open(_ documents: [URL]) async -> Bool {
+        let names = ListFormatter.localizedString(byJoining: documents.map(\.lastPathComponent))
+        do {
+            try await OpenInCompose.open(documents)
+            model.opened = names
+            return true
+        } catch {
+            model.failure = "Compose could not open \(names): \(error.localizedDescription)"
+            return false
         }
     }
 

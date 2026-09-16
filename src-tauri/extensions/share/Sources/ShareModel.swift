@@ -7,6 +7,8 @@ final class ShareModel: ObservableObject {
     @Published var destinations: [Destinations.Workspace] = []
     @Published var workspaceId: String?
     @Published var failure: String?
+    /// The files that opened in Compose, when a clip came with them.
+    @Published var opened: String?
 
     var canSave: Bool { !loading && !draft.isEmpty }
 

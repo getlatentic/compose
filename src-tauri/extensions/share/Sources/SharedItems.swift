@@ -1,42 +1,53 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// Reads what the sharing app handed over into a draft.
+/// What the sharing app handed over: a clip to file, and any files Compose
+/// opens where they are instead.
+struct SharedContent {
+    var draft = ClipDraft()
+    var documents: [URL] = []
+}
+
+/// Reads what the sharing app handed over.
 ///
 /// Apps share through the same few Cocoa objects — a URL, a string, rich text,
-/// an image — so this is driven by the types each item provider offers, never by
-/// which app is sharing. Each provider is read once, in its richest form.
+/// an image, a file — so this is driven by the types each item provider offers,
+/// never by which app is sharing. Each provider is read once, in its richest form.
 enum SharedItems {
-    static func draft(from items: [NSExtensionItem]) async -> ClipDraft {
-        var draft = ClipDraft()
+    static func content(from items: [NSExtensionItem], documents: DocumentFiles) async -> SharedContent {
+        var content = SharedContent()
         var itemTitle: String?
         for item in items {
             itemTitle = itemTitle ?? nonEmpty(item.attributedTitle?.string)
             for provider in item.attachments ?? [] {
-                await read(provider, into: &draft)
+                await read(provider, into: &content, documents: documents)
             }
         }
-        draft.title = ClipDraft.suggestedTitle(itemTitle: itemTitle, text: draft.text, url: draft.url)
-        return draft
+        content.draft.title = ClipDraft.suggestedTitle(
+            itemTitle: itemTitle, text: content.draft.text, url: content.draft.url)
+        return content
     }
 
-    private static func read(_ provider: NSItemProvider, into draft: inout ClipDraft) async {
+    private static func read(
+        _ provider: NSItemProvider, into content: inout SharedContent, documents: DocumentFiles
+    ) async {
         if let type = offered(provider, [.image]) {
-            if let image = await image(from: provider, type: type, index: draft.images.count) {
-                draft.images.append(image)
+            if let image = await image(from: provider, type: type, index: content.draft.images.count) {
+                content.draft.images.append(image)
             }
         } else if offered(provider, [.fileURL]) != nil {
-            if let file = await url(from: provider),
-                let image = imageFile(at: file, index: draft.images.count)
-            {
-                draft.images.append(image)
+            guard let file = await url(from: provider) else { return }
+            if documents.contains(file) {
+                content.documents.append(file)
+            } else if let image = imageFile(at: file, index: content.draft.images.count) {
+                content.draft.images.append(image)
             }
         } else if offered(provider, [.url]) != nil {
-            if draft.url == nil {
-                draft.url = await url(from: provider)
+            if content.draft.url == nil {
+                content.draft.url = await url(from: provider)
             }
         } else if let type = offered(provider, [.html, .rtf, .rtfd, .plainText]) {
-            await readText(provider, type: type, into: &draft)
+            await readText(provider, type: type, into: &content.draft)
         }
     }
 
