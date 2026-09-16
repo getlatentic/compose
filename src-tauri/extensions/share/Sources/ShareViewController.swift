@@ -62,10 +62,12 @@ final class ComposeShareViewController: NSViewController {
     }
 
     private func save() {
+        guard model.canSave else { return }
         guard let inbox else {
             model.failure = "Compose could not reach its shared folder."
             return
         }
+        model.saving = true
         let clip = model.draft.clip(
             id: UUID().uuidString, workspaceId: model.workspaceId, createdAt: Date())
         do {
@@ -75,6 +77,7 @@ final class ComposeShareViewController: NSViewController {
             }
             extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
         } catch {
+            model.saving = false
             model.failure = "The clip could not be saved: \(error.localizedDescription)"
         }
     }
