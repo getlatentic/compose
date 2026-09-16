@@ -1,5 +1,6 @@
 //! Files opened individually from outside any workspace (Finder Open-With,
-//! `open -a Compose file.md`). They are edited at their real absolute path —
+//! `open -a Compose file.md`): Markdown notes, and plain-text files, which a
+//! workspace never lists. They are edited at their real absolute path —
 //! nothing is mounted or copied — and tracked in a persisted list so the
 //! sidebar's "External files" section survives restarts (#113).
 
@@ -9,11 +10,9 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
 use crate::db::now_ms;
+use crate::document_kind::DocumentKind;
 use crate::files::{read_at, write_at, FileError, WorkspaceFileContent, WorkspaceWriteResult};
 use crate::workspace::WorkspaceRegistry;
-
-/// Mirrors the `fileAssociations` extensions in tauri.conf.json.
-const MARKDOWN_EXTENSIONS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
 
 const PERSIST_VERSION: u32 = 1;
 const REGISTRY_FILE_NAME: &str = "external_files.json";
@@ -118,7 +117,7 @@ impl ExternalFilesRegistry {
     /// Register a file, returning the CANONICAL path it was stored under —
     /// the caller keys buffers/tabs on that spelling, not the OS event's.
     pub fn add(&self, raw_path: &str) -> Result<ExternalAddResult, String> {
-        let path = markdown_file_path(raw_path)?;
+        let path = document_file_path(raw_path)?;
         let canonical = std::fs::canonicalize(&path)
             .map_err(|error| format!("could not open {}: {error}", path.display()))?;
         // Canonicalization follows symlinks, so the policy checks must hold on
@@ -127,8 +126,8 @@ impl ExternalFilesRegistry {
         if !canonical.is_file() {
             return Err(format!("{} is not a file", canonical.display()));
         }
-        if !is_markdown_path(&canonical) {
-            return Err("only Markdown files can be opened individually".to_owned());
+        if DocumentKind::of(&canonical).is_none() {
+            return Err(NOT_A_DOCUMENT.to_owned());
         }
         let canonical = canonical.to_string_lossy().into_owned();
 
@@ -224,14 +223,9 @@ fn persist_state(state: &ExternalFilesRegistryState) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn is_markdown_path(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_ascii_lowercase())
-        .is_some_and(|ext| MARKDOWN_EXTENSIONS.contains(&ext.as_str()))
-}
+const NOT_A_DOCUMENT: &str = "only Markdown and plain-text files can be opened individually";
 
-fn markdown_file_path(raw: &str) -> Result<PathBuf, String> {
+fn document_file_path(raw: &str) -> Result<PathBuf, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("file path cannot be blank".to_owned());
@@ -240,8 +234,8 @@ fn markdown_file_path(raw: &str) -> Result<PathBuf, String> {
     if !path.is_absolute() {
         return Err("external file path must be absolute".to_owned());
     }
-    if !is_markdown_path(&path) {
-        return Err("only Markdown files can be opened individually".to_owned());
+    if DocumentKind::of(&path).is_none() {
+        return Err(NOT_A_DOCUMENT.to_owned());
     }
     Ok(path)
 }
@@ -250,8 +244,17 @@ fn markdown_file_path(raw: &str) -> Result<PathBuf, String> {
 /// `(workspace_id, root)` pairs. Nested workspaces resolve to the deepest
 /// root containing the file; both sides are canonicalized so symlinked paths
 /// (`/tmp` → `/private/tmp`) and Finder-vs-registry casing agree.
+///
+/// Only a Markdown note is a workspace's to show. Anything else is opened on
+/// its own even inside a workspace folder, because the workspace never lists
+/// it and would close a tab it cannot find.
 pub(crate) fn resolve_target(workspaces: &[(String, PathBuf)], raw: &Path) -> OpenTarget {
     let canonical = std::fs::canonicalize(raw).unwrap_or_else(|_| raw.to_path_buf());
+    if DocumentKind::of(&canonical) != Some(DocumentKind::Markdown) {
+        return OpenTarget::External {
+            path: canonical.to_string_lossy().into_owned(),
+        };
+    }
     let mut best: Option<(usize, String, PathBuf)> = None;
     for (id, root) in workspaces {
         let Ok(root) = std::fs::canonicalize(root) else {
@@ -425,19 +428,31 @@ mod tests {
     }
 
     // `std::os::unix::fs::symlink` has no Windows equivalent that works
-    // without elevation, and the rule under test — a `.md` symlink must not
-    // smuggle in a non-markdown target — is enforced the same way regardless.
+    // without elevation, and the rule under test — a note's symlink must not
+    // smuggle in a file Compose does not open — is enforced the same way
+    // regardless.
     #[cfg(unix)]
     #[test]
-    fn add_rejects_markdown_symlink_to_non_markdown_target() {
+    fn add_rejects_a_note_symlink_to_a_file_compose_does_not_open() {
         let dir = tempfile::tempdir().expect("tempdir");
         let registry = registry_in(dir.path());
-        let secret = dir.path().join("secrets.txt");
-        std::fs::write(&secret, "top secret").expect("write");
+        let secret = dir.path().join("authorized_keys");
+        std::fs::write(&secret, "ssh-ed25519 AAAA").expect("write");
         let link = dir.path().join("note.md");
         std::os::unix::fs::symlink(&secret, &link).expect("symlink");
 
         assert!(registry.add(link.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn add_accepts_a_plain_text_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let registry = registry_in(dir.path());
+        let log = write_note(dir.path(), "server.log.txt", "started");
+
+        let added = registry.add(log.to_str().unwrap()).expect("add a text file");
+
+        assert_eq!(added.list.files.len(), 1);
     }
 
     #[test]
@@ -560,6 +575,35 @@ mod tests {
             resolve_target(&workspaces, &in_inner),
             OpenTarget::External { .. }
         ));
+    }
+
+    #[test]
+    fn a_note_under_any_markdown_extension_opens_in_its_workspace() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let note = write_note(dir.path(), "plan.markdown", "# plan");
+        let workspaces = vec![("ws".to_owned(), dir.path().to_path_buf())];
+
+        assert_eq!(
+            resolve_target(&workspaces, &note),
+            OpenTarget::Workspace {
+                workspace_id: "ws".to_owned(),
+                relative_path: "plan.markdown".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_text_file_inside_a_workspace_opens_on_its_own() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let text = write_note(dir.path(), "todo.txt", "milk");
+        let workspaces = vec![("ws".to_owned(), dir.path().to_path_buf())];
+
+        assert_eq!(
+            resolve_target(&workspaces, &text),
+            OpenTarget::External {
+                path: std::fs::canonicalize(&text).unwrap().to_string_lossy().into_owned(),
+            }
+        );
     }
 
     // Symlinks again: see the note on the test above.

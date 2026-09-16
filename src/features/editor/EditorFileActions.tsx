@@ -36,6 +36,8 @@ export interface EditorFileActionsProps {
   /** Absent for documents without version history (external files, #113). */
   onShowVersionHistory?: () => void;
   onExport: (format: DocumentExportFormat) => void;
+  /** False for a plain-text file, which has no Markdown to export. */
+  markdownExport?: boolean;
   /** Toggle the per-file comments side panel. Absent for documents without
    *  comments (external files). */
   onToggleComments?: () => void;
@@ -56,6 +58,7 @@ export function EditorFileActions({
   onSave,
   onShowVersionHistory,
   onExport,
+  markdownExport = true,
   onToggleComments,
   commentsOpen,
   commentCount,
@@ -98,7 +101,9 @@ export function EditorFileActions({
           </span>
         )}
       >
-        <OverflowMenuItem itemText="Markdown (.md)" onClick={() => onExport("markdown")} />
+        {markdownExport ? (
+          <OverflowMenuItem itemText="Markdown (.md)" onClick={() => onExport("markdown")} />
+        ) : null}
         <OverflowMenuItem itemText="HTML (.html)" onClick={() => onExport("html")} />
         <OverflowMenuItem itemText="PDF (.pdf)" onClick={() => onExport("pdf")} />
       </OverflowMenu>

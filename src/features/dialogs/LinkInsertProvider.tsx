@@ -17,6 +17,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { withoutDocumentExtension } from "../../lib/documents/documentKind";
 
 export type LinkInsertResult =
   | { type: "url"; url: string; text: string }
@@ -42,10 +43,6 @@ export function useLinkPrompt(): PromptLinkFn {
 
 interface PendingLink extends LinkPromptOptions {
   resolve: (result: LinkInsertResult | null) => void;
-}
-
-function stripMdExtension(path: string): string {
-  return path.toLowerCase().endsWith(".md") ? path.slice(0, -3) : path;
 }
 
 function basename(path: string): string {
@@ -103,7 +100,7 @@ export function LinkInsertProvider({ children }: { children: ReactNode }) {
     if (activeTab === "url") {
       settle({ type: "url", url: trimmedUrl, text: trimmedText || trimmedUrl });
     } else if (highlight) {
-      settle({ type: "wikilink", path: stripMdExtension(highlight) });
+      settle({ type: "wikilink", path: withoutDocumentExtension(highlight) });
     }
   }
 
@@ -187,7 +184,7 @@ export function LinkInsertProvider({ children }: { children: ReactNode }) {
                             onClick={() => setHighlight(path)}
                             onDoubleClick={() => {
                               setHighlight(path);
-                              settle({ type: "wikilink", path: stripMdExtension(path) });
+                              settle({ type: "wikilink", path: withoutDocumentExtension(path) });
                             }}
                           >
                             <span className="file-picker__name">{basename(path)}</span>
