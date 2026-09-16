@@ -28,6 +28,7 @@ func testDocumentFiles() {
 
     let script = temporaryFile("tool.py")
     let code = sharedContent(from: [item(NSItemProvider(contentsOf: script)!)], documents: documents)
-    check("a file Compose does not open is neither opened nor clipped",
-          code.documents.isEmpty && code.draft.isEmpty)
+    check("a file Compose does not open is neither opened nor clipped, and is named",
+          code.documents.isEmpty && code.draft.isEmpty
+              && code.ignoredFiles.map(\.lastPathComponent) == ["tool.py"])
 }

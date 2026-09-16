@@ -30,10 +30,21 @@
 	<dict>
 		<key>NSExtensionAttributes</key>
 		<dict>
-			<!-- build.sh replaces this with the rule share/Activation generates from the
-			     fileAssociations in tauri.conf.json; unbuilt, the extension is offered for nothing. -->
+			<!-- A dictionary, not a predicate: Safari runs ComposePage.js only for an
+			     extension whose rule declares web pages this way. -->
 			<key>NSExtensionActivationRule</key>
-			<string>FALSEPREDICATE</string>
+			<dict>
+				<key>NSExtensionActivationSupportsFileWithMaxCount</key>
+				<integer>10</integer>
+				<key>NSExtensionActivationSupportsImageWithMaxCount</key>
+				<integer>10</integer>
+				<key>NSExtensionActivationSupportsText</key>
+				<true/>
+				<key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
+				<integer>1</integer>
+				<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
+				<integer>1</integer>
+			</dict>
 			<!-- Safari runs Resources/ComposePage.js in a shared page and hands over what it returns. -->
 			<key>NSExtensionJavaScriptPreprocessingFile</key>
 			<string>ComposePage</string>

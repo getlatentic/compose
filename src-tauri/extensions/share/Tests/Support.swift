@@ -36,18 +36,3 @@ func temporaryFile(_ name: String, _ contents: Data = Data("text".utf8)) -> URL 
     try! contents.write(to: file)
     return file
 }
-
-/// The extensions Compose declares in tauri.conf.json — the list build.sh
-/// generates the rule and the document list from.
-func declaredDocumentExtensions() -> [String] {
-    guard let path = ProcessInfo.processInfo.environment["COMPOSE_CONFIG"],
-        let data = FileManager.default.contents(atPath: path),
-        let config = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let bundle = config["bundle"] as? [String: Any],
-        let associations = bundle["fileAssociations"] as? [[String: Any]]
-    else {
-        check("COMPOSE_CONFIG names tauri.conf.json (extensions/test.sh sets it)", false)
-        return []
-    }
-    return associations.flatMap { $0["ext"] as? [String] ?? [] }
-}
