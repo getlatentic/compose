@@ -4,10 +4,12 @@ import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
 import { isActiveFilePresent } from "../../app/workspaceModel";
+import { isPlainTextPath } from "../../lib/documents/documentKind";
 
 /**
- * The editor status bar — file path, the Rich/Raw mode toggle, and the
- * unsaved-dot + word-count.
+ * The editor status bar — file path, the Rich/Raw mode toggle (not for a
+ * plain-text file, which has only its raw form), and the unsaved-dot +
+ * word-count.
  *
  * A self-subscribing leaf so the word count (which updates as you type) and the
  * dirty flip re-render HERE and not the whole {@link EditorRegion}. It reads the
@@ -19,6 +21,9 @@ export function DocumentStatusBar() {
     const workspace = selectFocusedWorkspace(state);
     return workspace ? isActiveFilePresent(workspace) : false;
   });
+  const plainText = useWorkspaceStore((state) =>
+    isPlainTextPath(selectFocusedWorkspace(state)?.activeFilePath ?? ""),
+  );
   const content = useWorkspaceStore((state) => {
     const workspace = selectFocusedWorkspace(state);
     return workspace?.activeFilePath
@@ -50,7 +55,7 @@ export function DocumentStatusBar() {
   return (
     <div className="status-bar">
       <span className="status-bar__meta">
-        {activeFileExists ? (
+        {activeFileExists && !plainText ? (
           <span className="mode-toggle" role="group" aria-label="Editor mode">
             <button
               type="button"

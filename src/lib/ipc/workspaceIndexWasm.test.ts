@@ -48,6 +48,18 @@ describe("workspace-index WASM (same core as desktop)", () => {
     expect(snapshot.tags.map((t: { tag: string }) => t.tag).sort()).toEqual(["alpha", "beta"]);
   });
 
+  it("resolves a wikilink to a note saved under another Markdown extension", () => {
+    const docs = [
+      { docId: "w3:notes/source.md", path: "notes/source.md", content: "See [[plan]]." },
+      { docId: "w3:research/plan.markdown", path: "research/plan.markdown", content: "# Plan" },
+    ];
+
+    const snapshot = JSON.parse(buildIndex("w3", JSON.stringify(docs), 1_700_000_000_000));
+
+    expect(snapshot.backlinks[0].targetPath).toBe("research/plan.markdown");
+    expect(snapshot.backlinks[0].targetDocId).toBe("w3:research/plan.markdown");
+  });
+
   it("searches a built index and returns UTF-8 byte ranges", () => {
     const docs = [
       { docId: "w2:notes/cafe.md", path: "notes/cafe.md", content: "# Café\n\nRésumé notes for Café Bob." },

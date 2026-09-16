@@ -141,7 +141,12 @@ export async function loadBufferIfMissing(
     const current = get().workspaces.find((item) => item.id === workspaceId);
     const stillListed = current?.files.some((entry) => entry.relativePath === path) ?? false;
     const listSettled = current?.kind === "loose" || current?.scanState === "ready";
-    if (!stillListed && (listSettled || error instanceof FileNotFoundError)) {
+    // A read that answers NotFound is authoritative about the file whatever the
+    // list says: the loose list is the registry of files the user OPENED, which
+    // outlives the file on disk, so an entry there must not strand its tab on a
+    // blank editor.
+    const gone = error instanceof FileNotFoundError;
+    if (gone || (!stillListed && listSettled)) {
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
           closeWorkspaceFileTab(item, path),
@@ -149,6 +154,11 @@ export async function loadBufferIfMissing(
       }));
       settleLooseFocus(set, get);
       persistTabs(get().workspaces, workspaceId);
+      // Closing a tab the list still offers needs saying; when the list already
+      // agrees the file is gone, the tab closing is the expected end of it.
+      if (gone && stillListed) {
+        showErrorToast(`${path} is no longer there.`);
+      }
       return;
     }
     showErrorToast(error instanceof Error ? error.message : "Could not open file");

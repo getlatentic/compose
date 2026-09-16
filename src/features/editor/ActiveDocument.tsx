@@ -8,6 +8,8 @@ import {
   type EditorSelectionSnapshot,
 } from "@latentic/live-markdown";
 import { CodeMirrorToolbar } from "./CodeMirrorToolbar";
+import { PlainTextEditor } from "./PlainTextEditor";
+import { isPlainTextPath } from "../../lib/documents/documentKind";
 import { CommentBubble, CommentComposer } from "./CommentBubble";
 import { pickImageFileForCaret } from "@latentic/live-markdown";
 import { CommentsPanel } from "../comments/CommentsPanel";
@@ -34,7 +36,7 @@ import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
 import { useWorkspaceLinkTargets } from "../../app/useWorkspaceLinkTargets";
-import { documentCapabilities, type Workspace } from "../../app/workspaceModel";
+import { documentCapabilities, documentRef, type Workspace } from "../../app/workspaceModel";
 
 /**
  * How long after the last edit the active file is auto-written to disk. Stacks
@@ -74,6 +76,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
   const activeFilePath = useWorkspaceStore(
     (state) => selectFocusedWorkspace(state)?.activeFilePath ?? "",
   );
+  const plainText = isPlainTextPath(activeFilePath);
   // Relative links/images in an external file resolve against ITS directory —
   // the loose pseudo-workspace has no root of its own.
   const workspacePath = useWorkspaceStore((state) => {
@@ -238,18 +241,11 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
       exportMarkdownFile({ filePath: relativePath, markdown: buffer.content });
       return;
     }
-    // The HTML/PDF renderer resolves the document (and its images) against a
-    // registered workspace root — external files have none (#113 v1).
-    if (!documentCapabilities(workspace).richExport) {
-      showToast({
-        kind: "error",
-        title: "Not available",
-        message: "HTML/PDF export isn't available for external files yet — use Markdown.",
-      });
-      return;
-    }
     const exporter = format === "html" ? exportDocumentToHtml : exportDocumentToPdf;
-    const result = await exporter({ workspaceId: workspace.id, relativePath, content: buffer.content });
+    const result = await exporter({
+      document: documentRef(workspace, relativePath),
+      content: buffer.content,
+    });
     if (result.status === "cancelled") {
       return;
     }
@@ -270,16 +266,11 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
     if (!workspace || !relativePath || !buffer) {
       return;
     }
-    if (!documentCapabilities(workspace).richExport) {
-      showToast({
-        kind: "error",
-        title: "Not available",
-        message: "Printing isn't available for external files yet.",
-      });
-      return;
-    }
     try {
-      await printDocument({ workspaceId: workspace.id, relativePath, content: buffer.content });
+      await printDocument({
+        document: documentRef(workspace, relativePath),
+        content: buffer.content,
+      });
     } catch (error) {
       showToast({ kind: "error", title: "Print failed", message: String(error) });
     }
@@ -307,6 +298,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
         onSave={saveActiveFile}
         onShowVersionHistory={onShowVersionHistory}
         onExport={handleExport}
+        markdownExport={!plainText}
         onToggleComments={commentsEnabled ? toggleComments : undefined}
         commentsOpen={commentsOpen}
         commentCount={activeFileComments.length}
@@ -318,6 +310,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
       saveActiveFile,
       onShowVersionHistory,
       handleExport,
+      plainText,
       toggleComments,
       commentsOpen,
       activeFileComments.length,
@@ -367,6 +360,25 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
       ) : null,
     [handleAskAboutSelection, handleQueueComment, commentsEnabled],
   );
+
+  // A plain-text file keeps the file actions but none of the formatting.
+  const plainTextToolbar = useMemo(
+    () => <CodeMirrorToolbar view={null} mode="source" fileActions={fileActions} />,
+    [fileActions],
+  );
+
+  if (plainText) {
+    return (
+      <PlainTextEditor
+        key={activeFilePath}
+        value={content}
+        onChange={updateActiveContent}
+        onFlushReady={registerActiveEditorFlush}
+        onAfterContentSwap={markTabSwitchEnd}
+        toolbar={focusMode ? undefined : plainTextToolbar}
+      />
+    );
+  }
 
   return (
     <>

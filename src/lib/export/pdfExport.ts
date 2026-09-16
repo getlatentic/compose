@@ -4,6 +4,7 @@ import {
   saveDocumentExport,
   type FileExportResult,
 } from "./documentExport";
+import { documentRefPath, type DocumentRef } from "../../app/workspaceModel";
 
 /**
  * "Export to PDF": prompt for a location, render the PDF in the backend (macOS
@@ -11,12 +12,11 @@ import {
  * {@link saveDocumentExport}; this just supplies the PDF specifics.
  */
 export async function exportDocumentToPdf(args: {
-  workspaceId: string;
-  relativePath: string;
+  document: DocumentRef;
   content: string;
 }): Promise<FileExportResult> {
   return saveDocumentExport({
-    defaultFileName: defaultExportFileName(args.relativePath, "pdf"),
+    defaultFileName: defaultExportFileName(documentRefPath(args.document), "pdf"),
     filterName: "PDF",
     extension: "pdf",
     produce: (destinationPath) => exportPdf({ ...args, destinationPath }),

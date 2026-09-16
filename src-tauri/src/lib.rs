@@ -5,6 +5,7 @@ mod user_tool_dirs;
 mod data_reset;
 pub mod db;
 mod default_handler;
+mod document_kind;
 pub mod events;
 pub mod export;
 pub mod external;
@@ -342,9 +343,9 @@ pub fn run() {
             index::workspace_index_snapshot,
             index::workspace_rebuild_index,
             index::workspace_search_index,
-            export::workspace_export_pdf,
-            export::workspace_export_html,
-            export::workspace_print,
+            export::document_export_pdf,
+            export::document_export_html,
+            export::document_print,
             logging::report_client_error,
             logging::open_error_log,
             open_with::drain_pending_open_urls,
