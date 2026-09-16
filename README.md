@@ -38,7 +38,9 @@ into a new note in the active workspace.
 
 **Share → Compose** in Safari, Photos, Notes, or any app with a Share menu files a
 page, a selection, or images as a note in the workspace you pick. Clips shared
-while Compose is closed wait until it opens.
+while Compose is closed wait until it opens. macOS keeps every app's share
+extension off until you say otherwise, so turn Compose on once under System
+Settings → General → Login Items & Extensions → Sharing.
 
 Press Space on a `.md` file in the Finder and Quick Look shows the note
 rendered rather than its source; its icon is a page rather than a text file.
