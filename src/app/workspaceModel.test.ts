@@ -1,62 +1,65 @@
 import { describe, expect, it } from "vitest";
 import {
-  reorderOpenTabs,
-  removeWorkspaceFolder,
-  renameContextItemPath,
-  type WorkspaceChatThread,
+  CONVERSATION_REPLAY_LIMIT,
+  FILE_CONTEXT_INLINE_LIMIT,
+  LOOSE_WORKSPACE_ID,
   acceptWorkspaceSuggestion,
-  appendAssistantText,
+  addFileContextItem,
+  appendAppliedChanges,
   appendAssistantNotice,
   appendAssistantSuggestions,
-  appendAppliedChanges,
-  appendReviewChangeSuggestions,
-  markWorkspaceSuggestion,
-  assistantMessageContentForRun,
-  appendUserChatMessage,
+  appendAssistantText,
   appendAssistantThinking,
-  endAssistantToolCall,
-  setAssistantSession,
-  setAssistantStats,
-  startAssistantToolCall,
-  addFileContextItem,
-  buildFileContextBlock,
-  createPromptWithContext,
-  FILE_CONTEXT_INLINE_LIMIT,
-  hydrateChatThread,
-  missingFileContextPaths,
-  removeContextItem,
-  type WorkspaceContextItem,
-  resetChatThread,
-  serializeChatMessages,
-  CONVERSATION_REPLAY_LIMIT,
+  appendReviewChangeSuggestions,
+  appendUserChatMessage,
   applyFileBuffer,
-  applyUneditedFileBuffer,
-  applyFsEvent,
-  removeDeletedFile,
   applyFileSnapshot,
+  applyFsEvent,
   applyScanResult,
+  applyUneditedFileBuffer,
+  assistantMessageContentForRun,
+  buildFileContextBlock,
   closeWorkspaceFileTab,
-  isActiveFilePresent,
-  resolveOpenTabs,
   createLlmContextSnapshots,
+  createPromptWithContext,
   createWorkspaceFromPath,
   createWorkspaceFromRecord,
   dismissBufferConflict,
+  documentRef,
+  documentRefPath,
+  endAssistantToolCall,
   finalizeRun,
+  hydrateChatThread,
   hydrateWorkspaceRecords,
+  isActiveFilePresent,
   isSetupComplete,
-  markRunStreaming,
   markBufferConflict,
   markBufferDirty,
   markBufferSaved,
+  markRunStreaming,
+  markWorkspaceSuggestion,
+  missingFileContextPaths,
   openWorkspaceFile,
   prepareWorkspaceSuggestionDrafts,
   rejectWorkspaceSuggestion,
+  removeContextItem,
+  removeDeletedFile,
+  removeWorkspaceFolder,
+  renameContextItemPath,
+  reorderOpenTabs,
+  resetChatThread,
+  resolveOpenTabs,
+  serializeChatMessages,
   setAssistantActivity,
+  setAssistantSession,
+  setAssistantStats,
   setCommentChatContext,
   setCurrentTabContext,
+  startAssistantToolCall,
   startRun,
   type Workspace,
+  type WorkspaceChatThread,
+  type WorkspaceContextItem,
   type WorkspaceFileContextItem,
   type WorkspaceFileEntry,
 } from "./workspaceModel";
@@ -1640,5 +1643,27 @@ describe("a re-read racing the first keystrokes of a launch", () => {
 
     expect(updated.fileContents["a.md"].content).toBe("typed");
     expect(updated.fileContents["a.md"].dirty).toBe(true);
+  });
+});
+
+describe("documentRef", () => {
+  it("names a workspace document by its path inside the workspace", () => {
+    expect(documentRef({ id: "ws-1", kind: "real" }, "notes/x.md")).toEqual({
+      kind: "workspace",
+      workspaceId: "ws-1",
+      relativePath: "notes/x.md",
+    });
+  });
+
+  it("names a file opened outside every workspace by where it is", () => {
+    expect(documentRef({ id: LOOSE_WORKSPACE_ID, kind: "loose" }, "/Users/me/Downloads/x.md")).toEqual({
+      kind: "external",
+      path: "/Users/me/Downloads/x.md",
+    });
+  });
+
+  it("gives an export the path to name the saved file after", () => {
+    expect(documentRefPath({ kind: "workspace", workspaceId: "w", relativePath: "a/b.md" })).toBe("a/b.md");
+    expect(documentRefPath({ kind: "external", path: "/tmp/b.md" })).toBe("/tmp/b.md");
   });
 });
