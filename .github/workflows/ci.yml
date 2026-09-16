@@ -55,11 +55,10 @@ jobs:
         working-directory: src-tauri
         run: cargo clippy --all-targets
 
-      # The Quick Look extension is Swift and ships inside the .app, so it is
-      # built and tested here rather than only at release time — the renderer
-      # is where the behaviour lives, and it is pure markdown-in/HTML-out.
-      - name: Quick Look extension tests
-        run: src-tauri/extensions/quicklook/test.sh
+      # The app extensions are Swift and ship inside the .app, so their logic is
+      # tested here rather than only at release time — none of it needs a bundle.
+      - name: App extension tests
+        run: src-tauri/extensions/test.sh
 
   # Compose ships on macOS only, but the code carries `cfg(not(target_os =
   # "macos"))` branches — the data-reset and profile-migration fallbacks — that

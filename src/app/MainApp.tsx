@@ -7,6 +7,7 @@ import { useWorkspaceStore } from "./workspaceStore";
 import { useUiStore } from "./store/uiStore";
 import { openPathFromOs, useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
 import { useServiceNewNote } from "../features/workspace/useServiceNewNote";
+import { useShareInbox } from "../features/workspace/useShareInbox";
 import { useNewItemActions } from "../features/workspace/useNewItemActions";
 import { useSaveOnExit } from "./useSaveOnExit";
 
@@ -35,6 +36,7 @@ export function MainApp() {
   // arrivals stay buffered on the Rust side until this mounts.
   useExternalFileOpen();
   useServiceNewNote();
+  useShareInbox();
 
   // Native menu routing: View → Focus Mode (⌘⇧D), Compose → Settings… (⌘,),
   // and File → Open File… (⌘O, a picker routed exactly like a Finder open —

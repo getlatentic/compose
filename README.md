@@ -36,6 +36,13 @@ Apple Silicon and Intel are supported.
 Select text in any app and choose **Services → New Note in Compose** to drop it
 into a new note in the active workspace.
 
+**Share → Compose** in Safari, Photos, Notes, or any app with a Share menu files a
+page, a selection, or images as a note in the workspace you pick. Clips shared
+while Compose is closed wait until it opens. Share a Markdown or text file and
+it opens in Compose where it is, rather than as a copy. macOS keeps every app's share
+extension off until you say otherwise, so turn Compose on once under System
+Settings → General → Login Items & Extensions → Sharing.
+
 Press Space on a `.md` file in the Finder and Quick Look shows the note
 rendered rather than its source; its icon is a page rather than a text file.
 

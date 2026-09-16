@@ -1,0 +1,13 @@
+{
+  "createdAt" : 1789500000000,
+  "id" : "4F2C9A1E-7B3D-4E8A-9C21-5D6E7F8A9B0C",
+  "images" : [
+    "1-shot.png"
+  ],
+  "page" : "<html><head><title>Proof of Code Understanding</title></head><body><article><h1>Proof of Code Understanding</h1><p>The article.</p></article></body></html>",
+  "text" : "A paragraph of shared text.",
+  "title" : "Proof of Code Understanding",
+  "url" : "https://www.latentic.ai/blog/proof-of-code-understanding",
+  "version" : 1,
+  "workspaceId" : "5b8f0d2e-1c4a-4f6b-9e3d-7a2c8b1f0e4d"
+}
