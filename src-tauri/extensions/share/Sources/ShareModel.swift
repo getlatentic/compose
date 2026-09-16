@@ -4,6 +4,9 @@ import Foundation
 final class ShareModel: ObservableObject {
     @Published var draft = ClipDraft()
     @Published var loading = true
+    /// Set once Save is pressed: a second press before the sheet closes would
+    /// file the clip twice.
+    @Published var saving = false
     @Published var destinations: [Destinations.Workspace] = []
     @Published var workspaceId: String?
     @Published var failure: String?
@@ -12,7 +15,7 @@ final class ShareModel: ObservableObject {
     /// Shared files Compose does not open, when that is all there was.
     @Published var ignored: String?
 
-    var canSave: Bool { !loading && !draft.isEmpty }
+    var canSave: Bool { !loading && !saving && !draft.isEmpty }
 
     /// A few lines of what will be saved, for the sheet. Tags are stripped for
     /// display only; the app converts the real HTML.

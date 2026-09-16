@@ -45,6 +45,15 @@ check("the title is trimmed", clip.title == "A Title")
 check("createdAt is in milliseconds", clip.createdAt == 1500)
 check("an empty draft cannot be saved", ClipDraft().isEmpty)
 
+MainActor.assumeIsolated {
+    let sheet = ShareModel()
+    sheet.draft = ClipDraft(title: "T", text: "words")
+    sheet.loading = false
+    check("a loaded clip can be saved", sheet.canSave)
+    sheet.saving = true
+    check("but not a second time while the first save is closing the sheet", !sheet.canSave)
+}
+
 // --- image names ------------------------------------------------------------------
 
 check("a shared name is kept, made safe", ImageNaming.name(index: 0, suggested: "IMG 12/34", ext: "HEIC") == "1-IMG-12-34.heic")
