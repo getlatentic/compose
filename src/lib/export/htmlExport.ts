@@ -4,6 +4,7 @@ import {
   saveDocumentExport,
   type FileExportResult,
 } from "./documentExport";
+import { documentRefPath, type DocumentRef } from "../../app/workspaceModel";
 
 /**
  * "Export to HTML": prompt for a location, render a standalone HTML document in
@@ -12,12 +13,11 @@ import {
  * dependency, works on every platform.
  */
 export async function exportDocumentToHtml(args: {
-  workspaceId: string;
-  relativePath: string;
+  document: DocumentRef;
   content: string;
 }): Promise<FileExportResult> {
   return saveDocumentExport({
-    defaultFileName: defaultExportFileName(args.relativePath, "html"),
+    defaultFileName: defaultExportFileName(documentRefPath(args.document), "html"),
     filterName: "HTML",
     extension: "html",
     produce: (destinationPath) => exportHtml({ ...args, destinationPath }),
