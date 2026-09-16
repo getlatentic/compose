@@ -34,6 +34,9 @@
 			     fileAssociations in tauri.conf.json; unbuilt, the extension is offered for nothing. -->
 			<key>NSExtensionActivationRule</key>
 			<string>FALSEPREDICATE</string>
+			<!-- Safari runs Resources/ComposePage.js in a shared page and hands over what it returns. -->
+			<key>NSExtensionJavaScriptPreprocessingFile</key>
+			<string>ComposePage</string>
 		</dict>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.share-services</string>

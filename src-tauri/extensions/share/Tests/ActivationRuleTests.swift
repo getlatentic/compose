@@ -30,6 +30,8 @@ func testActivationRule() {
     check("for a link", offered([NSItemProvider(item: URL(string: "https://example.com")! as NSURL,
                                                 typeIdentifier: "public.url")]))
     check("for selected text", offered([NSItemProvider(object: "some words" as NSString)]))
+    check("for a page Safari shares", offered([safariPage(["url": "https://example.com"])]))
+    check("but not for a property-list file", !offered([file("Settings.plist")]))
     check("for a note and a picture together", offered([file("a.md"), file("b.png")]))
 
     for name in ["tool.py", "data.json", "archive.zip", "paper.pdf", "letter.rtf", "page.html"] {

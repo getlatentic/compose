@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 struct SharedContent {
     var draft = ClipDraft()
     var documents: [URL] = []
+    /// The title of a page Safari shared, which its item does not carry.
+    var pageTitle: String?
 }
 
 /// Reads what the sharing app handed over.
@@ -24,7 +26,7 @@ enum SharedItems {
             }
         }
         content.draft.title = ClipDraft.suggestedTitle(
-            itemTitle: itemTitle, text: content.draft.text, url: content.draft.url)
+            itemTitle: itemTitle ?? content.pageTitle, text: content.draft.text, url: content.draft.url)
         return content
     }
 
@@ -42,6 +44,8 @@ enum SharedItems {
             } else if let image = imageFile(at: file, index: content.draft.images.count) {
                 content.draft.images.append(image)
             }
+        } else if offered(provider, [.propertyList]) != nil {
+            await readWebPage(provider, into: &content)
         } else if offered(provider, [.url]) != nil {
             if content.draft.url == nil {
                 content.draft.url = await url(from: provider)
@@ -49,6 +53,32 @@ enum SharedItems {
         } else if let type = offered(provider, [.html, .rtf, .rtfd, .plainText]) {
             await readText(provider, type: type, into: &content.draft)
         }
+    }
+
+    /// What ComposePage.js returned from inside a page Safari shared: its address
+    /// and title, and either what the user selected or the whole page.
+    private static func readWebPage(_ provider: NSItemProvider, into content: inout SharedContent) async {
+        guard let results = await pageResults(provider) else { return }
+        if content.draft.url == nil, let address = results["url"] as? String {
+            content.draft.url = URL(string: address)
+        }
+        content.pageTitle = nonEmpty(results["title"] as? String)
+        if let selection = nonEmpty(results["selection"] as? String) {
+            content.draft.html = joined(content.draft.html, selection)
+        } else if let page = nonEmpty(results["page"] as? String) {
+            content.draft.page = page
+        }
+    }
+
+    private static func pageResults(_ provider: NSItemProvider) async -> [String: Any]? {
+        let item: Any?
+        switch await load(provider, .propertyList) {
+        case let data as Data:
+            item = try? PropertyListSerialization.propertyList(from: data, format: nil)
+        case let value:
+            item = value
+        }
+        return (item as? [String: Any])?[NSExtensionJavaScriptPreprocessingResultsKey] as? [String: Any]
     }
 
     private static func readText(

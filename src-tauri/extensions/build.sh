@@ -64,6 +64,10 @@ build_extension() {
   rm -rf "$appex"
   mkdir -p "$appex/Contents/MacOS"
   cp "$plist" "$appex/Contents/Info.plist"
+  if [ -n "${RESOURCES:-}" ]; then
+    mkdir -p "$appex/Contents/Resources"
+    find "$RESOURCES" -maxdepth 1 -type f ! -name "*.test.ts" -exec cp {} "$appex/Contents/Resources/" \;
+  fi
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$appex/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$appex/Contents/Info.plist"
 
@@ -132,5 +136,5 @@ plutil -replace NSExtension.NSExtensionAttributes.NSExtensionActivationRule \
 plutil -replace ComposeDocumentExtensions -json \
   "$(/usr/bin/python3 -c 'import json, sys; print(json.dumps(sys.argv[1:]))' "${DOCUMENT_EXTENSIONS[@]}")" \
   "$SHARE_PLIST"
-build_extension ComposeShare "$SHARE_PLIST" "$SHARE_ENTITLEMENTS" "AppKit SwiftUI" \
-  "$HERE/share/Sources"
+RESOURCES="$HERE/share/Resources" build_extension ComposeShare "$SHARE_PLIST" "$SHARE_ENTITLEMENTS" \
+  "AppKit SwiftUI" "$HERE/share/Sources"
