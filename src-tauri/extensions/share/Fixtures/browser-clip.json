@@ -1,0 +1,12 @@
+{
+  "createdAt" : 1789600000000,
+  "id" : "9D1E4B7A-2C3F-4A5B-8C6D-7E8F9A0B1C2D",
+  "images" : [
+
+  ],
+  "markdown" : "The article, already **Markdown**.\n\n```\n>>> print('clipped')\n```",
+  "title" : "A Clipped Article",
+  "url" : "https://www.latentic.ai/blog/a-clipped-article",
+  "version" : 1,
+  "workspaceId" : "5b8f0d2e-1c4a-4f6b-9e3d-7a2c8b1f0e4d"
+}

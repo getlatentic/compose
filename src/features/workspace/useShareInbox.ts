@@ -17,6 +17,8 @@ export interface PendingClip {
   text: string | null;
   /** A whole web page shared from Safari, whose article becomes the note. */
   page: string | null;
+  /** Markdown the browser clipper already made from the page. */
+  markdown: string | null;
 }
 
 type Invoke = typeof import("@tauri-apps/api/core").invoke;
@@ -53,6 +55,7 @@ const CONVERTERS: ClipConverters = {
  * knows the markup those apps write.
  */
 export async function clipBody(clip: PendingClip, convert: ClipConverters = CONVERTERS): Promise<string> {
+  if (clip.markdown) return clip.markdown;
   if (clip.html) {
     return clip.url ? convert.selection(clip.html, clip.url) : convert.richText(clip.html);
   }

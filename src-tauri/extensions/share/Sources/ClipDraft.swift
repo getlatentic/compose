@@ -37,6 +37,7 @@ struct ClipDraft: Equatable {
             text: text,
             html: html,
             page: page,
+            markdown: nil,
             images: images.map(\.fileName)
         )
     }

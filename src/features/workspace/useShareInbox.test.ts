@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { clipBody, type ClipConverters, type PendingClip } from "./useShareInbox";
 
-const clip: PendingClip = { id: "1", url: null, html: null, text: null, page: null };
+const clip: PendingClip = { id: "1", url: null, html: null, text: null, page: null, markdown: null };
 
 /** Converters that say which of them ran, and with what. */
 function recording(): ClipConverters & { calls: string[] } {
@@ -64,6 +64,12 @@ describe("clipBody", () => {
 
   it("keeps just the link when a page has no article", async () => {
     await expect(clipBody({ ...clip, url: "https://x.dev", page: "<html></html>" }, recording())).resolves.toBe("");
+  });
+
+  it("files the browser clipper's Markdown as it came", async () => {
+    await expect(
+      clipBody({ ...clip, url: "https://x.dev/post", markdown: "Already **Markdown**.", page: "<html>page</html>" }, refuse),
+    ).resolves.toBe("Already **Markdown**.");
   });
 
   it("does not load a converter for plain text", async () => {
