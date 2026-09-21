@@ -1,0 +1,127 @@
+:root {
+  color-scheme: light dark;
+  --capture-bg: #ffffff;
+  --capture-fg: #161616;
+  --capture-muted: #6f6f6f;
+  --capture-rule: #e0e0e0;
+  --capture-error: #da1e28;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --capture-bg: #1e1e1e;
+    --capture-fg: #f4f4f4;
+    --capture-muted: #a8a8a8;
+    --capture-rule: #393939;
+    --capture-error: #ff8389;
+  }
+}
+
+:root[data-theme="dark"] {
+  --capture-bg: #1e1e1e;
+  --capture-fg: #f4f4f4;
+  --capture-muted: #a8a8a8;
+  --capture-rule: #393939;
+  --capture-error: #ff8389;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--capture-bg);
+  color: var(--capture-fg);
+}
+
+.quick-capture {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* The native title bar sits under this strip, which is also what drags the window. */
+.quick-capture__bar {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--capture-muted);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.quick-capture__title {
+  font-weight: 600;
+  color: var(--capture-fg);
+}
+
+.quick-capture__destination {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-capture__editor {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 0.25rem 1rem;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.45;
+  background: transparent;
+  color: inherit;
+}
+
+.quick-capture__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.625rem 0.5rem 1rem;
+  border-top: 1px solid var(--capture-rule);
+  font-size: 0.75rem;
+  color: var(--capture-muted);
+}
+
+.quick-capture__error {
+  margin-right: auto;
+  color: var(--capture-error);
+}
+
+.quick-capture__action {
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* With no error to show, the actions sit at the right. */
+.quick-capture__footer > .quick-capture__action:first-child {
+  margin-left: auto;
+}
+
+.quick-capture__action:hover:not(:disabled) {
+  background: var(--capture-rule);
+  color: var(--capture-fg);
+}
+
+.quick-capture__action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.quick-capture__action kbd {
+  font: inherit;
+}

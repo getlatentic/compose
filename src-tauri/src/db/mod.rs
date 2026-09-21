@@ -29,6 +29,7 @@ pub use workspace_index::SourceRange;
 // — the OPEN / ARCHIVE / DELETE lifecycle, the history list, and the
 // per-conversation actions. Types are re-exported so `crate::db::Conversation*`
 // keeps resolving; the Tauri commands are referenced via `db::conversations::*`.
+mod app_settings;
 pub mod conversations;
 pub use conversations::{ConversationMessageRecord, ConversationSnapshot, ConversationSummary};
 

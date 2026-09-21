@@ -1,4 +1,6 @@
+mod autocorrect;
 mod boot_payload;
+mod capture;
 mod deep_link;
 mod services;
 mod share_inbox;
@@ -71,6 +73,7 @@ pub fn run() {
     // forward so a rename doesn't reset the user's workspaces or settings.
     profile_migration::migrate_legacy_profile();
     boot_native_mark("profile-migration");
+    autocorrect::turn_off();
 
     // The launch screen's data, read from disk before the web view exists and
     // handed to the page as a global so its first render is the finished app
@@ -99,7 +102,8 @@ pub fn run() {
         // relaunch (`tauri_plugin_process`). Inert until armed — see
         // `plugins.updater` in tauri.conf.json (pubkey + endpoint).
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init());
+        .plugin(tauri_plugin_process::init())
+        .plugin(capture::plugin());
 
     // Anonymous active-user analytics — registered only when the build carries an
     // Aptabase app key (COMPOSE_APTABASE_KEY, evaluated at compile time → no-op
@@ -208,6 +212,8 @@ pub fn run() {
             if let Err(error) = metadata.init_from_app(&app_handle) {
                 eprintln!("metadata store init failed: {error}");
             }
+            // After the metadata store, which holds the chosen shortcut.
+            capture::start(&app_handle);
             // Reap any agent child a prior hard crash orphaned, and point the
             // runner at the data dir so this session records its own live runs
             // for the same safety net. set_data_dir is instant (before any run);
@@ -361,6 +367,11 @@ pub fn run() {
             open_with::drain_pending_open_urls,
             services::drain_pending_service_text,
             share_inbox::share_inbox_pending,
+            capture::capture_save,
+            capture::capture_close,
+            capture::capture_destination,
+            capture::capture_shortcut,
+            capture::capture_set_shortcut,
             share_inbox::share_inbox_import,
             external::external_list,
             external::external_add,

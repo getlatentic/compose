@@ -24,6 +24,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -75,6 +76,9 @@ objc2-foundation = { version = "0.3", features = [
   "NSError",
   "NSFileManager",
   "NSProcessInfo",
+  "NSDictionary",
+  "NSUserDefaults",
+  "NSValue",
 ] }
 objc2-core-foundation = { version = "0.3", features = ["CFArray", "CFBase", "CFCGTypes", "CFString"] }
 block2 = "0.6"
@@ -95,4 +99,9 @@ objc2-app-kit = { version = "0.3", features = [
   "NSWindow",
   "NSView",
   "NSGraphics",
+  "NSButton",
+  "NSControl",
+  "NSRunningApplication",
+  "NSWorkspace",
+  "NSPanel",
 ] }
