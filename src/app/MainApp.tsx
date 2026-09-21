@@ -8,9 +8,7 @@ import { useUiStore } from "./store/uiStore";
 import { openPathFromOs, useExternalFileOpen } from "../features/workspace/useExternalFileOpen";
 import { useNewItemActions } from "../features/workspace/useNewItemActions";
 import { useSaveOnExit } from "./useSaveOnExit";
-
-/** The extensions File → Open File… offers — mirrors the fileAssociations. */
-const MARKDOWN_EXTENSIONS = ["md", "markdown", "mdown", "mkd"];
+import { MARKDOWN_EXTENSIONS, PLAIN_TEXT_EXTENSIONS } from "../lib/documents/documentKind";
 
 /**
  * The main app screen (mounted by AppRouter once boot + onboarding are done).
@@ -53,7 +51,12 @@ export function MainApp() {
           const { open } = await import("@tauri-apps/plugin-dialog");
           const picked = await open({
             multiple: true,
-            filters: [{ name: "Markdown", extensions: MARKDOWN_EXTENSIONS }],
+            filters: [
+              {
+                name: "Markdown and text",
+                extensions: [...MARKDOWN_EXTENSIONS, ...PLAIN_TEXT_EXTENSIONS],
+              },
+            ],
           });
           const paths = Array.isArray(picked) ? picked : picked ? [picked] : [];
           for (const path of paths) {

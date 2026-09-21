@@ -11,6 +11,7 @@
 
 import { isTauriRuntime } from "../runtime/desktopRuntime";
 import { vwImport } from "./virtualWorkspace";
+import { isMarkdownPath } from "../documents/documentKind";
 
 export interface ImportedFile {
   relativePath: string;
@@ -37,7 +38,7 @@ export async function applyImportedFolder(
 
 /**
  * Prompt for a folder and read its Markdown files. Resolves `null` if the
- * user cancels. Non-`.md` files are skipped (the index only covers
+ * user cancels. Files that aren't Markdown are skipped (the index only covers
  * Markdown); `folderName` is the picked directory's name, used to name the
  * workspace.
  */
@@ -58,7 +59,7 @@ export async function importFolderFromPicker(): Promise<FolderImport | null> {
       folderName = segments[0];
     }
     const relativePath = segments.length > 1 ? segments.slice(1).join("/") : rawPath;
-    if (!relativePath.toLowerCase().endsWith(".md")) {
+    if (!isMarkdownPath(relativePath)) {
       continue;
     }
     files.push({ content: await file.text(), relativePath });

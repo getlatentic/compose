@@ -23,6 +23,12 @@
 //! [`IndexedDocument::from_content`] supplies a cheap stable hash for
 //! callers that don't care.
 
+mod markdown_path;
+
+pub use markdown_path::{
+    is_markdown_path, markdown_extension, strip_markdown_extension, MARKDOWN_EXTENSIONS,
+};
+
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 
@@ -727,7 +733,8 @@ fn should_index_markdown_target(target: &str) -> bool {
         return false;
     }
     let without_fragment = target.split('#').next().unwrap_or(target);
-    without_fragment.ends_with(".md") || !without_fragment.contains('.')
+    let name = without_fragment.rsplit('/').next().unwrap_or(without_fragment);
+    is_markdown_path(without_fragment) || !name.contains('.')
 }
 
 fn resolve_document_target(
@@ -745,39 +752,63 @@ fn resolve_document_target(
         return target;
     }
 
-    let mut candidates = Vec::new();
-    let with_extension = if target.ends_with(".md") {
-        target.clone()
+    // A link that names its extension means that file; one that doesn't could
+    // be a note under any Markdown extension, `.md` first.
+    let spellings: Vec<String> = if is_markdown_path(&target) {
+        vec![target.clone()]
     } else {
-        format!("{target}.md")
+        MARKDOWN_EXTENSIONS
+            .iter()
+            .map(|extension| format!("{target}.{extension}"))
+            .collect()
     };
 
+    let mut candidates = Vec::new();
     if target.contains('/') || target.starts_with('.') {
         let source_parent = Path::new(source_path)
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_default();
-        candidates.push(normalize_path(source_parent.join(&with_extension)));
-        candidates.push(normalize_path(PathBuf::from(&with_extension)));
+        candidates.extend(spellings.iter().map(|spelling| normalize_path(source_parent.join(spelling))));
+        candidates.extend(spellings.iter().map(|spelling| normalize_path(PathBuf::from(spelling))));
     } else {
-        candidates.push(with_extension.clone());
-        candidates.extend(
-            doc_id_by_path
-                .keys()
-                .filter(|path| path_stem_matches(path, &target))
-                .cloned(),
-        );
+        candidates.extend(spellings.iter().cloned());
+        let named_extension = markdown_extension(&target);
+        let name = strip_markdown_extension(&target);
+        let mut by_name: Vec<&String> = doc_id_by_path
+            .keys()
+            .filter(|path| {
+                named_extension.is_none_or(|named| {
+                    markdown_extension(path).is_some_and(|extension| extension.eq_ignore_ascii_case(named))
+                })
+            })
+            .filter(|path| path_stem_matches(path, name))
+            .collect();
+        by_name.sort_by_key(|path| (markdown_extension_rank(path), path.as_str()));
+        candidates.extend(by_name.into_iter().cloned());
     }
 
     candidates
         .iter()
         .find(|candidate| doc_id_by_path.contains_key(*candidate))
-        .cloned()
-        .unwrap_or_else(|| candidates.first().cloned().unwrap_or(with_extension))
+        .unwrap_or(&candidates[0])
+        .clone()
+}
+
+/// Where a path's extension falls in [`MARKDOWN_EXTENSIONS`], so that of two
+/// notes answering to the same name the `.md` one is chosen, every time.
+fn markdown_extension_rank(path: &str) -> usize {
+    markdown_extension(path)
+        .and_then(|extension| {
+            MARKDOWN_EXTENSIONS
+                .iter()
+                .position(|known| extension.eq_ignore_ascii_case(known))
+        })
+        .unwrap_or(MARKDOWN_EXTENSIONS.len())
 }
 
 fn path_stem_matches(path: &str, target: &str) -> bool {
-    let path_without_extension = path.strip_suffix(".md").unwrap_or(path);
+    let path_without_extension = strip_markdown_extension(path);
     let basename = path_without_extension
         .rsplit('/')
         .next()
@@ -923,7 +954,7 @@ fn filename_match_boost(path: &str, terms: &[&str]) -> f32 {
 /// The filename, extension stripped, for shape comparison.
 fn path_basename(path: &str) -> &str {
     let name = path.rsplit('/').next().unwrap_or(path);
-    name.strip_suffix(".md").unwrap_or(name)
+    strip_markdown_extension(name)
 }
 
 /// Lowercased, with every maximal run of non-alphanumeric characters
@@ -1346,5 +1377,72 @@ mod tests {
         let links = parse_wikilinks("notes/source.md", "See [[Missing Note]].", &paths);
 
         assert_eq!(links[0].target_path, "Missing Note.md");
+    }
+
+    #[test]
+    fn a_link_to_any_markdown_spelling_is_a_note_link() {
+        assert!(should_index_markdown_target("Some Note.markdown"));
+        assert!(should_index_markdown_target("folder/note.MKD#part"));
+        assert!(!should_index_markdown_target("notes.txt"), "a text file is not a note");
+    }
+
+    #[test]
+    fn a_wikilink_finds_a_note_saved_under_another_markdown_extension() {
+        let snapshot = build_snapshot(
+            "workspace-1".to_owned(),
+            vec![
+                document("notes/source.md", "doc-source", "See [[plan]]."),
+                document("research/plan.markdown", "doc-plan", "# Plan"),
+            ],
+            2,
+            0,
+        );
+
+        assert_eq!(snapshot.backlinks[0].target_path, "research/plan.markdown");
+        assert_eq!(snapshot.backlinks[0].target_doc_id.as_deref(), Some("doc-plan"));
+    }
+
+    #[test]
+    fn a_relative_link_without_an_extension_finds_any_markdown_spelling() {
+        let paths = doc_map(&[
+            ("notes/source.md", "doc-source"),
+            ("research/target.mkd", "doc-target"),
+        ]);
+        let links = parse_markdown_links("notes/source.md", "Read [target](../research/target).", &paths);
+
+        assert_eq!(links[0].target_path, "research/target.mkd");
+    }
+
+    #[test]
+    fn a_link_that_names_its_extension_is_taken_at_its_word() {
+        let paths = doc_map(&[
+            ("notes/source.md", "doc-source"),
+            ("notes/plan.md", "doc-md"),
+            ("notes/plan.mdown", "doc-mdown"),
+        ]);
+        let links = parse_markdown_links("notes/source.md", "[a](plan.mdown) [b](plan)", &paths);
+
+        assert_eq!(links[0].target_path, "notes/plan.mdown");
+        assert_eq!(links[1].target_path, "notes/plan.md", ".md wins when the link does not say");
+    }
+
+    #[test]
+    fn a_wikilink_that_names_its_extension_finds_the_note_in_any_folder() {
+        let paths = doc_map(&[("notes/source.md", "doc-source"), ("research/plan.md", "doc-plan")]);
+        let links = parse_wikilinks("notes/source.md", "See [[plan.md]].", &paths);
+
+        assert_eq!(links[0].target_path, "research/plan.md");
+    }
+
+    #[test]
+    fn a_parent_relative_link_without_an_extension_is_still_a_note_link() {
+        assert!(should_index_markdown_target("../research/target"));
+        assert!(!should_index_markdown_target("../assets/diagram.png"));
+    }
+
+    #[test]
+    fn a_file_name_search_ignores_every_markdown_extension() {
+        assert_eq!(filename_match_boost("notes/alpha.md", &["md"]), 0.0);
+        assert_eq!(filename_match_boost("notes/alpha.mdown", &["mdown"]), 0.0);
     }
 }

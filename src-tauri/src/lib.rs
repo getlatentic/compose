@@ -5,6 +5,7 @@ mod user_tool_dirs;
 mod data_reset;
 pub mod db;
 mod default_handler;
+mod document_kind;
 pub mod events;
 pub mod export;
 pub mod external;

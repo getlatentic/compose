@@ -69,6 +69,16 @@
         "mimeType": "text/markdown",
         "role": "Editor",
         "rank": "Alternate"
+      },
+      {
+        "name": "Plain Text",
+        "description": "Plain text document",
+        "ext": [
+          "txt"
+        ],
+        "mimeType": "text/plain",
+        "role": "Editor",
+        "rank": "Alternate"
       }
     ]
   }

@@ -1,4 +1,5 @@
 import { isTauriRuntime } from "../runtime/desktopRuntime";
+import { withoutDocumentExtension } from "../documents/documentKind";
 
 /**
  * The shared "save a generated document" flow used by every export format:
@@ -12,10 +13,10 @@ export type FileExportResult =
   | { status: "cancelled" }
   | { status: "error"; message: string };
 
-/** Derive a default export filename from a workspace-relative markdown path. */
+/** Derive a default export filename from the document's path. */
 export function defaultExportFileName(relativePath: string, extension: string): string {
   const base = relativePath.split("/").pop() ?? "document";
-  return `${base.replace(/\.md$/i, "")}.${extension}`;
+  return `${withoutDocumentExtension(base)}.${extension}`;
 }
 
 /**

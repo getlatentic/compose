@@ -15,6 +15,7 @@ import { ExternalFilesSection } from "./ExternalFilesSection";
 import { PaneSplitter } from "./PaneSplitter";
 import { NewMenu } from "./NewMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
+import { isMarkdownPath } from "../../lib/documents/documentKind";
 
 /**
  * Width reserved for the macOS traffic lights when `titleBarStyle: Overlay` is
@@ -68,7 +69,7 @@ export function WorkspaceSidebar() {
   );
   const noteCount = useWorkspaceStore((state) => {
     const ws = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
-    return ws ? ws.files.filter((entry) => entry.relativePath.toLowerCase().endsWith(".md")).length : 0;
+    return ws ? ws.files.filter((entry) => isMarkdownPath(entry.relativePath)).length : 0;
   });
 
   // Stable callbacks so FileTree's memo can short-circuit on
