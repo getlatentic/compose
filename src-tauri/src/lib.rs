@@ -1,6 +1,8 @@
 mod autocorrect;
 mod boot_payload;
 mod capture;
+#[cfg(target_os = "macos")]
+mod clipper;
 mod deep_link;
 mod services;
 mod share_inbox;
@@ -168,6 +170,8 @@ pub fn run() {
             }
             // After the registry, whose workspaces it publishes to the share sheet.
             share_inbox::start(&app_handle);
+            #[cfg(target_os = "macos")]
+            std::thread::spawn(clipper::register_for_this_app);
             // Load user-registered custom agents before export_all (below) reads
             // their keys. A plain JSON read, so safe inline (unlike the keychain).
             match app_handle.path().app_config_dir() {
