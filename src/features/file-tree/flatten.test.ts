@@ -10,7 +10,7 @@ function file(relativePath: string): WorkspaceFileEntry {
 const tree = buildTree([file("Talks/a.md"), file("Talks/sub/b.md"), file("root.md")], []);
 const paths = (expanded: Set<string>) => flatten(tree, expanded).map((node) => node.path);
 
-describe("flatten (#52)", () => {
+describe("flatten", () => {
   it("shows only top-level rows when nothing is expanded — the collapsed default", () => {
     expect(paths(new Set())).toEqual(["Talks", "root.md"]);
   });

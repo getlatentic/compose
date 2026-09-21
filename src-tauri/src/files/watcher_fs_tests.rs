@@ -252,7 +252,7 @@ fn a_rename_out_of_the_tree_arrives_as_removed() {
     // Moving a note OUT of the vault (Finder move, the app's own trash-move)
     // surfaces as Modify(Name) on the old path — not Remove. Classifying by
     // event kind alone reported "modified" for a file that no longer exists,
-    // and the tree kept the row (#105).
+    // and the tree kept the row.
     let outside = tempfile::tempdir().expect("outside dir");
     let dir = WatchedDir::start();
     fs::write(dir.root.join("Moved.md"), "x").expect("write");

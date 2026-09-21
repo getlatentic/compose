@@ -296,7 +296,7 @@ const FilesTab = memo(function FilesTab({
   const files = useStableFileList();
   const folders = useFolderList();
   // While an external file is focused the editor shows THAT document — the
-  // tree drops its highlight so exactly one row ever reads as "open" (#113).
+  // tree drops its highlight so exactly one row ever reads as "open".
   const activeFilePath = useWorkspaceStore((state) => {
     if (state.focusedArea === "loose") {
       return "";

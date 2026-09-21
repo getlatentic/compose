@@ -29,7 +29,7 @@ export interface WorkspaceFileContextItem {
   label: string;
   path: string;
   workspaceId: string;
-  /** `"external"` = a #113 external file: `path` is absolute, presence is
+  /** `"external"` = an external file: `path` is absolute, presence is
    *  judged against the external-files list, and content resolves from the
    *  loose buffer. Absent = a workspace file (relative path) or a spilled
    *  attachment (absolute, app scratch). */
@@ -395,7 +395,7 @@ export function realWorkspaces(workspaces: Workspace[]): Workspace[] {
 }
 
 /**
- * What a document in this container supports (#113). Loose (external) files
+ * What a document in this container supports. Loose (external) files
  * are plain documents — the workspace-scoped machinery doesn't apply in v1 —
  * and the editor surface branches on THESE flags, not on `kind`, so the next
  * doc type (canvas, HTML) extends here instead of adding another ad-hoc check.
@@ -584,7 +584,7 @@ export function missingFileContextPaths(
   return contextItems
     .filter((item): item is WorkspaceFileContextItem => item.kind === "file")
     .filter((item) => {
-      // External chips (#113) are judged against the external-files list.
+      // External chips are judged against the external-files list.
       if (item.origin === "external") {
         return !loosePresent.has(item.path);
       }
@@ -628,7 +628,7 @@ export function renameContextItemPath(
       }
       // A comment excerpt in chat references its file by path too (the prompt
       // emits `File: <filePath>`); re-point it so the agent never reads the old,
-      // now-missing path (#32).
+      // now-missing path.
       if (item.kind === "comment" && item.filePath === from) {
         return { ...item, filePath: to, path: item.path === from ? to : item.path };
       }
@@ -638,7 +638,7 @@ export function renameContextItemPath(
 }
 
 /** Move an open tab to sit just before another, preserving the rest of the
- * order — drag-to-reorder (#29). The active file is untouched. */
+ * order — drag-to-reorder. The active file is untouched. */
 export function reorderOpenTabs(
   openFilePaths: string[],
   fromPath: string,
@@ -657,7 +657,7 @@ export function reorderOpenTabs(
 }
 
 /** Remove a folder and everything under it from workspace state — files,
- * folders, buffers, open tabs, chat context, and comments (#55). The IPC delete
+ * folders, buffers, open tabs, chat context, and comments. The IPC delete
  * moves the folder to trash; this reconciles the in-memory state. */
 export function removeWorkspaceFolder(workspace: Workspace, folderPath: string): Workspace {
   const prefix = `${folderPath}/`;
@@ -689,7 +689,7 @@ export function removeWorkspaceFolder(workspace: Workspace, folderPath: string):
 }
 
 /** User-initiated deletion: close the tab and drop the buffer, and — unlike an
- * external removal (mark-not-remove, #69) — also clear the file's chat context
+ * external removal (mark-not-remove) — also clear the file's chat context
  * and comments: the user chose to remove the note. */
 export function removeDeletedFile(workspace: Workspace, filePath: string): Workspace {
   const withoutTab = closeWorkspaceFileTab(workspace, filePath);
@@ -707,7 +707,7 @@ export function openWorkspaceFile(workspace: Workspace, filePath: string): Works
     : [...workspace.openFilePaths, filePath];
 
   // Opening / switching to a tab is navigation only — it must NOT repoint the
-  // chat context, which the user controls explicitly (#30). The context defaults
+  // chat context, which the user controls explicitly. The context defaults
   // to the active file at load and on a new chat, then stays pinned.
   return {
     ...workspace,
@@ -732,7 +732,7 @@ export function closeWorkspaceFileTab(workspace: Workspace, filePath: string): W
   delete remainingFileContents[filePath];
 
   // Closing a tab is navigation too — leave the chat context as the user set it
-  // (#30). A still-existing file can stay in context even with no tab open; a
+  //. A still-existing file can stay in context even with no tab open; a
   // deleted file is removed from context by deleteActiveFile.
   return {
     ...workspace,
@@ -1400,7 +1400,7 @@ function applyRemovedPath(
     // buffer — the user's work outlives the file, and an explicit save
     // re-creates it deliberately. Only the tree row goes. (Implicit saves
     // never write a path that is missing from `files`, so keeping the buffer
-    // cannot silently resurrect the file — #105.)
+    // cannot silently resurrect the file.)
     const buffer = workspace.fileContents[relativePath];
     if (buffer?.dirty) {
       const files = workspace.files.filter((entry) => entry.relativePath !== relativePath);
@@ -2277,7 +2277,7 @@ export function buildFileContextBlock(
         if (content != null && content.length <= inlineLimit) {
           return `### ${item.path}\n${content}`;
         }
-        // An external file (#113) sits OUTSIDE the run's cwd, and the local
+        // An external file sits OUTSIDE the run's cwd, and the local
         // agent's sandboxed read tool refuses absolute paths — a bare
         // reference would be a dead end. Inline the head instead.
         if (item.origin === "external" && content != null) {
@@ -2349,7 +2349,7 @@ export function createPromptWithContext(
         }:\n${fileContext}`
       : null,
     // Scope edits to the intended files so the agent doesn't write to files the
-    // user never asked it to touch (#31). A prompt guardrail, not a hard sandbox
+    // user never asked it to touch. A prompt guardrail, not a hard sandbox
     // (clone mode is the hard version) — but it makes the intended target explicit.
     fileContext
       ? "When you edit files, only modify the Context files listed above. Do not create or change any other file unless I explicitly ask you to."

@@ -2,7 +2,7 @@
 //! `open -a Compose file.md`): Markdown notes, and plain-text files, which a
 //! workspace never lists. They are edited at their real absolute path —
 //! nothing is mounted or copied — and tracked in a persisted list so the
-//! sidebar's "External files" section survives restarts (#113).
+//! sidebar's "External files" section survives restarts.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

@@ -1,4 +1,4 @@
-//! Retrieval-quality eval (#79): judged queries over a controlled corpus,
+//! Retrieval-quality eval: judged queries over a controlled corpus,
 //! scoring OUR ranker against an inline BM25 reference (the classic lexical
 //! baseline — term saturation + length normalization, k1=1.2 b=0.75).
 //!

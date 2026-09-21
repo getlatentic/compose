@@ -7,7 +7,7 @@ import {
 } from "./filesClient";
 
 /**
- * IPC surface for files opened from outside any workspace (#113): edited at
+ * IPC surface for files opened from outside any workspace: edited at
  * their real absolute path, tracked in a persisted list on the Rust side.
  * Desktop-only — the browser preview has no OS "Open with", so the list is
  * empty and IO is unreachable there.

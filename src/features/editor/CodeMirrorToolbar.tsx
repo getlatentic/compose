@@ -116,7 +116,7 @@ export function caretContextsEqual(a: CaretContext, b: CaretContext): boolean {
  * only when the *computed* caret context actually changes — typing inside
  * a paragraph produces an unchanged context, so React never re-renders
  * (react-scan-tuned; recomputing on CM's update cycle avoids rAF idle
- * wakeups, #42).
+ * wakeups).
  *
  * Subscribes via the editor's update bus, which survives `setState` — an
  * appended updateListener died on the first tab switch, freezing the

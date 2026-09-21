@@ -74,7 +74,7 @@ export function persistComments(
   onError: (message: string) => void,
 ) {
   const workspace = workspaces.find((item) => item.id === workspaceId);
-  // External files carry no comments (#113 v1) — and the backend has no
+  // External files carry no comments (v1) — and the backend has no
   // comment store for the loose pseudo-workspace to write into.
   if (!workspace || workspace.kind === "loose") {
     return;

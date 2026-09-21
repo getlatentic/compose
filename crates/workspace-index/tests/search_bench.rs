@@ -1,4 +1,4 @@
-//! Report-only search baseline for the #70 budget (1k-note query ≤ 100ms).
+//! Report-only search baseline for the performance budget (1k-note query ≤ 100ms).
 //!
 //! Builds a 1,000-document snapshot with a realistic shape — titles, headings,
 //! prose, wikilinks, one needle document — then times `search_snapshot` for the
@@ -77,7 +77,7 @@ fn searches_a_thousand_note_snapshot_within_budget() {
         "search_bench: build={build_ms:.1}ms common={common:.2}ms rare={rare:.2}ms phrase={phrase:.2}ms"
     );
 
-    // #70 budget: query ≤ 100ms. Generous CI ceiling at 5x budget.
+    // Performance budget: query ≤ 100ms. Generous CI ceiling at 5x budget.
     for (label, ms) in [("common", common), ("rare", rare), ("phrase", phrase)] {
         assert!(ms < 500.0, "{label} query took {ms:.1}ms — investigate");
     }

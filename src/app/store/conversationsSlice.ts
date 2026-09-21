@@ -123,7 +123,7 @@ export const createConversationsSlice = (
       workspaces: updateWorkspace(state.workspaces, workspaceId, (item) => ({
         ...item,
         // A new chat defaults its context to the current file, then stays pinned
-        // there regardless of tab switches (#30).
+        // there regardless of tab switches.
         chatThread: setCurrentTabContext(
           { ...resetChatThread(item.chatThread), conversationId: null },
           workspaceId,

@@ -7,7 +7,7 @@ function file(relativePath: string): WorkspaceFileEntry {
 }
 
 describe("buildTree", () => {
-  it("renders an empty folder that holds no file (#49)", () => {
+  it("renders an empty folder that holds no file", () => {
     const tree = buildTree([], ["Talks"]);
     expect(tree).toHaveLength(1);
     expect(tree[0]).toMatchObject({ type: "folder", name: "Talks", path: "Talks" });

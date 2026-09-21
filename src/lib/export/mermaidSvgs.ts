@@ -3,7 +3,7 @@ import { isMermaidFenceInfo, renderMermaidToSvg } from "@latentic/live-markdown"
 import { createMarkdownProcessor } from "../markdown/processor";
 
 /**
- * Pre-render the document's mermaid diagrams to SVG for export (#149).
+ * Pre-render the document's mermaid diagrams to SVG for export.
  *
  * There is no Rust mermaid renderer, so the export backend can't turn a
  * ```mermaid fence into a diagram on its own. We render each fence here — with

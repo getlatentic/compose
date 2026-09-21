@@ -12,7 +12,7 @@ let suppressNavPush = false;
 
 /** Back/Forward depth. Browsers keep ~50; beyond this the oldest entries are
  * dropped — without a cap the stack grows one entry per tab switch for the
- * whole session (measured as unbounded live-heap growth in the #70 session). */
+ * whole session (measured as unbounded live-heap growth in a profiling session). */
 export const NAV_HISTORY_LIMIT = 100;
 
 /** Push a new nav entry, truncating any "forward" entries past the current
@@ -44,7 +44,7 @@ export function pushNavEntry(
 
 /** Drop every history entry a file's removal invalidates, keeping `navIndex`
  * pointed at the same surviving entry. Called when a file is deleted so
- * Back/Forward can't resurrect it as a dangling error tab (#45). */
+ * Back/Forward can't resurrect it as a dangling error tab. */
 export function pruneNavHistory(
   state: { navHistory: NavEntry[]; navIndex: number },
   keep: (entry: NavEntry) => boolean,
