@@ -1,46 +1,7 @@
-//! A clip as a note: the name it is saved under and the Markdown it holds.
+//! A clip as a note: the Markdown it holds.
 
-const MAX_STEM_CHARS: usize = 80;
-const FALLBACK_TITLE: &str = "Clipping";
-/// Characters a file name cannot carry on every system a workspace might sync to.
-const UNSAFE_IN_FILE_NAMES: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
-
-/// The file name a title is saved under, without its extension.
-pub(super) fn file_stem(title: &str) -> String {
-    let cleaned: String = title
-        .chars()
-        .map(|c| {
-            if c.is_control() || UNSAFE_IN_FILE_NAMES.contains(&c) {
-                ' '
-            } else {
-                c
-            }
-        })
-        .collect();
-    let collapsed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
-    // A leading dot hides the file; a trailing dot or space is dropped by some
-    // file systems, which then cannot find the name they were given.
-    let stem: String = collapsed
-        .trim_start_matches('.')
-        .chars()
-        .take(MAX_STEM_CHARS)
-        .collect();
-    let stem = stem.trim_end_matches(['.', ' ']);
-    if stem.is_empty() {
-        FALLBACK_TITLE.to_owned()
-    } else {
-        stem.to_owned()
-    }
-}
-
-/// The `attempt`th path to try for a note: `Title.md`, then `Title 2.md`, …
-pub(super) fn candidate(stem: &str, attempt: usize) -> String {
-    if attempt <= 1 {
-        format!("{stem}.md")
-    } else {
-        format!("{stem} {attempt}.md")
-    }
-}
+/// What a clip is called when nothing it came with names it.
+pub(super) const FALLBACK_TITLE: &str = "Clipping";
 
 /// The note's Markdown. Where a web clip came from is kept as a `source`
 /// property, which the Properties panel shows, rather than as prose above the
@@ -110,33 +71,6 @@ fn yaml_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_title_loses_what_a_file_name_cannot_carry() {
-        assert_eq!(file_stem("Proof of Code: Understanding"), "Proof of Code Understanding");
-        assert_eq!(file_stem("a/b\\c*d?"), "a b c d");
-        assert_eq!(file_stem("  lots   of\tspace\n"), "lots of space");
-    }
-
-    #[test]
-    fn a_title_cannot_hide_the_file_or_leave_it_nameless() {
-        assert_eq!(file_stem("...hidden"), "hidden");
-        assert_eq!(file_stem("trailing. "), "trailing");
-        assert_eq!(file_stem("://"), "Clipping");
-        assert_eq!(file_stem(""), "Clipping");
-    }
-
-    #[test]
-    fn a_long_title_is_cut_on_a_character_not_a_byte() {
-        let stem = file_stem(&"é".repeat(200));
-        assert_eq!(stem.chars().count(), MAX_STEM_CHARS);
-    }
-
-    #[test]
-    fn candidates_count_up_from_the_bare_name() {
-        assert_eq!(candidate("Note", 1), "Note.md");
-        assert_eq!(candidate("Note", 3), "Note 3.md");
-    }
 
     #[test]
     fn a_web_clip_keeps_its_source_as_a_property() {

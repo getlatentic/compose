@@ -4,11 +4,10 @@ use super::contract::{Clip, ImportedClip};
 use super::inbox::Inbox;
 use super::note;
 use crate::db::MetadataStore;
-use crate::files::{create_file, ensure_vault_metadata, write_binary_file, FileError};
+use crate::files::new_note::{create_note, file_stem, MAX_NAME_ATTEMPTS};
+use crate::files::{ensure_vault_metadata, write_binary_file, FileError};
 use crate::workspace::{WorkspaceList, WorkspaceRegistry};
 
-/// Past this many same-named files a collision is a bug, not bad luck.
-const MAX_NAME_ATTEMPTS: usize = 1000;
 /// Beside the note, where a pasted image goes too.
 const IMAGE_DIR: &str = "images";
 
@@ -35,15 +34,8 @@ pub(super) fn import_clip(
 
     let images = copy_images(inbox, clip_id, &clip, registry, &workspace_id)?;
     let content = note::compose(&clip.title, clip.url.as_deref(), markdown, &images);
-    let (relative_path, last_modified_ms) =
-        create_note(registry, &workspace_id, &clip.title, &content)?;
-    metadata.record_document_written(
-        &workspace_id,
-        &relative_path,
-        &content,
-        last_modified_ms,
-        content.len() as u64,
-    )?;
+    let stem = file_stem(&clip.title).unwrap_or_else(|| note::FALLBACK_TITLE.to_owned());
+    let relative_path = create_note(registry, metadata, &workspace_id, &stem, &content)?;
     inbox.remove(clip_id)?;
     Ok(Some(ImportedClip {
         workspace_id,
@@ -103,24 +95,6 @@ fn free_image_path(
         }
     }
     Err(format!("no free name for image {name}").into())
-}
-
-fn create_note(
-    registry: &WorkspaceRegistry,
-    workspace_id: &str,
-    title: &str,
-    content: &str,
-) -> Result<(String, i64), FileError> {
-    let stem = note::file_stem(title);
-    for attempt in 1..=MAX_NAME_ATTEMPTS {
-        let relative_path = note::candidate(&stem, attempt);
-        match create_file(registry, workspace_id, &relative_path, content) {
-            Ok(written) => return Ok((relative_path, written.last_modified_ms)),
-            Err(FileError::AlreadyExists { .. }) => continue,
-            Err(error) => return Err(error),
-        }
-    }
-    Err(format!("no free name for a note titled {title}").into())
 }
 
 #[cfg(test)]

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quick Note</title>
+    <script>
+      /* The theme the main window saved (UI_PREFS_KEY in src/lib/prefs/uiPrefs.ts),
+         set before the first pixel so a dark-mode user never sees a white flash. */
+      try {
+        var prefs = JSON.parse(localStorage.getItem("compose.uiPrefs.v1") || "{}");
+        if (prefs.theme === "dark" || prefs.theme === "light") {
+          document.documentElement.setAttribute("data-theme", prefs.theme);
+        }
+      } catch (e) {
+        /* private mode, cleared storage: the system appearance decides */
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/capture/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "capture",
+  "description": "Capability for the quick-capture window: hear that it was shown, and be dragged by its top strip.",
+  "windows": ["capture"],
+  "permissions": ["core:event:default", "core:window:allow-start-dragging"]
+}

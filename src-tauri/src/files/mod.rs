@@ -8,6 +8,7 @@ use walkdir::WalkDir;
 
 pub mod clone;
 pub mod diff;
+pub(crate) mod new_note;
 pub(crate) mod icloud;
 pub mod starter;
 pub mod trash;

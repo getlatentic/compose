@@ -7,6 +7,7 @@ import { revealErrorLog } from "../../lib/diagnostics/errorReporter";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { AppearanceSection } from "./AppearanceSection";
 import { DefaultMarkdownAppSection } from "./DefaultMarkdownAppSection";
+import { QuickCaptureSection } from "./QuickCaptureSection";
 import { ResetDataSection } from "./ResetDataSection";
 
 /** Cap on the global custom instructions (~500 tokens) so they can't crowd out
@@ -28,6 +29,7 @@ export function GeneralSettings() {
       <CustomInstructionsSection />
       {isTauriRuntime() ? (
         <>
+          <QuickCaptureSection />
           <DefaultMarkdownAppSection />
           <PrivacySection />
           <ReportProblemSection />
