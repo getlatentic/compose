@@ -86,6 +86,8 @@ objc2-web-kit = { version = "0.3", features = [
   "block2",
 ] }
 objc2-app-kit = { version = "0.3", features = [
+  "NSApplication",
+  "NSPasteboard",
   "NSPrintInfo",
   "NSPrintOperation",
   "NSResponder",

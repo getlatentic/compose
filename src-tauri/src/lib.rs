@@ -1,4 +1,6 @@
 mod boot_payload;
+mod deep_link;
+mod services;
 mod launch_window;
 mod stale_state;
 mod user_tool_dirs;
@@ -88,6 +90,7 @@ pub fn run() {
         .manage(index::WorkspaceIndexStore::default())
         .manage(external::ExternalFilesRegistry::default())
         .manage(PendingOpenUrls::default())
+        .manage(services::PendingServiceText::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Self-update: check a signed manifest, download + swap the bundle, and
@@ -269,6 +272,9 @@ pub fn run() {
                     window.open_devtools();
                 }
             }
+            // The Services menu is offered once NSApp exists.
+            services::register(&app_handle);
+
             boot_native_mark("setup-end");
             Ok(())
         })
@@ -349,6 +355,7 @@ pub fn run() {
             logging::report_client_error,
             logging::open_error_log,
             open_with::drain_pending_open_urls,
+            services::drain_pending_service_text,
             external::external_list,
             external::external_add,
             external::external_remove,
@@ -372,11 +379,18 @@ pub fn run() {
         RunEvent::Opened { urls } => {
             let pending = app_handle.state::<PendingOpenUrls>();
             for url in urls {
-                let Some(path) = url
-                    .to_file_path()
-                    .ok()
-                    .and_then(|p| p.to_str().map(String::from))
-                else {
+                // A `file://` URL comes from the Finder or a file association,
+                // so the user picked it. A `compose://` link can come from a
+                // web page, so it is honoured only for a note inside one of
+                // the workspaces they opened.
+                let resolved = if url.scheme() == deep_link::SCHEME {
+                    deep_link::open_path(app_handle, &url)
+                } else {
+                    url.to_file_path()
+                        .ok()
+                        .and_then(|p| p.to_str().map(String::from))
+                };
+                let Some(path) = resolved else {
                     continue;
                 };
                 // Buffer first so a frontend that mounts later can drain it.

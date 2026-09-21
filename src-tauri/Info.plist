@@ -2,6 +2,38 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>New Note in Compose</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>newNoteFromSelection</string>
+			<key>NSPortName</key>
+			<string>Compose</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>public.utf8-plain-text</string>
+				<string>NSStringPboardType</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>ai.latentic.compose.link</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>compose</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>Compose opens the notes folder you choose so it can read and edit your Markdown files. Your notes stay on your Mac — nothing is uploaded.</string>
 	<key>NSDesktopFolderUsageDescription</key>
