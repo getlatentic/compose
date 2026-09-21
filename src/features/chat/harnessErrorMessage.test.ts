@@ -18,6 +18,19 @@ describe("friendlyHarnessError", () => {
     expect(summary).toBe("Ollama isn't running — start it, then retry.");
   });
 
+  it("sends a signed-out agent to sign in, not to a key it does not take", () => {
+    const readiness =
+      "Claude Code is installed but not signed in. Click Sign in to connect your Anthropic account, or set ANTHROPIC_API_KEY.";
+    const { summary } = friendlyHarnessError(readiness, "Claude Code");
+    expect(summary).toBe("Claude Code isn't signed in — sign in from Settings.");
+    expect(summary.length).toBeLessThan(60);
+  });
+
+  it("reads the CLI's own login prompt as a sign-in problem", () => {
+    const { summary } = friendlyHarnessError("Invalid API key · Please run /login", "Claude Code");
+    expect(summary).toBe("Claude Code isn't signed in — sign in from Settings.");
+  });
+
   it("maps a missing/invalid API key to a Settings summary", () => {
     const { summary } = friendlyHarnessError("401 Unauthorized: invalid api key", "Codex");
     expect(summary).toBe("Codex needs an API key in Settings.");

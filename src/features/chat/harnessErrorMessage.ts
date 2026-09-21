@@ -33,6 +33,16 @@ const SUMMARY_RULES: Array<{
     summary: (name) => `${name} isn't running — start it, then retry.`,
   },
   {
+    // An agent that manages its own login says so, and may name an API key as
+    // the alternative (`…or set ANTHROPIC_API_KEY`) — so this rule comes before
+    // the key rule, which would send the user to a key field that is not there.
+    match: (text) =>
+      ["not signed in", "not logged in", "please run /login", "sign in to"].some((key) =>
+        text.includes(key),
+      ),
+    summary: (name) => `${name} isn't signed in — sign in from Settings.`,
+  },
+  {
     match: (text) =>
       [
         "api key",
