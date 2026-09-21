@@ -25,7 +25,7 @@ export function useNewItemActions(): NewItemActions {
 
   // Lands in the selected folder (`newNoteDir`) or the root, so the first
   // top-level folder can be made in an empty workspace — the tree's own "New
-  // folder here" needs an existing folder row to hang off (#56).
+  // folder here" needs an existing folder row to hang off.
   const newFolder = useCallback(() => {
     void (async () => {
       const name = await promptText({
