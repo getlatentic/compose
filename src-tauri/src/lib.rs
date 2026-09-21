@@ -1,3 +1,4 @@
+mod autocorrect;
 mod boot_payload;
 mod capture;
 mod deep_link;
@@ -72,6 +73,7 @@ pub fn run() {
     // forward so a rename doesn't reset the user's workspaces or settings.
     profile_migration::migrate_legacy_profile();
     boot_native_mark("profile-migration");
+    autocorrect::turn_off();
 
     // The launch screen's data, read from disk before the web view exists and
     // handed to the page as a global so its first render is the finished app
