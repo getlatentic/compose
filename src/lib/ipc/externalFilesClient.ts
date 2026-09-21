@@ -28,7 +28,8 @@ export interface ExternalFilesList {
  *  workspace, or tracked as an external file. */
 export type OpenTarget =
   | { kind: "workspace"; workspaceId: string; relativePath: string }
-  | { kind: "external"; path: string };
+  | { kind: "external"; path: string }
+  | { kind: "folder"; path: string };
 
 const EMPTY_LIST: ExternalFilesList = { files: [], openPaths: [], activePath: "" };
 

@@ -53,7 +53,9 @@ pub fn authorised_path(workspaces: &[(String, PathBuf)], request: &Request) -> O
     let Request::Open { path } = request;
     match crate::external::resolve_target(workspaces, Path::new(path)) {
         crate::external::OpenTarget::Workspace { .. } => Some(path.clone()),
-        crate::external::OpenTarget::External { .. } => None,
+        // A folder would become a workspace, whose files the assistant can read,
+        // and a link reaches the app from any web page.
+        crate::external::OpenTarget::External { .. } | crate::external::OpenTarget::Folder { .. } => None,
     }
 }
 
@@ -142,6 +144,17 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn a_link_cannot_make_a_folder_a_workspace() {
+        let vault = tempdir().expect("vault");
+        let elsewhere = tempdir().expect("elsewhere");
+        let roots = vec![("w1".to_owned(), vault.path().to_path_buf())];
+        let as_link = |path: &Path| Request::Open { path: path.to_string_lossy().into_owned() };
+
+        assert_eq!(authorised_path(&roots, &as_link(elsewhere.path())), None);
+        assert_eq!(authorised_path(&roots, &as_link(vault.path())), None, "not even a workspace's own root");
     }
 
     #[test]

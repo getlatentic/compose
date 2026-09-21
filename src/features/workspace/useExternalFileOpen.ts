@@ -2,8 +2,10 @@ import { useEffect } from "react";
 
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { resolveOpenPath } from "../../lib/ipc/externalFilesClient";
+import { addWorkspace } from "../../lib/ipc/workspaceClient";
 import { showErrorToast } from "../toast/toastStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { showAddedWorkspace } from "./showAddedWorkspace";
 
 const EXTERNAL_FILE_OPEN_EVENT = "compose:open-external-file";
 const DRAIN_PENDING_URLS_CMD = "drain_pending_open_urls";
@@ -23,7 +25,8 @@ const DRAIN_PENDING_URLS_CMD = "drain_pending_open_urls";
  */
 /**
  * Route one absolute path the way an OS open would: inside a registered
- * workspace → switch + select in place; anywhere else → external-files tab.
+ * workspace → switch + select in place; anywhere else → external-files tab; a
+ * folder, such as a vault Obsidian hands over → open it as a workspace.
  * Shared by the Finder open events below and File → Open File… (⌘O).
  */
 export async function openPathFromOs(absolutePath: string): Promise<void> {
@@ -31,7 +34,9 @@ export async function openPathFromOs(absolutePath: string): Promise<void> {
   try {
     const target = await resolveOpenPath(absolutePath);
     const store = useWorkspaceStore.getState();
-    if (target.kind === "workspace") {
+    if (target.kind === "folder") {
+      showAddedWorkspace(await addWorkspace(target.path));
+    } else if (target.kind === "workspace") {
       if (store.activeWorkspaceId !== target.workspaceId) {
         store.switchWorkspace(target.workspaceId);
       }
