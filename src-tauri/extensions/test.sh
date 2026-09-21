@@ -22,3 +22,14 @@ run_suite quicklook \
 # The share suite checks clip.json against fixtures the Rust importer reads too.
 export SHARE_FIXTURES="$HERE/share/Fixtures"
 run_suite share "$HERE"/share/Sources/*.swift "$HERE"/share/Tests/*.swift
+# The clipper host is built from the share extension's contract and inbox, so a
+# clip from a browser is filed exactly like one from the share sheet.
+export CLIPPER_FIXTURES="$HERE/clipper/Fixtures"
+run_suite clipper \
+  "$HERE"/share/Sources/Contract.swift \
+  "$HERE"/share/Sources/ShareInbox.swift \
+  "$HERE"/share/Sources/ClipDraft.swift \
+  "$HERE"/clipper/Sources/ClipperMessages.swift \
+  "$HERE"/clipper/Sources/ClipperHost.swift \
+  "$HERE"/clipper/Sources/NativeMessaging.swift \
+  "$HERE"/clipper/Tests/main.swift
