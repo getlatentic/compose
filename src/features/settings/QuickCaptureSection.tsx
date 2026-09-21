@@ -7,7 +7,7 @@ import { shortcutFromKeyPress, shortcutLabel } from "./captureShortcut";
 /**
  * "Quick note": the global shortcut that opens a small window over any app, to
  * jot an idea into the open workspace. Changing it records the next shortcut
- * pressed; one the system refuses (another app holds it) leaves the old one on.
+ * pressed; one the system refuses leaves the old one on.
  */
 export function QuickCaptureSection() {
   const [shortcut, setShortcut] = useState<CaptureShortcut | null>(null);

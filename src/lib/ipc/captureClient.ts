@@ -12,7 +12,7 @@ export async function captureShortcut(): Promise<CaptureShortcut> {
 }
 
 /** Rejects, keeping the old shortcut, when the system will not register the
- *  new one — usually because another app holds it. */
+ *  new one. */
 export async function setCaptureShortcut(shortcut: string | null): Promise<CaptureShortcut> {
   return invoke<CaptureShortcut>("capture_set_shortcut", { shortcut });
 }

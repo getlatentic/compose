@@ -39,13 +39,13 @@ describe("the quick note setting", () => {
   });
 
   it("keeps the old shortcut and says why when the system refuses the new one", async () => {
-    client.setCaptureShortcut.mockRejectedValue(new Error("Super+Space could not be registered; another app may be using it"));
+    client.setCaptureShortcut.mockRejectedValue(new Error("Super+Space could not be registered (RegisterEventHotKey failed)"));
     render(<QuickCaptureSection />);
     fireEvent.click(await screen.findByRole("button", { name: "Change shortcut" }));
 
     fireEvent.keyDown(window, { code: "Space", metaKey: true });
 
-    expect(await screen.findByText(/another app may be using it/)).toBeTruthy();
+    expect(await screen.findByText(/Super\+Space could not be registered/)).toBeTruthy();
     expect(screen.getByText(/Press ⌃⌥N in any app/)).toBeTruthy();
   });
 

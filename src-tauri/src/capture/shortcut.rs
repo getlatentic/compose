@@ -24,8 +24,8 @@ pub(super) fn save(metadata: &MetadataStore, shortcut: Option<&str>) -> Result<(
     metadata.set_app_setting(SETTING_KEY, &shortcut)
 }
 
-/// Make `shortcut` the one that opens capture, replacing whatever did. The
-/// system refuses a combination another app already holds.
+/// Make `shortcut` the one that opens capture, replacing whatever did. macOS
+/// accepts keys another app has registered too, so a clash is not reported here.
 pub(super) fn register(app: &AppHandle, shortcut: Option<&str>) -> Result<(), String> {
     let parsed = shortcut.map(parse).transpose()?;
     let shortcuts = app.global_shortcut();
@@ -34,7 +34,7 @@ pub(super) fn register(app: &AppHandle, shortcut: Option<&str>) -> Result<(), St
         .map_err(|error| format!("could not release the capture shortcut: {error}"))?;
     if let (Some(text), Some(parsed)) = (shortcut, parsed) {
         shortcuts.register(parsed).map_err(|error| {
-            format!("{text} could not be registered; another app may be using it ({error})")
+            format!("{text} could not be registered ({error})")
         })?;
     }
     Ok(())
