@@ -1,6 +1,7 @@
 //! The capture window: made once and kept hidden, opened by the shortcut on the
-//! screen the pointer is on, and hidden again when the user saves or leaves,
-//! handing focus back to the app they were in.
+//! screen the pointer is on, and hidden again when the user saves or leaves.
+//! On macOS it is a panel that takes the keyboard without taking the user out
+//! of the app they were in.
 
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
@@ -36,16 +37,9 @@ pub(crate) fn prepare(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     Ok(window)
 }
 
-/// What the shortcut does: open capture, or close it if it is already open.
-///
-/// macOS delivers the shortcut on the main thread, so this acts at once. Sent
-/// back round the event loop instead, it would wait behind App Nap while
-/// another app is in front, and appear only once Compose was next activated.
+/// What the shortcut does: close capture if the user is typing in it, and
+/// otherwise open it — or bring it back if it was left open behind something.
 pub(super) fn toggle(app: &AppHandle) {
-    if platform::on_main_thread() {
-        toggle_now(app);
-        return;
-    }
     let handle = app.clone();
     if let Err(error) = app.run_on_main_thread(move || toggle_now(&handle)) {
         eprintln!("quick capture could not be scheduled: {error}");
@@ -53,11 +47,10 @@ pub(super) fn toggle(app: &AppHandle) {
 }
 
 fn toggle_now(app: &AppHandle) {
-    let open_now = app
-        .get_webview_window(LABEL)
-        .and_then(|window| window.is_visible().ok())
-        .unwrap_or(false);
-    if open_now {
+    let in_use = app.get_webview_window(LABEL).is_some_and(|window| {
+        window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false)
+    });
+    if in_use {
         hide_and_return_focus(app);
     } else if let Err(error) = open(app) {
         eprintln!("quick capture could not open: {error}");
@@ -72,7 +65,6 @@ pub(super) fn close(app: &AppHandle) {
 
 fn open(app: &AppHandle) -> tauri::Result<()> {
     let window = prepare(app)?;
-    platform::remember_frontmost_app();
     place_where_the_pointer_is(&window)?;
     window.show()?;
     platform::focus(&window);
@@ -104,23 +96,25 @@ fn place_where_the_pointer_is(window: &WebviewWindow) -> tauri::Result<()> {
 mod platform {
     use std::sync::Mutex;
 
-    use objc2::MainThreadMarker;
+    use objc2::runtime::NSObjectProtocol;
+    use objc2::ClassType;
     use objc2_app_kit::{
-        NSApplicationActivationOptions, NSRunningApplication, NSWindow, NSWindowButton,
+        NSApplicationActivationOptions, NSPanel, NSRunningApplication, NSWindow, NSWindowButton,
         NSWindowCollectionBehavior, NSWorkspace,
     };
     use tauri::WebviewWindow;
 
-    pub(super) fn on_main_thread() -> bool {
-        MainThreadMarker::new().is_some()
-    }
+    use crate::capture::panel;
 
-    /// The app that was in front when capture opened, which gets the keyboard
-    /// back when it closes.
+    /// The app that was in front when an ordinary capture window made Compose
+    /// active, which gets the keyboard back when it closes.
     static PREVIOUS_APP: Mutex<Option<i32>> = Mutex::new(None);
 
     pub(super) fn configure(window: &WebviewWindow) {
         let Some(ns_window) = ns_window(window) else { return };
+        if !panel::make_panel(ns_window) {
+            eprintln!("quick capture stays an ordinary window: its layout does not match a panel's");
+        }
         // On whichever Space the user is in, full-screen apps' included.
         ns_window.setCollectionBehavior(
             ns_window.collectionBehavior()
@@ -140,7 +134,7 @@ mod platform {
         }
     }
 
-    pub(super) fn remember_frontmost_app() {
+    fn remember_frontmost_app() {
         let frontmost = NSWorkspace::sharedWorkspace()
             .frontmostApplication()
             .map(|app| app.processIdentifier());
@@ -150,12 +144,17 @@ mod platform {
         }
     }
 
-    /// Key and in front, with Compose active — but not NSApp's
+    /// Key and in front. A panel takes the keyboard while the user's app stays
+    /// active. An ordinary window needs Compose active — but not through NSApp's
     /// `activateIgnoringOtherApps`, which would bring every Compose window
-    /// forward over what the user was doing. Only this one comes.
+    /// forward over what the user was doing.
     pub(super) fn focus(window: &WebviewWindow) {
         let Some(ns_window) = ns_window(window) else { return };
         ns_window.makeKeyAndOrderFront(None);
+        if ns_window.isKindOfClass(NSPanel::class()) {
+            return;
+        }
+        remember_frontmost_app();
         NSRunningApplication::currentApplication()
             .activateWithOptions(NSApplicationActivationOptions::empty());
     }
@@ -180,13 +179,7 @@ mod platform {
 mod platform {
     use tauri::WebviewWindow;
 
-    /// Elsewhere the shortcut arrives on its own thread.
-    pub(super) fn on_main_thread() -> bool {
-        false
-    }
-
     pub(super) fn configure(_window: &WebviewWindow) {}
-    pub(super) fn remember_frontmost_app() {}
     pub(super) fn focus(window: &WebviewWindow) {
         let _ = window.set_focus();
     }

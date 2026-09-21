@@ -3,6 +3,8 @@
 //! workspace. The shortcut is held by Rust, so it works with every Compose
 //! window closed.
 
+#[cfg(target_os = "macos")]
+mod panel;
 mod shortcut;
 mod text;
 mod window;
