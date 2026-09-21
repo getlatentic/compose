@@ -37,21 +37,30 @@ pub(crate) fn prepare(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 }
 
 /// What the shortcut does: open capture, or close it if it is already open.
+///
+/// macOS delivers the shortcut on the main thread, so this acts at once. Sent
+/// back round the event loop instead, it would wait behind App Nap while
+/// another app is in front, and appear only once Compose was next activated.
 pub(super) fn toggle(app: &AppHandle) {
+    if platform::on_main_thread() {
+        toggle_now(app);
+        return;
+    }
     let handle = app.clone();
-    let scheduled = app.run_on_main_thread(move || {
-        let open_now = handle
-            .get_webview_window(LABEL)
-            .and_then(|window| window.is_visible().ok())
-            .unwrap_or(false);
-        if open_now {
-            hide_and_return_focus(&handle);
-        } else if let Err(error) = open(&handle) {
-            eprintln!("quick capture could not open: {error}");
-        }
-    });
-    if let Err(error) = scheduled {
+    if let Err(error) = app.run_on_main_thread(move || toggle_now(&handle)) {
         eprintln!("quick capture could not be scheduled: {error}");
+    }
+}
+
+fn toggle_now(app: &AppHandle) {
+    let open_now = app
+        .get_webview_window(LABEL)
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+    if open_now {
+        hide_and_return_focus(app);
+    } else if let Err(error) = open(app) {
+        eprintln!("quick capture could not open: {error}");
     }
 }
 
@@ -95,11 +104,16 @@ fn place_where_the_pointer_is(window: &WebviewWindow) -> tauri::Result<()> {
 mod platform {
     use std::sync::Mutex;
 
+    use objc2::MainThreadMarker;
     use objc2_app_kit::{
         NSApplicationActivationOptions, NSRunningApplication, NSWindow, NSWindowButton,
         NSWindowCollectionBehavior, NSWorkspace,
     };
     use tauri::WebviewWindow;
+
+    pub(super) fn on_main_thread() -> bool {
+        MainThreadMarker::new().is_some()
+    }
 
     /// The app that was in front when capture opened, which gets the keyboard
     /// back when it closes.
@@ -165,6 +179,11 @@ mod platform {
 #[cfg(not(target_os = "macos"))]
 mod platform {
     use tauri::WebviewWindow;
+
+    /// Elsewhere the shortcut arrives on its own thread.
+    pub(super) fn on_main_thread() -> bool {
+        false
+    }
 
     pub(super) fn configure(_window: &WebviewWindow) {}
     pub(super) fn remember_frontmost_app() {}
