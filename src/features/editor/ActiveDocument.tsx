@@ -34,7 +34,7 @@ import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
 import { useWorkspaceLinkTargets } from "../../app/useWorkspaceLinkTargets";
-import { documentCapabilities, type Workspace } from "../../app/workspaceModel";
+import { documentCapabilities, documentRef, type Workspace } from "../../app/workspaceModel";
 
 /**
  * How long after the last edit the active file is auto-written to disk. Stacks
@@ -238,18 +238,11 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
       exportMarkdownFile({ filePath: relativePath, markdown: buffer.content });
       return;
     }
-    // The HTML/PDF renderer resolves the document (and its images) against a
-    // registered workspace root — external files have none (#113 v1).
-    if (!documentCapabilities(workspace).richExport) {
-      showToast({
-        kind: "error",
-        title: "Not available",
-        message: "HTML/PDF export isn't available for external files yet — use Markdown.",
-      });
-      return;
-    }
     const exporter = format === "html" ? exportDocumentToHtml : exportDocumentToPdf;
-    const result = await exporter({ workspaceId: workspace.id, relativePath, content: buffer.content });
+    const result = await exporter({
+      document: documentRef(workspace, relativePath),
+      content: buffer.content,
+    });
     if (result.status === "cancelled") {
       return;
     }
@@ -270,16 +263,11 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
     if (!workspace || !relativePath || !buffer) {
       return;
     }
-    if (!documentCapabilities(workspace).richExport) {
-      showToast({
-        kind: "error",
-        title: "Not available",
-        message: "Printing isn't available for external files yet.",
-      });
-      return;
-    }
     try {
-      await printDocument({ workspaceId: workspace.id, relativePath, content: buffer.content });
+      await printDocument({
+        document: documentRef(workspace, relativePath),
+        content: buffer.content,
+      });
     } catch (error) {
       showToast({ kind: "error", title: "Print failed", message: String(error) });
     }
