@@ -323,10 +323,29 @@ pub fn external_save_tabs(
 #[tauri::command(async)]
 pub fn external_read_file(
     path: String,
+    app: AppHandle,
     registry: State<'_, ExternalFilesRegistry>,
 ) -> Result<WorkspaceFileContent, FileError> {
     require_registered(&registry, &path)?;
+    allow_images_beside(&app, Path::new(&path));
     read_at(Path::new(&path))
+}
+
+/// Let the webview show the images an opened file references.
+///
+/// The editor turns `images/x.png` into an `asset://` URL, and that protocol
+/// serves only directories the app has allowed — granted per workspace root
+/// when the workspace is scanned. A file opened from outside every workspace
+/// has no root, so its own folder stands in: the scope is additive and covers
+/// only folders holding a file the user opened. Failing to widen it costs the
+/// images, not the file, so it must not fail the read.
+fn allow_images_beside(app: &AppHandle, file: &Path) {
+    let Some(dir) = file.parent() else {
+        return;
+    };
+    if let Err(error) = app.asset_protocol_scope().allow_directory(dir, true) {
+        eprintln!("asset scope allow failed for {}: {error}", dir.display());
+    }
 }
 
 #[tauri::command(async)]
