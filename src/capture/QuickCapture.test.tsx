@@ -22,6 +22,13 @@ function fakeApi(overrides: Partial<CaptureApi> = {}) {
   return { api, show: () => shown?.() };
 }
 
+/** Rendered, with the destination looked up, so nothing updates after a test. */
+async function open(api: CaptureApi) {
+  const view = render(<QuickCapture api={api} />);
+  await screen.findByText("Saves to My Notes");
+  return view;
+}
+
 function editor(): HTMLTextAreaElement {
   return screen.getByRole("textbox", { name: "Quick note" });
 }
@@ -57,9 +64,9 @@ describe("quick capture", () => {
     expect(api.save).toHaveBeenCalledWith("Call the printer");
   });
 
-  it("does not save nothing", () => {
+  it("does not save nothing", async () => {
     const { api } = fakeApi();
-    render(<QuickCapture api={api} />);
+    await open(api);
 
     type("   \n ");
     press("Enter", { metaKey: true });
@@ -67,9 +74,9 @@ describe("quick capture", () => {
     expect(api.save).not.toHaveBeenCalled();
   });
 
-  it("puts the idea away on Esc without losing it", () => {
+  it("puts the idea away on Esc without losing it", async () => {
     const { api } = fakeApi();
-    const { unmount } = render(<QuickCapture api={api} />);
+    const { unmount } = await open(api);
 
     type("half a thought");
     press("Escape");
@@ -77,8 +84,52 @@ describe("quick capture", () => {
     expect(api.close).toHaveBeenCalled();
     expect(editor().value).toBe("half a thought");
     unmount();
-    render(<QuickCapture api={api} />);
+    await open(api);
     expect(editor().value).toBe("half a thought");
+  });
+
+  it("saves from the Save button too", async () => {
+    const { api } = fakeApi();
+    render(<QuickCapture api={api} />);
+
+    type("Book the venue");
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+    await waitFor(() => expect(editor().value).toBe(""));
+    expect(api.save).toHaveBeenCalledWith("Book the venue");
+  });
+
+  it("offers Save only once there is something to save", async () => {
+    const { api } = fakeApi();
+    await open(api);
+    const save = screen.getByRole("button", { name: /Save/ }) as HTMLButtonElement;
+
+    expect(save.disabled).toBe(true);
+    type("  ");
+    expect(save.disabled).toBe(true);
+    type("an idea");
+    expect(save.disabled).toBe(false);
+  });
+
+  it("puts the idea away from the Close button without losing it", async () => {
+    const { api } = fakeApi();
+    await open(api);
+
+    type("half a thought");
+    fireEvent.click(screen.getByRole("button", { name: /Close/ }));
+
+    expect(api.close).toHaveBeenCalled();
+    expect(editor().value).toBe("half a thought");
+  });
+
+  it("keeps the caret in the text when a button is pressed", async () => {
+    const { api } = fakeApi();
+    await open(api);
+
+    const pressed = fireEvent.mouseDown(screen.getByRole("button", { name: /Close/ }));
+
+    expect(pressed).toBe(false);
+    expect(document.activeElement).toBe(editor());
   });
 
   it("keeps the text and says why when saving fails", async () => {

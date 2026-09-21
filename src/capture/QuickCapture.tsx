@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 
 import type { CaptureApi } from "./captureApi";
 
@@ -14,6 +22,12 @@ function readDraft(): string {
   }
 }
 
+/** A click on Save or Close leaves the caret where it was, so a failed save
+ *  can be fixed without clicking back into the text. */
+function keepTheCaret(event: MouseEvent<HTMLButtonElement>): void {
+  event.preventDefault();
+}
+
 function writeDraft(text: string): void {
   try {
     if (text) localStorage.setItem(DRAFT_KEY, text);
@@ -24,8 +38,9 @@ function writeDraft(text: string): void {
 }
 
 /**
- * The quick-capture window: type an idea, ⌘↩ to save it as a note, Esc to put
- * it away. Whatever is left unsaved is there next time the shortcut opens it.
+ * The quick-capture window: type an idea, then Save (⌘↩) makes it a note and
+ * Close (Esc) puts it away. Whatever is left unsaved is there next time the
+ * shortcut opens it.
  */
 export function QuickCapture({ api }: { api: CaptureApi }) {
   const [text, setText] = useState(readDraft);
@@ -74,17 +89,21 @@ export function QuickCapture({ api }: { api: CaptureApi }) {
     }
   }, [api, saving, text]);
 
+  const close = useCallback(() => {
+    void api.close();
+  }, [api]);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        void api.close();
+        close();
       } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         void save();
       }
     },
-    [api, save],
+    [close, save],
   );
 
   const handleChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -111,14 +130,31 @@ export function QuickCapture({ api }: { api: CaptureApi }) {
         onKeyDown={handleKeyDown}
         spellCheck
       />
-      <footer className="quick-capture__hints">
+      <footer className="quick-capture__footer">
         {error ? (
           <span role="alert" className="quick-capture__error">
             {error}
           </span>
-        ) : (
-          <span>⌘↩ Save · Esc Close</span>
-        )}
+        ) : null}
+        <button
+          type="button"
+          className="quick-capture__action"
+          aria-keyshortcuts="Meta+Enter"
+          disabled={saving || !text.trim()}
+          onMouseDown={keepTheCaret}
+          onClick={save}
+        >
+          <kbd>⌘↩</kbd> Save
+        </button>
+        <button
+          type="button"
+          className="quick-capture__action"
+          aria-keyshortcuts="Escape"
+          onMouseDown={keepTheCaret}
+          onClick={close}
+        >
+          <kbd>Esc</kbd> Close
+        </button>
       </footer>
     </main>
   );
