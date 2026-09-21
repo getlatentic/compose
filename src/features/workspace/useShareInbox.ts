@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { showErrorToast } from "../toast/toastStore";
-import { pageArticle } from "./pageArticle";
+import { pageMarkdown, selectionMarkdown } from "./webClip";
 
 const SHARE_INBOX_EVENT = "compose:share-inbox-changed";
 const PENDING_CMD = "share_inbox_pending";
@@ -19,33 +19,46 @@ export interface PendingClip {
   page: string | null;
 }
 
-type Converter = (html: string) => string;
-type ArticleFinder = (page: string, url: string | null) => Promise<string | null>;
 type Invoke = typeof import("@tauri-apps/api/core").invoke;
 
-async function pasteConverter(): Promise<Converter> {
-  // Loaded only when a clip carries HTML, so turndown stays out of the bundle
-  // that has to load before the app can draw.
+/** How each kind of shared content becomes Markdown. */
+export interface ClipConverters {
+  /** A whole web page, by its article; `null` when it has none. */
+  page: (page: string, url: string | null) => Promise<string | null>;
+  /** A selection from the web page at `url`, kept whole. */
+  selection: (html: string, url: string) => Promise<string>;
+  /** Rich text from an app, which has no page behind it. */
+  richText: (html: string) => Promise<string>;
+}
+
+async function pasteConversion(html: string): Promise<string> {
+  // Loaded only when a clip carries rich text, so turndown stays out of the
+  // bundle that has to load before the app can draw.
   const { htmlToMarkdown } = await import(
     "@latentic/live-markdown/codemirror/clipboard/htmlToMarkdown"
   );
-  return htmlToMarkdown;
+  return htmlToMarkdown(html);
 }
 
+const CONVERTERS: ClipConverters = {
+  page: pageMarkdown,
+  selection: selectionMarkdown,
+  richText: pasteConversion,
+};
+
 /**
- * The Markdown a clip's shared content becomes. Rich text goes through the
- * converter a paste uses, so a clipped page reads the same as a pasted one. A
- * selection is taken as it is; a whole page, by its article.
+ * The Markdown a clip's shared content becomes. Web content goes through
+ * Defuddle: a selection whole, a page by its article. Rich text from an app,
+ * which carries no address, goes through the converter a paste uses, which
+ * knows the markup those apps write.
  */
-export async function clipBody(
-  clip: PendingClip,
-  converter: () => Promise<Converter> = pasteConverter,
-  findArticle: ArticleFinder = pageArticle,
-): Promise<string> {
-  if (clip.html) return (await converter())(clip.html);
+export async function clipBody(clip: PendingClip, convert: ClipConverters = CONVERTERS): Promise<string> {
+  if (clip.html) {
+    return clip.url ? convert.selection(clip.html, clip.url) : convert.richText(clip.html);
+  }
   if (clip.page) {
-    const article = await findArticle(clip.page, clip.url);
-    if (article) return (await converter())(article);
+    const article = await convert.page(clip.page, clip.url);
+    if (article) return article;
   }
   return clip.text ?? "";
 }
