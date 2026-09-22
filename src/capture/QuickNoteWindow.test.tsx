@@ -56,8 +56,11 @@ function StandInEditor({ value, onChange, toolbar, onFlushReady }: StandInProps)
 }
 
 beforeAll(() => {
-  // jsdom lays nothing out, so it has no scrolling to do.
+  // jsdom lays nothing out: there is no scrolling to do, and CodeMirror's
+  // measure of the caret's text finds empty boxes.
   Element.prototype.scrollIntoView = vi.fn();
+  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
 });
 
 beforeEach(() => localStorage.clear());
