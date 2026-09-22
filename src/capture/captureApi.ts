@@ -48,8 +48,8 @@ export interface ClipboardApi {
   history(query: string): Promise<ClipboardHistory>;
   setEnabled(enabled: boolean): Promise<boolean>;
   entry(id: string): Promise<ClipboardEntry | null>;
-  /** Puts the entry back on the clipboard, to paste in any app. */
-  copy(id: string): Promise<void>;
+  /** Puts what was picked back on the clipboard, to paste in any app: several as one text. */
+  copy(ids: string[]): Promise<void>;
   pin(id: string, pinned: boolean): Promise<void>;
   forget(id: string): Promise<void>;
   clear(): Promise<void>;
@@ -115,7 +115,7 @@ export const tauriCaptureApi: CaptureApi = {
     history: (query) => invoke("clipboard_history", { query }),
     setEnabled: (enabled) => invoke("clipboard_set_enabled", { enabled }),
     entry: (id) => invoke("clipboard_entry", { id }),
-    copy: (id) => invoke("clipboard_copy", { id }),
+    copy: (ids) => invoke("clipboard_copy", { ids }),
     pin: (id, pinned) => invoke("clipboard_pin", { id, pinned }),
     forget: (id) => invoke("clipboard_forget", { id }),
     clear: () => invoke("clipboard_clear"),

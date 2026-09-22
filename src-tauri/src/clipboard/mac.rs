@@ -121,6 +121,17 @@ pub(super) fn write(item: &ClipboardItem) -> bool {
     write_to(&NSPasteboard::generalPasteboard(), item)
 }
 
+/// Put plain text on the clipboard, as several entries picked together are.
+pub(super) fn write_text(text: &str) -> bool {
+    write_text_to(&NSPasteboard::generalPasteboard(), text)
+}
+
+fn write_text_to(board: &NSPasteboard, text: &str) -> bool {
+    board.clearContents();
+    // SAFETY: as in `read_from`.
+    unsafe { board.setString_forType(&NSString::from_str(text), NSPasteboardTypeString) }
+}
+
 fn write_to(board: &NSPasteboard, item: &ClipboardItem) -> bool {
     board.clearContents();
     match item.kind {
@@ -228,6 +239,13 @@ mod tests {
         assert!(unsafe { board.0.setData_forType(Some(&tiff), NSPasteboardTypeTIFF) });
         let converted = read(&board.0).png.expect("converted");
         assert_eq!(&converted[1..4], b"PNG");
+    }
+
+    #[test]
+    fn text_picked_from_several_entries_goes_on_the_clipboard() {
+        let board = Scratch::new();
+        assert!(write_text_to(&board.0, "First thought\n\nSecond thought"));
+        assert_eq!(read(&board.0).text.as_deref(), Some("First thought\n\nSecond thought"));
     }
 
     #[test]

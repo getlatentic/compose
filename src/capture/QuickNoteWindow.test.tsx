@@ -224,7 +224,7 @@ describe("the clipboard in the quick-note window", () => {
     await waitFor(() => expect(selectedClip()).toContain("Just copied"));
     expect(screen.getAllByRole("option")[0]?.textContent).toContain("Pinned address");
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
-    await waitFor(() => expect(fake.api.clipboard.copy).toHaveBeenCalledWith("c1"));
+    await waitFor(() => expect(fake.api.clipboard.copy).toHaveBeenCalledWith(["c1"]));
   });
 
   it("moves to each new copy while the newest is selected, and stays on an entry the user picked", async () => {
@@ -249,7 +249,44 @@ describe("the clipboard in the quick-note window", () => {
     expect(fireEvent.mouseDown(older)).toBe(false);
     fireEvent.click(older);
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
-    await waitFor(() => expect(fake.api.clipboard.copy).toHaveBeenCalledWith("c2"));
+    await waitFor(() => expect(fake.api.clipboard.copy).toHaveBeenCalledWith(["c2"]));
+  });
+
+  it("gathers the copies picked into one note, oldest first", async () => {
+    const fake = fakeCaptureApi({ clips: [clip("c1", "Third"), clip("c2", "Second"), clip("c3", "First")] });
+    await open(fake.api);
+    act(() => fake.show("clipboard"));
+    const row = (text: string) => screen.getByText(text).closest("li")!;
+    fireEvent.click(await screen.findByText("First"));
+    fireEvent.click(row("Third"), { shiftKey: true });
+    expect(screen.getAllByRole("option", { selected: true })).toHaveLength(3);
+
+    press("Enter", { metaKey: true });
+    await waitFor(() => expect(editorView()?.state.doc.toString()).toBe("First\n\nSecond\n\nThird"));
+  });
+
+  it("starts one note from the copies picked with ⌘-click", async () => {
+    const fake = fakeCaptureApi({ notes: [{ id: "a", body: "Groceries", createdAt: 1, updatedAt: 1 }], clips: [clip("c1", "Newer"), clip("c2", "Older")] });
+    await open(fake.api);
+    act(() => fake.show("clipboard"));
+    fireEvent.click((await screen.findByText("Older")).closest("li")!, { metaKey: true });
+    expect(screen.getAllByRole("option", { selected: true })).toHaveLength(2);
+
+    press("n", { metaKey: true });
+    await waitFor(() => expect(editorView()?.state.doc.toString()).toBe("Older\n\nNewer"));
+  });
+
+  it("copies what was picked together with Return, oldest first", async () => {
+    const fake = fakeCaptureApi({ clips: [clip("c1", "Newer"), clip("c2", "Older")] });
+    await open(fake.api);
+    act(() => fake.show("clipboard"));
+    await screen.findByText("Older");
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown", shiftKey: true });
+    expect(screen.getAllByRole("option", { selected: true })).toHaveLength(2);
+
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
+    await waitFor(() => expect(fake.api.clipboard.copy).toHaveBeenCalledWith(["c2", "c1"]));
+    expect(fake.api.close).toHaveBeenCalled();
   });
 
   it("copies an entry back and closes on Return, to paste where the user was", async () => {
@@ -259,7 +296,7 @@ describe("the clipboard in the quick-note window", () => {
     await screen.findByText("Paste me");
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
     await waitFor(() => expect(fake.api.close).toHaveBeenCalled());
-    expect(fake.api.clipboard.copy).toHaveBeenCalledWith("c1");
+    expect(fake.api.clipboard.copy).toHaveBeenCalledWith(["c1"]);
   });
 
   it("puts an entry into the note with ⌘↩, formatting converted to Markdown", async () => {
