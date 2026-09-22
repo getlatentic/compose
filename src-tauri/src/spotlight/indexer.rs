@@ -67,12 +67,7 @@ impl<I: SearchIndex> Indexer<'_, I> {
     }
 
     fn send_paths(&self, workspace_id: &str, paths: &[String]) -> Result<(), String> {
-        let documents = self
-            .metadata
-            .indexable_documents(workspace_id)?
-            .into_iter()
-            .filter(|document| paths.contains(&document.relative_path))
-            .collect();
+        let documents = self.metadata.indexable_documents_at(workspace_id, paths)?;
         self.send(workspace_id, documents)
     }
 

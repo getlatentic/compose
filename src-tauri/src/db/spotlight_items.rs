@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 
 use super::{title_from_path, MetadataStore};
 
@@ -38,13 +38,38 @@ impl MetadataStore {
         rows.map(|row| {
             let (relative_path, title, content_hash, modified_at) =
                 row.map_err(|error| format!("could not read a document for Spotlight: {error}"))?;
-            let title = title
-                .filter(|title| !title.trim().is_empty())
-                .or_else(|| title_from_path(&relative_path))
-                .unwrap_or_else(|| relative_path.clone());
-            Ok(IndexableDocument { relative_path, title, content_hash, modified_at })
+            Ok(document(relative_path, title, content_hash, modified_at))
         })
         .collect()
+    }
+
+    /// The notes at `relative_paths` that `vault_id` still holds.
+    pub fn indexable_documents_at(
+        &self,
+        vault_id: &str,
+        relative_paths: &[String],
+    ) -> Result<Vec<IndexableDocument>, String> {
+        let Some(connection) = self.existing_vault_connection(vault_id)? else {
+            return Ok(Vec::new());
+        };
+        let mut statement = connection
+            .prepare(
+                "select current_path, title, content_hash, coalesce(last_seen_mtime, updated_at)
+                 from documents
+                 where deleted_at is null and current_path = ?1",
+            )
+            .map_err(|error| format!("could not read documents for Spotlight: {error}"))?;
+        let mut documents = Vec::new();
+        for relative_path in relative_paths {
+            let found = statement
+                .query_row(params![relative_path], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, String>(2)?, row.get::<_, i64>(3)?))
+                })
+                .optional()
+                .map_err(|error| format!("could not read a document for Spotlight: {error}"))?;
+            documents.extend(found.map(|(relative_path, title, content_hash, modified_at)| document(relative_path, title, content_hash, modified_at)));
+        }
+        Ok(documents)
     }
 
     /// What Spotlight was given for `vault_id`: each note's content hash, by path.
@@ -116,6 +141,15 @@ impl MetadataStore {
     }
 }
 
+/// A note named by its title, else its file.
+fn document(relative_path: String, title: Option<String>, content_hash: String, modified_at: i64) -> IndexableDocument {
+    let title = title
+        .filter(|title| !title.trim().is_empty())
+        .or_else(|| title_from_path(&relative_path))
+        .unwrap_or_else(|| relative_path.clone());
+    IndexableDocument { relative_path, title, content_hash, modified_at }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -141,6 +175,11 @@ mod tests {
         assert_eq!(documents[0].title, "Alpha");
         assert_eq!(documents[0].content_hash, crate::db::content_hash("# Alpha"));
         assert!(store.indexable_documents("never-opened").expect("none").is_empty());
+
+        let named = store
+            .indexable_documents_at("v1", &["a.md".to_owned(), "gone.md".to_owned(), "missing.md".to_owned()])
+            .expect("named");
+        assert_eq!(named.iter().map(|document| document.relative_path.as_str()).collect::<Vec<_>>(), ["a.md"]);
     }
 
     #[test]

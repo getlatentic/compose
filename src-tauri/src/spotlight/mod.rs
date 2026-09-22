@@ -51,9 +51,11 @@ pub fn start(app: &AppHandle) {
         std::thread::spawn(move || {
             let (metadata, registry) = (worker.state::<MetadataStore>(), worker.state::<WorkspaceRegistry>());
             let indexer = indexer::Indexer { index: &mac::CoreSpotlight, metadata: &metadata, registry: &registry };
-            for job in jobs {
-                if let Err(error) = indexer.run(job) {
-                    eprintln!("Spotlight: {error}");
+            while let Ok(job) = jobs.recv() {
+                for job in coalesce(job, jobs.try_iter()) {
+                    if let Err(error) = indexer.run(job) {
+                        eprintln!("Spotlight: {error}");
+                    }
                 }
             }
         });
@@ -113,6 +115,15 @@ fn launch_jobs(enabled: bool, registered: &[String], indexed: &[String]) -> Vec<
     jobs
 }
 
+/// `first` and the jobs already waiting, with repeats in a row run once: typing
+/// saves a note again and again, and each job reads the note as it is now. Only
+/// neighbours merge, so a write, a delete and a write still end with the note.
+fn coalesce(first: Job, waiting: impl Iterator<Item = Job>) -> Vec<Job> {
+    let mut jobs: Vec<Job> = std::iter::once(first).chain(waiting).collect();
+    jobs.dedup();
+    jobs
+}
+
 fn removed(registered: &[String], indexed: &[String]) -> Vec<Job> {
     let registered: HashSet<&String> = registered.iter().collect();
     indexed.iter().filter(|id| !registered.contains(id)).cloned().map(Job::Forget).collect()
@@ -162,6 +173,17 @@ mod tests {
         assert_eq!(
             launch_jobs(true, &ids(&["kept", "new"]), &ids(&["kept", "removed"])),
             [Job::Forget("removed".to_owned()), Job::Reconcile("kept".to_owned()), Job::Reconcile("new".to_owned())]
+        );
+    }
+
+    #[test]
+    fn a_burst_of_saves_is_indexed_once_but_a_delete_between_them_is_kept() {
+        let written = || Job::Written { workspace_id: "w".to_owned(), path: "a.md".to_owned() };
+        let deleted = Job::Deleted { workspace_id: "w".to_owned(), path: "a.md".to_owned() };
+        assert_eq!(coalesce(written(), [written(), written()].into_iter()), [written()]);
+        assert_eq!(
+            coalesce(written(), [deleted.clone(), written()].into_iter()),
+            [written(), deleted, written()]
         );
     }
 
