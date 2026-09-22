@@ -9,6 +9,7 @@ import { AppearanceSection } from "./AppearanceSection";
 import { DefaultMarkdownAppSection } from "./DefaultMarkdownAppSection";
 import { QuickCaptureSection } from "./QuickCaptureSection";
 import { ResetDataSection } from "./ResetDataSection";
+import { SpotlightSection } from "./SpotlightSection";
 
 /** Cap on the global custom instructions (~500 tokens) so they can't crowd out
  *  the workspace context in a small local model's window. */
@@ -30,6 +31,7 @@ export function GeneralSettings() {
       {isTauriRuntime() ? (
         <>
           <QuickCaptureSection />
+          <SpotlightSection />
           <DefaultMarkdownAppSection />
           <PrivacySection />
           <ReportProblemSection />
