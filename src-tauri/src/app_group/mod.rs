@@ -64,15 +64,17 @@ pub fn start(app: &AppHandle) {
     let _ = sender.send(());
     let _ = app.state::<AppGroupState>().notes_changed.set(sender);
 
-    let registry = app.state::<WorkspaceRegistry>();
-    if let Ok(list) = registry.list() {
+    if let Ok(list) = app.state::<WorkspaceRegistry>().list() {
         publish_destinations(dir, &list);
     }
-    let observer = app.clone();
-    registry.observe_list(move |list| {
+}
+
+/// A workspace was added, renamed or removed.
+pub fn workspaces_changed(app: &AppHandle, list: &WorkspaceList) {
+    if let Some(dir) = shared_dir() {
         publish_destinations(dir, list);
-        notes_changed(&observer);
-    });
+        notes_changed(app);
+    }
 }
 
 /// A note was written, renamed, deleted or rescanned.

@@ -8,6 +8,7 @@ mod clipper;
 mod deep_link;
 mod services;
 mod share_inbox;
+mod spotlight;
 mod launch_window;
 mod stale_state;
 mod user_tool_dirs;
@@ -103,6 +104,7 @@ pub fn run() {
         .manage(clipboard::ClipboardHistory::default())
         .manage(capture::RegisteredShortcuts::default())
         .manage(app_group::AppGroupState::default())
+        .manage(spotlight::SpotlightState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Self-update: check a signed manifest, download + swap the bundle, and
@@ -222,8 +224,17 @@ pub fn run() {
             // After the registry and the metadata store, whose workspaces and
             // notes it publishes for the extensions.
             app_group::start(&app_handle);
+            spotlight::start(&app_handle);
             let documents_observer = app_handle.clone();
-            metadata.observe_documents(move |_, _| app_group::notes_changed(&documents_observer));
+            metadata.observe_documents(move |workspace_id, change| {
+                app_group::notes_changed(&documents_observer);
+                spotlight::documents_changed(&documents_observer, workspace_id, change);
+            });
+            let workspaces_observer = app_handle.clone();
+            app_handle.state::<workspace::WorkspaceRegistry>().observe_list(move |list| {
+                app_group::workspaces_changed(&workspaces_observer, list);
+                spotlight::workspaces_changed(&workspaces_observer, list);
+            });
             share_inbox::start(&app_handle);
             // After the metadata store, which holds the chosen shortcut and
             // whether clipboard history is on.
@@ -401,6 +412,8 @@ pub fn run() {
             clipboard::clipboard_clear,
             clipboard::clipboard_privacy_settings,
             share_inbox::share_inbox_import,
+            spotlight::spotlight_enabled,
+            spotlight::spotlight_set_enabled,
             external::external_list,
             external::external_add,
             external::external_remove,
