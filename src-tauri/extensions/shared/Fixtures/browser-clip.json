@@ -5,6 +5,7 @@
 
   ],
   "markdown" : "The article, already **Markdown**.\n\n```\n>>> print('clipped')\n```",
+  "open" : false,
   "title" : "A Clipped Article",
   "url" : "https://www.latentic.ai/blog/a-clipped-article",
   "version" : 1,

@@ -1,10 +1,9 @@
-//! The files the app and the share extension exchange. Each type mirrors one in
-//! `extensions/share/Sources/Contract.swift`, and both sides' tests read the same
-//! fixtures in `extensions/share/Fixtures`, so neither can drift alone.
+//! The files the app and its extensions exchange. Each type mirrors one in
+//! `extensions/shared/Contract.swift`, and both sides' tests read the same
+//! fixtures in `extensions/shared/Fixtures`, so neither can drift alone.
 
 use serde::{Deserialize, Serialize};
 
-use super::inbox::StoredClip;
 use crate::workspace::WorkspaceList;
 
 pub const CONTRACT_VERSION: u32 = 1;
@@ -65,39 +64,29 @@ pub struct Clip {
     pub markdown: Option<String>,
     #[serde(default)]
     pub images: Vec<String>,
+    /// The user asked to see the note: the app opens it once filed.
+    #[serde(default)]
+    pub open: bool,
 }
 
-/// What the frontend needs to convert a clip: its id and shared content.
-#[derive(Debug, Serialize)]
+/// The notes changed most recently across every workspace, newest first, for
+/// Shortcuts' Open Note and the widget.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotesIndex {
+    pub version: u32,
+    pub notes: Vec<PublishedNote>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PendingClip {
-    pub id: String,
-    /// What a page's relative links resolve against.
-    pub url: Option<String>,
-    pub html: Option<String>,
-    pub text: Option<String>,
-    pub page: Option<String>,
-    pub markdown: Option<String>,
-}
-
-impl From<StoredClip> for PendingClip {
-    fn from(stored: StoredClip) -> Self {
-        Self {
-            id: stored.id,
-            url: stored.clip.url,
-            html: stored.clip.html,
-            text: stored.clip.text,
-            page: stored.clip.page,
-            markdown: stored.clip.markdown,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ImportedClip {
+pub struct PublishedNote {
+    /// Absolute, and what `compose://open?path=` opens.
+    pub path: String,
+    pub title: String,
     pub workspace_id: String,
-    pub relative_path: String,
+    pub workspace_name: String,
+    /// Milliseconds since the epoch.
+    pub modified_at: i64,
 }
 
 #[cfg(test)]
@@ -105,20 +94,10 @@ mod tests {
     use super::*;
     use crate::workspace::WorkspaceRecord;
 
-    const CLIP_FIXTURE: &str = include_str!("../../extensions/share/Fixtures/clip.json");
-    const BROWSER_CLIP_FIXTURE: &str =
-        include_str!("../../extensions/share/Fixtures/browser-clip.json");
+    const CLIP_FIXTURE: &str = include_str!("../../extensions/shared/Fixtures/clip.json");
     const DESTINATIONS_FIXTURE: &str =
-        include_str!("../../extensions/share/Fixtures/destinations.json");
-
-    #[test]
-    fn a_browser_clip_hands_the_frontend_its_markdown() {
-        let clip: Clip = serde_json::from_str(BROWSER_CLIP_FIXTURE).expect("fixture decodes");
-        assert_eq!(clip.page, None);
-        let pending = PendingClip::from(StoredClip { id: clip.id.clone(), clip });
-        assert!(pending.markdown.as_deref().is_some_and(|markdown| markdown.contains("```")));
-        assert_eq!(pending.url.as_deref(), Some("https://www.latentic.ai/blog/a-clipped-article"));
-    }
+        include_str!("../../extensions/shared/Fixtures/destinations.json");
+    const NOTES_FIXTURE: &str = include_str!("../../extensions/shared/Fixtures/notes.json");
 
     #[test]
     fn decodes_the_clip_the_extension_writes() {
@@ -130,19 +109,7 @@ mod tests {
         assert_eq!(clip.html, None, "an absent key is a missing value");
         assert!(clip.page.as_deref().is_some_and(|page| page.contains("<article>")));
         assert!(clip.workspace_id.is_some());
-    }
-
-    #[test]
-    fn a_pending_clip_hands_the_frontend_the_page_and_its_address() {
-        let clip: Clip = serde_json::from_str(CLIP_FIXTURE).expect("fixture decodes");
-        let pending = serde_json::to_value(PendingClip::from(StoredClip {
-            id: "c1".to_owned(),
-            clip,
-        }))
-        .expect("serializes");
-
-        assert_eq!(pending["url"], "https://www.latentic.ai/blog/proof-of-code-understanding");
-        assert!(pending["page"].as_str().is_some_and(|page| page.contains("<article>")));
+        assert!(clip.open, "Open in Compose was asked for");
     }
 
     #[test]
@@ -151,6 +118,7 @@ mod tests {
             serde_json::from_str(r#"{"version":1,"id":"a","createdAt":0,"title":"t"}"#)
                 .expect("decodes");
         assert!(clip.images.is_empty() && clip.url.is_none() && clip.workspace_id.is_none());
+        assert!(!clip.open, "a clip is filed without opening unless asked");
     }
 
     #[test]
@@ -174,5 +142,21 @@ mod tests {
         let fixture: serde_json::Value =
             serde_json::from_str(DESTINATIONS_FIXTURE).expect("fixture parses");
         assert_eq!(written, fixture, "paths and history stay in the app");
+    }
+
+    #[test]
+    fn notes_are_written_as_the_extensions_read_them() {
+        let index = NotesIndex {
+            version: CONTRACT_VERSION,
+            notes: vec![PublishedNote {
+                path: "/Users/me/My Notes/Ideas/Launch plan.md".to_owned(),
+                title: "Launch plan".to_owned(),
+                workspace_id: "5b8f0d2e-1c4a-4f6b-9e3d-7a2c8b1f0e4d".to_owned(),
+                workspace_name: "My Notes".to_owned(),
+                modified_at: 1_789_500_000_000,
+            }],
+        };
+        let fixture: serde_json::Value = serde_json::from_str(NOTES_FIXTURE).expect("fixture parses");
+        assert_eq!(serde_json::to_value(&index).expect("encodes"), fixture);
     }
 }

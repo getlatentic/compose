@@ -1,3 +1,4 @@
+mod app_group;
 mod autocorrect;
 mod boot_payload;
 mod capture;
@@ -101,6 +102,7 @@ pub fn run() {
         .manage(share_inbox::ShareInboxState::default())
         .manage(clipboard::ClipboardHistory::default())
         .manage(capture::RegisteredShortcuts::default())
+        .manage(app_group::AppGroupState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Self-update: check a signed manifest, download + swap the bundle, and
@@ -171,8 +173,6 @@ pub fn run() {
             if let Err(error) = externals.init_from_app(&app_handle) {
                 eprintln!("external files registry init failed: {error}");
             }
-            // After the registry, whose workspaces it publishes to the share sheet.
-            share_inbox::start(&app_handle);
             #[cfg(target_os = "macos")]
             std::thread::spawn(clipper::register_for_this_app);
             // Load user-registered custom agents before export_all (below) reads
@@ -219,6 +219,12 @@ pub fn run() {
             if let Err(error) = metadata.init_from_app(&app_handle) {
                 eprintln!("metadata store init failed: {error}");
             }
+            // After the registry and the metadata store, whose workspaces and
+            // notes it publishes for the extensions.
+            app_group::start(&app_handle);
+            let documents_observer = app_handle.clone();
+            metadata.observe_documents(move |_, _| app_group::notes_changed(&documents_observer));
+            share_inbox::start(&app_handle);
             // After the metadata store, which holds the chosen shortcut and
             // whether clipboard history is on.
             capture::start(&app_handle);
@@ -416,7 +422,6 @@ pub fn run() {
         // would reach a non-macOS build is a question for whenever one ships.
         #[cfg(target_os = "macos")]
         RunEvent::Opened { urls } => {
-            let pending = app_handle.state::<PendingOpenUrls>();
             for url in urls {
                 // A `file://` URL comes from the Finder or a file association,
                 // so the user picked it. A `compose://` link can come from a
@@ -429,13 +434,9 @@ pub fn run() {
                         .ok()
                         .and_then(|p| p.to_str().map(String::from))
                 };
-                let Some(path) = resolved else {
-                    continue;
-                };
-                // Buffer first so a frontend that mounts later can drain it.
-                pending.push(path.clone());
-                // Best-effort live emit for the warm-start case.
-                let _ = app_handle.emit("compose:open-external-file", path);
+                if let Some(path) = resolved {
+                    open_with::open_in_app(app_handle, path);
+                }
             }
         }
         // Quitting — signal every in-flight agent child so it doesn't orphan

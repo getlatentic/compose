@@ -38,11 +38,12 @@ let draft = ClipDraft(
     images: [ClipImage(fileName: "1-photo.png", data: Data([1, 2, 3]))])
 let clip = draft.clip(id: "abc", workspaceId: "w1", createdAt: Date(timeIntervalSince1970: 1.5))
 let json = String(data: try! JSONEncoder().encode(clip), encoding: .utf8)!
-for key in ["version", "id", "createdAt", "workspaceId", "title", "url", "text", "images"] {
+for key in ["version", "id", "createdAt", "workspaceId", "title", "url", "text", "images", "open"] {
     check("clip.json carries \(key)", json.contains("\"\(key)\""), json)
 }
 check("the title is trimmed", clip.title == "A Title")
 check("createdAt is in milliseconds", clip.createdAt == 1500)
+check("a shared clip is filed without opening unless asked", !clip.open)
 check("an empty draft cannot be saved", ClipDraft().isEmpty)
 
 MainActor.assumeIsolated {
@@ -142,7 +143,7 @@ try? FileManager.default.removeItem(at: imageFile.deletingLastPathComponent())
 
 // --- the contract, pinned by fixtures the Rust importer's tests read too ---------
 
-if let fixtures = ProcessInfo.processInfo.environment["SHARE_FIXTURES"] {
+if let fixtures = ProcessInfo.processInfo.environment["CONTRACT_FIXTURES"] {
     let base = URL(fileURLWithPath: fixtures, isDirectory: true)
     do {
         let clip = try JSONDecoder().decode(
@@ -162,7 +163,7 @@ if let fixtures = ProcessInfo.processInfo.environment["SHARE_FIXTURES"] {
         check("contract fixtures", false, "\(error)")
     }
 } else {
-    check("SHARE_FIXTURES names the fixture folder (extensions/test.sh sets it)", false)
+    check("CONTRACT_FIXTURES names the fixture folder (extensions/test.sh sets it)", false)
 }
 
 testDocumentFiles()

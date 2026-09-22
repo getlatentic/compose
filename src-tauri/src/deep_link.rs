@@ -105,6 +105,18 @@ mod tests {
         );
     }
 
+    /// As the extensions write it (`OpenInCompose.link(toNoteAt:)`): a name with
+    /// `&`, `+` or `=` keeps them.
+    #[test]
+    fn a_link_from_an_extension_keeps_every_character_of_the_name() {
+        assert_eq!(
+            parse(&url("compose://open?path=/Users/me/My%20Notes/A%26B%2BC%3D%C3%A9.md")),
+            Some(Request::Open {
+                path: "/Users/me/My Notes/A&B+C=é.md".to_owned()
+            })
+        );
+    }
+
     #[test]
     fn anything_this_app_does_not_offer_is_dropped() {
         assert_eq!(parse(&url("compose://run?cmd=rm")), None);

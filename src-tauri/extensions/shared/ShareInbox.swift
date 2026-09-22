@@ -1,13 +1,15 @@
 import Foundation
 import Security
 
-/// Where the extension and the app meet: a folder in their shared app-group
-/// container. The extension is sandboxed and cannot write into a workspace, so a
-/// clip is dropped here and the app — which can — turns it into a note.
+/// Where the extensions and the app meet: a folder in their shared app-group
+/// container. An extension is sandboxed and cannot write into a workspace, so a
+/// clip is dropped here and the app — which can — turns it into a note. The app
+/// publishes here what the extensions show: its workspaces and recent notes.
 struct ShareInbox {
     let root: URL
 
     var destinationsURL: URL { root.appendingPathComponent("destinations.json") }
+    var notesURL: URL { root.appendingPathComponent("notes.json") }
     var inboxURL: URL { root.appendingPathComponent("Inbox", isDirectory: true) }
 
     /// The container of the app group this process was signed into. Read from
@@ -27,6 +29,11 @@ struct ShareInbox {
     func destinations() -> Destinations? {
         guard let data = try? Data(contentsOf: destinationsURL) else { return nil }
         return try? JSONDecoder().decode(Destinations.self, from: data)
+    }
+
+    func notes() -> PublishedNotes? {
+        guard let data = try? Data(contentsOf: notesURL) else { return nil }
+        return try? JSONDecoder().decode(PublishedNotes.self, from: data)
     }
 
     /// Writes under a dot-named staging folder and renames it into place, so the

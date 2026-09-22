@@ -6,7 +6,8 @@
         "PlugIns/ComposeQuickLook.appex": "extensions/build/ComposeQuickLook.appex",
         "PlugIns/ComposeThumbnail.appex": "extensions/build/ComposeThumbnail.appex",
         "PlugIns/ComposeShare.appex": "extensions/build/ComposeShare.appex",
-        "Helpers/ComposeClipper": "extensions/build/ComposeClipper"
+        "Helpers/ComposeClipper": "extensions/build/ComposeClipper",
+        "Extensions/ComposeIntents.appex": "extensions/build/ComposeIntents.appex"
       }
     }
   }

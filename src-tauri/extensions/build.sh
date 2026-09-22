@@ -1,6 +1,7 @@
 #!/bin/bash
-# Build Compose's app extensions — the .md Quick Look preview and thumbnail, and
-# Share → Compose — and the entitlements the app needs to receive shared clips.
+# Build Compose's app extensions — the .md Quick Look preview and thumbnail,
+# Share → Compose, and the actions Shortcuts, Spotlight and Siri offer — and the
+# entitlements the app needs to meet them in their shared folder.
 #
 # No Xcode project: an app extension is an executable whose entry point is
 # Foundation's NSExtensionMain, plus an Info.plist naming the principal class.
@@ -8,6 +9,10 @@
 # rest of the app uses.
 #
 #   build.sh <output-dir> [arch...]      default arch: the host's
+#
+# COMPOSE_APP_ID names the app the extensions ship in (default: the shipped
+# ai.latentic.compose). Extension ids and the app group follow it, so a test
+# copy built under its own id never shares an inbox with an installed Compose.
 #
 # Signed here when APPLE_SIGNING_IDENTITY is set, because Tauri signs the app
 # WITHOUT --deep: it seals what it finds, so each extension has to arrive
@@ -37,6 +42,9 @@ fi
 VERSION="$(/usr/bin/python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" \
   "$HERE/../tauri.conf.json")"
 
+SHIPPED_APP_ID=ai.latentic.compose
+APP_ID="${COMPOSE_APP_ID:-$SHIPPED_APP_ID}"
+
 # The share sheet and the app meet in an app-group container. On macOS a group
 # is named for the team that signs it, which only the signing identity knows —
 # so the entitlements naming it are written here rather than committed.
@@ -53,13 +61,28 @@ write_group_entitlements() {
   } > "$path"
 }
 
+# App Intents are described by metadata extracted from the compiler's record of
+# their compile-time values, as Xcode does it: the compiler is told which
+# protocols to record, and the processor reads that record beside the binary.
+APP_INTENTS_PROTOCOLS='["AppIntent","EntityQuery","AppEntity","TransientEntity","AppEnum","AppShortcutProviding","AppShortcutsProvider","AnyResolverProviding","AppIntentsPackage","DynamicOptionsProvider","_IntentValueRepresentable","_AssistantIntentsProvider","_GenerativeFunctionExtractable","IntentValueQuery","Resolver"]'
+
 # Build one .appex. Args: <name> <info-plist> <entitlements> <frameworks> <source-dir>...
+# With APP_INTENTS set, its actions' metadata is extracted into Resources.
 build_extension() {
   local name="$1" plist="$2" entitlements="$3" frameworks="$4"
   shift 4
   local appex="$OUT_DIR/$name.appex" sources=() flags=() dir framework
   for dir in "$@"; do sources+=("$dir"/*.swift); done
   for framework in $frameworks; do flags+=(-framework "$framework"); done
+  # Compiled for the oldest macOS the extension says it runs on.
+  local minimum
+  minimum="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$plist")"
+  local work
+  work="$(mktemp -d)"
+  if [ -n "${APP_INTENTS:-}" ]; then
+    echo "$APP_INTENTS_PROTOCOLS" > "$work/protocols.json"
+    flags+=(-parse-as-library -Xfrontend -const-gather-protocols-file -Xfrontend "$work/protocols.json")
+  fi
 
   rm -rf "$appex"
   mkdir -p "$appex/Contents/MacOS"
@@ -68,19 +91,23 @@ build_extension() {
     mkdir -p "$appex/Contents/Resources"
     find "$RESOURCES" -maxdepth 1 -type f ! -name "*.test.ts" -exec cp {} "$appex/Contents/Resources/" \;
   fi
+  local id
+  id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$appex/Contents/Info.plist")"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_ID${id#"$SHIPPED_APP_ID"}" "$appex/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$appex/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$appex/Contents/Info.plist"
 
   local slices=() arch slice
   for arch in "${ARCHS[@]}"; do
-    slice="$(mktemp -d)/$name-$arch"
+    slice="$work/$name-$arch"
     xcrun --sdk macosx swiftc \
-      -target "${arch}-apple-macos12.0" \
+      -target "${arch}-apple-macos${minimum}" \
       -sdk "$SDK" \
       -module-name "$name" \
       -O -wmo \
       -application-extension \
       ${flags[@]+"${flags[@]}"} \
+      -emit-const-values-path "$slice.swiftconstvalues" \
       -Xlinker -e -Xlinker _NSExtensionMain \
       -o "$slice" \
       "${sources[@]}"
@@ -90,6 +117,9 @@ build_extension() {
     lipo -create "${slices[@]}" -output "$appex/Contents/MacOS/$name"
   else
     cp "${slices[0]}" "$appex/Contents/MacOS/$name"
+  fi
+  if [ -n "${APP_INTENTS:-}" ]; then
+    extract_app_intents "$appex" "$name" "$minimum" "${slices[0]}.swiftconstvalues" "${sources[@]}"
   fi
 
   local state="unsigned — the system will not load it"
@@ -132,6 +162,41 @@ build_helper() {
   fi
   echo "[extensions] built $name ($(lipo -archs "$helper"), $state)"
 }
+
+# Args: <appex> <module> <minimum-macos> <const-values> <source>...
+# The processor succeeds and writes nothing when it finds no record, so the
+# metadata is checked for: an extension without it offers no actions.
+extract_app_intents() {
+  local appex="$1" module="$2" minimum="$3" values="$4"
+  shift 4
+  local lists toolchain
+  lists="$(mktemp -d)"
+  printf '%s\n' "$@" > "$lists/sources"
+  echo "$values" > "$lists/values"
+  toolchain="$(cd "$(dirname "$(xcrun --find swiftc)")/../.." && pwd)"
+  mkdir -p "$appex/Contents/Resources"
+  xcrun appintentsmetadataprocessor \
+    --toolchain-dir "$toolchain" \
+    --module-name "$module" \
+    --sdk-root "$SDK" \
+    --xcode-version "$(xcodebuild -version | awk '/Build version/ {print $3}')" \
+    --platform-family macOS \
+    --deployment-target "$minimum" \
+    --bundle-identifier "$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$appex/Contents/Info.plist")" \
+    --output "$appex/Contents/Resources" \
+    --target-triple "${ARCHS[0]}-apple-macos$minimum" \
+    --binary-file "$appex/Contents/MacOS/$module" \
+    --source-file-list "$lists/sources" \
+    --swift-const-vals-list "$lists/values" \
+    --compile-time-extraction \
+    --deployment-aware-processing \
+    --no-app-shortcuts-localization
+  if [ ! -f "$appex/Contents/Resources/Metadata.appintents/extract.actionsdata" ]; then
+    echo "[extensions] no App Intents metadata was extracted for $module" >&2
+    exit 1
+  fi
+}
+
 QUICKLOOK="$HERE/quicklook"
 build_extension ComposeQuickLook "$QUICKLOOK/Preview/Info.plist" \
   "$QUICKLOOK/ComposeQuickLook.entitlements" "QuickLookUI" \
@@ -140,11 +205,12 @@ build_extension ComposeThumbnail "$QUICKLOOK/Thumbnail/Info.plist" \
   "$QUICKLOOK/ComposeQuickLook.entitlements" "QuickLookThumbnailing AppKit" \
   "$QUICKLOOK/Shared" "$QUICKLOOK/Thumbnail/Sources"
 
-SHARE_ENTITLEMENTS="$OUT_DIR/ComposeShare.entitlements"
+# Share and the actions both run sandboxed in the group.
+GROUP_EXTENSION_ENTITLEMENTS="$OUT_DIR/GroupExtension.entitlements"
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   : "${APPLE_TEAM_ID:?APPLE_TEAM_ID names the app group, so signing needs it}"
-  APP_GROUP="$APPLE_TEAM_ID.ai.latentic.compose"
-  write_group_entitlements "$SHARE_ENTITLEMENTS" sandboxed "$APP_GROUP"
+  APP_GROUP="$APPLE_TEAM_ID.$APP_ID"
+  write_group_entitlements "$GROUP_EXTENSION_ENTITLEMENTS" sandboxed "$APP_GROUP"
   write_group_entitlements "$OUT_DIR/Compose.entitlements" unsandboxed "$APP_GROUP"
   write_group_entitlements "$OUT_DIR/ComposeClipper.entitlements" unsandboxed "$APP_GROUP"
 fi
@@ -163,12 +229,15 @@ cp "$HERE/share/Info.plist" "$SHARE_PLIST"
 plutil -replace ComposeDocumentExtensions -json \
   "$(/usr/bin/python3 -c 'import json, sys; print(json.dumps(sys.argv[1:]))' "${DOCUMENT_EXTENSIONS[@]}")" \
   "$SHARE_PLIST"
-RESOURCES="$HERE/share/Resources" build_extension ComposeShare "$SHARE_PLIST" "$SHARE_ENTITLEMENTS" \
-  "AppKit SwiftUI" "$HERE/share/Sources"
+RESOURCES="$HERE/share/Resources" build_extension ComposeShare "$SHARE_PLIST" "$GROUP_EXTENSION_ENTITLEMENTS" \
+  "AppKit SwiftUI" "$HERE/shared" "$HERE/share/Sources"
 # The browser clipper's native-messaging host: a browser starts it to hand over
-# a clip, which it leaves in the share inbox using the share extension's code.
-build_helper ComposeClipper ai.latentic.compose.clipper "$OUT_DIR/ComposeClipper.entitlements" \
-  "$HERE/share/Sources/Contract.swift" \
-  "$HERE/share/Sources/ShareInbox.swift" \
-  "$HERE/share/Sources/ClipDraft.swift" \
+# a clip, which it leaves in the share inbox using the shared contract and inbox.
+build_helper ComposeClipper "$APP_ID.clipper" "$OUT_DIR/ComposeClipper.entitlements" \
+  "$HERE/shared/Contract.swift" \
+  "$HERE/shared/ShareInbox.swift" \
+  "$HERE/shared/ClipDraft.swift" \
   "$HERE"/clipper/Sources/*.swift
+
+APP_INTENTS=1 build_extension ComposeIntents "$HERE/intents/Info.plist" "$GROUP_EXTENSION_ENTITLEMENTS" \
+  "AppKit AppIntents" "$HERE/shared" "$HERE/intents/Sources" "$HERE/intents/Main"

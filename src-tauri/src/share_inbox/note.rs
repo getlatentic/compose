@@ -5,15 +5,17 @@ pub(super) const FALLBACK_TITLE: &str = "Clipping";
 
 /// The note's Markdown. Where a web clip came from is kept as a `source`
 /// property, which the Properties panel shows, rather than as prose above the
-/// content; the title is a heading unless the content already opens with it.
+/// content. The title is a heading unless the content already opens with it,
+/// and text whose first line is the title has that line made the heading.
 pub(super) fn compose(title: &str, source: Option<&str>, body: &str, images: &[String]) -> String {
     let title = heading_text(title);
-    let body = body.trim();
+    let mut body = body.trim();
     let mut sections = Vec::new();
     if let Some(source) = source.map(str::trim).filter(|source| !source.is_empty()) {
         sections.push(format!("---\nsource: {}\n---", yaml_quote(source)));
     }
     if !opens_with_heading(body, &title) {
+        body = after_first_line_if(body, &title).unwrap_or(body);
         sections.push(format!("# {title}"));
     }
     if !body.is_empty() {
@@ -32,6 +34,12 @@ fn heading_text(title: &str) -> String {
     } else {
         text
     }
+}
+
+/// What follows `body`'s first line when that line says `title`.
+fn after_first_line_if<'a>(body: &'a str, title: &str) -> Option<&'a str> {
+    let (first, rest) = body.split_once('\n').unwrap_or((body, ""));
+    (heading_text(first) == title).then(|| rest.trim())
 }
 
 fn opens_with_heading(body: &str, title: &str) -> bool {
@@ -87,6 +95,13 @@ mod tests {
     fn content_that_opens_with_the_title_is_not_titled_twice() {
         let note = compose("Title", None, "## Title\n\nBody.", &[]);
         assert_eq!(note, "## Title\n\nBody.\n");
+    }
+
+    #[test]
+    fn text_whose_first_line_is_the_title_is_not_titled_twice() {
+        assert_eq!(compose("Buy milk", None, "Buy  milk\nand eggs", &[]), "# Buy milk\n\nand eggs\n");
+        assert_eq!(compose("Buy milk", None, "Buy milk", &[]), "# Buy milk\n");
+        assert_eq!(compose("Groceries", None, "Buy milk", &[]), "# Groceries\n\nBuy milk\n");
     }
 
     #[test]

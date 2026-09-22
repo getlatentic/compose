@@ -1,16 +1,13 @@
-//! The folder in the app-group container where the extension leaves clips and
-//! the app publishes the destinations the share sheet offers.
+//! The folder in the app-group container where the extensions leave clips.
 
 use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 
-use super::contract::{Clip, Destinations, CONTRACT_VERSION};
+use crate::app_group::contract::{Clip, CONTRACT_VERSION};
 use crate::files::FileError;
-use crate::workspace::WorkspaceList;
 
 const INBOX_DIR: &str = "Inbox";
-const DESTINATIONS_FILE: &str = "destinations.json";
 const CLIP_FILE: &str = "clip.json";
 
 #[derive(Debug, Clone)]
@@ -82,23 +79,6 @@ impl Inbox {
         }
     }
 
-    /// Mirror the workspaces into the container for the share sheet, writing only
-    /// when what the sheet would see changes: opening a workspace rewrites the
-    /// registry, and the sheet does not care.
-    pub fn publish_destinations(&self, list: &WorkspaceList) -> Result<bool, FileError> {
-        let payload = serde_json::to_vec_pretty(&Destinations::from_list(list))
-            .map_err(|error| error.to_string())?;
-        let path = self.root.join(DESTINATIONS_FILE);
-        if fs::read(&path).is_ok_and(|current| current == payload) {
-            return Ok(false);
-        }
-        fs::create_dir_all(&self.root)?;
-        let staging = self.root.join(format!(".{DESTINATIONS_FILE}.tmp"));
-        fs::write(&staging, &payload)?;
-        fs::rename(&staging, &path)?;
-        Ok(true)
-    }
-
     fn clip_dir(&self, id: &str) -> Result<PathBuf, FileError> {
         if !is_plain_name(id) {
             return Err(format!("{id:?} is not a clip id").into());
@@ -116,30 +96,12 @@ fn is_plain_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workspace::WorkspaceRecord;
 
     fn leave(inbox: &Inbox, folder: &str, id: &str, created_at: i64) {
         let dir = inbox.inbox_dir().join(folder);
         fs::create_dir_all(&dir).expect("clip dir");
         let clip = format!(r#"{{"version":1,"id":"{id}","createdAt":{created_at},"title":"t"}}"#);
         fs::write(dir.join(CLIP_FILE), clip).expect("clip.json");
-    }
-
-    fn list(names: &[&str]) -> WorkspaceList {
-        WorkspaceList {
-            active_workspace_id: None,
-            onboarding: Default::default(),
-            workspaces: names
-                .iter()
-                .map(|name| WorkspaceRecord {
-                    id: format!("id-{name}"),
-                    name: (*name).to_owned(),
-                    path: format!("/vaults/{name}"),
-                    tabs: None,
-                    last_opened_at: None,
-                })
-                .collect(),
-        }
     }
 
     #[test]
@@ -180,14 +142,5 @@ mod tests {
         assert!(inbox.read("../secret").is_err());
         assert!(inbox.remove("..").is_err());
         assert_eq!(inbox.image("id", "../../secret"), None);
-    }
-
-    #[test]
-    fn destinations_are_rewritten_only_when_the_sheet_would_see_a_change() {
-        let share = tempfile::tempdir().expect("share");
-        let inbox = Inbox::new(share.path().join("Share"));
-        assert!(inbox.publish_destinations(&list(&["Notes"])).expect("first"));
-        assert!(!inbox.publish_destinations(&list(&["Notes"])).expect("unchanged"));
-        assert!(inbox.publish_destinations(&list(&["Notes", "Thesis"])).expect("added"));
     }
 }

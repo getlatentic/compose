@@ -1,8 +1,8 @@
 import Foundation
 
-/// The app's workspaces as it last published them for the share sheet. The
-/// extension cannot read the app's settings, so the app mirrors what the picker
-/// needs into the shared container.
+/// The app's workspaces as it last published them. The extensions cannot read
+/// the app's settings, so the app mirrors what they need into the shared
+/// container.
 struct Destinations: Codable, Equatable {
     struct Workspace: Codable, Equatable, Identifiable {
         let id: String
@@ -37,6 +37,25 @@ struct Clip: Codable, Equatable {
     let markdown: String?
     /// File names inside the clip's folder.
     let images: [String]
+    /// The user asked to see the note: the app opens it once filed.
+    let open: Bool
+}
+
+/// The notes changed most recently across every workspace, newest first, as the
+/// app last published them.
+struct PublishedNotes: Codable, Equatable {
+    struct Note: Codable, Equatable {
+        /// Absolute, and what `compose://open?path=` opens.
+        let path: String
+        let title: String
+        let workspaceId: String
+        let workspaceName: String
+        /// Milliseconds since the epoch.
+        let modifiedAt: Int64
+    }
+
+    let version: Int
+    let notes: [Note]
 }
 
 struct ClipImage: Equatable {

@@ -43,7 +43,7 @@ enum SharedItems {
             guard let file = await url(from: provider) else { return }
             if documents.contains(file) {
                 content.documents.append(file)
-            } else if let image = imageFile(at: file, index: content.draft.images.count) {
+            } else if let image = ClipImages.file(at: file, index: content.draft.images.count) {
                 content.draft.images.append(image)
             } else {
                 content.ignoredFiles.append(file)
@@ -104,7 +104,7 @@ enum SharedItems {
         -> ClipImage?
     {
         let value = await load(provider, type)
-        if let url = value as? URL { return imageFile(at: url, index: index) }
+        if let url = value as? URL { return ClipImages.file(at: url, index: index) }
         let stem = provider.suggestedName.map { ($0 as NSString).deletingPathExtension }
         if let data = value as? Data {
             let name = ImageNaming.name(
@@ -112,18 +112,9 @@ enum SharedItems {
                 ext: type.preferredFilenameExtension ?? "png")
             return ClipImage(fileName: name, data: data)
         }
-        guard let png = (value as? NSImage).flatMap(pngData) else { return nil }
+        guard let png = (value as? NSImage).flatMap(ClipImages.png) else { return nil }
         return ClipImage(
             fileName: ImageNaming.name(index: index, suggested: stem, ext: "png"), data: png)
-    }
-
-    private static func imageFile(at url: URL, index: Int) -> ClipImage? {
-        guard UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true,
-            let data = try? Data(contentsOf: url)
-        else { return nil }
-        let stem = url.deletingPathExtension().lastPathComponent
-        let name = ImageNaming.name(index: index, suggested: stem, ext: url.pathExtension)
-        return ClipImage(fileName: name, data: data)
     }
 
     /// The first of `types` the provider can supply, as the concrete type it
@@ -168,12 +159,6 @@ enum SharedItems {
         }
     }
 
-    private static func pngData(_ image: NSImage) -> Data? {
-        image.tiffRepresentation
-            .flatMap { NSBitmapImageRep(data: $0) }?
-            .representation(using: .png, properties: [:])
-    }
-
     private static func nonEmpty(_ text: String?) -> String? {
         guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
@@ -184,19 +169,5 @@ enum SharedItems {
     private static func joined(_ existing: String?, _ addition: String) -> String {
         guard let existing, !existing.isEmpty else { return addition }
         return existing + "\n\n" + addition
-    }
-}
-
-/// A shared image's name in the clip folder: its own name where the sharing app
-/// gave one, prefixed with its position so two `image.png`s cannot collide.
-enum ImageNaming {
-    static func name(index: Int, suggested: String?, ext: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        let stem = (suggested ?? "")
-            .unicodeScalars
-            .map { allowed.contains($0) ? Character($0) : "-" }
-            .reduce(into: "") { $0.append($1) }
-            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-        return "\(index + 1)-\(stem.isEmpty ? "image" : stem).\(ext.lowercased())"
     }
 }
