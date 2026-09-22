@@ -137,18 +137,41 @@ pub fn clipboard_entry(id: String, metadata: State<'_, MetadataStore>) -> Result
     }))
 }
 
-/// Put an entry back on the clipboard, to paste in any app. Runs on the main
+/// Put what was picked back on the clipboard, to paste in any app: one entry as
+/// it was copied, several as their text in the order given. Runs on the main
 /// thread, where AppKit's pasteboard belongs.
 #[tauri::command]
-pub fn clipboard_copy(id: String, metadata: State<'_, MetadataStore>) -> Result<(), String> {
-    let item = metadata.clipboard_item(&id)?.ok_or("That copy is no longer in the history.")?;
+pub fn clipboard_copy(ids: Vec<String>, metadata: State<'_, MetadataStore>) -> Result<(), String> {
+    let mut items = Vec::with_capacity(ids.len());
+    for id in &ids {
+        items.push(metadata.clipboard_item(id)?.ok_or("That copy is no longer in the history.")?);
+    }
     #[cfg(target_os = "macos")]
-    return if mac::write(&item) { Ok(()) } else { Err("The clipboard did not take it.".to_owned()) };
+    {
+        let wrote = match items.as_slice() {
+            [] => return Err("Nothing was picked to copy.".to_owned()),
+            [one] => mac::write(one),
+            several => mac::write_text(&joined(several)),
+        };
+        wrote.then_some(()).ok_or_else(|| "The clipboard did not take it.".to_owned())
+    }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = item;
+        let _ = items;
         Err("Clipboard history needs macOS.".to_owned())
     }
+}
+
+/// Several entries as one text, an empty line between them. An image has no
+/// text of its own and leaves none behind.
+#[cfg(target_os = "macos")]
+fn joined(items: &[crate::db::clipboard_history::ClipboardItem]) -> String {
+    items
+        .iter()
+        .map(|item| item.text.trim())
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 #[tauri::command(async)]
@@ -191,6 +214,25 @@ mod tests {
         assert_eq!(history.access(), ClipboardAccess::Asks);
         assert!(history.record_access(ClipboardAccess::Denied));
         assert_eq!(history.access(), ClipboardAccess::Denied);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn entries_picked_together_are_copied_as_one_text_in_the_order_given() {
+        use crate::db::clipboard_history::ClipboardItem;
+        let entry = |text: &str, kind| ClipboardItem {
+            id: text.to_owned(),
+            kind,
+            text: text.to_owned(),
+            html: None,
+            image_png: None,
+        };
+        let picked = [
+            entry("First thought ", ClipboardKind::Text),
+            entry("", ClipboardKind::Image),
+            entry("https://example.com", ClipboardKind::Link),
+        ];
+        assert_eq!(joined(&picked), "First thought\n\nhttps://example.com");
     }
 
     #[test]

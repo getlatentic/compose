@@ -5,12 +5,12 @@ import { timeAgo } from "../timeAgo";
 import type { ClipboardHistoryState } from "./useClipboardHistory";
 
 export interface ClipboardActions {
-  /** Put the entry back on the clipboard and close, to paste where the user was. */
-  use(id: string): void;
-  /** Put the entry into the quick note being written. */
-  insert(id: string): void;
-  /** Start a new quick note with the entry in it. */
-  newNote(id: string): void;
+  /** Put what was picked back on the clipboard and close, to paste where the user was. */
+  use(ids: string[]): void;
+  /** Put what was picked into the quick note being written. */
+  insert(ids: string[]): void;
+  /** Start a new quick note with what was picked in it. */
+  newNote(ids: string[]): void;
 }
 
 export interface ClipboardViewProps {
@@ -29,10 +29,12 @@ export function ClipboardView({ api, history, actions, searchRef }: ClipboardVie
     (event: KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
-        history.move(event.key === "ArrowDown" ? 1 : -1);
-      } else if (event.key === "Enter" && !event.metaKey && history.selectedId) {
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        if (event.shiftKey) history.extend(step);
+        else history.move(step);
+      } else if (event.key === "Enter" && !event.metaKey && history.selectedIds.length > 0) {
         event.preventDefault();
-        actions.use(history.selectedId);
+        actions.use(history.selectedIds);
       }
     },
     [actions, history],
@@ -48,6 +50,9 @@ export function ClipboardView({ api, history, actions, searchRef }: ClipboardVie
 
   if (history.enabled === false) return <HistoryOff onTurnOn={turnOn} />;
 
+  const picked = new Set(history.selectedIds);
+  const several = history.selectedIds.length > 1;
+
   return (
     <div className="quick-note__clipboard">
       <input
@@ -61,9 +66,23 @@ export function ClipboardView({ api, history, actions, searchRef }: ClipboardVie
         onKeyDown={navigate}
       />
       {history.access === "allowed" ? null : <AccessNotice access={history.access} onOpenSettings={openPrivacySettings} />}
-      <ul className="quick-note__clips" role="listbox" aria-label="Copied lately" onMouseDown={keepTheSearchFocused}>
+      <ul
+        className="quick-note__clips"
+        role="listbox"
+        aria-label="Copied lately"
+        aria-multiselectable="true"
+        onMouseDown={keepTheSearchFocused}
+      >
         {history.items.map((item) => (
-          <ClipboardRow key={item.id} api={api} item={item} selected={item.id === history.selectedId} history={history} actions={actions} />
+          <ClipboardRow
+            key={item.id}
+            api={api}
+            item={item}
+            selected={picked.has(item.id)}
+            current={item.id === history.focusId}
+            history={history}
+            actions={actions}
+          />
         ))}
         {history.items.length === 0 ? (
           <li className="quick-note__empty">{history.query ? "Nothing you copied matches." : "Copy something in any app and it appears here."}</li>
@@ -87,7 +106,17 @@ export function ClipboardView({ api, history, actions, searchRef }: ClipboardVie
           </span>
         ) : (
           <span className="quick-note__hints">
-            <kbd>↩</kbd> Copy to paste anywhere <kbd>⌘↩</kbd> Into the note <kbd>⌘N</kbd> New note
+            {several ? (
+              <>
+                <kbd>↩</kbd> Copy {history.selectedIds.length} together <kbd>⌘↩</kbd> Put them in the note <kbd>⌘N</kbd>{" "}
+                New note from them
+              </>
+            ) : (
+              <>
+                <kbd>↩</kbd> Copy to paste anywhere <kbd>⌘↩</kbd> Into the note <kbd>⌘N</kbd> New note <kbd>⌘</kbd>-click
+                for several
+              </>
+            )}
           </span>
         )}
         <span className="quick-note__spacer" />
@@ -145,33 +174,40 @@ interface RowProps {
   api: CaptureApi;
   item: ClipboardSummary;
   selected: boolean;
+  /** The one the keyboard is on, which the list scrolls to. */
+  current: boolean;
   history: ClipboardHistoryState;
   actions: ClipboardActions;
 }
 
-const ClipboardRow = memo(function ClipboardRow({ api, item, selected, history, actions }: RowProps) {
+const ClipboardRow = memo(function ClipboardRow({ api, item, selected, current, history, actions }: RowProps) {
   const row = useRef<HTMLLIElement>(null);
   useEffect(() => {
-    if (selected) row.current?.scrollIntoView({ block: "nearest" });
-  }, [selected]);
+    if (current) row.current?.scrollIntoView({ block: "nearest" });
+  }, [current]);
   const id = item.id;
-  const choose = useCallback(() => history.select(id), [history, id]);
-  const use = useCallback(() => actions.use(id), [actions, id]);
+  /** Plain picks this entry; ⌘ takes it in or out; ⇧ reaches back to where picking started. */
+  const choose = useCallback((event: MouseEvent) => {
+    if (event.metaKey) history.toggle(id);
+    else if (event.shiftKey) history.extendTo(id);
+    else history.select(id);
+  }, [history, id]);
+  const use = useCallback(() => actions.use([id]), [actions, id]);
   const insert = useCallback((event: MouseEvent) => {
     event.stopPropagation();
-    actions.insert(id);
+    actions.insert([id]);
   }, [actions, id]);
   const newNote = useCallback((event: MouseEvent) => {
     event.stopPropagation();
-    actions.newNote(id);
+    actions.newNote([id]);
   }, [actions, id]);
   const copy = useCallback((event: MouseEvent) => {
     event.stopPropagation();
-    actions.use(id);
+    actions.use([id]);
   }, [actions, id]);
   const pin = useCallback((event: MouseEvent) => {
     event.stopPropagation();
-    void history.pin(id, !item.pinned);
+    void history.pin([id], !item.pinned);
   }, [history, id, item.pinned]);
   const forget = useCallback((event: MouseEvent) => {
     event.stopPropagation();

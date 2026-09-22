@@ -117,17 +117,39 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
     inEditor(notes.create().id, (view) => view.focus());
   }, [inEditor, notes]);
 
+  /** What was picked, oldest copy first, which is the order a note gathers them in. */
+  const inCopyOrder = useCallback(
+    (ids: string[]) => {
+      const picked = new Set(ids);
+      return history.items
+        .filter((item) => picked.has(item.id))
+        .sort((one, other) => one.copiedAt - other.copiedAt)
+        .map((item) => item.id);
+    },
+    [history.items],
+  );
+
   const insertInto = useCallback(
-    async (noteId: string, entryId: string) => {
-      const entry = await api.clipboard.entry(entryId);
-      if (!entry) return;
-      const markdown = await entryMarkdown(entry, (relativePath, bytes) => api.keepImage(noteId, relativePath, bytes));
+    async (noteId: string, entryIds: string[]) => {
+      const parts: string[] = [];
+      let block = false;
+      for (const entryId of entryIds) {
+        const entry = await api.clipboard.entry(entryId);
+        if (!entry) continue;
+        const markdown = await entryMarkdown(entry, (relativePath, bytes) => api.keepImage(noteId, relativePath, bytes));
+        if (!markdown) continue;
+        block ||= entry.kind === "image";
+        parts.push(markdown);
+      }
       const open = editor.current;
-      if (open?.noteId !== noteId) return;
+      if (parts.length === 0 || open?.noteId !== noteId) return;
       const { view } = open;
       const { from } = view.state.selection.main;
-      const onOwnLine = entry.kind === "image" && from > view.state.doc.lineAt(from).from;
-      view.dispatch(view.state.replaceSelection(onOwnLine ? `\n${markdown}` : markdown));
+      // An image, and a gathering of several, start a line of their own rather
+      // than running on from what is already written.
+      const ownLine = (block || parts.length > 1) && from > view.state.doc.lineAt(from).from;
+      const markdown = parts.join("\n\n");
+      view.dispatch(view.state.replaceSelection(ownLine ? `\n${markdown}` : markdown));
       view.focus();
     },
     [api],
@@ -135,24 +157,24 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
 
   const actions: ClipboardActions = useMemo(
     () => ({
-      use: (id) =>
+      use: (ids) =>
         void (async () => {
-          await api.clipboard.copy(id);
+          await api.clipboard.copy(inCopyOrder(ids));
           await close();
         })(),
-      insert: (id) => {
+      insert: (ids) => {
         const active = notes.active;
         if (!active) return;
         show("notes");
-        void insertInto(active.id, id);
+        void insertInto(active.id, inCopyOrder(ids));
       },
-      newNote: (id) => {
+      newNote: (ids) => {
         const note = notes.create();
         show("notes");
-        inEditor(note.id, () => void insertInto(note.id, id));
+        inEditor(note.id, () => void insertInto(note.id, inCopyOrder(ids)));
       },
     }),
-    [api, close, inEditor, insertInto, notes, show],
+    [api, close, inCopyOrder, inEditor, insertInto, notes, show],
   );
 
   useWindowKeys({
@@ -160,15 +182,21 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
     close: () => void close(),
     save: () => void save(),
     newNote: () => {
-      if (view === "clipboard" && history.selectedId) actions.newNote(history.selectedId);
+      if (view === "clipboard" && history.selectedIds.length > 0) actions.newNote(history.selectedIds);
       else if (view === "notes") newNote();
     },
     insertClip: () => {
-      if (history.selectedId) actions.insert(history.selectedId);
+      if (history.selectedIds.length > 0) actions.insert(history.selectedIds);
     },
     pinClip: () => {
-      const selected = history.items.find((item) => item.id === history.selectedId);
-      if (selected) void history.pin(selected.id, !selected.pinned);
+      const picked = history.items.filter((item) => history.selectedIds.includes(item.id));
+      if (picked.length === 0) return;
+      // Pinning a gathering pins all of it, unless all of it is pinned already.
+      const pinned = picked.some((item) => !item.pinned);
+      void history.pin(
+        picked.map((item) => item.id),
+        pinned,
+      );
     },
     switchView: () => show(view === "notes" ? "clipboard" : "notes"),
     stepNote: (step) => {
