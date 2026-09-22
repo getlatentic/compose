@@ -2,14 +2,16 @@
 //! widget — inside the app-group container both sides are signed into. The
 //! extensions are sandboxed and cannot read the app's settings or database, so
 //! the app publishes what they need there: the workspaces, and the notes
-//! changed most recently. A build not signed into the group — a development
-//! build, or any build off macOS — has no such folder and publishes nothing.
+//! changed most recently, redrawing the widgets whenever either changes. A
+//! build not signed into the group — a development build, or any build off
+//! macOS — has no such folder and publishes nothing.
 
 #[cfg(target_os = "macos")]
 mod container;
 pub mod contract;
 mod notes;
 mod publish;
+mod widgets;
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -92,8 +94,10 @@ fn settle(changes: &Receiver<()>, quiet: Duration, longest: Duration) -> bool {
 }
 
 fn publish_destinations(dir: &Path, list: &WorkspaceList) {
-    if let Err(error) = publish::publish(dir, publish::DESTINATIONS_FILE, &Destinations::from_list(list)) {
-        eprintln!("workspaces were not published for the extensions: {error}");
+    match publish::publish(dir, publish::DESTINATIONS_FILE, &Destinations::from_list(list)) {
+        Ok(true) => widgets::reload(),
+        Ok(false) => {}
+        Err(error) => eprintln!("workspaces were not published for the extensions: {error}"),
     }
 }
 
@@ -102,8 +106,10 @@ fn publish_notes(app: &AppHandle, dir: &Path) {
         return;
     };
     let index = notes::index(&list, &app.state::<MetadataStore>());
-    if let Err(error) = publish::publish(dir, publish::NOTES_FILE, &index) {
-        eprintln!("notes were not published for the extensions: {error}");
+    match publish::publish(dir, publish::NOTES_FILE, &index) {
+        Ok(true) => widgets::reload(),
+        Ok(false) => {}
+        Err(error) => eprintln!("notes were not published for the extensions: {error}"),
     }
 }
 
