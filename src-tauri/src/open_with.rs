@@ -4,11 +4,13 @@ use tauri::{AppHandle, Emitter, Manager};
 
 const OPEN_EVENT: &str = "compose:open-external-file";
 
-/// Open `path` as a file handed to the app from outside: kept until a frontend
-/// that mounts later drains it, and told at once to one already running.
+/// Open `path` as a file handed to the app from outside: kept until the main
+/// window's front end drains it — at once when it is running, else when the
+/// window it brings up mounts.
 pub fn open_in_app(app: &AppHandle, path: String) {
-    app.state::<PendingOpenUrls>().push(path.clone());
-    let _ = app.emit(OPEN_EVENT, path);
+    app.state::<PendingOpenUrls>().push(path);
+    let _ = app.emit(OPEN_EVENT, ());
+    crate::main_window::ensure(app);
 }
 
 #[derive(Default)]

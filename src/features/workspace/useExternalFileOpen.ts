@@ -1,11 +1,9 @@
-import { useEffect } from "react";
-
-import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { resolveOpenPath } from "../../lib/ipc/externalFilesClient";
 import { addWorkspace } from "../../lib/ipc/workspaceClient";
 import { showErrorToast } from "../toast/toastStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { showAddedWorkspace } from "./showAddedWorkspace";
+import { useNativeQueue } from "./useNativeQueue";
 
 const EXTERNAL_FILE_OPEN_EVENT = "compose:open-external-file";
 const DRAIN_PENDING_URLS_CMD = "drain_pending_open_urls";
@@ -20,8 +18,8 @@ const DRAIN_PENDING_URLS_CMD = "drain_pending_open_urls";
  *
  * Mounted by MainApp, which exists only after boot hydration — so the
  * cold-start drain always sees the hydrated workspace list. URLs that arrive
- * earlier (launch-by-double-click, or during onboarding) sit buffered on the
- * Rust side until this drains them.
+ * earlier (launch-by-double-click, during onboarding, or while the main window
+ * is closed) sit buffered on the Rust side until this drains them.
  */
 /**
  * Route one absolute path the way an OS open would: inside a registered
@@ -50,43 +48,5 @@ export async function openPathFromOs(absolutePath: string): Promise<void> {
 }
 
 export function useExternalFileOpen(): void {
-  useEffect(function bindExternalFileOpen() {
-    if (!isTauriRuntime()) return;
-    let unlisten: (() => void) | null = null;
-    let disposed = false;
-
-    async function openFromOs(absolutePath: string) {
-      if (disposed) return;
-      await openPathFromOs(absolutePath);
-    }
-
-    void (async () => {
-      const tauri = await import("@tauri-apps/api/core");
-      const eventApi = await import("@tauri-apps/api/event");
-      if (disposed) return;
-      // Cold-start path: any URLs that arrived before this listener mounted
-      // were buffered on the Rust side. Drain them and route the same way.
-      try {
-        const pending = await tauri.invoke<string[]>(DRAIN_PENDING_URLS_CMD);
-        if (!disposed) {
-          for (const path of pending) {
-            await openFromOs(path);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to drain pending open URLs:", error);
-      }
-      if (disposed) return;
-      // Warm-start path: live listener for URLs that arrive while the app
-      // is already running.
-      unlisten = await eventApi.listen<string>(EXTERNAL_FILE_OPEN_EVENT, (event) => {
-        void openFromOs(event.payload);
-      });
-    })();
-
-    return function unbind() {
-      disposed = true;
-      if (unlisten) unlisten();
-    };
-  }, []);
+  useNativeQueue(EXTERNAL_FILE_OPEN_EVENT, DRAIN_PENDING_URLS_CMD, openPathFromOs);
 }

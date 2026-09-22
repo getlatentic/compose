@@ -55,19 +55,12 @@ struct ActiveFile {
     last_modified_ms: i64,
 }
 
-/// The plugin that carries the payload into the page. `js_init_script` runs
-/// after the global object exists but before the document is parsed, which is
-/// the only point early enough for the front end to *seed* state with it rather
-/// than fetch it.
-pub fn plugin<R: tauri::Runtime>(script: String) -> tauri::plugin::TauriPlugin<R> {
-    tauri::plugin::Builder::new("compose-boot")
-        .js_init_script(script)
-        .build()
-}
-
-/// Read the payload and wrap it as the assignment the page will run. An empty
-/// string when there is nothing useful to say, which registers a plugin that
-/// injects nothing.
+/// Read the payload and wrap it as the assignment the main window's page runs
+/// as an initialization script: after the global object exists but before the
+/// document is parsed, the only point early enough for the front end to *seed*
+/// state with it rather than fetch it. Read for each main window, so one made
+/// again later starts from the notes as they are then. An empty string when
+/// there is nothing useful to say, which injects nothing.
 pub fn init_script(profile_dir: Option<PathBuf>) -> String {
     let Some(profile_dir) = profile_dir else {
         return String::new();

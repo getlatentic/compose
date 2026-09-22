@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { captureShortcuts, setCaptureShortcut, type CaptureShortcuts } from "../../lib/ipc/captureClient";
 import { ClipboardHistorySetting } from "./ClipboardHistorySetting";
+import { OpenAtLoginSetting } from "./OpenAtLoginSetting";
 import { ShortcutSetting } from "./ShortcutSetting";
 
 const describeNotes = (label: string) => `Press ${label} in any app to jot an idea; ⌘↩ saves it into the open workspace.`;
@@ -9,8 +10,8 @@ const describeClipboard = (label: string) => `Press ${label} in any app to find 
 
 /**
  * "Quick note": the global shortcuts that open a small window over any app —
- * one on the notes jotted there, one on the clipboard history — and whether
- * that history is kept.
+ * one on the notes jotted there, one on the clipboard history — whether Compose
+ * opens at login to have them from then on, and whether that history is kept.
  */
 export function QuickCaptureSection() {
   const [shortcuts, setShortcuts] = useState<CaptureShortcuts | null>(null);
@@ -46,6 +47,7 @@ export function QuickCaptureSection() {
           offText="Off. Turn it on to jot ideas from any app."
           choose={chooseNotes}
         />
+        <OpenAtLoginSetting />
       </div>
       <div className="settings-section">
         <h3>Clipboard history</h3>

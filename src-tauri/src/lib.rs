@@ -10,6 +10,8 @@ mod services;
 mod share_inbox;
 mod spotlight;
 mod launch_window;
+mod login_item;
+mod main_window;
 mod stale_state;
 mod user_tool_dirs;
 mod data_reset;
@@ -82,15 +84,14 @@ pub fn run() {
     autocorrect::turn_off();
 
     // The launch screen's data, read from disk before the web view exists and
-    // handed to the page as a global so its first render is the finished app
-    // rather than an empty shell that fills in. Empty when there is nothing to
-    // say, which injects nothing and leaves the front end's own IPC fan-out —
-    // still the source of truth — to do exactly what it did before.
+    // handed to the main window's page as a global so its first render is the
+    // finished app rather than an empty shell that fills in. Empty when there is
+    // nothing to say, which injects nothing and leaves the front end's own IPC
+    // fan-out — still the source of truth — to do exactly what it did before.
     let boot_script = boot_payload::init_script(profile_migration::profile_dir());
     boot_native_mark("boot-payload");
 
     let mut builder = tauri::Builder::default()
-        .plugin(boot_payload::plugin(boot_script))
         .manage(workspace::WorkspaceRegistry::default())
         .manage(db::MetadataStore::default())
         .manage(files::watcher::WatcherManager::default())
@@ -132,10 +133,17 @@ pub fn run() {
         // emits `menu://print` (routed in `setup`) → the editor opens the system
         // print panel (a printer, or Save as PDF from the panel).
         .menu(menu::build)
-        .setup(|app| {
+        .setup(move |app| {
             boot_native_mark("setup-entered");
             boot_native_mark("setup-start");
             let app_handle = app.handle().clone();
+            // Opened at login, Compose starts with only the quick note: its
+            // window waits until the user comes to it. Asked now, while the
+            // launch's own Apple event is still the current one.
+            let at_login = login_item::launched_at_login();
+            if !at_login {
+                main_window::open_at_launch(&app_handle, boot_script);
+            }
             // Capture back-end panics into the local error log (best-effort),
             // then chain to the default hook. Resolve the path once here so the
             // hook needs no AppHandle.
@@ -239,7 +247,7 @@ pub fn run() {
             share_inbox::start(&app_handle);
             // After the metadata store, which holds the chosen shortcut and
             // whether clipboard history is on.
-            capture::start(&app_handle);
+            capture::start(&app_handle, !at_login);
             clipboard::start(&app_handle);
             // Reap any agent child a prior hard crash orphaned, and point the
             // runner at the data dir so this session records its own live runs
@@ -273,42 +281,6 @@ pub fn run() {
                 let metadata = sweep_handle.state::<db::MetadataStore>();
                 files::trash_sweep::run_startup_trash_sweep(&metadata);
             });
-            // Open Safari Web Inspector on launch when this build was made with
-            // `COMPOSE_DEVTOOLS=1 pnpm tauri build`. `option_env!` evaluates at
-            // compile time, so a normal release build never opens the inspector.
-            #[cfg(debug_assertions)]
-            let want_devtools = true;
-            #[cfg(not(debug_assertions))]
-            let want_devtools = option_env!("COMPOSE_DEVTOOLS").is_some();
-            if let Some(window) = app_handle.get_webview_window("main") {
-                // Force the window forward on launch. A WKWebView whose window
-                // is never visible at launch (created behind another app — a
-                // background/`open`-from-terminal launch) doesn't begin
-                // executing the page's JS, so the boot IPC handoff never runs
-                // and the splash hangs until the window is clicked. Focusing it
-                // makes the view visible so the WebView starts; once running,
-                // `backgroundThrottling: disabled` keeps it alive if the window
-                // is later occluded mid-boot.
-                // The window paints its configured background before the web
-                // view has anything to show — ~300ms, which is why the static
-                // splash exists at all. Configured white, that is a white flash
-                // on every launch for a dark-mode user. The OS appearance is
-                // the best answer available this early: the front end has not
-                // run, so a stored "always light" override is not readable yet,
-                // and it corrects itself as soon as the splash paints.
-                if window.theme().is_ok_and(|theme| theme == tauri::Theme::Dark) {
-                    let _ = window.set_background_color(Some(tauri::window::Color(
-                        0x16, 0x16, 0x16, 0xff,
-                    )));
-                }
-                boot_native_mark("pre-focus");
-                // Not shown yet: `launch_window` shows it when the front end
-                // says the first screen is complete, or on its own deadline.
-                launch_window::arm_deadline(app_handle.clone());
-                if want_devtools {
-                    window.open_devtools();
-                }
-            }
             // The Services menu is offered once NSApp exists.
             services::register(&app_handle);
 
@@ -375,6 +347,9 @@ pub fn run() {
             files::workspace_files_snapshot,
             launch_window::launch_window_ready,
             launch_window::launch_document_parsed,
+            login_item::login_item_status,
+            login_item::login_item_set,
+            login_item::login_item_settings,
             files::workspace_scan_folders,
             files::workspace_write_binary_file,
             files::workspace_write_file,
@@ -449,9 +424,20 @@ pub fn run() {
                 }
             }
         }
+        // The Dock icon of a Compose running without its window, as after a
+        // login launch or once the window was closed.
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => main_window::ensure(app_handle),
         // Quitting — signal every in-flight agent child so it doesn't orphan
         // and keep editing files after the app is gone.
         RunEvent::ExitRequested { .. } => {
+            app_handle
+                .state::<harness::runner::RunnerState>()
+                .cancel_all();
+        }
+        // Closing the window while the quick note keeps Compose running leaves
+        // an agent's edits with nothing to show or stop them: the same.
+        RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == main_window::LABEL => {
             app_handle
                 .state::<harness::runner::RunnerState>()
                 .cancel_all();
