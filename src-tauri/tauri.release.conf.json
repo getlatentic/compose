@@ -4,8 +4,9 @@
       "entitlements": "extensions/build/Compose.entitlements",
       "files": {
         "PlugIns/ComposeQuickLook.appex": "extensions/build/ComposeQuickLook.appex",
-        "PlugIns/ComposeThumbnail.appex": "extensions/build/ComposeThumbnail.appex",
         "PlugIns/ComposeShare.appex": "extensions/build/ComposeShare.appex",
+        "PlugIns/ComposeThumbnail.appex": "extensions/build/ComposeThumbnail.appex",
+        "PlugIns/ComposeWidget.appex": "extensions/build/ComposeWidget.appex",
         "Helpers/ComposeClipper": "extensions/build/ComposeClipper",
         "Extensions/ComposeIntents.appex": "extensions/build/ComposeIntents.appex"
       }

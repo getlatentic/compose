@@ -1,6 +1,7 @@
 import AppIntents
 
-/// One of the workspaces Compose last published.
+/// One of the workspaces Compose last published. A workspace left unset means
+/// the one open in Compose to an action, and every workspace to the widget.
 struct WorkspaceEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Workspace"
     static let defaultQuery = WorkspaceQuery()
@@ -15,11 +16,6 @@ struct WorkspaceEntity: AppEntity {
     static func all(in destinations: Destinations?) -> [WorkspaceEntity] {
         (destinations?.workspaces ?? []).map { WorkspaceEntity(id: $0.id, name: $0.name) }
     }
-
-    /// The workspace open in Compose.
-    static func open(in destinations: Destinations?) -> WorkspaceEntity? {
-        all(in: destinations).first { $0.id == destinations?.activeWorkspaceId }
-    }
 }
 
 struct WorkspaceQuery: EntityQuery {
@@ -29,9 +25,5 @@ struct WorkspaceQuery: EntityQuery {
 
     func suggestedEntities() async throws -> [WorkspaceEntity] {
         WorkspaceEntity.all(in: ShareInbox.located()?.destinations())
-    }
-
-    func defaultResult() async -> WorkspaceEntity? {
-        WorkspaceEntity.open(in: ShareInbox.located()?.destinations())
     }
 }

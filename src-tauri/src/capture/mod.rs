@@ -105,6 +105,12 @@ pub fn start(app: &AppHandle) {
     });
 }
 
+/// Open the window on the notes from elsewhere than the shortcut — the widget's
+/// New Note — leaving it open if it already is.
+pub fn open(app: &AppHandle) {
+    window::show(app, View::Notes);
+}
+
 /// Save quick note `id` as a note in the workspace, with the images pasted into
 /// it, and close the window. `None` for blank text, which leaves the window open.
 #[tauri::command(async)]

@@ -1,7 +1,8 @@
 #!/bin/bash
 # Build Compose's app extensions — the .md Quick Look preview and thumbnail,
-# Share → Compose, and the actions Shortcuts, Spotlight and Siri offer — and the
-# entitlements the app needs to meet them in their shared folder.
+# Share → Compose, the actions Shortcuts, Spotlight and Siri offer, and the
+# Recent Notes widget — and the entitlements the app needs to meet them in
+# their shared folder.
 #
 # No Xcode project: an app extension is an executable whose entry point is
 # Foundation's NSExtensionMain, plus an Info.plist naming the principal class.
@@ -205,7 +206,7 @@ build_extension ComposeThumbnail "$QUICKLOOK/Thumbnail/Info.plist" \
   "$QUICKLOOK/ComposeQuickLook.entitlements" "QuickLookThumbnailing AppKit" \
   "$QUICKLOOK/Shared" "$QUICKLOOK/Thumbnail/Sources"
 
-# Share and the actions both run sandboxed in the group.
+# Share, the actions and the widget all run sandboxed in the group.
 GROUP_EXTENSION_ENTITLEMENTS="$OUT_DIR/GroupExtension.entitlements"
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   : "${APPLE_TEAM_ID:?APPLE_TEAM_ID names the app group, so signing needs it}"
@@ -240,4 +241,8 @@ build_helper ComposeClipper "$APP_ID.clipper" "$OUT_DIR/ComposeClipper.entitleme
   "$HERE"/clipper/Sources/*.swift
 
 APP_INTENTS=1 build_extension ComposeIntents "$HERE/intents/Info.plist" "$GROUP_EXTENSION_ENTITLEMENTS" \
-  "AppKit AppIntents" "$HERE/shared" "$HERE/intents/Sources" "$HERE/intents/Main"
+  "AppKit AppIntents" "$HERE/shared" "$HERE/entities" "$HERE/intents/Sources" "$HERE/intents/Main"
+
+# Its configuration is an App Intent, so it carries App Intents metadata too.
+APP_INTENTS=1 build_extension ComposeWidget "$HERE/widget/Info.plist" "$GROUP_EXTENSION_ENTITLEMENTS" \
+  "AppKit AppIntents SwiftUI WidgetKit" "$HERE/shared" "$HERE/entities" "$HERE/widget/Sources" "$HERE/widget/Main"

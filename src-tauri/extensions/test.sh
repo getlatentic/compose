@@ -33,5 +33,6 @@ run_suite clipper \
   "$HERE"/clipper/Sources/ClipperHost.swift \
   "$HERE"/clipper/Sources/NativeMessaging.swift \
   "$HERE"/clipper/Tests/main.swift
-# Everything but the extension's entry point, which the suite's own main replaces.
-run_suite intents "$HERE"/shared/*.swift "$HERE"/intents/Sources/*.swift "$HERE"/intents/Tests/*.swift
+# Everything but each extension's entry point, which the suite's own main replaces.
+run_suite intents "$HERE"/shared/*.swift "$HERE"/entities/*.swift "$HERE"/intents/Sources/*.swift "$HERE"/intents/Tests/*.swift
+run_suite widget "$HERE"/shared/*.swift "$HERE"/entities/*.swift "$HERE"/widget/Sources/*.swift "$HERE"/widget/Tests/*.swift
