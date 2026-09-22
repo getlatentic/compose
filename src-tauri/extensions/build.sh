@@ -1,8 +1,8 @@
 #!/bin/bash
 # Build Compose's app extensions — the .md Quick Look preview and thumbnail,
-# Share → Compose, the actions Shortcuts, Spotlight and Siri offer, and the
-# Recent Notes widget — and the entitlements the app needs to meet them in
-# their shared folder.
+# Share → Compose, the actions Shortcuts, Spotlight and Siri offer, the Recent
+# Notes widget, and Compose in the Finder — and the entitlements the app needs
+# to meet them in their shared folder.
 #
 # No Xcode project: an app extension is an executable whose entry point is
 # Foundation's NSExtensionMain, plus an Info.plist naming the principal class.
@@ -206,7 +206,8 @@ build_extension ComposeThumbnail "$QUICKLOOK/Thumbnail/Info.plist" \
   "$QUICKLOOK/ComposeQuickLook.entitlements" "QuickLookThumbnailing AppKit" \
   "$QUICKLOOK/Shared" "$QUICKLOOK/Thumbnail/Sources"
 
-# Share, the actions and the widget all run sandboxed in the group.
+# Share, the actions, the widget and the Finder extension all run sandboxed in
+# the group.
 GROUP_EXTENSION_ENTITLEMENTS="$OUT_DIR/GroupExtension.entitlements"
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   : "${APPLE_TEAM_ID:?APPLE_TEAM_ID names the app group, so signing needs it}"
@@ -215,23 +216,36 @@ if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   write_group_entitlements "$OUT_DIR/Compose.entitlements" unsandboxed "$APP_GROUP"
   write_group_entitlements "$OUT_DIR/ComposeClipper.entitlements" unsandboxed "$APP_GROUP"
 fi
-# Share hands over the files Compose opens, and macOS lets it only for the types
-# Compose declares — so the list the sheet checks comes from tauri.conf.json.
-DOCUMENT_EXTENSIONS=()
-while IFS= read -r extension; do
-  DOCUMENT_EXTENSIONS+=("$extension")
-done < <(/usr/bin/python3 -c "
+# Share and the Finder extension hand over the files Compose opens, and macOS
+# lets them only for the types Compose declares — so the lists they check come
+# from tauri.conf.json. Args: [association-name...]; all when none are named.
+declared_extensions() {
+  /usr/bin/python3 -c "
 import json, sys
+wanted = sys.argv[2:]
 for association in json.load(open(sys.argv[1]))['bundle']['fileAssociations']:
-    print('\\n'.join(association['ext']))
-" "$HERE/../tauri.conf.json")
-SHARE_PLIST="$(mktemp -d)/Info.plist"
-cp "$HERE/share/Info.plist" "$SHARE_PLIST"
-plutil -replace ComposeDocumentExtensions -json \
-  "$(/usr/bin/python3 -c 'import json, sys; print(json.dumps(sys.argv[1:]))' "${DOCUMENT_EXTENSIONS[@]}")" \
-  "$SHARE_PLIST"
-RESOURCES="$HERE/share/Resources" build_extension ComposeShare "$SHARE_PLIST" "$GROUP_EXTENSION_ENTITLEMENTS" \
-  "AppKit SwiftUI" "$HERE/shared" "$HERE/share/Sources"
+    if not wanted or association['name'] in wanted:
+        print('\\n'.join(association['ext']))
+" "$HERE/../tauri.conf.json" "$@"
+}
+
+# A copy of <info-plist> naming the files the extension hands Compose.
+# Args: <info-plist> [association-name...]; prints the copy's path.
+with_document_extensions() {
+  local plist extensions=() extension
+  while IFS= read -r extension; do
+    extensions+=("$extension")
+  done < <(declared_extensions "${@:2}")
+  plist="$(mktemp -d)/Info.plist"
+  cp "$1" "$plist"
+  plutil -replace ComposeDocumentExtensions -json \
+    "$(/usr/bin/python3 -c 'import json, sys; print(json.dumps(sys.argv[1:]))' "${extensions[@]}")" \
+    "$plist"
+  echo "$plist"
+}
+
+RESOURCES="$HERE/share/Resources" build_extension ComposeShare "$(with_document_extensions "$HERE/share/Info.plist")" \
+  "$GROUP_EXTENSION_ENTITLEMENTS" "AppKit SwiftUI" "$HERE/shared" "$HERE/share/Sources"
 # The browser clipper's native-messaging host: a browser starts it to hand over
 # a clip, which it leaves in the share inbox using the shared contract and inbox.
 build_helper ComposeClipper "$APP_ID.clipper" "$OUT_DIR/ComposeClipper.entitlements" \
@@ -242,6 +256,10 @@ build_helper ComposeClipper "$APP_ID.clipper" "$OUT_DIR/ComposeClipper.entitleme
 
 APP_INTENTS=1 build_extension ComposeIntents "$HERE/intents/Info.plist" "$GROUP_EXTENSION_ENTITLEMENTS" \
   "AppKit AppIntents" "$HERE/shared" "$HERE/entities" "$HERE/intents/Sources" "$HERE/intents/Main"
+
+# Open in Compose goes through compose://open, which opens only Markdown notes.
+build_extension ComposeFinder "$(with_document_extensions "$HERE/finder/Info.plist" Markdown)" \
+  "$GROUP_EXTENSION_ENTITLEMENTS" "AppKit FinderSync" "$HERE/shared" "$HERE/finder/Sources"
 
 # Its configuration is an App Intent, so it carries App Intents metadata too.
 APP_INTENTS=1 build_extension ComposeWidget "$HERE/widget/Info.plist" "$GROUP_EXTENSION_ENTITLEMENTS" \

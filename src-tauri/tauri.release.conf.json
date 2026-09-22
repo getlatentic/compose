@@ -3,6 +3,7 @@
     "macOS": {
       "entitlements": "extensions/build/Compose.entitlements",
       "files": {
+        "PlugIns/ComposeFinder.appex": "extensions/build/ComposeFinder.appex",
         "PlugIns/ComposeQuickLook.appex": "extensions/build/ComposeQuickLook.appex",
         "PlugIns/ComposeShare.appex": "extensions/build/ComposeShare.appex",
         "PlugIns/ComposeThumbnail.appex": "extensions/build/ComposeThumbnail.appex",

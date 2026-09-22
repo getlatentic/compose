@@ -31,10 +31,10 @@ enum OpenInCompose {
         _ = try await NSWorkspace.shared.openApplication(at: app, configuration: forward())
     }
 
-    /// Opens the note at `path`. Compose opens a `compose://open` link only for a
-    /// note inside one of its workspaces.
-    static func note(at path: String) async throws {
-        _ = try await NSWorkspace.shared.open([link(toNoteAt: path)], withApplicationAt: app, configuration: forward())
+    /// Opens the notes at `paths`. Compose opens a `compose://open` link only for
+    /// a note inside one of its workspaces.
+    static func notes(at paths: [String]) async throws {
+        _ = try await NSWorkspace.shared.open(paths.map(link(toNoteAt:)), withApplicationAt: app, configuration: forward())
     }
 
     /// Opens the quick-note window.
