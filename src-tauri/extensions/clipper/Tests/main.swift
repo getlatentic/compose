@@ -70,7 +70,7 @@ check("a reply too large for the browser is refused",
 // --- hello ---------------------------------------------------------------------
 
 let published = temporaryInbox()
-try! fixture("SHARE_FIXTURES", "destinations.json").write(to: published.destinationsURL)
+try! fixture("CONTRACT_FIXTURES", "destinations.json").write(to: published.destinationsURL)
 let hello = reply(host(inbox: published, running: false), #"{"type":"hello"}"#)
 check("hello answers with the protocol it speaks", hello["protocolVersion"] as? Int == ClipperProtocol.version)
 check("hello offers the workspaces Compose published",
@@ -91,7 +91,7 @@ check("a clip is filed", answer["ok"] as? Bool == true, "\(answer)")
 check("under the id it was given", answer["clipId"] as? String == "9D1E4B7A-2C3F-4A5B-8C6D-7E8F9A0B1C2D")
 let written = inbox.inboxURL.appendingPathComponent("9D1E4B7A-2C3F-4A5B-8C6D-7E8F9A0B1C2D/clip.json")
 let decoded = try? JSONDecoder().decode(Clip.self, from: Data(contentsOf: written))
-let expected = try? JSONDecoder().decode(Clip.self, from: fixture("SHARE_FIXTURES", "browser-clip.json"))
+let expected = try? JSONDecoder().decode(Clip.self, from: fixture("CONTRACT_FIXTURES", "browser-clip.json"))
 check("the clip written is the one the Rust importer's fixture decodes", decoded != nil && decoded == expected,
       "\(String(describing: decoded))")
 

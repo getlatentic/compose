@@ -20,16 +20,18 @@ run_suite quicklook \
   "$HERE"/quicklook/Thumbnail/Sources/*.swift \
   "$HERE"/quicklook/Tests/main.swift
 # The share suite checks clip.json against fixtures the Rust importer reads too.
-export SHARE_FIXTURES="$HERE/share/Fixtures"
-run_suite share "$HERE"/share/Sources/*.swift "$HERE"/share/Tests/*.swift
-# The clipper host is built from the share extension's contract and inbox, so a
-# clip from a browser is filed exactly like one from the share sheet.
+export CONTRACT_FIXTURES="$HERE/shared/Fixtures"
+run_suite share "$HERE"/shared/*.swift "$HERE"/share/Sources/*.swift "$HERE"/share/Tests/*.swift
+# The clipper host is built from the shared contract and inbox, so a clip from a
+# browser is filed exactly like one from the share sheet.
 export CLIPPER_FIXTURES="$HERE/clipper/Fixtures"
 run_suite clipper \
-  "$HERE"/share/Sources/Contract.swift \
-  "$HERE"/share/Sources/ShareInbox.swift \
-  "$HERE"/share/Sources/ClipDraft.swift \
+  "$HERE"/shared/Contract.swift \
+  "$HERE"/shared/ShareInbox.swift \
+  "$HERE"/shared/ClipDraft.swift \
   "$HERE"/clipper/Sources/ClipperMessages.swift \
   "$HERE"/clipper/Sources/ClipperHost.swift \
   "$HERE"/clipper/Sources/NativeMessaging.swift \
   "$HERE"/clipper/Tests/main.swift
+# Everything but the extension's entry point, which the suite's own main replaces.
+run_suite intents "$HERE"/shared/*.swift "$HERE"/intents/Sources/*.swift "$HERE"/intents/Tests/*.swift

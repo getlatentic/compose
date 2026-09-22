@@ -76,7 +76,8 @@ struct ClipperHost {
             html: nil,
             page: nil,
             markdown: submission.markdown,
-            images: [])
+            images: [],
+            open: false)
         do {
             try inbox.write(clip, images: [])
         } catch {

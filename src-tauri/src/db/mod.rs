@@ -4,13 +4,15 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 #[derive(Default)]
 pub struct MetadataStore {
     paths: Mutex<Option<MetadataPaths>>,
+    /// Set once, at setup: the store does not know who is listening.
+    document_observer: OnceLock<DocumentObserver>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +53,14 @@ pub use history::{BaselineCandidate, DocumentVersion};
 // deleted. Like `history`, this submodule reuses the private `app_connection`.
 pub mod trash;
 pub use trash::TrashEntry;
+
+// What changed among a workspace's notes, told to whatever mirrors them outside
+// the app, and the notes each workspace changed last.
+mod document_changes;
+pub use document_changes::DocumentChange;
+use document_changes::DocumentObserver;
+mod recent;
+pub use recent::RecentDocument;
 
 // Snapshot blob storage: compression codec (deflate, with a self-describing
 // `codec` tag and a raw fallback) and the retention policy that bounds a
@@ -354,6 +364,7 @@ impl MetadataStore {
         transaction
             .commit()
             .map_err(|error| format!("could not commit document sync: {error}"))?;
+        self.notify_documents(vault_id, &DocumentChange::Synced);
         Ok(())
     }
 
@@ -384,6 +395,7 @@ impl MetadataStore {
         transaction
             .commit()
             .map_err(|error| format!("could not commit document write metadata: {error}"))?;
+        self.notify_documents(vault_id, &DocumentChange::Written(relative_path.to_owned()));
         Ok(())
     }
 
@@ -455,6 +467,7 @@ impl MetadataStore {
         transaction
             .commit()
             .map_err(|error| format!("could not commit document transaction metadata: {error}"))?;
+        self.notify_documents(vault_id, &DocumentChange::Written(relative_path.to_owned()));
         Ok(())
     }
 
@@ -488,6 +501,10 @@ impl MetadataStore {
         transaction
             .commit()
             .map_err(|error| format!("could not commit document rename metadata: {error}"))?;
+        self.notify_documents(
+            vault_id,
+            &DocumentChange::Renamed { from: from_relative.to_owned(), to: to_relative.to_owned() },
+        );
         Ok(())
     }
 
@@ -504,6 +521,7 @@ impl MetadataStore {
                 params![now, relative_path],
             )
             .map_err(|error| format!("could not mark document deleted: {error}"))?;
+        self.notify_documents(vault_id, &DocumentChange::Deleted(relative_path.to_owned()));
         Ok(())
     }
 
@@ -1043,6 +1061,16 @@ impl MetadataStore {
         let db_path = self.vault_db_path(vault_id)?;
         migrate_vault_database(&db_path)?;
         open_connection(&db_path)
+    }
+
+    /// The vault's database when one was ever written, without creating it.
+    fn existing_vault_connection(&self, vault_id: &str) -> Result<Option<Connection>, String> {
+        validate_storage_id(vault_id, "vault id")?;
+        let db_path = self.paths()?.vaults_dir.join(vault_id).join("vault.db");
+        if !db_path.exists() {
+            return Ok(None);
+        }
+        open_connection(&db_path).map(Some)
     }
 
     fn vault_db_path(&self, vault_id: &str) -> Result<PathBuf, String> {

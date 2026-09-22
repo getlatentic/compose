@@ -1,8 +1,9 @@
 //! Filing a clip: where it goes, its images, the note, and then the clip gone.
 
-use super::contract::{Clip, ImportedClip};
 use super::inbox::Inbox;
 use super::note;
+use super::pending::ImportedClip;
+use crate::app_group::contract::Clip;
 use crate::db::MetadataStore;
 use crate::files::new_note::{create_note, file_stem, MAX_NAME_ATTEMPTS};
 use crate::files::{ensure_vault_metadata, write_binary_file, FileError};
@@ -40,6 +41,7 @@ pub(super) fn import_clip(
     Ok(Some(ImportedClip {
         workspace_id,
         relative_path,
+        open: clip.open,
     }))
 }
 
