@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "capture",
-  "description": "Capability for the quick-capture window: hear that it was shown, and be dragged by its top strip.",
+  "description": "Capability for the quick-note window: hear that it was shown and what was copied, be dragged by its top strip, and open a link the user clicks in a note.",
   "windows": ["capture"],
-  "permissions": ["core:event:default", "core:window:allow-start-dragging"]
+  "permissions": ["core:event:default", "core:window:allow-start-dragging", "opener:default"]
 }
