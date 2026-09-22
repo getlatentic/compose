@@ -30,6 +30,8 @@ pub use workspace_index::SourceRange;
 // per-conversation actions. Types are re-exported so `crate::db::Conversation*`
 // keeps resolving; the Tauri commands are referenced via `db::conversations::*`.
 mod app_settings;
+pub mod clipboard_history;
+pub mod quick_notes;
 pub mod conversations;
 pub use conversations::{ConversationMessageRecord, ConversationSnapshot, ConversationSummary};
 
@@ -1225,6 +1227,26 @@ fn migrate_global_database(db_path: &Path) -> Result<(), String> {
             );
             create index if not exists idx_trash_entries_trashed_at
               on trash_entries(trashed_at);
+            create table if not exists quick_notes (
+              id text primary key,
+              body text not null,
+              created_at integer not null,
+              updated_at integer not null
+            );
+            create table if not exists clipboard_items (
+              id text primary key,
+              kind text not null,
+              text text not null,
+              html text,
+              image blob,
+              fingerprint text not null unique,
+              source_name text,
+              source_bundle text,
+              copied_at integer not null,
+              pinned integer not null default 0
+            );
+            create index if not exists idx_clipboard_items_copied_at
+              on clipboard_items(copied_at);
             ",
         )
         .map_err(|error| format!("could not migrate app metadata db: {error}"))?;

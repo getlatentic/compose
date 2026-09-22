@@ -1,13 +1,18 @@
-//! Quick capture: a global shortcut opens a small window over whatever the user
-//! is doing, and what they type there becomes a new note in the active
-//! workspace. The shortcut is held by Rust, so it works with every Compose
-//! window closed.
+//! Quick notes: a global shortcut opens a small window over whatever the user
+//! is doing. Notes jotted there wait, several at once, until one is saved as a
+//! note in the active workspace; a second shortcut opens the clipboard history
+//! in the same window. The shortcuts are held by Rust, so they work with every
+//! Compose window closed.
 
+mod images;
+pub mod notes;
 #[cfg(target_os = "macos")]
 mod panel;
 mod shortcut;
 mod text;
 mod window;
+
+pub use shortcut::{RegisteredShortcuts, View};
 
 use std::time::Duration;
 
@@ -33,7 +38,7 @@ pub struct CapturedNote {
     pub relative_path: String,
 }
 
-/// The shortcut that opens capture, `None` once turned off, and the one it
+/// A shortcut that opens the window, `None` once turned off, and the one it
 /// starts as.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -42,12 +47,21 @@ pub struct CaptureShortcut {
     pub default: &'static str,
 }
 
-impl CaptureShortcut {
-    fn new(current: Option<String>) -> Self {
-        Self {
-            current,
-            default: shortcut::DEFAULT_SHORTCUT,
-        }
+/// The shortcut on the notes and the one on the clipboard history.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureShortcuts {
+    pub notes: CaptureShortcut,
+    pub clipboard: CaptureShortcut,
+}
+
+impl CaptureShortcuts {
+    fn from_chosen(chosen: Vec<(View, Option<String>)>) -> Self {
+        let pick = |wanted: View| CaptureShortcut {
+            current: chosen.iter().find(|(view, _)| *view == wanted).and_then(|(_, current)| current.clone()),
+            default: wanted.default_shortcut(),
+        };
+        Self { notes: pick(View::Notes), clipboard: pick(View::Clipboard) }
     }
 }
 
@@ -58,25 +72,26 @@ pub struct CaptureDestination {
     pub name: String,
 }
 
-/// Delivers the shortcut: every press opens capture, or closes it if open.
+/// Delivers the shortcuts: a press opens the window on that shortcut's part, or
+/// closes it if the user is already there.
 pub fn plugin() -> tauri::plugin::TauriPlugin<Wry> {
     tauri_plugin_global_shortcut::Builder::new()
-        .with_handler(|app, _shortcut, event| {
+        .with_handler(|app, pressed, event| {
             if event.state == ShortcutState::Pressed {
-                window::toggle(app);
+                let view = app.state::<RegisteredShortcuts>().view_for(pressed).unwrap_or(View::Notes);
+                window::toggle(app, view);
             }
         })
         .build()
 }
 
-/// Register the chosen shortcut, then build the window once launch is done.
-/// Runs after the metadata store is open, since that is where the choice lives.
+/// Register the chosen shortcuts, then build the window once launch is done.
+/// Runs after the metadata store is open, since that is where the choices live.
 pub fn start(app: &AppHandle) {
     let metadata = app.state::<MetadataStore>();
-    let registered = shortcut::chosen(&metadata)
-        .and_then(|chosen| shortcut::register(app, chosen.as_deref()));
+    let registered = shortcut::all_chosen(&metadata).and_then(|chosen| shortcut::register(app, &chosen));
     if let Err(error) = registered {
-        eprintln!("quick capture shortcut: {error}");
+        eprintln!("quick note shortcuts: {error}");
     }
     let handle = app.clone();
     std::thread::spawn(move || {
@@ -90,10 +105,11 @@ pub fn start(app: &AppHandle) {
     });
 }
 
-/// Save what was typed as a new note and close the window. `None` for blank
-/// text, which leaves the window open.
+/// Save quick note `id` as a note in the workspace, with the images pasted into
+/// it, and close the window. `None` for blank text, which leaves the window open.
 #[tauri::command(async)]
 pub fn capture_save(
+    id: String,
     text: String,
     app: AppHandle,
     registry: State<'_, WorkspaceRegistry>,
@@ -102,7 +118,9 @@ pub fn capture_save(
     if text.trim().is_empty() {
         return Ok(None);
     }
-    let note = file_capture(&text, &registry, &metadata)?;
+    let images = images::folder(&notes::images_dir(&app)?, &id);
+    let note = file_capture(&text, &images, &registry, &metadata)?;
+    metadata.delete_quick_note(&id)?;
     let _ = app.emit(NOTE_CAPTURED_EVENT, &note);
     window::close(&app);
     Ok(Some(note))
@@ -126,29 +144,35 @@ pub fn capture_destination(
 }
 
 #[tauri::command]
-pub fn capture_shortcut(metadata: State<'_, MetadataStore>) -> Result<CaptureShortcut, String> {
-    shortcut::chosen(&metadata).map(CaptureShortcut::new)
+pub fn capture_shortcuts(metadata: State<'_, MetadataStore>) -> Result<CaptureShortcuts, String> {
+    shortcut::all_chosen(&metadata).map(CaptureShortcuts::from_chosen)
 }
 
-/// Change the shortcut, or turn it off with `None`. Saved only once the system
-/// has accepted it; if it refuses, the previous shortcut keeps working.
+/// Change the shortcut on `view`, or turn it off with `None`. Saved only once
+/// the system has accepted it; if it refuses, the previous shortcuts keep working.
 #[tauri::command]
 pub fn capture_set_shortcut(
+    view: View,
     shortcut: Option<String>,
     app: AppHandle,
     metadata: State<'_, MetadataStore>,
-) -> Result<CaptureShortcut, String> {
-    let previous = shortcut::chosen(&metadata)?;
-    if let Err(error) = shortcut::register(&app, shortcut.as_deref()) {
-        let _ = shortcut::register(&app, previous.as_deref());
+) -> Result<CaptureShortcuts, String> {
+    let previous = shortcut::all_chosen(&metadata)?;
+    let wanted: Vec<(View, Option<String>)> = previous
+        .iter()
+        .map(|(each, current)| (*each, if *each == view { shortcut.clone() } else { current.clone() }))
+        .collect();
+    if let Err(error) = shortcut::register(&app, &wanted) {
+        let _ = shortcut::register(&app, &previous);
         return Err(error);
     }
-    shortcut::save(&metadata, shortcut.as_deref())?;
-    Ok(CaptureShortcut::new(shortcut))
+    shortcut::save(&metadata, view, shortcut.as_deref())?;
+    Ok(CaptureShortcuts::from_chosen(wanted))
 }
 
 fn file_capture(
     text: &str,
+    images: &std::path::Path,
     registry: &WorkspaceRegistry,
     metadata: &MetadataStore,
 ) -> Result<CapturedNote, String> {
@@ -157,12 +181,14 @@ fn file_capture(
         .ok_or("Open a workspace in Compose first: captured notes are saved there.")?;
     let root = registry.workspace_root(&workspace.id)?;
     ensure_vault_metadata(metadata, &workspace.id, &root).map_err(|error| error.to_string())?;
+    // A captured note is saved at the workspace's top, so its images go there too.
+    let text = images::move_into(images, &root, text)?;
     let relative_path = create_note(
         registry,
         metadata,
         &workspace.id,
-        &text::file_stem(text),
-        &text::content(text),
+        &text::file_stem(&text),
+        &text::content(&text),
     )
     .map_err(|error| error.to_string())?;
     Ok(CapturedNote {
@@ -210,7 +236,7 @@ mod tests {
     fn a_capture_becomes_a_note_named_after_its_first_line() {
         let (fixture, vaults) = fixture(1);
 
-        let note = file_capture("## Book idea\n\nA memoir told in recipes.\n\n", &fixture.registry, &fixture.metadata)
+        let note = file_capture("## Book idea\n\nA memoir told in recipes.\n\n", &no_images(), &fixture.registry, &fixture.metadata)
             .expect("capture");
 
         assert_eq!(note.relative_path, "Book idea.md");
@@ -221,8 +247,8 @@ mod tests {
     #[test]
     fn a_second_capture_with_the_same_title_does_not_replace_the_first() {
         let (fixture, vaults) = fixture(1);
-        file_capture("Call Ade", &fixture.registry, &fixture.metadata).expect("first");
-        let second = file_capture("Call Ade\nabout Friday", &fixture.registry, &fixture.metadata).expect("second");
+        file_capture("Call Ade", &no_images(), &fixture.registry, &fixture.metadata).expect("first");
+        let second = file_capture("Call Ade\nabout Friday", &no_images(), &fixture.registry, &fixture.metadata).expect("second");
 
         assert_eq!(second.relative_path, "Call Ade 2.md");
         assert_eq!(std::fs::read_to_string(vaults[0].join("Call Ade.md")).unwrap(), "Call Ade\n");
@@ -234,7 +260,7 @@ mod tests {
         let first = fixture.registry.list().unwrap().workspaces[0].id.clone();
         fixture.registry.switch(first.clone()).expect("switch");
 
-        let note = file_capture("idea", &fixture.registry, &fixture.metadata).expect("capture");
+        let note = file_capture("idea", &no_images(), &fixture.registry, &fixture.metadata).expect("capture");
 
         assert_eq!(note.workspace_id, first, "not simply the last one added");
     }
@@ -242,7 +268,26 @@ mod tests {
     #[test]
     fn with_no_workspace_there_is_nowhere_to_save() {
         let (fixture, _vaults) = fixture(0);
-        let refused = file_capture("idea", &fixture.registry, &fixture.metadata);
+        let refused = file_capture("idea", &no_images(), &fixture.registry, &fixture.metadata);
         assert!(refused.is_err());
+    }
+
+    #[test]
+    fn a_pasted_image_moves_into_the_workspace_with_its_note() {
+        let (fixture, vaults) = fixture(1);
+        let waiting = tempfile::tempdir().expect("images");
+        images::save(waiting.path(), "images/pasted.png", b"png").expect("paste");
+
+        let note = file_capture("Sketch\n\n![pasted](images/pasted.png)", waiting.path(), &fixture.registry, &fixture.metadata)
+            .expect("capture");
+
+        assert_eq!(std::fs::read(vaults[0].join("images/pasted.png")).expect("image"), b"png");
+        let written = std::fs::read_to_string(vaults[0].join(&note.relative_path)).expect("note");
+        assert!(written.contains("![pasted](images/pasted.png)"));
+    }
+
+    /// A quick note nothing was pasted into.
+    fn no_images() -> std::path::PathBuf {
+        std::env::temp_dir().join("compose-quick-note-with-no-images")
     }
 }

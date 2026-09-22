@@ -1,6 +1,7 @@
 mod autocorrect;
 mod boot_payload;
 mod capture;
+mod clipboard;
 #[cfg(target_os = "macos")]
 mod clipper;
 mod deep_link;
@@ -98,6 +99,8 @@ pub fn run() {
         .manage(PendingOpenUrls::default())
         .manage(services::PendingServiceText::default())
         .manage(share_inbox::ShareInboxState::default())
+        .manage(clipboard::ClipboardHistory::default())
+        .manage(capture::RegisteredShortcuts::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Self-update: check a signed manifest, download + swap the bundle, and
@@ -216,8 +219,10 @@ pub fn run() {
             if let Err(error) = metadata.init_from_app(&app_handle) {
                 eprintln!("metadata store init failed: {error}");
             }
-            // After the metadata store, which holds the chosen shortcut.
+            // After the metadata store, which holds the chosen shortcut and
+            // whether clipboard history is on.
             capture::start(&app_handle);
+            clipboard::start(&app_handle);
             // Reap any agent child a prior hard crash orphaned, and point the
             // runner at the data dir so this session records its own live runs
             // for the same safety net. set_data_dir is instant (before any run);
@@ -374,8 +379,21 @@ pub fn run() {
             capture::capture_save,
             capture::capture_close,
             capture::capture_destination,
-            capture::capture_shortcut,
+            capture::capture_shortcuts,
             capture::capture_set_shortcut,
+            capture::notes::quick_notes,
+            capture::notes::quick_note_keep,
+            capture::notes::quick_note_delete,
+            capture::notes::quick_note_keep_image,
+            capture::notes::quick_note_folder,
+            clipboard::clipboard_history,
+            clipboard::clipboard_set_enabled,
+            clipboard::clipboard_entry,
+            clipboard::clipboard_copy,
+            clipboard::clipboard_pin,
+            clipboard::clipboard_forget,
+            clipboard::clipboard_clear,
+            clipboard::clipboard_privacy_settings,
             share_inbox::share_inbox_import,
             external::external_list,
             external::external_add,

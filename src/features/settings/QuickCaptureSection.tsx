@@ -1,28 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@carbon/react";
 
-import { captureShortcut, setCaptureShortcut, type CaptureShortcut } from "../../lib/ipc/captureClient";
-import { shortcutFromKeyPress, shortcutLabel } from "./captureShortcut";
+import { captureShortcuts, setCaptureShortcut, type CaptureShortcuts } from "../../lib/ipc/captureClient";
+import { ClipboardHistorySetting } from "./ClipboardHistorySetting";
+import { ShortcutSetting } from "./ShortcutSetting";
+
+const describeNotes = (label: string) => `Press ${label} in any app to jot an idea; ⌘↩ saves it into the open workspace.`;
+const describeClipboard = (label: string) => `Press ${label} in any app to find what you copied, paste it again, or put it in a note.`;
 
 /**
- * "Quick note": the global shortcut that opens a small window over any app, to
- * jot an idea into the open workspace. Changing it records the next shortcut
- * pressed; one the system refuses leaves the old one on.
+ * "Quick note": the global shortcuts that open a small window over any app —
+ * one on the notes jotted there, one on the clipboard history — and whether
+ * that history is kept.
  */
 export function QuickCaptureSection() {
-  const [shortcut, setShortcut] = useState<CaptureShortcut | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [shortcuts, setShortcuts] = useState<CaptureShortcuts | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    captureShortcut().then(
+    captureShortcuts().then(
       (current) => {
-        if (!cancelled) setShortcut(current);
+        if (!cancelled) setShortcuts(current);
       },
       () => {
-        if (!cancelled) setShortcut(null);
+        if (!cancelled) setShortcuts(null);
       },
     );
     return () => {
@@ -30,88 +30,33 @@ export function QuickCaptureSection() {
     };
   }, []);
 
-  const choose = useCallback(async (next: string | null) => {
-    setBusy(true);
-    setError(null);
-    try {
-      setShortcut(await setCaptureShortcut(next));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
-  useEffect(
-    function recordNextShortcut() {
-      if (!recording) return;
-      const onKeyDown = (event: KeyboardEvent) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.code === "Escape") {
-          setRecording(false);
-          return;
-        }
-        const pressed = shortcutFromKeyPress(event);
-        if (pressed) {
-          setRecording(false);
-          void choose(pressed);
-        }
-      };
-      window.addEventListener("keydown", onKeyDown, true);
-      return () => window.removeEventListener("keydown", onKeyDown, true);
-    },
-    [recording, choose],
-  );
-
-  const startRecording = useCallback(() => {
-    setError(null);
-    setRecording(true);
-  }, []);
-  const stopRecording = useCallback(() => setRecording(false), []);
-  const turnOff = useCallback(() => void choose(null), [choose]);
-  const restoreDefault = useCallback(() => {
-    if (shortcut) void choose(shortcut.default);
-  }, [choose, shortcut]);
+  const chooseNotes = useCallback(async (next: string | null) => setShortcuts(await setCaptureShortcut("notes", next)), []);
+  const chooseClipboard = useCallback(async (next: string | null) => setShortcuts(await setCaptureShortcut("clipboard", next)), []);
 
   // Unavailable in the browser preview, where there is no system to register with.
-  if (!shortcut) return null;
+  if (!shortcuts) return null;
 
-  const current = shortcut.current;
   return (
-    <div className="settings-section">
-      <h3>Quick note</h3>
-      <p className="settings-helper">
-        {recording
-          ? "Press the new shortcut — hold ⌘, ⌃ or ⌥ with a key. Esc cancels."
-          : current
-            ? `Press ${shortcutLabel(current)} in any app to jot an idea into the open workspace; ⌘↩ saves it.`
-            : "Off. Turn it on to jot ideas from any app."}
-      </p>
-      <div className="settings-actions">
-        {recording ? (
-          <Button size="sm" kind="ghost" onClick={stopRecording}>
-            Cancel
-          </Button>
-        ) : (
-          <>
-            <Button size="sm" kind="tertiary" disabled={busy} onClick={startRecording}>
-              {current ? "Change shortcut" : "Turn on"}
-            </Button>
-            {current && current !== shortcut.default ? (
-              <Button size="sm" kind="ghost" disabled={busy} onClick={restoreDefault}>
-                Use {shortcutLabel(shortcut.default)}
-              </Button>
-            ) : null}
-            {current ? (
-              <Button size="sm" kind="ghost" disabled={busy} onClick={turnOff}>
-                Turn off
-              </Button>
-            ) : null}
-          </>
-        )}
+    <>
+      <div className="settings-section">
+        <h3>Quick note</h3>
+        <ShortcutSetting
+          shortcut={shortcuts.notes}
+          describe={describeNotes}
+          offText="Off. Turn it on to jot ideas from any app."
+          choose={chooseNotes}
+        />
       </div>
-      {error ? <p className="settings-helper settings-helper--error">{error}</p> : null}
-    </div>
+      <div className="settings-section">
+        <h3>Clipboard history</h3>
+        <ShortcutSetting
+          shortcut={shortcuts.clipboard}
+          describe={describeClipboard}
+          offText="No shortcut. The clipboard is still in the quick-note window."
+          choose={chooseClipboard}
+        />
+        <ClipboardHistorySetting />
+      </div>
+    </>
   );
 }

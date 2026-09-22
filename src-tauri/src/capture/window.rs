@@ -3,13 +3,28 @@
 //! On macOS it is a panel that takes the keyboard without taking the user out
 //! of the app they were in.
 
+use std::sync::Mutex;
+
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+use super::shortcut::View;
+
 pub(super) const LABEL: &str = "capture";
-/// Tells the page it is on screen again, so it takes the keyboard.
+/// Tells the page it is on screen again, and which part to show, so it takes the keyboard.
 const SHOWN_EVENT: &str = "capture:shown";
-const WIDTH: f64 = 520.0;
-const HEIGHT: f64 = 240.0;
+const WIDTH: f64 = 680.0;
+const HEIGHT: f64 = 420.0;
+const MIN_WIDTH: f64 = 480.0;
+const MIN_HEIGHT: f64 = 280.0;
+
+/// The part of the window last shown.
+static SHOWING: Mutex<View> = Mutex::new(View::Notes);
+
+#[derive(Clone, Serialize)]
+struct Shown {
+    view: View,
+}
 
 /// The capture window, built hidden if it does not exist yet, so a press of the
 /// shortcut only has to show it.
@@ -20,7 +35,8 @@ pub(crate) fn prepare(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let builder = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("capture.html".into()))
         .title("Quick Note")
         .inner_size(WIDTH, HEIGHT)
-        .resizable(false)
+        .min_inner_size(MIN_WIDTH, MIN_HEIGHT)
+        .resizable(true)
         .minimizable(false)
         .maximizable(false)
         .always_on_top(true)
@@ -37,22 +53,30 @@ pub(crate) fn prepare(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     Ok(window)
 }
 
-/// What the shortcut does: close capture if the user is typing in it, and
-/// otherwise open it — or bring it back if it was left open behind something.
-pub(super) fn toggle(app: &AppHandle) {
+/// What a shortcut does: close the window if the user is in that part of it,
+/// switch to that part if they are in the other, and otherwise open it on that
+/// part — or bring it back if it was left open behind something.
+pub(super) fn toggle(app: &AppHandle, view: View) {
     let handle = app.clone();
-    if let Err(error) = app.run_on_main_thread(move || toggle_now(&handle)) {
+    if let Err(error) = app.run_on_main_thread(move || toggle_now(&handle, view)) {
         eprintln!("quick capture could not be scheduled: {error}");
     }
 }
 
-fn toggle_now(app: &AppHandle) {
+fn toggle_now(app: &AppHandle, view: View) {
     let in_use = app.get_webview_window(LABEL).is_some_and(|window| {
         window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false)
     });
-    if in_use {
+    let showing = SHOWING.lock().map(|showing| *showing).unwrap_or(View::Notes);
+    let result = if in_use && showing == view {
         hide_and_return_focus(app);
-    } else if let Err(error) = open(app) {
+        Ok(())
+    } else if in_use {
+        show_view(app, view)
+    } else {
+        open(app, view)
+    };
+    if let Err(error) = result {
         eprintln!("quick capture could not open: {error}");
     }
 }
@@ -63,12 +87,19 @@ pub(super) fn close(app: &AppHandle) {
     let _ = app.run_on_main_thread(move || hide_and_return_focus(&handle));
 }
 
-fn open(app: &AppHandle) -> tauri::Result<()> {
+fn open(app: &AppHandle, view: View) -> tauri::Result<()> {
     let window = prepare(app)?;
     place_where_the_pointer_is(&window)?;
     window.show()?;
     platform::focus(&window);
-    app.emit_to(LABEL, SHOWN_EVENT, ())
+    show_view(app, view)
+}
+
+fn show_view(app: &AppHandle, view: View) -> tauri::Result<()> {
+    if let Ok(mut showing) = SHOWING.lock() {
+        *showing = view;
+    }
+    app.emit_to(LABEL, SHOWN_EVENT, Shown { view })
 }
 
 fn hide_and_return_focus(app: &AppHandle) {
@@ -86,7 +117,8 @@ fn place_where_the_pointer_is(window: &WebviewWindow) -> tauri::Result<()> {
         return window.center();
     };
     let area = monitor.work_area();
-    let width = (WIDTH * monitor.scale_factor()).round() as i32;
+    // The size the user left it at, which may differ from the one it opened with.
+    let width = window.outer_size().map(|size| size.width as i32).unwrap_or((WIDTH * monitor.scale_factor()).round() as i32);
     let x = area.position.x + (area.size.width as i32 - width) / 2;
     let y = area.position.y + area.size.height as i32 / 5;
     window.set_position(PhysicalPosition::new(x, y))
