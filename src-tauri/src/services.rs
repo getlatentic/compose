@@ -57,20 +57,16 @@ mod mac {
 
     pub const NEW_NOTE_EVENT: &str = "compose:new-note-from-selection";
 
-    /// Buffer the selection, wake the window, and tell a listening frontend.
+    /// Buffer the selection, tell a listening frontend to drain it, and bring
+    /// the window up — a Service fires while another app is frontmost, and the
+    /// note is only useful if the user can see it being written.
     fn capture(app: &AppHandle, text: String) {
         if text.trim().is_empty() {
             return;
         }
-        app.state::<PendingServiceText>().push(text.clone());
-        // A Service fires while another app is frontmost; the note is only
-        // useful if the user can see it being written.
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
-        let _ = app.emit(NEW_NOTE_EVENT, text);
+        app.state::<PendingServiceText>().push(text);
+        let _ = app.emit(NEW_NOTE_EVENT, ());
+        crate::main_window::ensure(app);
     }
 
     struct ProviderIvars {
