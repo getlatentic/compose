@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useState } from "react";
+import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { CodeMirrorMarkdownEditor } from "@latentic/live-markdown";
 
@@ -15,8 +16,8 @@ export interface NoteEditorProps {
   api: CaptureApi;
   note: QuickNote;
   onChange(id: string, body: string): void;
-  /** The editor, once it exists, for inserting into it and reading its text. */
-  onView(view: EditorView | null): void;
+  /** The note's editor once it is on screen, for the caret and inserting; `null` once it is gone. */
+  onView(view: EditorView | null, noteId: string): void;
   /** Pulls text typed a moment ago into `onChange` at once; `null` when gone. */
   onFlush(flush: (() => void) | null): void;
 }
@@ -42,16 +43,16 @@ function NoteEditorInner({ api, note, onChange, onView, onFlush }: NoteEditorPro
     };
   }, [api, id]);
 
-  useEffect(() => () => onView(null), [onView]);
-
   const change = useCallback((body: string) => onChange(id, body), [id, onChange]);
   const saveImageBytes = useCallback((relativePath: string, bytes: Uint8Array) => api.keepImage(id, relativePath, bytes), [api, id]);
   const toolbar = useCallback(
-    ({ view }: { view: EditorView }) => {
-      onView(view);
-      return <QuickNoteToolbar view={view} />;
-    },
-    [onView],
+    ({ view }: { view: EditorView }) => (
+      <>
+        <OnScreen view={view} noteId={id} onView={onView} />
+        <QuickNoteToolbar view={view} />
+      </>
+    ),
+    [id, onView],
   );
 
   return (
@@ -72,3 +73,23 @@ function NoteEditorInner({ api, note, onChange, onView, onFlush }: NoteEditorPro
 }
 
 export const NoteEditor = memo(NoteEditorInner);
+
+interface OnScreenProps {
+  view: EditorView;
+  noteId: string;
+  onView: NoteEditorProps["onView"];
+}
+
+/**
+ * Hands the editor over with the caret at the end of the note, to go on writing.
+ * The editor makes its view in a layout effect and gives it only to its toolbar,
+ * so an effect in the toolbar is the first moment the view is on screen.
+ */
+function OnScreen({ view, noteId, onView }: OnScreenProps) {
+  useEffect(() => {
+    view.dispatch({ selection: EditorSelection.cursor(view.state.doc.length), scrollIntoView: true });
+    onView(view, noteId);
+    return () => onView(null, noteId);
+  }, [view, noteId, onView]);
+  return null;
+}

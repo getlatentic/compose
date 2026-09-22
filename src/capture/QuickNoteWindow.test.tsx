@@ -121,6 +121,50 @@ describe("the quick-note window", () => {
     await waitFor(() => expect(editorView()?.state.doc.toString()).toBe("Groceries"));
   });
 
+  it("puts the caret in a new note, from ⌘N or the New note button, so typing goes into it", async () => {
+    const fake = fakeCaptureApi({ notes: [{ id: "a", body: "Groceries", createdAt: 1, updatedAt: 1 }] });
+    await open(fake.api);
+    const groceries = editorView();
+    press("n", { metaKey: true });
+    await waitFor(() => expect(editorView()).not.toBe(groceries));
+    expect(editorView()?.hasFocus).toBe(true);
+
+    type("Call Ada");
+    const callAda = editorView();
+    fireEvent.click(screen.getByRole("button", { name: /⌘N/ }));
+    await waitFor(() => expect(editorView()).not.toBe(callAda));
+    expect(editorView()?.hasFocus).toBe(true);
+
+    act(() => (document.activeElement as HTMLElement).blur());
+    press("n", { metaKey: true });
+    await waitFor(() => expect(editorView()?.hasFocus).toBe(true));
+  });
+
+  it("opens a note picked from the list, stepped to, or next after a save with the caret at its end", async () => {
+    const fake = fakeCaptureApi({
+      notes: [
+        { id: "b", body: "Call Ada", createdAt: 2, updatedAt: 2 },
+        { id: "a", body: "# Groceries\n\n- eggs", createdAt: 1, updatedAt: 1 },
+      ],
+    });
+    await open(fake.api);
+    const caretAtEnd = (body: string) => {
+      const view = editorView();
+      expect(view?.state.doc.toString()).toBe(body);
+      expect(view?.hasFocus).toBe(true);
+      expect(view?.state.selection.main.head).toBe(body.length);
+    };
+
+    const groceries = screen.getByRole("button", { name: /Groceries/ });
+    expect(fireEvent.mouseDown(groceries)).toBe(false);
+    fireEvent.click(groceries);
+    await waitFor(() => caretAtEnd("# Groceries\n\n- eggs"));
+    press("ArrowUp", { ctrlKey: true, metaKey: true });
+    await waitFor(() => caretAtEnd("Call Ada"));
+    press("Enter", { metaKey: true });
+    await waitFor(() => caretAtEnd("# Groceries\n\n- eggs"));
+  });
+
   it("asks before deleting a note that has not been saved", async () => {
     const fake = fakeCaptureApi({ notes: [{ id: "a", body: "Keep me?", createdAt: 1, updatedAt: 1 }] });
     await open(fake.api);

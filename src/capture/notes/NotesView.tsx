@@ -11,14 +11,16 @@ export interface NotesViewProps {
   api: CaptureApi;
   notes: QuickNotes;
   saving: boolean;
-  onView(view: EditorView | null): void;
+  onView(view: EditorView | null, noteId: string): void;
   onFlush(flush: (() => void) | null): void;
+  /** Starts a note, or goes to the blank one already there, with the caret in it. */
+  onNewNote(): void;
   onSave(): void;
   onClose(): void;
 }
 
 /** The quick notes: the list, the one being written, and what to do with it. */
-export function NotesView({ api, notes, saving, onView, onFlush, onSave, onClose }: NotesViewProps) {
+export function NotesView({ api, notes, saving, onView, onFlush, onNewNote, onSave, onClose }: NotesViewProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const active = notes.active;
 
@@ -31,9 +33,9 @@ export function NotesView({ api, notes, saving, onView, onFlush, onSave, onClose
     [notes],
   );
   const newNote = useCallback(() => {
-    notes.create();
+    onNewNote();
     setConfirmingDelete(false);
-  }, [notes]);
+  }, [onNewNote]);
   const askToDelete = useCallback(() => {
     if (!active) return;
     if (active.body.trim()) setConfirmingDelete(true);
@@ -61,6 +63,7 @@ export function NotesView({ api, notes, saving, onView, onFlush, onSave, onClose
                 className="quick-note__list-item"
                 aria-current={note.id === active?.id ? "true" : undefined}
                 data-id={note.id}
+                onMouseDown={keepTheCaret}
                 onClick={selectNote}
               >
                 <span className="quick-note__list-title">{noteTitle(note.body) || "New note"}</span>
@@ -79,7 +82,7 @@ export function NotesView({ api, notes, saving, onView, onFlush, onSave, onClose
         {notes.error ? (
           <span role="alert" className="quick-note__error">
             {notes.error}
-            <button type="button" className="quick-note__link" onClick={notes.dismissError}>
+            <button type="button" className="quick-note__link" onMouseDown={keepTheCaret} onClick={notes.dismissError}>
               Dismiss
             </button>
           </span>
@@ -87,10 +90,10 @@ export function NotesView({ api, notes, saving, onView, onFlush, onSave, onClose
         {confirmingDelete ? (
           <span role="alert" className="quick-note__confirm">
             Delete this note? It has not been saved.
-            <button type="button" className="quick-note__action quick-note__action--danger" onClick={confirmDelete}>
+            <button type="button" className="quick-note__action quick-note__action--danger" onMouseDown={keepTheCaret} onClick={confirmDelete}>
               Delete
             </button>
-            <button type="button" className="quick-note__action" onClick={keepNote}>
+            <button type="button" className="quick-note__action" onMouseDown={keepTheCaret} onClick={keepNote}>
               Keep
             </button>
           </span>
