@@ -10,7 +10,7 @@ import {
   caretContextsEqual,
   EMPTY_CONTEXT,
   type CaretContext,
-} from "./CodeMirrorToolbar";
+} from "./caretContext";
 
 /** A headless editor with the caret at `caret`, parsed before it is read. */
 function editorAt(doc: string, caret: number): EditorView {
