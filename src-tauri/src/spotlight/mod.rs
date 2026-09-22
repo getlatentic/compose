@@ -59,10 +59,12 @@ pub fn start(app: &AppHandle) {
         });
         let state = app.state::<SpotlightState>();
         let _ = state.jobs.set(sender);
-        let enabled = app.state::<MetadataStore>().app_setting::<bool>(SETTING_KEY).ok().flatten().unwrap_or(true);
+        let metadata = app.state::<MetadataStore>();
+        let enabled = metadata.app_setting::<bool>(SETTING_KEY).ok().flatten().unwrap_or(true);
         state.enabled.store(enabled, Ordering::SeqCst);
-        if enabled {
-            reconcile_every_workspace(app);
+        let registered = registered_workspaces(app);
+        for job in launch_jobs(enabled, &registered, &metadata.spotlight_vaults().unwrap_or_default()) {
+            state.queue(job);
         }
     }
     #[cfg(not(target_os = "macos"))]
@@ -93,20 +95,34 @@ pub fn workspaces_changed(app: &AppHandle, list: &WorkspaceList) {
     let Ok(indexed) = app.state::<MetadataStore>().spotlight_vaults() else {
         return;
     };
-    let registered: HashSet<&str> = list.workspaces.iter().map(|workspace| workspace.id.as_str()).collect();
-    for workspace_id in indexed.into_iter().filter(|id| !registered.contains(id.as_str())) {
-        state.queue(Job::Forget(workspace_id));
+    let registered: Vec<String> = list.workspaces.iter().map(|workspace| workspace.id.clone()).collect();
+    for job in removed(&registered, &indexed) {
+        state.queue(job);
     }
 }
 
-fn reconcile_every_workspace(app: &AppHandle) {
-    let Ok(list) = app.state::<WorkspaceRegistry>().list() else {
-        return;
-    };
-    let state = app.state::<SpotlightState>();
-    for workspace in list.workspaces {
-        state.queue(Job::Reconcile(workspace.id));
+/// At launch: empty Spotlight when it is off but holds notes, which a run that
+/// ended before turning it off had finished leaves; else drop the workspaces
+/// removed while Compose was not running and bring every other up to date.
+fn launch_jobs(enabled: bool, registered: &[String], indexed: &[String]) -> Vec<Job> {
+    if !enabled {
+        return if indexed.is_empty() { Vec::new() } else { vec![Job::ForgetAll] };
     }
+    let mut jobs = removed(registered, indexed);
+    jobs.extend(registered.iter().cloned().map(Job::Reconcile));
+    jobs
+}
+
+fn removed(registered: &[String], indexed: &[String]) -> Vec<Job> {
+    let registered: HashSet<&String> = registered.iter().collect();
+    indexed.iter().filter(|id| !registered.contains(id)).cloned().map(Job::Forget).collect()
+}
+
+fn registered_workspaces(app: &AppHandle) -> Vec<String> {
+    app.state::<WorkspaceRegistry>()
+        .list()
+        .map(|list| list.workspaces.into_iter().map(|workspace| workspace.id).collect())
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -125,10 +141,33 @@ pub fn spotlight_set_enabled(
     metadata.set_app_setting(SETTING_KEY, &enabled)?;
     if state.enabled.swap(enabled, Ordering::SeqCst) != enabled {
         if enabled {
-            reconcile_every_workspace(&app);
+            registered_workspaces(&app).into_iter().for_each(|id| state.queue(Job::Reconcile(id)));
         } else {
             state.queue(Job::ForgetAll);
         }
     }
     Ok(enabled)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ids(names: &[&str]) -> Vec<String> {
+        names.iter().map(|name| (*name).to_owned()).collect()
+    }
+
+    #[test]
+    fn a_launch_drops_workspaces_removed_meanwhile_and_updates_the_rest() {
+        assert_eq!(
+            launch_jobs(true, &ids(&["kept", "new"]), &ids(&["kept", "removed"])),
+            [Job::Forget("removed".to_owned()), Job::Reconcile("kept".to_owned()), Job::Reconcile("new".to_owned())]
+        );
+    }
+
+    #[test]
+    fn a_launch_with_spotlight_off_empties_what_a_previous_run_left() {
+        assert_eq!(launch_jobs(false, &ids(&["a"]), &ids(&["a"])), [Job::ForgetAll]);
+        assert!(launch_jobs(false, &ids(&["a"]), &[]).is_empty(), "nothing to empty, nothing to do");
+    }
 }
