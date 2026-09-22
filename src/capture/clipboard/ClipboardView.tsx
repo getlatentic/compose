@@ -61,7 +61,7 @@ export function ClipboardView({ api, history, actions, searchRef }: ClipboardVie
         onKeyDown={navigate}
       />
       {history.access === "allowed" ? null : <AccessNotice access={history.access} onOpenSettings={openPrivacySettings} />}
-      <ul className="quick-note__clips" role="listbox" aria-label="Copied lately">
+      <ul className="quick-note__clips" role="listbox" aria-label="Copied lately" onMouseDown={keepTheSearchFocused}>
         {history.items.map((item) => (
           <ClipboardRow key={item.id} api={api} item={item} selected={item.id === history.selectedId} history={history} actions={actions} />
         ))}
@@ -69,7 +69,7 @@ export function ClipboardView({ api, history, actions, searchRef }: ClipboardVie
           <li className="quick-note__empty">{history.query ? "Nothing you copied matches." : "Copy something in any app and it appears here."}</li>
         ) : null}
       </ul>
-      <footer className="quick-note__footer">
+      <footer className="quick-note__footer" onMouseDown={keepTheSearchFocused}>
         {history.error ? (
           <span role="alert" className="quick-note__error">
             {history.error}
@@ -100,6 +100,11 @@ export function ClipboardView({ api, history, actions, searchRef }: ClipboardVie
       </footer>
     </div>
   );
+}
+
+/** A click on an entry or a button leaves the keyboard in the search box, where Return and the arrows work. */
+function keepTheSearchFocused(event: MouseEvent): void {
+  event.preventDefault();
 }
 
 function HistoryOff({ onTurnOn }: { onTurnOn: () => void }) {

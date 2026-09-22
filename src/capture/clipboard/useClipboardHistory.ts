@@ -11,13 +11,15 @@ export interface ClipboardHistoryState {
   access: ClipboardAccess;
   items: ClipboardSummary[];
   query: string;
-  /** The entry the keyboard is on. */
+  /** The entry the keyboard is on: the newest copy, until the user picks another. */
   selectedId: string | null;
   error: string | null;
   setQuery(query: string): void;
   select(id: string): void;
   /** Move the selection by `step` entries, staying within the list. */
   move(step: number): void;
+  /** Clear the search and go back to the newest copy, as the view is each time it is shown. */
+  openOnNewest(): void;
   refresh(): Promise<void>;
   setEnabled(enabled: boolean): Promise<void>;
   pin(id: string, pinned: boolean): Promise<void>;
@@ -35,6 +37,8 @@ export function useClipboardHistory(api: ClipboardApi): ClipboardHistoryState {
   const [error, setError] = useState<string | null>(null);
   const queryRef = useRef(query);
   queryRef.current = query;
+  // Keeps the selection on the newest copy as copies arrive, so Return pastes the latest.
+  const onNewest = useRef(true);
 
   const refresh = useCallback(async () => {
     try {
@@ -43,7 +47,7 @@ export function useClipboardHistory(api: ClipboardApi): ClipboardHistoryState {
       setAccess(history.access);
       setItems(history.items);
       setSelectedId((selected) =>
-        selected && history.items.some((item) => item.id === selected) ? selected : (history.items[0]?.id ?? null),
+        !onNewest.current && history.items.some((item) => item.id === selected) ? selected : newestId(history.items),
       );
       setError(null);
     } catch (caught) {
@@ -72,8 +76,19 @@ export function useClipboardHistory(api: ClipboardApi): ClipboardHistoryState {
     };
   }, [api, refresh]);
 
+  const search = useCallback((next: string) => {
+    onNewest.current = true;
+    setQuery(next);
+  }, []);
+
+  const select = useCallback((id: string) => {
+    onNewest.current = false;
+    setSelectedId(id);
+  }, []);
+
   const move = useCallback(
     (step: number) => {
+      onNewest.current = false;
       setSelectedId((selected) => {
         if (items.length === 0) return null;
         const index = items.findIndex((item) => item.id === selected);
@@ -83,6 +98,13 @@ export function useClipboardHistory(api: ClipboardApi): ClipboardHistoryState {
     },
     [items],
   );
+
+  const openOnNewest = useCallback(() => {
+    onNewest.current = true;
+    // A cleared search asks again by itself.
+    if (queryRef.current) setQuery("");
+    else void refresh();
+  }, [refresh]);
 
   const act = useCallback(
     async (action: () => Promise<unknown>) => {
@@ -109,9 +131,10 @@ export function useClipboardHistory(api: ClipboardApi): ClipboardHistoryState {
     query,
     selectedId,
     error,
-    setQuery,
-    select: setSelectedId,
+    setQuery: search,
+    select,
     move,
+    openOnNewest,
     refresh,
     setEnabled,
     pin,
@@ -119,4 +142,10 @@ export function useClipboardHistory(api: ClipboardApi): ClipboardHistoryState {
     clear,
     openPrivacySettings,
   };
+}
+
+/** The entry copied last, wherever pinning puts it in the list. */
+function newestId(items: ClipboardSummary[]): string | null {
+  const newest = items.reduce<ClipboardSummary | null>((latest, item) => (!latest || item.copiedAt > latest.copiedAt ? item : latest), null);
+  return newest?.id ?? null;
 }

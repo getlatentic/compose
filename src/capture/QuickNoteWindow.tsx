@@ -63,12 +63,14 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
     });
   }, []);
 
+  const { openOnNewest } = history;
   const show = useCallback(
     (shown: QuickNoteView) => {
       setView(shown);
+      if (shown === "clipboard") openOnNewest();
       focusView(shown);
     },
-    [focusView],
+    [focusView, openOnNewest],
   );
 
   useEffect(() => {
@@ -80,7 +82,6 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
       .onShown((shown) => {
         show(shown);
         void refreshDestination();
-        if (shown === "clipboard") void history.refresh();
       })
       .then(
         (stop) => {
@@ -93,7 +94,7 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
       cancelled = true;
       unlisten?.();
     };
-  }, [api, show, history.refresh]);
+  }, [api, show]);
 
   const keepEverything = useCallback(async () => {
     flushEditor.current?.();

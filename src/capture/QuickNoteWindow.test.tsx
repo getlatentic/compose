@@ -83,6 +83,10 @@ function press(key: string, modifiers: Partial<Pick<KeyboardEvent, "metaKey" | "
   fireEvent.keyDown(document.activeElement ?? document.body, { key, ...modifiers });
 }
 
+function selectedClip(): string {
+  return screen.getByRole("option", { selected: true }).textContent ?? "";
+}
+
 describe("the quick-note window", () => {
   it("saves the note as typed with ⌘↩", async () => {
     const fake = fakeCaptureApi();
@@ -193,6 +197,56 @@ describe("the clipboard in the quick-note window", () => {
     await screen.findByText("First copy");
     act(() => fake.copy(clip("c2", "Just copied")));
     await screen.findByText("Just copied");
+  });
+
+  it("opens on the newest copy with the search cleared, whichever entry was picked before", async () => {
+    const fake = fakeCaptureApi({ clips: [clip("c1", "Newest"), clip("c2", "Older")] });
+    await open(fake.api);
+    act(() => fake.show("clipboard"));
+    await waitFor(() => expect(selectedClip()).toContain("Newest"));
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
+    expect(selectedClip()).toContain("Older");
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "old" } });
+
+    act(() => fake.show("notes"));
+    act(() => fake.show("clipboard"));
+    await waitFor(() => expect(selectedClip()).toContain("Newest"));
+    expect(screen.getByRole<HTMLInputElement>("searchbox").value).toBe("");
+  });
+
+  it("selects the newest copy rather than a pinned entry listed above it, so Return pastes what was copied last", async () => {
+    const fake = fakeCaptureApi({ clips: [clip("c1", "Just copied"), clip("c2", "Pinned address", { pinned: true })] });
+    await open(fake.api);
+    act(() => fake.show("clipboard"));
+    await waitFor(() => expect(selectedClip()).toContain("Just copied"));
+    expect(screen.getAllByRole("option")[0]?.textContent).toContain("Pinned address");
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
+    await waitFor(() => expect(fake.api.clipboard.copy).toHaveBeenCalledWith("c1"));
+  });
+
+  it("moves to each new copy while the newest is selected, and stays on an entry the user picked", async () => {
+    const fake = fakeCaptureApi({ clips: [clip("c1", "First copy"), clip("c2", "Earlier")] });
+    await open(fake.api);
+    act(() => fake.show("clipboard"));
+    await waitFor(() => expect(selectedClip()).toContain("First copy"));
+    act(() => fake.copy(clip("c3", "Second copy")));
+    await waitFor(() => expect(selectedClip()).toContain("Second copy"));
+
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
+    act(() => fake.copy(clip("c4", "Third copy")));
+    await screen.findByText("Third copy");
+    expect(selectedClip()).toContain("First copy");
+  });
+
+  it("keeps the keyboard in the search box when an entry is clicked, so Return copies that entry", async () => {
+    const fake = fakeCaptureApi({ clips: [clip("c1", "Newest"), clip("c2", "Older")] });
+    await open(fake.api);
+    act(() => fake.show("clipboard"));
+    const older = (await screen.findByText("Older")).closest("li")!;
+    expect(fireEvent.mouseDown(older)).toBe(false);
+    fireEvent.click(older);
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
+    await waitFor(() => expect(fake.api.clipboard.copy).toHaveBeenCalledWith("c2"));
   });
 
   it("copies an entry back and closes on Return, to paste where the user was", async () => {
