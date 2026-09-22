@@ -12,9 +12,9 @@
 use std::ffi::CStr;
 use std::sync::OnceLock;
 
-use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, NSObjectProtocol};
-use objc2::{msg_send, sel, ClassType};
-use objc2_app_kit::{NSPanel, NSWindow, NSWindowStyleMask};
+use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, NSObjectProtocol, Sel};
+use objc2::{msg_send, sel, ClassType, MainThreadMarker};
+use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSPanel, NSWindow, NSWindowStyleMask};
 
 /// Where tao keeps whether a window may take the keyboard; tao finds it by name.
 const TAO_FOCUSABLE: &CStr = c"focusable";
@@ -71,8 +71,68 @@ fn panel_class() -> &'static AnyClass {
         let mut builder = ClassBuilder::new(c"ComposeCapturePanel", NSPanel::class())
             .expect("the capture panel class is registered once");
         builder.add_ivar::<Bool>(TAO_FOCUSABLE);
+        // SAFETY: the function matches `- (BOOL)performKeyEquivalent:(NSEvent *)event`.
+        unsafe {
+            builder.add_method(
+                sel!(performKeyEquivalent:),
+                perform_key_equivalent as unsafe extern "C-unwind" fn(*mut AnyObject, Sel, *mut NSEvent) -> Bool,
+            );
+        }
         builder.register()
     })
+}
+
+/// The panel's own editing shortcuts. They are the menu bar's, and while the
+/// panel is over another app the menu bar is that app's: without this, ⌘V would
+/// paste nothing. Cut, copy and paste go straight to the page as the menu's
+/// actions would; select-all and undo reach the page's editor first, which
+/// keeps its own undo history, and act natively only when it leaves them.
+unsafe extern "C-unwind" fn perform_key_equivalent(this: *mut AnyObject, _cmd: Sel, event: *mut NSEvent) -> Bool {
+    // SAFETY: AppKit calls this with the panel and a live key event.
+    let (this, event) = unsafe { (&*this, &*event) };
+    let shortcut = editing_shortcut(event);
+    if let Some((action, true)) = shortcut {
+        if send_action(this, action) {
+            return Bool::YES;
+        }
+    }
+    // SAFETY: NSPanel implements it, with the same signature.
+    let handled: Bool = unsafe { msg_send![super(this, NSPanel::class()), performKeyEquivalent: event] };
+    match shortcut {
+        Some((action, false)) if !handled.as_bool() => Bool::new(send_action(this, action)),
+        _ => handled,
+    }
+}
+
+fn editing_shortcut(event: &NSEvent) -> Option<(Sel, bool)> {
+    editing_action(event.modifierFlags(), &event.charactersIgnoringModifiers()?.to_string())
+}
+
+/// The editing action a key equivalent names, and whether it goes to the page
+/// directly (`true`) or only when the page does not take the key itself.
+fn editing_action(flags: NSEventModifierFlags, key: &str) -> Option<(Sel, bool)> {
+    let flags = flags & NSEventModifierFlags::DeviceIndependentFlagsMask;
+    let shifted = flags.contains(NSEventModifierFlags::Shift);
+    if !flags.contains(NSEventModifierFlags::Command) || flags.intersects(NSEventModifierFlags::Control | NSEventModifierFlags::Option) {
+        return None;
+    }
+    match (key.to_lowercase().as_str(), shifted) {
+        ("x", false) => Some((sel!(cut:), true)),
+        ("c", false) => Some((sel!(copy:), true)),
+        ("v", false) => Some((sel!(paste:), true)),
+        ("a", false) => Some((sel!(selectAll:), false)),
+        ("z", false) => Some((sel!(undo:), false)),
+        ("z", true) => Some((sel!(redo:), false)),
+        _ => None,
+    }
+}
+
+fn send_action(sender: &AnyObject, action: Sel) -> bool {
+    let Some(mtm) = MainThreadMarker::new() else { return false };
+    // SAFETY: a nil target sends `action` along the responder chain from the key
+    // window's first responder, as a menu item does; AppKit calls this method
+    // on the main thread.
+    unsafe { NSApplication::sharedApplication(mtm).sendAction_to_from(action, None, Some(sender)) }
 }
 
 #[cfg(test)]
@@ -99,6 +159,30 @@ mod tests {
             .expect("NSWindow implements _setPreventsActivation:");
         assert_eq!(method.name(), sel!(_setPreventsActivation:));
         assert_eq!(method.arguments_count(), 3, "self, _cmd and one BOOL");
+    }
+
+    #[test]
+    fn cut_copy_and_paste_go_straight_to_the_page() {
+        let command = NSEventModifierFlags::Command;
+        assert_eq!(editing_action(command, "v"), Some((sel!(paste:), true)));
+        assert_eq!(editing_action(command, "c"), Some((sel!(copy:), true)));
+        assert_eq!(editing_action(command, "x"), Some((sel!(cut:), true)));
+    }
+
+    #[test]
+    fn select_all_and_undo_are_the_editors_first() {
+        let command = NSEventModifierFlags::Command;
+        assert_eq!(editing_action(command, "a"), Some((sel!(selectAll:), false)));
+        assert_eq!(editing_action(command, "z"), Some((sel!(undo:), false)));
+        assert_eq!(editing_action(command | NSEventModifierFlags::Shift, "Z"), Some((sel!(redo:), false)));
+    }
+
+    #[test]
+    fn other_shortcuts_are_left_alone() {
+        assert_eq!(editing_action(NSEventModifierFlags::Command, "b"), None, "the editor's bold");
+        assert_eq!(editing_action(NSEventModifierFlags::Command | NSEventModifierFlags::Control, "v"), None);
+        assert_eq!(editing_action(NSEventModifierFlags::Command | NSEventModifierFlags::Option, "v"), None);
+        assert_eq!(editing_action(NSEventModifierFlags::empty(), "v"), None, "typing a v");
     }
 
     #[test]
