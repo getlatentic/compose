@@ -81,9 +81,25 @@ objc2-foundation = { version = "0.3", features = [
   "NSDictionary",
   "NSUserDefaults",
   "NSValue",
+  "NSArray",
+  "NSDate",
+  "NSUserActivity",
 ] }
 objc2-core-foundation = { version = "0.3", features = ["CFArray", "CFBase", "CFCGTypes", "CFString"] }
 block2 = "0.6"
+objc2-core-spotlight = { version = "0.3", default-features = false, features = [
+  "std",
+  "block2",
+  "objc2-uniform-type-identifiers",
+  "CSSearchableIndex",
+  "CSSearchableItem",
+  "CSSearchableItemAttributeSet",
+  "CSSearchableItemAttributeSet_Documents",
+  "CSSearchableItemAttributeSet_General",
+  "CSSearchableItemAttributeSet_Media",
+  "CSSearchableItemAttributeSet_Messaging",
+] }
+objc2-uniform-type-identifiers = { version = "0.3", default-features = false, features = ["std", "UTType", "UTCoreTypes"] }
 objc2-web-kit = { version = "0.3", features = [
   "WKWebView",
   "WKWebViewConfiguration",

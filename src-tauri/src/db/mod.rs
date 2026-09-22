@@ -61,6 +61,8 @@ pub use document_changes::DocumentChange;
 use document_changes::DocumentObserver;
 mod recent;
 pub use recent::RecentDocument;
+mod spotlight_items;
+pub use spotlight_items::IndexableDocument;
 
 // Snapshot blob storage: compression codec (deflate, with a self-describing
 // `codec` tag and a raw fallback) and the retention policy that bounds a
@@ -1244,6 +1246,14 @@ fn migrate_global_database(db_path: &Path) -> Result<(), String> {
               key text primary key,
               value_json text not null,
               updated_at integer not null
+            );
+            -- What Compose last gave Spotlight, so a launch indexes only the
+            -- notes that changed since.
+            create table if not exists spotlight_items (
+              vault_id text not null,
+              relative_path text not null,
+              content_hash text not null,
+              primary key (vault_id, relative_path)
             );
             create table if not exists trash_entries (
               id text primary key,

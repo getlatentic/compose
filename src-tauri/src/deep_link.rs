@@ -67,24 +67,28 @@ pub fn authorised_path(workspaces: &[(String, PathBuf)], path: &str) -> Option<S
 /// Do what a `compose://` link asks, when this app offers it: open a note inside
 /// one of the workspaces, or the quick-note window.
 pub fn follow(app: &tauri::AppHandle, url: &Url) {
-    use tauri::Manager;
-
     match parse(url) {
-        Some(Request::Open { path }) => {
-            let Ok(list) = app.state::<crate::workspace::WorkspaceRegistry>().list() else {
-                return;
-            };
-            let roots = list
-                .workspaces
-                .into_iter()
-                .map(|record| (record.id, PathBuf::from(record.path)))
-                .collect::<Vec<_>>();
-            if let Some(path) = authorised_path(&roots, &path) {
-                crate::open_with::open_in_app(app, path);
-            }
-        }
+        Some(Request::Open { path }) => open_note(app, &path),
         Some(Request::Capture) => crate::capture::open(app),
         None => {}
+    }
+}
+
+/// Open the note at `path`, named from outside the app — a link, a Spotlight
+/// result — when it is inside one of the workspaces.
+pub fn open_note(app: &tauri::AppHandle, path: &str) {
+    use tauri::Manager;
+
+    let Ok(list) = app.state::<crate::workspace::WorkspaceRegistry>().list() else {
+        return;
+    };
+    let roots = list
+        .workspaces
+        .into_iter()
+        .map(|record| (record.id, PathBuf::from(record.path)))
+        .collect::<Vec<_>>();
+    if let Some(path) = authorised_path(&roots, path) {
+        crate::open_with::open_in_app(app, path);
     }
 }
 
