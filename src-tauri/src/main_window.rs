@@ -1,7 +1,8 @@
-//! The main window. Made at launch, and made again whenever the user comes back
-//! to a Compose without one: its Dock icon, or a note opened from the Finder,
-//! Spotlight, a link or a Service. Closing it leaves Compose running, so the
-//! quick note's shortcuts keep working.
+//! The main window. Made at launch — unless macOS opened Compose at login, when
+//! it starts with only the quick note — and made again whenever the user comes
+//! back to a Compose without one: its Dock icon, or a note opened from the
+//! Finder, Spotlight, a link or a Service. Closing it leaves Compose running, so
+//! the quick note's shortcuts keep working.
 
 use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
 

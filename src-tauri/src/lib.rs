@@ -10,6 +10,7 @@ mod services;
 mod share_inbox;
 mod spotlight;
 mod launch_window;
+mod login_item;
 mod main_window;
 mod stale_state;
 mod user_tool_dirs;
@@ -136,7 +137,13 @@ pub fn run() {
             boot_native_mark("setup-entered");
             boot_native_mark("setup-start");
             let app_handle = app.handle().clone();
-            main_window::open_at_launch(&app_handle, boot_script);
+            // Opened at login, Compose starts with only the quick note: its
+            // window waits until the user comes to it. Asked now, while the
+            // launch's own Apple event is still the current one.
+            let at_login = login_item::launched_at_login();
+            if !at_login {
+                main_window::open_at_launch(&app_handle, boot_script);
+            }
             // Capture back-end panics into the local error log (best-effort),
             // then chain to the default hook. Resolve the path once here so the
             // hook needs no AppHandle.
@@ -240,7 +247,7 @@ pub fn run() {
             share_inbox::start(&app_handle);
             // After the metadata store, which holds the chosen shortcut and
             // whether clipboard history is on.
-            capture::start(&app_handle);
+            capture::start(&app_handle, !at_login);
             clipboard::start(&app_handle);
             // Reap any agent child a prior hard crash orphaned, and point the
             // runner at the data dir so this session records its own live runs
@@ -340,6 +347,9 @@ pub fn run() {
             files::workspace_files_snapshot,
             launch_window::launch_window_ready,
             launch_window::launch_document_parsed,
+            login_item::login_item_status,
+            login_item::login_item_set,
+            login_item::login_item_settings,
             files::workspace_scan_folders,
             files::workspace_write_binary_file,
             files::workspace_write_file,
@@ -414,8 +424,8 @@ pub fn run() {
                 }
             }
         }
-        // The Dock icon of a Compose running without its window, as once the
-        // window was closed while the quick note keeps Compose running.
+        // The Dock icon of a Compose running without its window, as after a
+        // login launch or once the window was closed.
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => main_window::ensure(app_handle),
         // Quitting — signal every in-flight agent child so it doesn't orphan

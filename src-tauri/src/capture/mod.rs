@@ -28,7 +28,7 @@ use crate::workspace::{WorkspaceList, WorkspaceRecord, WorkspaceRegistry};
 /// Tells the main window a note was captured.
 pub const NOTE_CAPTURED_EVENT: &str = "compose:note-captured";
 /// Long enough after launch that building the capture window never competes
-/// with Compose's first screen.
+/// with the main window's first screen.
 const PREPARE_DELAY: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -85,9 +85,10 @@ pub fn plugin() -> tauri::plugin::TauriPlugin<Wry> {
         .build()
 }
 
-/// Register the chosen shortcuts, then build the window once launch is done.
-/// Runs after the metadata store is open, since that is where the choices live.
-pub fn start(app: &AppHandle) {
+/// Register the chosen shortcuts, then build the window they show: soon after
+/// the main window's launch, or at once when there is none to wait for, as at
+/// login. Runs after the metadata store is open, since that is where the choices live.
+pub fn start(app: &AppHandle, main_window_opening: bool) {
     let metadata = app.state::<MetadataStore>();
     let registered = shortcut::all_chosen(&metadata).and_then(|chosen| shortcut::register(app, &chosen));
     if let Err(error) = registered {
@@ -95,7 +96,9 @@ pub fn start(app: &AppHandle) {
     }
     let handle = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(PREPARE_DELAY);
+        if main_window_opening {
+            std::thread::sleep(PREPARE_DELAY);
+        }
         let window_owner = handle.clone();
         let _ = handle.run_on_main_thread(move || {
             if let Err(error) = window::prepare(&window_owner) {
