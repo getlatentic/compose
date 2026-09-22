@@ -12,7 +12,6 @@ export interface NotesViewProps {
   notes: QuickNotes;
   saving: boolean;
   onView(view: EditorView | null, noteId: string): void;
-  onFlush(flush: (() => void) | null): void;
   /** Starts a note, or goes to the blank one already there, with the caret in it. */
   onNewNote(): void;
   onSave(): void;
@@ -20,7 +19,7 @@ export interface NotesViewProps {
 }
 
 /** The quick notes: the list, the one being written, and what to do with it. */
-export function NotesView({ api, notes, saving, onView, onFlush, onNewNote, onSave, onClose }: NotesViewProps) {
+export function NotesView({ api, notes, saving, onView, onNewNote, onSave, onClose }: NotesViewProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const active = notes.active;
 
@@ -38,7 +37,7 @@ export function NotesView({ api, notes, saving, onView, onFlush, onNewNote, onSa
   }, [onNewNote]);
   const askToDelete = useCallback(() => {
     if (!active) return;
-    if (active.body.trim()) setConfirmingDelete(true);
+    if (notes.hasText(active.id)) setConfirmingDelete(true);
     else void notes.remove(active.id);
   }, [active, notes]);
   const confirmDelete = useCallback(() => {
@@ -75,7 +74,7 @@ export function NotesView({ api, notes, saving, onView, onFlush, onNewNote, onSa
       </nav>
       <section className="quick-note__editor" aria-label="Quick note">
         {active ? (
-          <NoteEditor key={active.id} api={api} note={active} onChange={notes.edit} onView={onView} onFlush={onFlush} />
+          <NoteEditor key={active.id} api={api} note={active} onChange={notes.edit} onView={onView} onFlush={notes.onEditorFlush} />
         ) : null}
       </section>
       <footer className="quick-note__footer">

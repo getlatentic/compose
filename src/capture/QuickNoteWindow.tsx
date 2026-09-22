@@ -25,7 +25,6 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
   const editor = useRef<{ view: EditorView; noteId: string } | null>(null);
   // Waits for a note's editor to open: a new note is only on screen a render later.
   const whenOpen = useRef<{ noteId: string; act(view: EditorView): void } | null>(null);
-  const flushEditor = useRef<(() => void) | null>(null);
   const search = useRef<HTMLInputElement>(null);
 
   /** Whenever the note being written changes, typing goes on in it. */
@@ -47,9 +46,6 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
     const open = editor.current;
     if (open?.noteId === noteId) act(open.view);
     else whenOpen.current = { noteId, act };
-  }, []);
-  const onFlush = useCallback((flush: (() => void) | null) => {
-    flushEditor.current = flush;
   }, []);
 
   const focusView = useCallback((shown: QuickNoteView) => {
@@ -96,28 +92,24 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
     };
   }, [api, show]);
 
-  const keepEverything = useCallback(async () => {
-    flushEditor.current?.();
-    await notes.flush();
-  }, [notes]);
+  const keepNotes = notes.flush;
 
   useEffect(() => {
-    const onBlur = () => void keepEverything();
+    const onBlur = () => void keepNotes();
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
-  }, [keepEverything]);
+  }, [keepNotes]);
 
   const close = useCallback(async () => {
-    await keepEverything();
+    await keepNotes();
     await api.close();
-  }, [api, keepEverything]);
+  }, [api, keepNotes]);
 
   const save = useCallback(async () => {
     const active = notes.active;
     if (!active || saving) return;
-    flushEditor.current?.();
     setSaving(true);
-    await notes.save(active.id, editor.current?.view.state.doc.toString());
+    await notes.save(active.id);
     setSaving(false);
   }, [notes, saving]);
 
@@ -211,7 +203,6 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
           notes={notes}
           saving={saving}
           onView={onView}
-          onFlush={onFlush}
           onNewNote={newNote}
           onSave={save}
           onClose={close}

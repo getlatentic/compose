@@ -25,6 +25,13 @@ export interface QuickNotes {
   save(id: string, body?: string): Promise<boolean>;
   /** Keeps whatever is still waiting for a pause in typing. */
   flush(): Promise<void>;
+  /** Whether a note has text, counting what was typed a moment ago. */
+  hasText(id: string): boolean;
+  /**
+   * The editor's way to hand over what was typed since its last report, which
+   * it would drop on closing; `null` once it is gone.
+   */
+  onEditorFlush(flush: (() => void) | null): void;
   dismissError(): void;
 }
 
@@ -39,6 +46,9 @@ export function useQuickNotes(api: CaptureApi): QuickNotes {
   const inFlight = useRef(new Map<string, Promise<void>>());
   const current = useRef(notes);
   current.current = notes;
+  // The editor reports typing only after a pause; this takes it now.
+  const editorFlush = useRef<(() => void) | null>(null);
+  const takeTyped = useCallback(() => editorFlush.current?.(), []);
 
   const fail = useCallback((caught: unknown) => setError(caught instanceof Error ? caught.message : String(caught)), []);
 
@@ -103,12 +113,36 @@ export function useQuickNotes(api: CaptureApi): QuickNotes {
   );
 
   const flush = useCallback(async () => {
+    takeTyped();
     await Promise.all([...waiting.current.keys()].map((id) => keepNow(id)));
-  }, [keepNow]);
+  }, [keepNow, takeTyped]);
+
+  /** A note's text as last typed, which can be ahead of the render showing it. */
+  const latestBody = useCallback(
+    (id: string) => waiting.current.get(id)?.body ?? current.current.find((note) => note.id === id)?.body ?? "",
+    [],
+  );
+
+  const hasText = useCallback(
+    (id: string) => {
+      takeTyped();
+      return latestBody(id).trim() !== "";
+    },
+    [latestBody, takeTyped],
+  );
+
+  const select = useCallback(
+    (id: string) => {
+      takeTyped();
+      setActiveId(id);
+    },
+    [takeTyped],
+  );
 
   const create = useCallback(
     (body = "") => {
-      const blank = current.current.find((note) => !note.body && !kept.current.has(note.id));
+      takeTyped();
+      const blank = current.current.find((note) => !kept.current.has(note.id) && !latestBody(note.id));
       if (blank && !body) {
         setActiveId(blank.id);
         return blank;
@@ -119,7 +153,7 @@ export function useQuickNotes(api: CaptureApi): QuickNotes {
       if (body) edit(note.id, body);
       return note;
     },
-    [edit],
+    [edit, latestBody, takeTyped],
   );
 
   const drop = useCallback((id: string) => {
@@ -157,7 +191,8 @@ export function useQuickNotes(api: CaptureApi): QuickNotes {
 
   const save = useCallback(
     async (id: string, body?: string) => {
-      const text = body ?? current.current.find((each) => each.id === id)?.body ?? "";
+      takeTyped();
+      const text = body ?? latestBody(id);
       if (!text.trim()) return false;
       try {
         await settle(id);
@@ -169,13 +204,17 @@ export function useQuickNotes(api: CaptureApi): QuickNotes {
         return false;
       }
     },
-    [api, drop, fail, settle],
+    [api, drop, fail, latestBody, settle, takeTyped],
   );
+
+  const onEditorFlush = useCallback((flush: (() => void) | null) => {
+    editorFlush.current = flush;
+  }, []);
 
   const active = useMemo(() => notes.find((note) => note.id === activeId) ?? notes[0] ?? null, [notes, activeId]);
   const dismissError = useCallback(() => setError(null), []);
 
-  return { notes, active, loaded, error, select: setActiveId, create, edit, remove, save, flush, dismissError };
+  return { notes, active, loaded, error, select, create, edit, remove, save, flush, hasText, onEditorFlush, dismissError };
 }
 
 /** The notes the app has, with the old single draft moved in as one of them. */

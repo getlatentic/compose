@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fakeCaptureApi } from "../testing/fakeCaptureApi";
-import { useQuickNotes } from "./useQuickNotes";
+import { useQuickNotes, type QuickNotes } from "./useQuickNotes";
 
 const OLD_DRAFT_KEY = "compose.captureDraft.v1";
 
@@ -14,6 +14,16 @@ async function loaded(api = fakeCaptureApi().api) {
   const hook = renderHook(() => useQuickNotes(api));
   await waitFor(() => expect(hook.result.current.loaded).toBe(true));
   return hook;
+}
+
+/** The editor holds `body` for note `id` and reports it only when flushed, as it does inside its pause. */
+function typedNotReported(notes: QuickNotes, id: string, body: string) {
+  let pending: string | null = body;
+  notes.onEditorFlush(() => {
+    if (pending === null) return;
+    notes.edit(id, pending);
+    pending = null;
+  });
 }
 
 describe("quick notes", () => {
@@ -73,6 +83,38 @@ describe("quick notes", () => {
     });
     expect(result.current.notes).toHaveLength(3);
     expect(result.current.active?.id).toBe(first.id);
+  });
+
+  it("take what was typed a moment ago before starting or moving to another note, so it is neither reused nor lost", async () => {
+    const { result } = await loaded(fakeCaptureApi({ notes: [{ id: "a", body: "Groceries", createdAt: 1, updatedAt: 1 }] }).api);
+    const bodyOf = (id: string) => result.current.notes.find((note) => note.id === id)?.body;
+    let callAda!: { id: string };
+    act(() => {
+      callAda = result.current.create();
+    });
+
+    act(() => typedNotReported(result.current, callAda.id, "Call Ada"));
+    let next!: { id: string };
+    act(() => {
+      next = result.current.create();
+    });
+    expect(next.id).not.toBe(callAda.id);
+    expect(bodyOf(callAda.id)).toBe("Call Ada");
+
+    act(() => typedNotReported(result.current, next.id, "Buy bread"));
+    act(() => result.current.select("a"));
+    expect(bodyOf(next.id)).toBe("Buy bread");
+  });
+
+  it("count what was typed a moment ago when asked whether a note has text", async () => {
+    const { result } = await loaded();
+    const id = result.current.active!.id;
+    act(() => typedNotReported(result.current, id, "Half a thought"));
+    let hasText = false;
+    act(() => {
+      hasText = result.current.hasText(id);
+    });
+    expect(hasText).toBe(true);
   });
 
   it("start a note with text, kept at once", async () => {
