@@ -37,6 +37,9 @@ enum OpenInCompose {
         _ = try await NSWorkspace.shared.open([link(toNoteAt: path)], withApplicationAt: app, configuration: forward())
     }
 
+    /// Opens the quick-note window.
+    static let newNoteLink = URL(string: "compose://capture")!
+
     /// Everything but unreserved ASCII and `/` is escaped: the app reads the query
     /// as a form, where `&`, `=` and `+` would end or change the path.
     static func link(toNoteAt path: String) -> URL {

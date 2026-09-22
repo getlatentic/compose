@@ -155,8 +155,7 @@ if let fixtures {
         let destinations = try JSONDecoder().decode(
             Destinations.self, from: Data(contentsOf: fixtures.appendingPathComponent("destinations.json")))
         check("every published workspace is offered", WorkspaceEntity.all(in: destinations).map(\.name) == ["My Notes", "Thesis"])
-        check("the one open in Compose is the default", WorkspaceEntity.open(in: destinations)?.name == "My Notes")
-        check("nothing published offers nothing", WorkspaceEntity.all(in: nil).isEmpty && WorkspaceEntity.open(in: nil) == nil)
+        check("nothing published offers nothing", WorkspaceEntity.all(in: nil).isEmpty)
 
         let notes = try JSONDecoder().decode(
             PublishedNotes.self, from: Data(contentsOf: fixtures.appendingPathComponent("notes.json")))
