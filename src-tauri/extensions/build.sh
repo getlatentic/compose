@@ -101,6 +101,37 @@ build_extension() {
   echo "[extensions] built $name.appex ($(lipo -archs "$appex/Contents/MacOS/$name"), $state)"
 }
 
+# Build a command-line helper that ships inside the app, signed with its own
+# entitlements for the same reason as an extension.
+# Args: <name> <identifier> <entitlements> <swift-file>...
+build_helper() {
+  local name="$1" identifier="$2" entitlements="$3"
+  shift 3
+  local helper="$OUT_DIR/$name" slices=() arch slice
+  for arch in "${ARCHS[@]}"; do
+    slice="$(mktemp -d)/$name-$arch"
+    xcrun --sdk macosx swiftc \
+      -target "${arch}-apple-macos12.0" \
+      -sdk "$SDK" \
+      -module-name "$name" \
+      -O -wmo \
+      -o "$slice" \
+      "$@"
+    slices+=("$slice")
+  done
+  if [ "${#slices[@]}" -gt 1 ]; then
+    lipo -create "${slices[@]}" -output "$helper"
+  else
+    cp "${slices[0]}" "$helper"
+  fi
+  local state="unsigned — it cannot reach the app group"
+  if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+    codesign --force --timestamp --options runtime --identifier "$identifier" \
+      --entitlements "$entitlements" --sign "$APPLE_SIGNING_IDENTITY" "$helper"
+    state="signed"
+  fi
+  echo "[extensions] built $name ($(lipo -archs "$helper"), $state)"
+}
 QUICKLOOK="$HERE/quicklook"
 build_extension ComposeQuickLook "$QUICKLOOK/Preview/Info.plist" \
   "$QUICKLOOK/ComposeQuickLook.entitlements" "QuickLookUI" \
@@ -115,6 +146,7 @@ if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   APP_GROUP="$APPLE_TEAM_ID.ai.latentic.compose"
   write_group_entitlements "$SHARE_ENTITLEMENTS" sandboxed "$APP_GROUP"
   write_group_entitlements "$OUT_DIR/Compose.entitlements" unsandboxed "$APP_GROUP"
+  write_group_entitlements "$OUT_DIR/ComposeClipper.entitlements" unsandboxed "$APP_GROUP"
 fi
 # Share hands over the files Compose opens, and macOS lets it only for the types
 # Compose declares — so the list the sheet checks comes from tauri.conf.json.
@@ -133,3 +165,10 @@ plutil -replace ComposeDocumentExtensions -json \
   "$SHARE_PLIST"
 RESOURCES="$HERE/share/Resources" build_extension ComposeShare "$SHARE_PLIST" "$SHARE_ENTITLEMENTS" \
   "AppKit SwiftUI" "$HERE/share/Sources"
+# The browser clipper's native-messaging host: a browser starts it to hand over
+# a clip, which it leaves in the share inbox using the share extension's code.
+build_helper ComposeClipper ai.latentic.compose.clipper "$OUT_DIR/ComposeClipper.entitlements" \
+  "$HERE/share/Sources/Contract.swift" \
+  "$HERE/share/Sources/ShareInbox.swift" \
+  "$HERE/share/Sources/ClipDraft.swift" \
+  "$HERE"/clipper/Sources/*.swift

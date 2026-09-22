@@ -60,6 +60,9 @@ pub struct Clip {
     /// A whole web page shared from Safari; the frontend files its article.
     #[serde(default)]
     pub page: Option<String>,
+    /// Markdown the browser clipper already made from the page.
+    #[serde(default)]
+    pub markdown: Option<String>,
     #[serde(default)]
     pub images: Vec<String>,
 }
@@ -74,6 +77,7 @@ pub struct PendingClip {
     pub html: Option<String>,
     pub text: Option<String>,
     pub page: Option<String>,
+    pub markdown: Option<String>,
 }
 
 impl From<StoredClip> for PendingClip {
@@ -84,6 +88,7 @@ impl From<StoredClip> for PendingClip {
             html: stored.clip.html,
             text: stored.clip.text,
             page: stored.clip.page,
+            markdown: stored.clip.markdown,
         }
     }
 }
@@ -101,8 +106,19 @@ mod tests {
     use crate::workspace::WorkspaceRecord;
 
     const CLIP_FIXTURE: &str = include_str!("../../extensions/share/Fixtures/clip.json");
+    const BROWSER_CLIP_FIXTURE: &str =
+        include_str!("../../extensions/share/Fixtures/browser-clip.json");
     const DESTINATIONS_FIXTURE: &str =
         include_str!("../../extensions/share/Fixtures/destinations.json");
+
+    #[test]
+    fn a_browser_clip_hands_the_frontend_its_markdown() {
+        let clip: Clip = serde_json::from_str(BROWSER_CLIP_FIXTURE).expect("fixture decodes");
+        assert_eq!(clip.page, None);
+        let pending = PendingClip::from(StoredClip { id: clip.id.clone(), clip });
+        assert!(pending.markdown.as_deref().is_some_and(|markdown| markdown.contains("```")));
+        assert_eq!(pending.url.as_deref(), Some("https://www.latentic.ai/blog/a-clipped-article"));
+    }
 
     #[test]
     fn decodes_the_clip_the_extension_writes() {
