@@ -190,7 +190,13 @@ kbd {
 }
 
 .quick-note__editor .cm-editor-host__scroll {
-  padding: 0.25rem 1rem;
+  padding: 0.25rem 0.75rem;
+}
+
+/* The editor's page margins are made for a full window; in a window this small
+   they leave the note a narrow column inside a wide frame. */
+.quick-note__editor .cm-scroller {
+  padding: 0.25rem 0;
 }
 
 .quick-note-toolbar {
