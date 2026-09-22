@@ -135,7 +135,7 @@ export default defineConfig(async () => ({
       "**/*.baseline.spec.ts",
       // Real-browser (WebKit) suites — geometry/caret behavior jsdom can't
       // test. Run via `pnpm test:browser` (vitest.browser.config.ts).
-      "**/*.browser.test.ts",
+      "**/*.browser.test.{ts,tsx}",
       // Agent worktree mirrors (.claude/worktrees/<name>/src/**) are full
       // copies of the repo; without this, vitest collects every suite a
       // second/third time and the count silently triples.
