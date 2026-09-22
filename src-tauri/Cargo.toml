@@ -84,6 +84,7 @@ objc2-foundation = { version = "0.3", features = [
   "NSArray",
   "NSDate",
   "NSUserActivity",
+  "NSBundle",
 ] }
 objc2-core-foundation = { version = "0.3", features = ["CFArray", "CFBase", "CFCGTypes", "CFString"] }
 block2 = "0.6"

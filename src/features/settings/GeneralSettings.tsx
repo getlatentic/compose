@@ -7,6 +7,7 @@ import { revealErrorLog } from "../../lib/diagnostics/errorReporter";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { AppearanceSection } from "./AppearanceSection";
 import { DefaultMarkdownAppSection } from "./DefaultMarkdownAppSection";
+import { FinderSection } from "./FinderSection";
 import { QuickCaptureSection } from "./QuickCaptureSection";
 import { ResetDataSection } from "./ResetDataSection";
 import { SpotlightSection } from "./SpotlightSection";
@@ -32,6 +33,7 @@ export function GeneralSettings() {
         <>
           <QuickCaptureSection />
           <SpotlightSection />
+          <FinderSection />
           <DefaultMarkdownAppSection />
           <PrivacySection />
           <ReportProblemSection />
