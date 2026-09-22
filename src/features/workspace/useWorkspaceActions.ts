@@ -14,6 +14,7 @@ import {
 import { countUnsavedBuffers } from "../../lib/workspace/unsavedBuffers";
 import { useConfirm } from "../dialogs/ConfirmProvider";
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { showAddedWorkspace } from "./showAddedWorkspace";
 
 // Browser-preview only: the virtual "sample workspace" id (the path is just an
 // identifier in the browser — no disk access). Overridable for local dev.
@@ -99,13 +100,7 @@ export function useWorkspaceActions(): WorkspaceActions {
         // that follows reads the imported files (not the demo seed).
         await applyImportedFolder(list.activeWorkspaceId, importedFiles);
       }
-      hydrateWorkspaces(list);
-      const newWorkspace =
-        list.workspaces.find((item) => item.id === list.activeWorkspaceId) ??
-        list.workspaces[list.workspaces.length - 1];
-      if (newWorkspace) {
-        switchWorkspace(newWorkspace.id);
-      }
+      showAddedWorkspace(list);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not open folder");
     } finally {

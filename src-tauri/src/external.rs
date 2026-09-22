@@ -56,6 +56,11 @@ pub enum OpenTarget {
     External {
         path: String,
     },
+    /// A folder, such as an Obsidian vault handed over by Obsidian: it opens
+    /// as a workspace, added if Compose does not have it yet.
+    Folder {
+        path: String,
+    },
 }
 
 #[derive(Default)]
@@ -250,6 +255,11 @@ fn document_file_path(raw: &str) -> Result<PathBuf, String> {
 /// it and would close a tab it cannot find.
 pub(crate) fn resolve_target(workspaces: &[(String, PathBuf)], raw: &Path) -> OpenTarget {
     let canonical = std::fs::canonicalize(raw).unwrap_or_else(|_| raw.to_path_buf());
+    if canonical.is_dir() {
+        return OpenTarget::Folder {
+            path: canonical.to_string_lossy().into_owned(),
+        };
+    }
     if DocumentKind::of(&canonical) != Some(DocumentKind::Markdown) {
         return OpenTarget::External {
             path: canonical.to_string_lossy().into_owned(),
@@ -575,6 +585,26 @@ mod tests {
             resolve_target(&workspaces, &in_inner),
             OpenTarget::External { .. }
         ));
+    }
+
+    #[test]
+    fn a_folder_opens_as_a_workspace() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = dir.path().join("Vault");
+        std::fs::create_dir_all(&vault).expect("vault");
+
+        assert_eq!(
+            resolve_target(&[], &vault),
+            OpenTarget::Folder {
+                path: std::fs::canonicalize(&vault).unwrap().to_string_lossy().into_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_folder_reaches_the_frontend_by_kind_and_path() {
+        let value = serde_json::to_value(OpenTarget::Folder { path: "/v".to_owned() }).expect("json");
+        assert_eq!(value, serde_json::json!({ "kind": "folder", "path": "/v" }));
     }
 
     #[test]
