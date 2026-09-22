@@ -20,6 +20,7 @@ pub mod events;
 pub mod export;
 pub mod external;
 pub mod files;
+mod finder_extension;
 mod harness;
 pub mod index;
 pub mod logging;
@@ -412,6 +413,8 @@ pub fn run() {
             clipboard::clipboard_clear,
             clipboard::clipboard_privacy_settings,
             share_inbox::share_inbox_import,
+            finder_extension::finder_extension_enabled,
+            finder_extension::finder_extension_settings,
             spotlight::spotlight_enabled,
             spotlight::spotlight_set_enabled,
             external::external_list,

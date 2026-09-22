@@ -7,6 +7,9 @@ struct Destinations: Codable, Equatable {
     struct Workspace: Codable, Equatable, Identifiable {
         let id: String
         let name: String
+        /// Its folder. Optional: a Compose published before the Finder
+        /// extension existed wrote none.
+        var path: String? = nil
     }
 
     let version: Int
@@ -39,6 +42,9 @@ struct Clip: Codable, Equatable {
     let images: [String]
     /// The user asked to see the note: the app opens it once filed.
     let open: Bool
+    /// The folder the note goes in, absolute, when not its workspace's root:
+    /// the Finder's New Compose Note. Its workspace is the one it is inside.
+    var folder: String? = nil
 }
 
 /// The notes changed most recently across every workspace, newest first, as the

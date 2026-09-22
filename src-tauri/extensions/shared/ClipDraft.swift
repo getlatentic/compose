@@ -26,7 +26,7 @@ struct ClipDraft: Equatable {
         return "Clipping"
     }
 
-    func clip(id: String, workspaceId: String?, createdAt: Date, open: Bool = false) -> Clip {
+    func clip(id: String, workspaceId: String?, createdAt: Date, open: Bool = false, folder: String? = nil) -> Clip {
         Clip(
             version: Clip.currentVersion,
             id: id,
@@ -39,7 +39,8 @@ struct ClipDraft: Equatable {
             page: page,
             markdown: nil,
             images: images.map(\.fileName),
-            open: open
+            open: open,
+            folder: folder
         )
     }
 

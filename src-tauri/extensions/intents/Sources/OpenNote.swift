@@ -12,7 +12,7 @@ struct OpenNoteIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        try await OpenInCompose.note(at: note.id)
+        try await OpenInCompose.notes(at: [note.id])
         return .result()
     }
 }

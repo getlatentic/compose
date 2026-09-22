@@ -193,6 +193,7 @@ fn file_capture(
         registry,
         metadata,
         &workspace.id,
+        "",
         &text::file_stem(&text),
         &text::content(&text),
     )

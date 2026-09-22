@@ -1,8 +1,7 @@
 import Foundation
 
-/// The files Compose opens where they are, rather than clipping them: the ones it
-/// declares to macOS, which build.sh copies from tauri.conf.json into this
-/// extension's Info.plist.
+/// The files Compose opens where they are: the ones it declares to macOS, which
+/// build.sh copies from tauri.conf.json into this extension's Info.plist.
 struct DocumentFiles {
     let extensions: Set<String>
 

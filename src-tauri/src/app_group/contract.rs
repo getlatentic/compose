@@ -21,6 +21,8 @@ pub struct Destinations {
 pub struct DestinationWorkspace {
     pub id: String,
     pub name: String,
+    /// The workspace's folder, which the Finder extension watches.
+    pub path: String,
 }
 
 impl Destinations {
@@ -34,6 +36,7 @@ impl Destinations {
                 .map(|workspace| DestinationWorkspace {
                     id: workspace.id.clone(),
                     name: workspace.name.clone(),
+                    path: workspace.path.clone(),
                 })
                 .collect(),
         }
@@ -67,6 +70,10 @@ pub struct Clip {
     /// The user asked to see the note: the app opens it once filed.
     #[serde(default)]
     pub open: bool,
+    /// The folder the note goes in, absolute, when not its workspace's root: the
+    /// Finder's New Note Here. Its workspace is the one it is inside.
+    #[serde(default)]
+    pub folder: Option<String>,
 }
 
 /// The notes changed most recently across every workspace, newest first, for
@@ -119,6 +126,7 @@ mod tests {
                 .expect("decodes");
         assert!(clip.images.is_empty() && clip.url.is_none() && clip.workspace_id.is_none());
         assert!(!clip.open, "a clip is filed without opening unless asked");
+        assert!(clip.folder.is_none());
     }
 
     #[test]
@@ -141,7 +149,7 @@ mod tests {
         let written = serde_json::to_value(Destinations::from_list(&list)).expect("encodes");
         let fixture: serde_json::Value =
             serde_json::from_str(DESTINATIONS_FIXTURE).expect("fixture parses");
-        assert_eq!(written, fixture, "paths and history stay in the app");
+        assert_eq!(written, fixture, "tabs and history stay in the app");
     }
 
     #[test]
