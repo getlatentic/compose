@@ -393,6 +393,7 @@ pub fn run() {
             clipboard::clipboard_pin,
             clipboard::clipboard_forget,
             clipboard::clipboard_clear,
+            clipboard::clipboard_privacy_settings,
             share_inbox::share_inbox_import,
             external::external_list,
             external::external_add,

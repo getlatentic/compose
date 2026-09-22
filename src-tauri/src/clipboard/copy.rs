@@ -77,7 +77,9 @@ pub fn to_item(copy: Copy) -> Option<NewClipboardItem> {
     })
 }
 
-fn is_private(copy: &Copy) -> bool {
+/// Marked private by the app that copied it, or copied from a password app:
+/// decided from its types and source alone, before anything is read.
+pub(super) fn is_private(copy: &Copy) -> bool {
     copy.types.iter().any(|kind| PRIVATE_MARKERS.contains(&kind.as_str()))
         || copy.source_bundle.as_deref().is_some_and(|bundle| PRIVATE_APPS.contains(&bundle))
 }

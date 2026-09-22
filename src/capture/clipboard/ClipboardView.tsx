@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from "react";
-import type { CaptureApi, ClipboardSummary } from "../captureApi";
+import type { CaptureApi, ClipboardAccess, ClipboardSummary } from "../captureApi";
 import { CopyIcon, DocumentIcon, IntoNoteIcon, NewNoteIcon, PinIcon, TextIcon, TrashIcon, WebLinkIcon } from "../icons";
 import { timeAgo } from "../timeAgo";
 import type { ClipboardHistoryState } from "./useClipboardHistory";
@@ -44,6 +44,7 @@ export function ClipboardView({ api, history, actions, searchRef }: ClipboardVie
   }, [history]);
   const keep = useCallback(() => setConfirmingClear(false), []);
   const turnOff = useCallback(() => void history.setEnabled(false), [history]);
+  const openPrivacySettings = useCallback(() => void history.openPrivacySettings(), [history]);
 
   if (history.enabled === false) return <HistoryOff onTurnOn={turnOn} />;
 
@@ -59,6 +60,7 @@ export function ClipboardView({ api, history, actions, searchRef }: ClipboardVie
         onChange={search}
         onKeyDown={navigate}
       />
+      {history.access === "allowed" ? null : <AccessNotice access={history.access} onOpenSettings={openPrivacySettings} />}
       <ul className="quick-note__clips" role="listbox" aria-label="Copied lately">
         {history.items.map((item) => (
           <ClipboardRow key={item.id} api={api} item={item} selected={item.id === history.selectedId} history={history} actions={actions} />
@@ -113,6 +115,23 @@ function HistoryOff({ onTurnOn }: { onTurnOn: () => void }) {
           Turn on clipboard history
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Why new copies are not arriving, and where the user changes that. */
+function AccessNotice({ access, onOpenSettings }: { access: Exclude<ClipboardAccess, "allowed">; onOpenSettings: () => void }) {
+  return (
+    <div role="status" className="quick-note__notice">
+      <p>
+        {access === "denied"
+          ? "macOS stops Compose from reading what other apps copy, so new copies are not kept."
+          : "macOS asks before Compose reads what other apps copy, so new copies are not kept."}{" "}
+        Set Compose to Allow under Paste from Other Apps.
+      </p>
+      <button type="button" className="quick-note__action" onClick={onOpenSettings}>
+        Open Privacy &amp; Security
+      </button>
     </div>
   );
 }

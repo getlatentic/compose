@@ -1,5 +1,9 @@
 /** What the quick-note window asks of the app, behind one seam so it can be tested. */
 
+import type { ClipboardAccess } from "../lib/ipc/clipboardClient";
+
+export type { ClipboardAccess };
+
 /** The part of the window a shortcut opens. */
 export type QuickNoteView = "notes" | "clipboard";
 
@@ -36,6 +40,7 @@ export interface ClipboardEntry {
 
 export interface ClipboardHistory {
   enabled: boolean;
+  access: ClipboardAccess;
   items: ClipboardSummary[];
 }
 
@@ -48,7 +53,9 @@ export interface ClipboardApi {
   pin(id: string, pinned: boolean): Promise<void>;
   forget(id: string): Promise<void>;
   clear(): Promise<void>;
-  /** Calls back each time a new copy is kept. */
+  /** Opens the macOS setting that lets Compose read what other apps copy. */
+  openPrivacySettings(): Promise<void>;
+  /** Calls back each time a new copy is kept, or what macOS allows changes. */
   onChanged(callback: () => void): Promise<() => void>;
 }
 
@@ -112,6 +119,7 @@ export const tauriCaptureApi: CaptureApi = {
     pin: (id, pinned) => invoke("clipboard_pin", { id, pinned }),
     forget: (id) => invoke("clipboard_forget", { id }),
     clear: () => invoke("clipboard_clear"),
+    openPrivacySettings: () => invoke("clipboard_privacy_settings"),
     onChanged: (callback) => listen<null>("clipboard:changed", () => callback()),
   },
 };

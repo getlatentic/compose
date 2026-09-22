@@ -1,6 +1,7 @@
 //! Clipboard history: what the user copies in any app, kept so it can be found
 //! again from the quick-note window. Off until the user turns it on; passwords
-//! and other private copies are never kept (see `copy`).
+//! and other private copies are never kept (see `copy`), and nothing is read
+//! unless macOS lets Compose read other apps' copies without asking.
 
 mod copy;
 #[cfg(target_os = "macos")]
@@ -8,7 +9,7 @@ mod mac;
 #[cfg(target_os = "macos")]
 mod watch;
 
-use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU8, Ordering};
 
 use base64::Engine;
 use serde::Serialize;
@@ -25,17 +26,54 @@ const KEEP: usize = 300;
 /// Entries the window asks for at a time.
 const LISTED: usize = 200;
 
-/// Whether history is on, and the clipboard's change counter at the last look.
+/// Whether history is on, what macOS lets it read, and the clipboard's change
+/// counter at the last look.
 #[derive(Default)]
 pub struct ClipboardHistory {
     enabled: AtomicBool,
+    access: AtomicU8,
     seen: AtomicIsize,
+}
+
+impl ClipboardHistory {
+    fn access(&self) -> ClipboardAccess {
+        ClipboardAccess::from_u8(self.access.load(Ordering::SeqCst))
+    }
+
+    /// Note what macOS lets Compose read; `true` when that changed.
+    fn record_access(&self, access: ClipboardAccess) -> bool {
+        self.access.swap(access as u8, Ordering::SeqCst) != access as u8
+    }
+}
+
+/// What macOS lets Compose read of other apps' copies, as the user set it in
+/// Privacy & Security → Paste from Other Apps.
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[repr(u8)]
+pub enum ClipboardAccess {
+    #[default]
+    Allowed = 0,
+    /// macOS asks at every read, so a history would prompt at every copy.
+    Asks = 1,
+    Denied = 2,
+}
+
+impl ClipboardAccess {
+    fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::Allowed,
+            2 => Self::Denied,
+            _ => Self::Asks,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipboardHistoryView {
     pub enabled: bool,
+    pub access: ClipboardAccess,
     pub items: Vec<ClipboardSummary>,
 }
 
@@ -66,6 +104,7 @@ pub fn clipboard_history(
 ) -> Result<ClipboardHistoryView, String> {
     Ok(ClipboardHistoryView {
         enabled: history.enabled.load(Ordering::SeqCst),
+        access: history.access(),
         items: metadata.clipboard_items(&query, LISTED)?,
     })
 }
@@ -126,4 +165,40 @@ pub fn clipboard_forget(id: String, metadata: State<'_, MetadataStore>) -> Resul
 #[tauri::command(async)]
 pub fn clipboard_clear(metadata: State<'_, MetadataStore>) -> Result<(), String> {
     metadata.clear_clipboard_history(false)
+}
+
+/// Open Privacy & Security → Paste from Other Apps, where the user lets Compose
+/// read what other apps copy.
+#[tauri::command(async)]
+pub fn clipboard_privacy_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    return mac::open_privacy_settings();
+    #[cfg(not(target_os = "macos"))]
+    Err("Clipboard history needs macOS.".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_change_in_what_macos_allows_is_noticed_once() {
+        let history = ClipboardHistory::default();
+        assert_eq!(history.access(), ClipboardAccess::Allowed);
+        assert!(!history.record_access(ClipboardAccess::Allowed));
+        assert!(history.record_access(ClipboardAccess::Asks));
+        assert!(!history.record_access(ClipboardAccess::Asks));
+        assert_eq!(history.access(), ClipboardAccess::Asks);
+        assert!(history.record_access(ClipboardAccess::Denied));
+        assert_eq!(history.access(), ClipboardAccess::Denied);
+    }
+
+    #[test]
+    fn the_window_is_told_what_macos_allows() {
+        let view = ClipboardHistoryView { enabled: true, access: ClipboardAccess::Asks, items: Vec::new() };
+        assert_eq!(
+            serde_json::to_value(view).expect("json"),
+            serde_json::json!({ "enabled": true, "access": "asks", "items": [] })
+        );
+    }
 }

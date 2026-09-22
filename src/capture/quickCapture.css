@@ -365,6 +365,27 @@ kbd {
   border-color: var(--cds-border-interactive);
 }
 
+.quick-note__notice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0.75rem 0.375rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 6px;
+  background: var(--cds-notification-background-warning);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.quick-note__notice p {
+  flex: 1;
+  margin: 0;
+}
+
+.quick-note__notice .quick-note__action {
+  flex: none;
+}
+
 .quick-note__clips {
   flex: 1;
   min-height: 0;

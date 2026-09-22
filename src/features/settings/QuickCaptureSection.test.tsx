@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const capture = vi.hoisted(() => ({
@@ -9,9 +9,11 @@ const capture = vi.hoisted(() => ({
 vi.mock("../../lib/ipc/captureClient", () => capture);
 
 const clipboard = vi.hoisted(() => ({
-  clipboardHistoryEnabled: vi.fn(),
+  clipboardHistoryStatus: vi.fn(),
   setClipboardHistoryEnabled: vi.fn(),
   clearClipboardHistory: vi.fn(),
+  openClipboardPrivacySettings: vi.fn(),
+  onClipboardHistoryChanged: vi.fn(),
 }));
 vi.mock("../../lib/ipc/clipboardClient", () => clipboard);
 
@@ -25,6 +27,9 @@ function section(title: string): HTMLElement {
 }
 
 describe("the quick note settings", () => {
+  /** What macOS lets Compose read changed, as the app announces it. */
+  let changed: (next: { access: string }) => void = () => undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
     let shortcuts = { notes: { current: NOTES, default: NOTES }, clipboard: { current: CLIPBOARD, default: CLIPBOARD } };
@@ -33,9 +38,21 @@ describe("the quick note settings", () => {
       shortcuts = { ...shortcuts, [view]: { ...shortcuts[view], current: shortcut } };
       return shortcuts;
     });
-    clipboard.clipboardHistoryEnabled.mockResolvedValue(false);
-    clipboard.setClipboardHistoryEnabled.mockImplementation(async (enabled: boolean) => enabled);
+    let history = { enabled: false, access: "allowed" };
+    clipboard.clipboardHistoryStatus.mockImplementation(async () => history);
+    clipboard.setClipboardHistoryEnabled.mockImplementation(async (enabled: boolean) => {
+      history = { ...history, enabled };
+      return enabled;
+    });
     clipboard.clearClipboardHistory.mockResolvedValue(undefined);
+    clipboard.openClipboardPrivacySettings.mockResolvedValue(undefined);
+    clipboard.onClipboardHistoryChanged.mockImplementation(async (callback: () => void) => {
+      changed = (next) => {
+        history = { ...history, ...next };
+        callback();
+      };
+      return () => undefined;
+    });
   });
 
   it("shows both shortcuts as macOS writes them", async () => {
@@ -87,5 +104,20 @@ describe("the quick note settings", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Clear history" }));
     expect(await screen.findByText(/History cleared; pinned copies stay/)).toBeTruthy();
+  });
+
+  it("says how to let Compose read other apps' copies when macOS asks first, until it is allowed", async () => {
+    render(<QuickCaptureSection />);
+    fireEvent.click(await screen.findByRole("button", { name: "Keep what I copy" }));
+    await screen.findByText(/Keeping what you copy/);
+    expect(screen.queryByRole("button", { name: "Open Privacy & Security" })).toBeNull();
+
+    act(() => changed({ access: "asks" }));
+    expect(await screen.findByText(/macOS asks before Compose reads what other apps copy/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open Privacy & Security" }));
+    expect(clipboard.openClipboardPrivacySettings).toHaveBeenCalled();
+
+    act(() => changed({ access: "allowed" }));
+    await waitFor(() => expect(screen.queryByText(/macOS asks before/)).toBeNull());
   });
 });

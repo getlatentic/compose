@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { ClipboardApi, ClipboardSummary } from "../captureApi";
+import type { ClipboardAccess, ClipboardApi, ClipboardSummary } from "../captureApi";
 
 /** Typing in the search box asks again after this pause. */
 const SEARCH_AFTER_MS = 120;
@@ -8,6 +8,7 @@ const SEARCH_AFTER_MS = 120;
 export interface ClipboardHistoryState {
   /** `null` until the app has said. */
   enabled: boolean | null;
+  access: ClipboardAccess;
   items: ClipboardSummary[];
   query: string;
   /** The entry the keyboard is on. */
@@ -22,10 +23,12 @@ export interface ClipboardHistoryState {
   pin(id: string, pinned: boolean): Promise<void>;
   forget(id: string): Promise<void>;
   clear(): Promise<void>;
+  openPrivacySettings(): Promise<void>;
 }
 
 export function useClipboardHistory(api: ClipboardApi): ClipboardHistoryState {
   const [enabled, setEnabledState] = useState<boolean | null>(null);
+  const [access, setAccess] = useState<ClipboardAccess>("allowed");
   const [items, setItems] = useState<ClipboardSummary[]>([]);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -37,6 +40,7 @@ export function useClipboardHistory(api: ClipboardApi): ClipboardHistoryState {
     try {
       const history = await api.history(queryRef.current);
       setEnabledState(history.enabled);
+      setAccess(history.access);
       setItems(history.items);
       setSelectedId((selected) =>
         selected && history.items.some((item) => item.id === selected) ? selected : (history.items[0]?.id ?? null),
@@ -96,6 +100,23 @@ export function useClipboardHistory(api: ClipboardApi): ClipboardHistoryState {
   const pin = useCallback((id: string, pinned: boolean) => act(() => api.pin(id, pinned)), [act, api]);
   const forget = useCallback((id: string) => act(() => api.forget(id)), [act, api]);
   const clear = useCallback(() => act(() => api.clear()), [act, api]);
+  const openPrivacySettings = useCallback(() => act(() => api.openPrivacySettings()), [act, api]);
 
-  return { enabled, items, query, selectedId, error, setQuery, select: setSelectedId, move, refresh, setEnabled, pin, forget, clear };
+  return {
+    enabled,
+    access,
+    items,
+    query,
+    selectedId,
+    error,
+    setQuery,
+    select: setSelectedId,
+    move,
+    refresh,
+    setEnabled,
+    pin,
+    forget,
+    clear,
+    openPrivacySettings,
+  };
 }

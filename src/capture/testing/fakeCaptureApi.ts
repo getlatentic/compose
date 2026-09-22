@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 
-import type { CaptureApi, ClipboardEntry, ClipboardSummary, QuickNote, QuickNoteView } from "../captureApi";
+import type { CaptureApi, ClipboardAccess, ClipboardEntry, ClipboardSummary, QuickNote, QuickNoteView } from "../captureApi";
 
 export interface FakeClip extends ClipboardEntry {
   sourceName?: string;
@@ -11,12 +11,15 @@ export interface FakeClip extends ClipboardEntry {
  * The app as the quick-note window sees it, in memory: quick notes, saved
  * notes, images, and a clipboard history, with every call recorded.
  */
-export function fakeCaptureApi(options: { notes?: QuickNote[]; clips?: FakeClip[]; historyOn?: boolean } = {}) {
+export function fakeCaptureApi(
+  options: { notes?: QuickNote[]; clips?: FakeClip[]; historyOn?: boolean; access?: ClipboardAccess } = {},
+) {
   const notes = new Map((options.notes ?? []).map((note) => [note.id, note]));
   const saved: { id: string; text: string }[] = [];
   const images = new Map<string, Uint8Array>();
   let clips = [...(options.clips ?? [])];
   let historyOn = options.historyOn ?? true;
+  let access = options.access ?? "allowed";
   let shown: ((view: QuickNoteView) => void) | null = null;
   let copied: (() => void) | null = null;
   let now = 1_700_000_000_000;
@@ -60,6 +63,7 @@ export function fakeCaptureApi(options: { notes?: QuickNote[]; clips?: FakeClip[
     clipboard: {
       history: vi.fn(async (query: string) => ({
         enabled: historyOn,
+        access,
         items: clips
           .map(summary)
           .filter((item) => item.preview.toLowerCase().includes(query.trim().toLowerCase()))
@@ -80,6 +84,7 @@ export function fakeCaptureApi(options: { notes?: QuickNote[]; clips?: FakeClip[
       clear: vi.fn(async () => {
         clips = clips.filter((clip) => clip.pinned);
       }),
+      openPrivacySettings: vi.fn(async () => {}),
       onChanged: vi.fn(async (callback: () => void) => {
         copied = callback;
         return () => {
@@ -99,6 +104,11 @@ export function fakeCaptureApi(options: { notes?: QuickNote[]; clips?: FakeClip[
     /** Something new was copied in another app. */
     copy(clip: FakeClip) {
       clips = [clip, ...clips];
+      copied?.();
+    },
+    /** The user changed what macOS lets Compose read. */
+    setAccess(next: ClipboardAccess) {
+      access = next;
       copied?.();
     },
   };

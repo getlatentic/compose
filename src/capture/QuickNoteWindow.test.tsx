@@ -181,6 +181,21 @@ describe("the clipboard in the quick-note window", () => {
     await waitFor(() => expect(editorView()?.state.doc.toString()).toBe("<https://example.com/article>"));
   });
 
+  it("says how to let Compose read other apps' copies when macOS asks first, until it is allowed", async () => {
+    const fake = fakeCaptureApi({ clips: [clip("c1", "Copied earlier")], access: "asks" });
+    await open(fake.api);
+    act(() => fake.show("clipboard"));
+    const notice = await screen.findByRole("status");
+    expect(notice.textContent).toMatch(/macOS asks before Compose reads what other apps copy/);
+    expect(screen.getByText("Copied earlier")).toBeTruthy();
+
+    fireEvent.click(within(notice).getByRole("button", { name: "Open Privacy & Security" }));
+    expect(fake.api.clipboard.openPrivacySettings).toHaveBeenCalled();
+
+    act(() => fake.setAccess("allowed"));
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  });
+
   it("finds entries by what they say", async () => {
     const fake = fakeCaptureApi({ clips: [clip("c1", "Tomato soup"), clip("c2", "Bread")] });
     await open(fake.api);
