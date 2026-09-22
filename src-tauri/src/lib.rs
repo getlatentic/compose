@@ -425,16 +425,10 @@ pub fn run() {
             for url in urls {
                 // A `file://` URL comes from the Finder or a file association,
                 // so the user picked it. A `compose://` link can come from a
-                // web page, so it is honoured only for a note inside one of
-                // the workspaces they opened.
-                let resolved = if url.scheme() == deep_link::SCHEME {
-                    deep_link::open_path(app_handle, &url)
-                } else {
-                    url.to_file_path()
-                        .ok()
-                        .and_then(|p| p.to_str().map(String::from))
-                };
-                if let Some(path) = resolved {
+                // web page, so `deep_link` decides what it may do.
+                if url.scheme() == deep_link::SCHEME {
+                    deep_link::follow(app_handle, &url);
+                } else if let Some(path) = url.to_file_path().ok().and_then(|p| p.to_str().map(String::from)) {
                     open_with::open_in_app(app_handle, path);
                 }
             }

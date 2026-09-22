@@ -9,7 +9,11 @@
 //!
 //! ```text
 //! compose://open?path=/Users/me/Notes/thesis/framework.md
+//! compose://capture
 //! ```
+//!
+//! `capture` opens the quick-note window, as the widget's New Note does. It
+//! shows an empty window and reads nothing, so it needs no scoping.
 //!
 //! An absolute path rather than a workspace id + relative pair, because the
 //! path is what another tool already has — Obsidian, Shortcuts, a shell script.
@@ -25,6 +29,7 @@ pub const SCHEME: &str = "compose";
 #[derive(Debug, PartialEq, Eq)]
 pub enum Request {
     Open { path: String },
+    Capture,
 }
 
 /// The link's intent, or `None` for anything this app does not offer. Unknown
@@ -34,9 +39,10 @@ pub fn parse(url: &Url) -> Option<Request> {
         return None;
     }
     // `compose://open?...` parses with "open" as the HOST, not the path.
-    let action = url.host_str().filter(|host| !host.is_empty())?;
-    if action != "open" {
-        return None;
+    match url.host_str()? {
+        "open" => {}
+        "capture" => return Some(Request::Capture),
+        _ => return None,
     }
     let path = url
         .query_pairs()
@@ -49,31 +55,37 @@ pub fn parse(url: &Url) -> Option<Request> {
 /// The path a link may open: inside one of the registered workspaces, or
 /// nothing. Symlinks and `..` are resolved before the check, so neither can
 /// walk out of a root.
-pub fn authorised_path(workspaces: &[(String, PathBuf)], request: &Request) -> Option<String> {
-    let Request::Open { path } = request;
+pub fn authorised_path(workspaces: &[(String, PathBuf)], path: &str) -> Option<String> {
     match crate::external::resolve_target(workspaces, Path::new(path)) {
-        crate::external::OpenTarget::Workspace { .. } => Some(path.clone()),
+        crate::external::OpenTarget::Workspace { .. } => Some(path.to_owned()),
         // A folder would become a workspace, whose files the assistant can read,
         // and a link reaches the app from any web page.
         crate::external::OpenTarget::External { .. } | crate::external::OpenTarget::Folder { .. } => None,
     }
 }
 
-/// The note a `compose://` link may open, or `None` when the link asks for
-/// something this app does not offer or for a file outside every workspace.
-pub fn open_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>, url: &Url) -> Option<String> {
+/// Do what a `compose://` link asks, when this app offers it: open a note inside
+/// one of the workspaces, or the quick-note window.
+pub fn follow(app: &tauri::AppHandle, url: &Url) {
     use tauri::Manager;
 
-    let request = parse(url)?;
-    let roots = app
-        .state::<crate::workspace::WorkspaceRegistry>()
-        .list()
-        .ok()?
-        .workspaces
-        .into_iter()
-        .map(|record| (record.id, PathBuf::from(record.path)))
-        .collect::<Vec<_>>();
-    authorised_path(&roots, &request)
+    match parse(url) {
+        Some(Request::Open { path }) => {
+            let Ok(list) = app.state::<crate::workspace::WorkspaceRegistry>().list() else {
+                return;
+            };
+            let roots = list
+                .workspaces
+                .into_iter()
+                .map(|record| (record.id, PathBuf::from(record.path)))
+                .collect::<Vec<_>>();
+            if let Some(path) = authorised_path(&roots, &path) {
+                crate::open_with::open_in_app(app, path);
+            }
+        }
+        Some(Request::Capture) => crate::capture::open(app),
+        None => {}
+    }
 }
 
 #[cfg(test)]
@@ -118,6 +130,12 @@ mod tests {
     }
 
     #[test]
+    fn a_link_opens_the_quick_note_window() {
+        assert_eq!(parse(&url("compose://capture")), Some(Request::Capture));
+        assert_eq!(parse(&url("compose://capture?path=/etc/passwd")), Some(Request::Capture));
+    }
+
+    #[test]
     fn anything_this_app_does_not_offer_is_dropped() {
         assert_eq!(parse(&url("compose://run?cmd=rm")), None);
         assert_eq!(parse(&url("compose://open")), None, "no path");
@@ -135,7 +153,7 @@ mod tests {
         let target = vault.path().join("note.md").to_string_lossy().into_owned();
 
         assert_eq!(
-            authorised_path(&roots, &Request::Open { path: target.clone() }),
+            authorised_path(&roots, &target),
             Some(target)
         );
     }
@@ -150,9 +168,7 @@ mod tests {
         assert_eq!(
             authorised_path(
                 &roots,
-                &Request::Open {
-                    path: elsewhere.path().join("secret").to_string_lossy().into_owned()
-                }
+                &elsewhere.path().join("secret").to_string_lossy()
             ),
             None
         );
@@ -163,10 +179,10 @@ mod tests {
         let vault = tempdir().expect("vault");
         let elsewhere = tempdir().expect("elsewhere");
         let roots = vec![("w1".to_owned(), vault.path().to_path_buf())];
-        let as_link = |path: &Path| Request::Open { path: path.to_string_lossy().into_owned() };
+        let named = |path: &Path| path.to_string_lossy().into_owned();
 
-        assert_eq!(authorised_path(&roots, &as_link(elsewhere.path())), None);
-        assert_eq!(authorised_path(&roots, &as_link(vault.path())), None, "not even a workspace's own root");
+        assert_eq!(authorised_path(&roots, &named(elsewhere.path())), None);
+        assert_eq!(authorised_path(&roots, &named(vault.path())), None, "not even a workspace's own root");
     }
 
     #[test]
@@ -180,9 +196,7 @@ mod tests {
         assert_eq!(
             authorised_path(
                 &roots,
-                &Request::Open {
-                    path: vault.join("../outside.md").to_string_lossy().into_owned()
-                }
+                &vault.join("../outside.md").to_string_lossy()
             ),
             None,
             "`..` is resolved before the root check, so it cannot climb out"

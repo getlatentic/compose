@@ -81,6 +81,19 @@ fn toggle_now(app: &AppHandle, view: View) {
     }
 }
 
+/// Open the window on `view`, or bring it back, leaving it open if it already is.
+pub(super) fn show(app: &AppHandle, view: View) {
+    let handle = app.clone();
+    let scheduled = app.run_on_main_thread(move || {
+        if let Err(error) = open(&handle, view) {
+            eprintln!("quick capture could not open: {error}");
+        }
+    });
+    if let Err(error) = scheduled {
+        eprintln!("quick capture could not be scheduled: {error}");
+    }
+}
+
 /// Hide the window and give the keyboard back to the app the user was in.
 pub(super) fn close(app: &AppHandle) {
     let handle = app.clone();
