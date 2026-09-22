@@ -245,6 +245,33 @@ fn document_file_path(raw: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+/// The workspace a folder is in, and the folder's path within it — empty for
+/// the workspace's own folder. Symlinks are resolved first, as for a note.
+pub(crate) fn resolve_folder(workspaces: &[(String, PathBuf)], raw: &Path) -> Option<(String, String)> {
+    let canonical = std::fs::canonicalize(raw).ok()?;
+    innermost_workspace(workspaces, &canonical)
+        .map(|(workspace_id, relative)| (workspace_id, relative.to_string_lossy().into_owned()))
+}
+
+/// The workspace whose folder holds `canonical` most closely, when workspaces
+/// nest, and the path from its folder.
+fn innermost_workspace(workspaces: &[(String, PathBuf)], canonical: &Path) -> Option<(String, PathBuf)> {
+    let mut best: Option<(usize, String, PathBuf)> = None;
+    for (id, root) in workspaces {
+        let Ok(root) = std::fs::canonicalize(root) else {
+            continue;
+        };
+        let Ok(relative) = canonical.strip_prefix(&root) else {
+            continue;
+        };
+        let depth = root.components().count();
+        if best.as_ref().is_none_or(|(existing, _, _)| depth > *existing) {
+            best = Some((depth, id.clone(), relative.to_path_buf()));
+        }
+    }
+    best.map(|(_, id, relative)| (id, relative))
+}
+
 /// The routing policy for OS-opened paths, pure over the given
 /// `(workspace_id, root)` pairs. Nested workspaces resolve to the deepest
 /// root containing the file; both sides are canonicalized so symlinked paths
@@ -265,24 +292,8 @@ pub(crate) fn resolve_target(workspaces: &[(String, PathBuf)], raw: &Path) -> Op
             path: canonical.to_string_lossy().into_owned(),
         };
     }
-    let mut best: Option<(usize, String, PathBuf)> = None;
-    for (id, root) in workspaces {
-        let Ok(root) = std::fs::canonicalize(root) else {
-            continue;
-        };
-        let Ok(relative) = canonical.strip_prefix(&root) else {
-            continue;
-        };
-        if relative.as_os_str().is_empty() {
-            continue;
-        }
-        let depth = root.components().count();
-        if best.as_ref().is_none_or(|(existing, _, _)| depth > *existing) {
-            best = Some((depth, id.clone(), relative.to_path_buf()));
-        }
-    }
-    match best {
-        Some((_, workspace_id, relative)) => OpenTarget::Workspace {
+    match innermost_workspace(workspaces, &canonical).filter(|(_, relative)| !relative.as_os_str().is_empty()) {
+        Some((workspace_id, relative)) => OpenTarget::Workspace {
             workspace_id,
             relative_path: relative.to_string_lossy().into_owned(),
         },

@@ -46,17 +46,21 @@ fn candidate(stem: &str, attempt: usize) -> String {
     }
 }
 
-/// Write `content` as a new note named `stem` at the workspace root, and record
-/// it; returns its workspace-relative path. An existing note is never touched.
+/// Write `content` as a new note named `stem` in `folder` of the workspace — its
+/// root when empty — and record it; returns its workspace-relative path. An
+/// existing note is never touched.
 pub(crate) fn create_note(
     registry: &WorkspaceRegistry,
     metadata: &MetadataStore,
     workspace_id: &str,
+    folder: &str,
     stem: &str,
     content: &str,
 ) -> Result<String, FileError> {
+    let folder = folder.trim_matches('/');
     for attempt in 1..=MAX_NAME_ATTEMPTS {
-        let relative_path = candidate(stem, attempt);
+        let name = candidate(stem, attempt);
+        let relative_path = if folder.is_empty() { name } else { format!("{folder}/{name}") };
         match create_file(registry, workspace_id, &relative_path, content) {
             Ok(written) => {
                 metadata.record_document_written(
@@ -121,10 +125,15 @@ mod tests {
         metadata.init_from_dir(data.path()).expect("metadata");
         std::fs::write(vault.path().join("Idea.md"), "first").expect("existing note");
 
-        let path = create_note(&registry, &metadata, &workspace_id, "Idea", "second").expect("create");
+        let path = create_note(&registry, &metadata, &workspace_id, "", "Idea", "second").expect("create");
 
         assert_eq!(path, "Idea 2.md");
         assert_eq!(std::fs::read_to_string(vault.path().join("Idea.md")).unwrap(), "first");
         assert_eq!(std::fs::read_to_string(vault.path().join("Idea 2.md")).unwrap(), "second");
+
+        std::fs::create_dir(vault.path().join("Plans")).expect("folder");
+        let inside = create_note(&registry, &metadata, &workspace_id, "Plans/", "Idea", "third").expect("create");
+        assert_eq!(inside, "Plans/Idea.md");
+        assert_eq!(std::fs::read_to_string(vault.path().join("Plans/Idea.md")).unwrap(), "third");
     }
 }

@@ -4,11 +4,13 @@
   "workspaces": [
     {
       "id": "5b8f0d2e-1c4a-4f6b-9e3d-7a2c8b1f0e4d",
-      "name": "My Notes"
+      "name": "My Notes",
+      "path": "/vaults/My Notes"
     },
     {
       "id": "0a9e8d7c-6b5a-4f3e-2d1c-0b9a8f7e6d5c",
-      "name": "Thesis"
+      "name": "Thesis",
+      "path": "/vaults/Thesis"
     }
   ]
 }

@@ -5,6 +5,7 @@ use super::note;
 use super::pending::ImportedClip;
 use crate::app_group::contract::Clip;
 use crate::db::MetadataStore;
+use crate::external::resolve_folder;
 use crate::files::new_note::{create_note, file_stem, MAX_NAME_ATTEMPTS};
 use crate::files::{ensure_vault_metadata, write_binary_file, FileError};
 use crate::workspace::{WorkspaceList, WorkspaceRegistry};
@@ -27,7 +28,7 @@ pub(super) fn import_clip(
     let Some(clip) = inbox.read(clip_id)? else {
         return Ok(None);
     };
-    let Some(workspace_id) = destination(&clip, &registry.list()?) else {
+    let Some((workspace_id, folder)) = destination(&clip, &registry.list()?) else {
         return Ok(None);
     };
     let root = registry.workspace_root(&workspace_id)?;
@@ -36,7 +37,7 @@ pub(super) fn import_clip(
     let images = copy_images(inbox, clip_id, &clip, registry, &workspace_id)?;
     let content = note::compose(&clip.title, clip.url.as_deref(), markdown, &images);
     let stem = file_stem(&clip.title).unwrap_or_else(|| note::FALLBACK_TITLE.to_owned());
-    let relative_path = create_note(registry, metadata, &workspace_id, &stem, &content)?;
+    let relative_path = create_note(registry, metadata, &workspace_id, &folder, &stem, &content)?;
     inbox.remove(clip_id)?;
     Ok(Some(ImportedClip {
         workspace_id,
@@ -45,16 +46,25 @@ pub(super) fn import_clip(
     }))
 }
 
-/// The workspace chosen in the sheet while it still exists, else the one open
-/// now, else any.
-fn destination(clip: &Clip, list: &WorkspaceList) -> Option<String> {
+/// Where the note goes: the folder asked for, inside whichever workspace holds
+/// it; else the root of the workspace chosen in the sheet while it still
+/// exists, else the one open now, else any.
+fn destination(clip: &Clip, list: &WorkspaceList) -> Option<(String, String)> {
+    let roots: Vec<(String, std::path::PathBuf)> = list
+        .workspaces
+        .iter()
+        .map(|workspace| (workspace.id.clone(), workspace.path.clone().into()))
+        .collect();
+    if let Some(found) = clip.folder.as_deref().and_then(|folder| resolve_folder(&roots, std::path::Path::new(folder))) {
+        return Some(found);
+    }
     let registered = |id: &&str| list.workspaces.iter().any(|workspace| workspace.id == *id);
     clip.workspace_id
         .as_deref()
         .filter(registered)
         .or_else(|| list.active_workspace_id.as_deref().filter(registered))
         .or_else(|| list.workspaces.first().map(|workspace| workspace.id.as_str()))
-        .map(str::to_owned)
+        .map(|workspace_id| (workspace_id.to_owned(), String::new()))
 }
 
 fn copy_images(
@@ -207,6 +217,42 @@ mod tests {
         let note = fs::read_to_string(fixture.vault.join(filed.relative_path)).expect("note");
         assert!(note.contains("(images/1-shot-2.png)"), "{note}");
         assert_eq!(fs::read(fixture.vault.join("images/1-shot.png")).expect("mine"), b"mine");
+    }
+
+    #[test]
+    fn a_new_note_here_goes_in_the_folder_asked_for() {
+        let fixture = fixture();
+        fs::create_dir_all(fixture.vault.join("Plans/2026")).expect("folder");
+        let folder = fixture.vault.join("Plans/2026").to_string_lossy().into_owned();
+        leave(
+            &fixture,
+            "c1",
+            serde_json::json!({"version":1,"id":"c1","createdAt":0,"title":"Untitled","folder":folder,"open":true}),
+            &[],
+        );
+
+        let filed = file(&fixture, "c1", "").expect("filed");
+
+        assert_eq!(filed.relative_path, "Plans/2026/Untitled.md");
+        assert!(filed.open);
+        assert_eq!(fs::read_to_string(fixture.vault.join("Plans/2026/Untitled.md")).expect("note"), "# Untitled\n");
+    }
+
+    #[test]
+    fn a_folder_outside_every_workspace_files_the_note_at_the_root() {
+        let fixture = fixture();
+        let elsewhere = tempfile::tempdir().expect("elsewhere");
+        leave(
+            &fixture,
+            "c1",
+            serde_json::json!({"version":1,"id":"c1","createdAt":0,"title":"Kept","folder":elsewhere.path()}),
+            &[],
+        );
+
+        let filed = file(&fixture, "c1", "Body.").expect("filed");
+
+        assert_eq!(filed.relative_path, "Kept.md");
+        assert!(fs::read_dir(elsewhere.path()).expect("elsewhere").next().is_none(), "nothing written outside");
     }
 
     #[test]
