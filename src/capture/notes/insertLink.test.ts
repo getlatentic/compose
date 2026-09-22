@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { insertLink } from "./insertLink";
 
+// Destroyed after each test: a live view measures itself on the next frame,
+// which jsdom cannot do.
+const views: EditorView[] = [];
+afterEach(() => views.splice(0).forEach((view) => view.destroy()));
+
 function editor(doc: string, from: number, to = from): EditorView {
-  return new EditorView({ state: EditorState.create({ doc, selection: EditorSelection.range(from, to) }) });
+  const view = new EditorView({ state: EditorState.create({ doc, selection: EditorSelection.range(from, to) }) });
+  views.push(view);
+  return view;
 }
 
 describe("making a link", () => {
