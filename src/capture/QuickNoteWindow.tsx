@@ -20,17 +20,32 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
   const [saving, setSaving] = useState(false);
   const notes = useQuickNotes(api);
   const history = useClipboardHistory(api.clipboard);
-  const editor = useRef<EditorView | null>(null);
-  const flushEditor = useRef<(() => void) | null>(null);
+  const showing = useRef(view);
+  showing.current = view;
+  const editor = useRef<{ view: EditorView; noteId: string } | null>(null);
+  // Waits for a note's editor to open: a new note is only on screen a render later.
+  const whenOpen = useRef<{ noteId: string; act(view: EditorView): void } | null>(null);
   const search = useRef<HTMLInputElement>(null);
-  // A note made from an image waits for its editor before the image goes in.
-  const [pendingInsert, setPendingInsert] = useState<{ noteId: string; entryId: string } | null>(null);
 
-  const onView = useCallback((next: EditorView | null) => {
-    editor.current = next;
+  /** Whenever the note being written changes, typing goes on in it. */
+  const onView = useCallback((next: EditorView | null, noteId: string) => {
+    if (!next) {
+      if (editor.current?.noteId === noteId) editor.current = null;
+      return;
+    }
+    editor.current = { view: next, noteId };
+    if (showing.current === "notes") next.focus();
+    const waiting = whenOpen.current;
+    if (waiting?.noteId !== noteId) return;
+    whenOpen.current = null;
+    waiting.act(next);
   }, []);
-  const onFlush = useCallback((flush: (() => void) | null) => {
-    flushEditor.current = flush;
+
+  /** Does `act` in a note's editor: now when it is open, else as soon as it opens. */
+  const inEditor = useCallback((noteId: string, act: (view: EditorView) => void) => {
+    const open = editor.current;
+    if (open?.noteId === noteId) act(open.view);
+    else whenOpen.current = { noteId, act };
   }, []);
 
   const focusView = useCallback((shown: QuickNoteView) => {
@@ -39,17 +54,19 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
         search.current?.focus();
         return;
       }
-      editor.current?.requestMeasure();
-      editor.current?.focus();
+      editor.current?.view.requestMeasure();
+      editor.current?.view.focus();
     });
   }, []);
 
+  const { openOnNewest } = history;
   const show = useCallback(
     (shown: QuickNoteView) => {
       setView(shown);
+      if (shown === "clipboard") openOnNewest();
       focusView(shown);
     },
-    [focusView],
+    [focusView, openOnNewest],
   );
 
   useEffect(() => {
@@ -61,7 +78,6 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
       .onShown((shown) => {
         show(shown);
         void refreshDestination();
-        if (shown === "clipboard") void history.refresh();
       })
       .then(
         (stop) => {
@@ -74,39 +90,41 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
       cancelled = true;
       unlisten?.();
     };
-  }, [api, show, history.refresh]);
+  }, [api, show]);
 
-  const keepEverything = useCallback(async () => {
-    flushEditor.current?.();
-    await notes.flush();
-  }, [notes]);
+  const keepNotes = notes.flush;
 
   useEffect(() => {
-    const onBlur = () => void keepEverything();
+    const onBlur = () => void keepNotes();
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
-  }, [keepEverything]);
+  }, [keepNotes]);
 
   const close = useCallback(async () => {
-    await keepEverything();
+    await keepNotes();
     await api.close();
-  }, [api, keepEverything]);
+  }, [api, keepNotes]);
 
   const save = useCallback(async () => {
     const active = notes.active;
     if (!active || saving) return;
-    flushEditor.current?.();
     setSaving(true);
-    await notes.save(active.id, editor.current?.state.doc.toString());
+    await notes.save(active.id);
     setSaving(false);
   }, [notes, saving]);
+
+  const newNote = useCallback(() => {
+    inEditor(notes.create().id, (view) => view.focus());
+  }, [inEditor, notes]);
 
   const insertInto = useCallback(
     async (noteId: string, entryId: string) => {
       const entry = await api.clipboard.entry(entryId);
-      const view = editor.current;
-      if (!entry || !view) return;
+      if (!entry) return;
       const markdown = await entryMarkdown(entry, (relativePath, bytes) => api.keepImage(noteId, relativePath, bytes));
+      const open = editor.current;
+      if (open?.noteId !== noteId) return;
+      const { view } = open;
       const { from } = view.state.selection.main;
       const onOwnLine = entry.kind === "image" && from > view.state.doc.lineAt(from).from;
       view.dispatch(view.state.replaceSelection(onOwnLine ? `\n${markdown}` : markdown));
@@ -131,21 +149,11 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
       newNote: (id) => {
         const note = notes.create();
         show("notes");
-        setPendingInsert({ noteId: note.id, entryId: id });
+        inEditor(note.id, () => void insertInto(note.id, id));
       },
     }),
-    [api, close, insertInto, notes, show],
+    [api, close, inEditor, insertInto, notes, show],
   );
-
-  useEffect(() => {
-    if (!pendingInsert || notes.active?.id !== pendingInsert.noteId) return;
-    // The new note's editor mounts on the next frame.
-    const frame = requestAnimationFrame(() => {
-      setPendingInsert(null);
-      void insertInto(pendingInsert.noteId, pendingInsert.entryId);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [pendingInsert, notes.active, insertInto]);
 
   useWindowKeys({
     view,
@@ -153,7 +161,7 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
     save: () => void save(),
     newNote: () => {
       if (view === "clipboard" && history.selectedId) actions.newNote(history.selectedId);
-      else if (view === "notes") notes.create();
+      else if (view === "notes") newNote();
     },
     insertClip: () => {
       if (history.selectedId) actions.insert(history.selectedId);
@@ -190,7 +198,15 @@ export function QuickNoteWindow({ api }: { api: CaptureApi }) {
         </span>
       </header>
       <div className="quick-note__view" hidden={view !== "notes"}>
-        <NotesView api={api} notes={notes} saving={saving} onView={onView} onFlush={onFlush} onSave={save} onClose={close} />
+        <NotesView
+          api={api}
+          notes={notes}
+          saving={saving}
+          onView={onView}
+          onNewNote={newNote}
+          onSave={save}
+          onClose={close}
+        />
       </div>
       <div className="quick-note__view" hidden={view !== "clipboard"}>
         <ClipboardView api={api} history={history} actions={actions} searchRef={search} />
