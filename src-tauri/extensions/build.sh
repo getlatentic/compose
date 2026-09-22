@@ -10,6 +10,10 @@
 #
 #   build.sh <output-dir> [arch...]      default arch: the host's
 #
+# COMPOSE_APP_ID names the app the extensions ship in (default: the shipped
+# ai.latentic.compose). Extension ids and the app group follow it, so a test
+# copy built under its own id never shares an inbox with an installed Compose.
+#
 # Signed here when APPLE_SIGNING_IDENTITY is set, because Tauri signs the app
 # WITHOUT --deep: it seals what it finds, so each extension has to arrive
 # already signed with its own entitlements. (--deep would re-sign an .appex with
@@ -37,6 +41,9 @@ fi
 # bundle id + version, so a stale version means an update is never picked up.
 VERSION="$(/usr/bin/python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" \
   "$HERE/../tauri.conf.json")"
+
+SHIPPED_APP_ID=ai.latentic.compose
+APP_ID="${COMPOSE_APP_ID:-$SHIPPED_APP_ID}"
 
 # The share sheet and the app meet in an app-group container. On macOS a group
 # is named for the team that signs it, which only the signing identity knows —
@@ -84,6 +91,9 @@ build_extension() {
     mkdir -p "$appex/Contents/Resources"
     find "$RESOURCES" -maxdepth 1 -type f ! -name "*.test.ts" -exec cp {} "$appex/Contents/Resources/" \;
   fi
+  local id
+  id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$appex/Contents/Info.plist")"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_ID${id#"$SHIPPED_APP_ID"}" "$appex/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$appex/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$appex/Contents/Info.plist"
 
@@ -199,7 +209,7 @@ build_extension ComposeThumbnail "$QUICKLOOK/Thumbnail/Info.plist" \
 GROUP_EXTENSION_ENTITLEMENTS="$OUT_DIR/GroupExtension.entitlements"
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   : "${APPLE_TEAM_ID:?APPLE_TEAM_ID names the app group, so signing needs it}"
-  APP_GROUP="$APPLE_TEAM_ID.ai.latentic.compose"
+  APP_GROUP="$APPLE_TEAM_ID.$APP_ID"
   write_group_entitlements "$GROUP_EXTENSION_ENTITLEMENTS" sandboxed "$APP_GROUP"
   write_group_entitlements "$OUT_DIR/Compose.entitlements" unsandboxed "$APP_GROUP"
   write_group_entitlements "$OUT_DIR/ComposeClipper.entitlements" unsandboxed "$APP_GROUP"
@@ -223,7 +233,7 @@ RESOURCES="$HERE/share/Resources" build_extension ComposeShare "$SHARE_PLIST" "$
   "AppKit SwiftUI" "$HERE/shared" "$HERE/share/Sources"
 # The browser clipper's native-messaging host: a browser starts it to hand over
 # a clip, which it leaves in the share inbox using the shared contract and inbox.
-build_helper ComposeClipper ai.latentic.compose.clipper "$OUT_DIR/ComposeClipper.entitlements" \
+build_helper ComposeClipper "$APP_ID.clipper" "$OUT_DIR/ComposeClipper.entitlements" \
   "$HERE/shared/Contract.swift" \
   "$HERE/shared/ShareInbox.swift" \
   "$HERE/shared/ClipDraft.swift" \
