@@ -69,7 +69,7 @@ pub fn authorised_path(workspaces: &[(String, PathBuf)], path: &str) -> Option<S
 pub fn follow(app: &tauri::AppHandle, url: &Url) {
     match parse(url) {
         Some(Request::Open { path }) => open_note(app, &path),
-        Some(Request::Capture) => crate::capture::open(app),
+        Some(Request::Capture) => crate::capture::open(app, crate::capture::View::Notes),
         None => {}
     }
 }

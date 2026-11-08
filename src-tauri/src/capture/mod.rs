@@ -4,6 +4,7 @@
 //! in the same window. The shortcuts are held by Rust, so they work with every
 //! Compose window closed.
 
+mod carbon_keys;
 mod images;
 pub mod notes;
 #[cfg(target_os = "macos")]
@@ -108,10 +109,23 @@ pub fn start(app: &AppHandle, main_window_opening: bool) {
     });
 }
 
-/// Open the window on the notes from elsewhere than the shortcut — the widget's
-/// New Note — leaving it open if it already is.
-pub fn open(app: &AppHandle) {
-    window::show(app, View::Notes);
+/// What the shortcuts helper passes when a shortcut it holds starts Compose:
+/// the quick note on that view, and no main window.
+const QUICK_NOTE_ARGUMENT: &str = "--quick-note";
+
+/// The view the helper asked for in Compose's launch arguments, if it did.
+pub fn requested_at_launch(mut args: impl Iterator<Item = String>) -> Option<View> {
+    args.find(|arg| arg == QUICK_NOTE_ARGUMENT)?;
+    match args.next().as_deref() {
+        Some("clipboard") => Some(View::Clipboard),
+        _ => Some(View::Notes),
+    }
+}
+
+/// Open the window on `view` from elsewhere than the shortcut — the widget's
+/// New Note, or the helper starting Compose — leaving it open if it already is.
+pub fn open(app: &AppHandle, view: View) {
+    window::show(app, view);
 }
 
 /// Save quick note `id` as a note in the workspace, with the images pasted into
@@ -218,6 +232,23 @@ fn destination(list: &WorkspaceList) -> Option<&WorkspaceRecord> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn launched_with(args: &[&str]) -> Option<View> {
+        requested_at_launch(args.iter().map(|arg| (*arg).to_owned()))
+    }
+
+    #[test]
+    fn the_helper_asks_for_the_view_its_shortcut_opens() {
+        assert_eq!(launched_with(&["compose", "--quick-note", "clipboard"]), Some(View::Clipboard));
+        assert_eq!(launched_with(&["compose", "--quick-note", "notes"]), Some(View::Notes));
+        assert_eq!(launched_with(&["compose", "--quick-note"]), Some(View::Notes), "a missing view is the notes");
+    }
+
+    #[test]
+    fn an_ordinary_launch_asks_for_no_quick_note() {
+        assert_eq!(launched_with(&["compose"]), None);
+        assert_eq!(launched_with(&["compose", "-psn_0_12345"]), None);
+    }
 
     struct Fixture {
         registry: WorkspaceRegistry,

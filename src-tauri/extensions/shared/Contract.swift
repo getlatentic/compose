@@ -64,6 +64,21 @@ struct PublishedNotes: Codable, Equatable {
     let notes: [Note]
 }
 
+/// The quick-note shortcuts in macOS's own key codes and modifier bits, for the
+/// helper that holds them while Compose is not running. Mirrors
+/// `QuickNoteShortcuts` in the app's `app_group/contract.rs`.
+struct QuickNoteShortcuts: Codable, Equatable {
+    var version: Int
+    var shortcuts: [QuickNoteShortcut]
+}
+
+struct QuickNoteShortcut: Codable, Equatable {
+    /// `notes` or `clipboard`: the part of the quick-note window it opens.
+    var view: String
+    var keyCode: UInt32
+    var modifiers: UInt32
+}
+
 struct ClipImage: Equatable {
     let fileName: String
     let data: Data

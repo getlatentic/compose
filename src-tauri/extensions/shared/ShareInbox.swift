@@ -10,6 +10,7 @@ struct ShareInbox {
 
     var destinationsURL: URL { root.appendingPathComponent("destinations.json") }
     var notesURL: URL { root.appendingPathComponent("notes.json") }
+    var shortcutsURL: URL { root.appendingPathComponent("shortcuts.json") }
     var inboxURL: URL { root.appendingPathComponent("Inbox", isDirectory: true) }
 
     /// The container of the app group this process was signed into. Read from
@@ -29,6 +30,11 @@ struct ShareInbox {
     func destinations() -> Destinations? {
         guard let data = try? Data(contentsOf: destinationsURL) else { return nil }
         return try? JSONDecoder().decode(Destinations.self, from: data)
+    }
+
+    func shortcuts() -> QuickNoteShortcuts? {
+        guard let data = try? Data(contentsOf: shortcutsURL) else { return nil }
+        return try? JSONDecoder().decode(QuickNoteShortcuts.self, from: data)
     }
 
     func notes() -> PublishedNotes? {

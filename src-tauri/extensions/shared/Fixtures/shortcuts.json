@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "shortcuts": [
+    { "view": "notes", "keyCode": 45, "modifiers": 6144 },
+    { "view": "clipboard", "keyCode": 9, "modifiers": 6144 }
+  ]
+}
