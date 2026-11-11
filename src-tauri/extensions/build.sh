@@ -1,8 +1,9 @@
 #!/bin/bash
 # Build Compose's app extensions — the .md Quick Look preview and thumbnail,
 # Share → Compose, the actions Shortcuts, Spotlight and Siri offer, the Recent
-# Notes widget, and Compose in the Finder — and the entitlements the app needs
-# to meet them in their shared folder.
+# Notes widget, and Compose in the Finder — its helpers, the browser clipper's
+# host and the login item that holds the quick-note shortcuts, and the
+# entitlements the app needs to meet them in their shared folder.
 #
 # No Xcode project: an app extension is an executable whose entry point is
 # Foundation's NSExtensionMain, plus an Info.plist naming the principal class.
@@ -164,6 +165,52 @@ build_helper() {
   echo "[extensions] built $name ($(lipo -archs "$helper"), $state)"
 }
 
+# Build a login item: an app with no window or Dock icon, which the app asks
+# macOS to start at login (SMAppService). Signed with its own entitlements for
+# the same reason as an extension.
+# Args: <name> <info-plist> <entitlements> <frameworks> <swift-file>...
+build_login_item() {
+  local name="$1" plist="$2" entitlements="$3" frameworks="$4"
+  shift 4
+  local bundle="$OUT_DIR/$name.app" flags=() framework minimum work id
+  for framework in $frameworks; do flags+=(-framework "$framework"); done
+  minimum="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$plist")"
+  work="$(mktemp -d)"
+  rm -rf "$bundle"
+  mkdir -p "$bundle/Contents/MacOS"
+  cp "$plist" "$bundle/Contents/Info.plist"
+  id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$bundle/Contents/Info.plist")"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_ID${id#"$SHIPPED_APP_ID"}" "$bundle/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$bundle/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$bundle/Contents/Info.plist"
+
+  local slices=() arch slice
+  for arch in "${ARCHS[@]}"; do
+    slice="$work/$name-$arch"
+    xcrun --sdk macosx swiftc \
+      -target "${arch}-apple-macos${minimum}" \
+      -sdk "$SDK" \
+      -module-name "$name" \
+      -O -wmo \
+      ${flags[@]+"${flags[@]}"} \
+      -o "$slice" \
+      "$@"
+    slices+=("$slice")
+  done
+  if [ "${#slices[@]}" -gt 1 ]; then
+    lipo -create "${slices[@]}" -output "$bundle/Contents/MacOS/$name"
+  else
+    cp "${slices[0]}" "$bundle/Contents/MacOS/$name"
+  fi
+  local state="unsigned — macOS will not start it"
+  if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+    codesign --force --timestamp --options runtime \
+      --entitlements "$entitlements" --sign "$APPLE_SIGNING_IDENTITY" "$bundle"
+    state="signed"
+  fi
+  echo "[extensions] built $name.app ($(lipo -archs "$bundle/Contents/MacOS/$name"), $state)"
+}
+
 # Args: <appex> <module> <minimum-macos> <const-values> <source>...
 # The processor succeeds and writes nothing when it finds no record, so the
 # metadata is checked for: an extension without it offers no actions.
@@ -215,6 +262,7 @@ if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   write_group_entitlements "$GROUP_EXTENSION_ENTITLEMENTS" sandboxed "$APP_GROUP"
   write_group_entitlements "$OUT_DIR/Compose.entitlements" unsandboxed "$APP_GROUP"
   write_group_entitlements "$OUT_DIR/ComposeClipper.entitlements" unsandboxed "$APP_GROUP"
+  write_group_entitlements "$OUT_DIR/ComposeShortcuts.entitlements" unsandboxed "$APP_GROUP"
 fi
 # Share and the Finder extension hand over the files Compose opens, and macOS
 # lets them only for the types Compose declares — so the lists they check come
@@ -253,6 +301,14 @@ build_helper ComposeClipper "$APP_ID.clipper" "$OUT_DIR/ComposeClipper.entitleme
   "$HERE/shared/ShareInbox.swift" \
   "$HERE/shared/ClipDraft.swift" \
   "$HERE"/clipper/Sources/*.swift
+
+# Holds the quick-note shortcuts while Compose is not running, reading the ones
+# the app publishes, and starts Compose on the quick note when one is pressed.
+build_login_item ComposeShortcuts "$HERE/shortcuts/Info.plist" "$OUT_DIR/ComposeShortcuts.entitlements" \
+  "AppKit Carbon" \
+  "$HERE/shared/Contract.swift" \
+  "$HERE/shared/ShareInbox.swift" \
+  "$HERE"/shortcuts/Sources/*.swift
 
 APP_INTENTS=1 build_extension ComposeIntents "$HERE/intents/Info.plist" "$GROUP_EXTENSION_ENTITLEMENTS" \
   "AppKit AppIntents" "$HERE/shared" "$HERE/entities" "$HERE/intents/Sources" "$HERE/intents/Main"

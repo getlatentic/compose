@@ -37,3 +37,10 @@ run_suite clipper \
 run_suite intents "$HERE"/shared/*.swift "$HERE"/entities/*.swift "$HERE"/intents/Sources/*.swift "$HERE"/intents/Tests/*.swift
 run_suite widget "$HERE"/shared/*.swift "$HERE"/entities/*.swift "$HERE"/widget/Sources/*.swift "$HERE"/widget/Tests/*.swift
 run_suite finder "$HERE"/shared/*.swift "$HERE"/finder/Sources/*.swift "$HERE"/finder/Tests/*.swift
+# The shortcuts helper's decisions over fakes, and the shortcuts it reads from
+# the app; its Carbon keys and entry point are left out.
+run_suite shortcuts \
+  "$HERE"/shared/Contract.swift \
+  "$HERE"/shared/ShareInbox.swift \
+  "$HERE"/shortcuts/Sources/ShortcutHolder.swift \
+  "$HERE"/shortcuts/Tests/main.swift

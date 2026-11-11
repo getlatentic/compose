@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
+use super::carbon_keys::carbon_key;
+use crate::app_group::contract::{QuickNoteShortcut, QuickNoteShortcuts, QuickNoteView, CONTRACT_VERSION};
 use crate::db::MetadataStore;
 
 /// Which part of the window a shortcut opens.
@@ -25,6 +27,13 @@ impl View {
         match self {
             Self::Notes => "capture.shortcut",
             Self::Clipboard => "capture.clipboardShortcut",
+        }
+    }
+
+    fn published(self) -> QuickNoteView {
+        match self {
+            Self::Notes => QuickNoteView::Notes,
+            Self::Clipboard => QuickNoteView::Clipboard,
         }
     }
 
@@ -88,10 +97,25 @@ pub(super) fn register(app: &AppHandle, shortcuts: &[(View, Option<String>)]) ->
             .register(*shortcut)
             .map_err(|error| format!("{text} could not be registered ({error})"))?;
     }
+    let now: Vec<(Shortcut, View)> = parsed.into_iter().map(|(shortcut, view, _)| (shortcut, view)).collect();
+    crate::app_group::shortcuts_changed(&for_helper(&now));
     if let Ok(mut registered) = app.state::<RegisteredShortcuts>().0.lock() {
-        *registered = parsed.into_iter().map(|(shortcut, view, _)| (shortcut, view)).collect();
+        *registered = now;
     }
     Ok(())
+}
+
+/// The same shortcuts for the helper, which holds them while Compose is not
+/// running. A key macOS cannot register globally is left to Compose alone.
+fn for_helper(registered: &[(Shortcut, View)]) -> QuickNoteShortcuts {
+    let shortcuts = registered
+        .iter()
+        .filter_map(|(shortcut, view)| {
+            let (key_code, modifiers) = carbon_key(shortcut)?;
+            Some(QuickNoteShortcut { view: view.published(), key_code, modifiers })
+        })
+        .collect();
+    QuickNoteShortcuts { version: CONTRACT_VERSION, shortcuts }
 }
 
 fn parse(shortcut: &str) -> Result<Shortcut, String> {
@@ -109,6 +133,19 @@ mod tests {
         let store = MetadataStore::default();
         store.init_from_dir(dir.path()).expect("init");
         (store, dir)
+    }
+
+    #[test]
+    fn the_helper_is_given_the_shortcuts_registered_and_none_it_cannot_hold() {
+        let registered = [
+            (parse("Control+Alt+KeyN").expect("notes"), View::Notes),
+            (parse("MediaPlayPause").expect("media"), View::Clipboard),
+        ];
+        let published = for_helper(&registered);
+        assert_eq!(
+            published.shortcuts,
+            [QuickNoteShortcut { view: QuickNoteView::Notes, key_code: 0x2d, modifiers: 6144 }]
+        );
     }
 
     #[test]

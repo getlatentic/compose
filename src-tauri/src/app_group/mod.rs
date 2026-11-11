@@ -77,6 +77,17 @@ pub fn workspaces_changed(app: &AppHandle, list: &WorkspaceList) {
     }
 }
 
+/// The quick-note shortcuts were registered: the helper holds the same ones
+/// while Compose is not running.
+pub fn shortcuts_changed(shortcuts: &contract::QuickNoteShortcuts) {
+    let Some(dir) = shared_dir() else {
+        return;
+    };
+    if let Err(error) = publish::publish(dir, publish::SHORTCUTS_FILE, shortcuts) {
+        eprintln!("quick-note shortcuts were not published for the helper: {error}");
+    }
+}
+
 /// A note was written, renamed, deleted or rescanned.
 pub fn notes_changed(app: &AppHandle) {
     if let Some(sender) = app.state::<AppGroupState>().notes_changed.get() {

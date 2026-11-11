@@ -137,11 +137,13 @@ pub fn run() {
             boot_native_mark("setup-entered");
             boot_native_mark("setup-start");
             let app_handle = app.handle().clone();
-            // Opened at login, Compose starts with only the quick note: its
-            // window waits until the user comes to it. Asked now, while the
+            // Opened at login, or started by the shortcuts helper for the quick
+            // note, Compose starts with only the quick note: its window waits
+            // until the user comes to it. The login is asked now, while the
             // launch's own Apple event is still the current one.
-            let at_login = login_item::launched_at_login();
-            if !at_login {
+            let quick_note = capture::requested_at_launch(std::env::args());
+            let windowless = quick_note.is_some() || login_item::launched_at_login();
+            if !windowless {
                 main_window::open_at_launch(&app_handle, boot_script);
             }
             // Capture back-end panics into the local error log (best-effort),
@@ -247,7 +249,10 @@ pub fn run() {
             share_inbox::start(&app_handle);
             // After the metadata store, which holds the chosen shortcut and
             // whether clipboard history is on.
-            capture::start(&app_handle, !at_login);
+            capture::start(&app_handle, !windowless);
+            if let Some(view) = quick_note {
+                capture::open(&app_handle, view);
+            }
             clipboard::start(&app_handle);
             // Reap any agent child a prior hard crash orphaned, and point the
             // runner at the data dir so this session records its own live runs

@@ -96,6 +96,30 @@ pub struct PublishedNote {
     pub modified_at: i64,
 }
 
+/// The quick-note shortcuts, in macOS's own key codes and modifier bits, for the
+/// helper that holds them while Compose is not running.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuickNoteShortcuts {
+    pub version: u32,
+    pub shortcuts: Vec<QuickNoteShortcut>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickNoteShortcut {
+    pub view: QuickNoteView,
+    pub key_code: u32,
+    pub modifiers: u32,
+}
+
+/// Which part of the quick-note window a shortcut opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum QuickNoteView {
+    Notes,
+    Clipboard,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,6 +129,21 @@ mod tests {
     const DESTINATIONS_FIXTURE: &str =
         include_str!("../../extensions/shared/Fixtures/destinations.json");
     const NOTES_FIXTURE: &str = include_str!("../../extensions/shared/Fixtures/notes.json");
+    const SHORTCUTS_FIXTURE: &str = include_str!("../../extensions/shared/Fixtures/shortcuts.json");
+
+    #[test]
+    fn the_shortcuts_are_written_as_the_helper_reads_them() {
+        let shortcuts = QuickNoteShortcuts {
+            version: CONTRACT_VERSION,
+            shortcuts: vec![
+                QuickNoteShortcut { view: QuickNoteView::Notes, key_code: 0x2d, modifiers: 6144 },
+                QuickNoteShortcut { view: QuickNoteView::Clipboard, key_code: 0x09, modifiers: 6144 },
+            ],
+        };
+        let written = serde_json::to_value(&shortcuts).expect("json");
+        let fixture: serde_json::Value = serde_json::from_str(SHORTCUTS_FIXTURE).expect("fixture parses");
+        assert_eq!(written, fixture);
+    }
 
     #[test]
     fn decodes_the_clip_the_extension_writes() {

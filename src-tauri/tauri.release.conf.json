@@ -9,6 +9,7 @@
         "PlugIns/ComposeThumbnail.appex": "extensions/build/ComposeThumbnail.appex",
         "PlugIns/ComposeWidget.appex": "extensions/build/ComposeWidget.appex",
         "Helpers/ComposeClipper": "extensions/build/ComposeClipper",
+        "Library/LoginItems/ComposeShortcuts.app": "extensions/build/ComposeShortcuts.app",
         "Extensions/ComposeIntents.appex": "extensions/build/ComposeIntents.appex"
       }
     }

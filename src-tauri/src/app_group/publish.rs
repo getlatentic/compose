@@ -10,6 +10,7 @@ use crate::files::FileError;
 
 pub(super) const DESTINATIONS_FILE: &str = "destinations.json";
 pub(super) const NOTES_FILE: &str = "notes.json";
+pub(super) const SHORTCUTS_FILE: &str = "shortcuts.json";
 
 /// Write `value` as `name` in `dir` unless the file already says exactly that;
 /// `true` when it was written. Written beside and renamed into place.
