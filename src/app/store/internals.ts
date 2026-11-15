@@ -27,12 +27,19 @@ export function errorMessage(error: unknown, fallback: string) {
 
 /** Next free `untitled-N.md` path — inside `dir` when given, else at the
  * workspace root, alongside any other notes — that collides with neither an
- * existing file nor an open (possibly unsaved) tab. */
-export function nextUntitledPath(workspace: Workspace, dir?: string): string {
+ * existing file, an open (possibly unsaved) tab, nor a note still being
+ * created (`creating`, keyed `${workspaceId}\n${path}`). */
+export function nextUntitledPath(
+  workspace: Workspace,
+  dir?: string,
+  creating: ReadonlySet<string> = new Set(),
+): string {
   const prefix = dir ? `${dir.replace(/\/+$/, "")}/` : "";
+  const mine = `${workspace.id}\n`;
   const existing = new Set([
     ...workspace.files.map((entry) => entry.relativePath),
     ...workspace.openFilePaths,
+    ...[...creating].filter((key) => key.startsWith(mine)).map((key) => key.slice(mine.length)),
   ]);
   let index = 1;
   while (existing.has(`${prefix}untitled-${index}.md`)) {
