@@ -25,6 +25,7 @@ import { listen } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { markBoot, markTabSwitchEnd } from "../../lib/perf";
 import { registerActiveEditorFlush } from "../../lib/editor/editorFlush";
+import { useShownFileUpdate } from "./useShownFileUpdate";
 import { showToast } from "../toast/toastStore";
 import { useConfirm } from "../dialogs/ConfirmProvider";
 import { markDocumentSurfaceMounted } from "./documentSurface";
@@ -105,7 +106,8 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
   const saveActiveFile = useWorkspaceStore((state) => state.saveActiveFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const askAboutSelectionStream = useWorkspaceStore((state) => state.askAboutSelectionStream);
-  const updateActiveContent = useWorkspaceStore((state) => state.updateActiveContent);
+  const focusedWorkspaceId = useWorkspaceStore((state) => selectFocusedWorkspace(state)?.id ?? "");
+  const updateShownContent = useShownFileUpdate(focusedWorkspaceId, activeFilePath);
 
   const editorMode = useUiStore((state) => state.editorMode);
   // Deeper focus: the formatting toolbar is part of the room — omit
@@ -369,7 +371,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
       <PlainTextEditor
         key={activeFilePath}
         value={content}
-        onChange={updateActiveContent}
+        onChange={updateShownContent}
         onFlushReady={registerActiveEditorFlush}
         onAfterContentSwap={markTabSwitchEnd}
         toolbar={focusMode ? undefined : plainTextToolbar}
@@ -386,7 +388,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
         filePath={activeFilePath || undefined}
         linkTargets={linkTargets}
         onNavigateToLink={navigateToFile}
-        onChange={updateActiveContent}
+        onChange={updateShownContent}
         toolbar={focusMode ? undefined : toolbar}
         selectionActions={selectionActions}
         resolveImageSrc={resolveDisplaySrc}

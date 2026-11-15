@@ -53,6 +53,10 @@ import {
  *  read of the same file. */
 const loadingBuffers = new Set<string>();
 
+/** Notes being created, keyed `${workspaceId}\n${path}`: a second "New note"
+ *  before the first is on disk must not pick the same name. */
+const creating = new Set<string>();
+
 /** Read a file's content, routed by its container: external files (the loose
  *  workspace) read by absolute path; workspace files by `(id, relative)`. */
 function readFileFor(workspace: Workspace, path: string) {
@@ -170,7 +174,7 @@ export async function loadBufferIfMissing(
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "deleteFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "deleteFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "updateFileContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().focusedWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -261,11 +265,15 @@ export const createFilesSlice = (
     // plain `+` falls back to a blank untitled note — in the chosen folder
     // (`newNoteDir`, set by selecting a folder/file in the tree) or the root.
     const dir = seed?.dir ?? get().newNoteDir;
-    const relativePath = seed?.relativePath ?? nextUntitledPath(workspace, dir);
+    const relativePath = seed?.relativePath ?? nextUntitledPath(workspace, dir, creating);
     const content = seed?.content ?? `# Untitled\n\n`;
+    const reserved = `${workspace.id}\n${relativePath}`;
+    creating.add(reserved);
 
     try {
       const result = await createFileIpc(workspace.id, relativePath, content);
+      // The new note takes the editor: the one it leaves is saved first.
+      commitOutgoingFile(get, { id: workspace.id, path: relativePath });
       const newEntry: WorkspaceFileEntry = {
         lastModifiedMs: result.lastModifiedMs,
         relativePath,
@@ -289,6 +297,8 @@ export const createFilesSlice = (
       void get().rebuildWorkspaceIndex(workspace.id);
     } catch (error) {
       showErrorToast(error instanceof Error ? error.message : "Could not create note");
+    } finally {
+      creating.delete(reserved);
     }
   },
   createFolder: async (relativePath) => {
@@ -430,6 +440,8 @@ export const createFilesSlice = (
       return;
     }
 
+    // The editor's last edits belong to the old path's buffer, which moves.
+    flushActiveEditor();
     try {
       await renameFileIpc(workspace.id, from, trimmed);
       set((state) => ({
@@ -573,20 +585,16 @@ export const createFilesSlice = (
     if (!workspace || !workspace.activeFilePath) {
       return;
     }
-
+    get().updateFileContent(workspace.id, workspace.activeFilePath, markdown, changes);
+  },
+  updateFileContent: (workspaceId, relativePath, markdown, changes = []) => {
     set((state) => ({
-      workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
-        applyWorkspaceDocumentChanges(
-          item,
-          item.activeFilePath,
-          markdown,
-          changes,
-          Date.now(),
-        ),
+      workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
+        applyWorkspaceDocumentChanges(item, relativePath, markdown, changes, Date.now()),
       ),
     }));
     if (changes.length > 0) {
-      persistComments(get().workspaces, workspace.id, showErrorToast);
+      persistComments(get().workspaces, workspaceId, showErrorToast);
     }
   },
   dismissConflict: (relativePath: string) => {

@@ -233,6 +233,15 @@ export interface WorkspaceState {
   removeChatContextItem: (id: string) => void;
   switchWorkspace: (workspaceId: string) => void;
   updateActiveContent: (markdown: string, changes?: DocumentTextChange[]) => void;
+  /** The editor's text for the file it is SHOWING, which is not always the
+   *  active one: the editor hands over its last edits after the active file
+   *  has changed. */
+  updateFileContent: (
+    workspaceId: string,
+    relativePath: string,
+    markdown: string,
+    changes?: DocumentTextChange[],
+  ) => void;
   workspaces: Workspace[];
 }
 

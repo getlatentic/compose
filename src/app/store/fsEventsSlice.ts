@@ -1,5 +1,6 @@
 import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
 import { showErrorToast } from "../../features/toast/toastStore";
+import { flushActiveEditor } from "../../lib/editor/editorFlush";
 import {
   applyFileBuffer,
   applyFsEvent,
@@ -81,6 +82,12 @@ export const createFsEventsSlice = (
   get: WorkspaceStoreGet,
 ): Pick<WorkspaceState, "handleFsEvent" | "refreshWorkspaceTree"> => ({
   handleFsEvent: async (workspaceId: string, event: WorkspaceFsEvent) => {
+    // A removal decides by the buffer whether the tab stays. The editor's last
+    // edits must be in it first, or a file with unsaved typing looks clean.
+    if (event.kind === "removed") {
+      flushActiveEditor();
+    }
+
     const workspace = get().workspaces.find((item) => item.id === workspaceId);
     if (!workspace) {
       return;
