@@ -1,6 +1,3 @@
-// Math is rendered by the document surface and nowhere else, so its
-// stylesheet ships with this chunk instead of blocking every launch.
-import "katex/dist/katex.min.css";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { EditorView } from "@codemirror/view";
 import {
