@@ -49,7 +49,7 @@ export const MAC_TRAFFIC_LIGHTS_INSET = 78;
 export function WorkspaceSidebar() {
   const newChat = useWorkspaceStore((state) => state.newChat);
   const deleteFile = useWorkspaceStore((state) => state.deleteFile);
-  const renameActiveFile = useWorkspaceStore((state) => state.renameActiveFile);
+  const renameFile = useWorkspaceStore((state) => state.renameFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const sidebarTab = useUiStore((state) => state.sidebarTab);
   const setSidebarTab = useUiStore((state) => state.setSidebarTab);
@@ -77,14 +77,12 @@ export function WorkspaceSidebar() {
   // (chat tokens, autosaves, fs events).
   const handleRename = useCallback(
     async (relativePath: string) => {
-      await selectFile(relativePath);
       const target = await requestRename(relativePath);
-      if (!target || target === relativePath) {
-        return;
+      if (target && target !== relativePath) {
+        await renameFile(relativePath, target);
       }
-      await renameActiveFile(target);
     },
-    [selectFile, renameActiveFile, requestRename],
+    [renameFile, requestRename],
   );
 
   const handleDelete = useCallback(
@@ -118,9 +116,8 @@ export function WorkspaceSidebar() {
     (relativePath: string) => void handleRename(relativePath),
     [handleRename],
   );
-  // Moving a file into a folder is a rename into that folder — which already
-  // carries the open tab, chat context, comments, and version history along
-  // (renameActiveFile). selectFile makes the dragged file the active target.
+  // Moving a file into a folder is a rename into that folder, which carries
+  // the open tab, chat context, comments and version history along.
   const handleMoveFile = useCallback(
     (from: string, folderPath: string) => {
       const slash = from.lastIndexOf("/");
@@ -129,12 +126,9 @@ export function WorkspaceSidebar() {
       if (dest === from) {
         return;
       }
-      void (async () => {
-        await selectFile(from);
-        await renameActiveFile(dest);
-      })();
+      void renameFile(from, dest);
     },
-    [selectFile, renameActiveFile],
+    [renameFile],
   );
 
   // Shared with the File menu's ⌘N / ⌘⇧N, so the two cannot drift apart.

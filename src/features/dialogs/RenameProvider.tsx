@@ -8,7 +8,7 @@ import {
 import { Modal } from "@carbon/react";
 import { Folder } from "@carbon/react/icons";
 
-import { renameRelativePath, splitFileName } from "../../lib/files/fileName";
+import { baseNameProblem, renameRelativePath, splitFileName } from "../../lib/files/fileName";
 
 /**
  * In-app "Rename file" dialog.
@@ -59,13 +59,14 @@ export function RenameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const trimmed = value.trim();
+  const problem = baseNameProblem(value);
   const submit = useCallback(() => {
-    if (trimmed === "") return;
+    if (problem !== null) return;
     setPending((current) => {
       current?.resolve(renameRelativePath(current.path, trimmed));
       return null;
     });
-  }, [trimmed]);
+  }, [problem, trimmed]);
 
   const split = pending ? splitFileName(pending.path) : null;
   const location = split && split.dir ? split.dir.replace(/\/+$/, "") : "Top level";
@@ -82,7 +83,7 @@ export function RenameProvider({ children }: { children: ReactNode }) {
           modalHeading="Rename file"
           primaryButtonText="Rename"
           secondaryButtonText="Cancel"
-          primaryButtonDisabled={trimmed === ""}
+          primaryButtonDisabled={problem !== null}
           selectorPrimaryFocus={`#${INPUT_ID}`}
           size="sm"
           onRequestSubmit={submit}
@@ -96,6 +97,8 @@ export function RenameProvider({ children }: { children: ReactNode }) {
               <input
                 id={INPUT_ID}
                 className="cds--text-input rename-field__input"
+                aria-invalid={problem !== null && trimmed !== ""}
+                aria-describedby={problem !== null && trimmed !== "" ? `${INPUT_ID}-problem` : undefined}
                 type="text"
                 value={value}
                 onFocus={(event) => event.currentTarget.select()}
@@ -113,6 +116,11 @@ export function RenameProvider({ children }: { children: ReactNode }) {
                 </span>
               ) : null}
             </div>
+            {problem !== null && trimmed !== "" ? (
+              <p id={`${INPUT_ID}-problem`} className="rename-field__problem" role="alert">
+                {problem}
+              </p>
+            ) : null}
             <p className="rename-field__location">
               <Folder size={14} />
               <span>{location}</span>

@@ -6822,6 +6822,17 @@ $theme-dark-line: #525252;
   user-select: none;
 }
 
+.rename-field__problem {
+  margin-block-start: 0.5rem;
+  color: var(--cds-text-error, #da1e28);
+  font-size: 0.75rem;
+}
+
+.rename-field__input[aria-invalid="true"] {
+  outline: 2px solid var(--cds-support-error, #da1e28);
+  outline-offset: -2px;
+}
+
 .rename-field__location {
   display: flex;
   align-items: center;

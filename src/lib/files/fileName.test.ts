@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renameRelativePath, splitFileName } from "./fileName";
+import { baseNameProblem, renameRelativePath, splitFileName } from "./fileName";
 
 describe("splitFileName", () => {
   it("splits the directory, base name, and extension", () => {
@@ -31,5 +31,17 @@ describe("renameRelativePath", () => {
 
   it("trims surrounding whitespace from the new base", () => {
     expect(renameRelativePath("Notes/Plan.md", "  Roadmap  ")).toBe("Notes/Roadmap.md");
+  });
+});
+
+describe("baseNameProblem", () => {
+  it("accepts an ordinary name, spaces and dots inside included", () => {
+    expect(baseNameProblem("Plan for v2.1")).toBeNull();
+  });
+
+  it("refuses a name that would move the note, hide it, or is empty", () => {
+    for (const name of ["Ideas/Plan", "a\\b", "a:b", ".hidden", "", "   "]) {
+      expect(baseNameProblem(name), JSON.stringify(name)).not.toBeNull();
+    }
   });
 });
