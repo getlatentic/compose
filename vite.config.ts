@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { splashCss } from "./src/lib/theme/paletteCss";
 
 const host = process.env.TAURI_DEV_HOST;
 const require = createRequire(import.meta.url);
@@ -37,9 +38,28 @@ function reactScanInjectPlugin(): Plugin {
 }
 
 
+const PALETTE_SPLASH_MARK = "/* @palette-splash */";
+
+/**
+ * Writes each palette's launch-skeleton colours into index.html. The skeleton
+ * paints before any module runs, so its colours have to be in the HTML; this
+ * keeps palettes.json the only place they are written.
+ */
+function paletteSplashPlugin(): Plugin {
+  return {
+    name: "compose-palette-splash",
+    transformIndexHtml(html) {
+      if (!html.includes(PALETTE_SPLASH_MARK)) {
+        throw new Error(`index.html lost its ${PALETTE_SPLASH_MARK} mark; the launch skeleton would have no colours`);
+      }
+      return html.replace(PALETTE_SPLASH_MARK, splashCss());
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [reactScanInjectPlugin(), react()],
+  plugins: [reactScanInjectPlugin(), paletteSplashPlugin(), react()],
   // Keep component names readable in react-scan / perf marks for instrumented
   // builds; no effect on a normal release build (see `instrumented` above).
   esbuild: {

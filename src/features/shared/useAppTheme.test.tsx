@@ -47,6 +47,24 @@ describe("useAppTheme", () => {
     expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
   });
 
+  it("puts the palette, reading font and size on the document as they change", () => {
+    render(<Harness />);
+    act(() => {
+      useUiStore.getState().setPalette("paper");
+      useUiStore.getState().setReadingFont("mono");
+      useUiStore.getState().setReadingSize("large");
+    });
+    const root = document.documentElement;
+    expect(root.getAttribute("data-palette")).toBe("paper");
+    expect(root.getAttribute("data-reading-font")).toBe("mono");
+    expect(root.getAttribute("data-reading-size")).toBe("large");
+    act(() => {
+      useUiStore.getState().setPalette("walnut");
+      useUiStore.getState().setReadingFont("theme");
+      useUiStore.getState().setReadingSize("default");
+    });
+  });
+
   it("applies the stored choice on mount, not only on later changes", () => {
     useUiStore.getState().setTheme("dark");
     render(<Harness />);

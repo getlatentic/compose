@@ -5,6 +5,15 @@
  * owns one concern.
  */
 
+import { DEFAULT_PALETTE, normalizePalette } from "../theme/palettes";
+import {
+  DEFAULT_READING_FONT,
+  DEFAULT_READING_SIZE,
+  normalizeReadingFont,
+  normalizeReadingSize,
+  type ReadingFont,
+  type ReadingSize,
+} from "../theme/reading";
 import { DEFAULT_THEME, normalizeTheme, type ThemeChoice } from "../theme/theme";
 import { DEFAULT_ZOOM, clampZoom } from "../zoom/zoom";
 
@@ -26,6 +35,12 @@ export interface UiPrefs {
   zoom: number;
   /** Light, dark, or follow the system. */
   theme: ThemeChoice;
+  /** The colour theme's id (`palettes.json`). */
+  palette: string;
+  /** The note font: the palette's own, or one chosen in Settings. */
+  readingFont: ReadingFont;
+  /** The note text size. */
+  readingSize: ReadingSize;
 }
 
 const FALLBACK: UiPrefs = {
@@ -36,6 +51,9 @@ const FALLBACK: UiPrefs = {
   chatWidthPx: null,
   zoom: DEFAULT_ZOOM,
   theme: DEFAULT_THEME,
+  palette: DEFAULT_PALETTE,
+  readingFont: DEFAULT_READING_FONT,
+  readingSize: DEFAULT_READING_SIZE,
 };
 
 function widthOrNull(value: unknown): number | null {
@@ -66,6 +84,9 @@ export function loadUiPrefs(): UiPrefs {
       chatWidthPx: widthOrNull(parsed.chatWidthPx),
       zoom: clampZoom(parsed.zoom),
       theme: normalizeTheme(parsed.theme),
+      palette: normalizePalette(parsed.palette),
+      readingFont: normalizeReadingFont(parsed.readingFont),
+      readingSize: normalizeReadingSize(parsed.readingSize),
     };
   } catch {
     return FALLBACK;

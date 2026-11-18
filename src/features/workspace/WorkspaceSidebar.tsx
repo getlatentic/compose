@@ -33,13 +33,12 @@ export const MAC_TRAFFIC_LIGHTS_INSET = 78;
  * Layout, top → bottom:
  *   1. **Titlebar row** (40px, drag region): traffic-light spacer + sidebar
  *      collapse toggle (PanelLeft) + back/forward chevrons (browser-style).
- *   2. **Workspace switcher** (the existing {@link WorkspaceMenu} dropdown,
- *      now with "Open in new window").
+ *   2. **Workspace switcher** ({@link WorkspaceMenu}) and the "Search notes"
+ *      field, which opens the search popover.
  *   3. **Notes/Chat tabs** + a context-aware "New" button.
  *   4. **Tab body** — file tree + properties (Notes) or conversation list
- *      (Chat). Search moved OUT of the sidebar to a footer popover; the
- *      INDEX section is gone.
- *   5. **Footer** (pinned): "X notes" counter + Search + Settings icons.
+ *      (Chat).
+ *   5. **Footer** (pinned): "X notes" counter + Settings.
  *
  * When `sidebarCollapsed` is true, the whole sidebar is removed from the
  * layout (the editor's tab strip then owns the traffic-lights inset and shows
@@ -140,6 +139,7 @@ export function WorkspaceSidebar() {
   // Shared with the File menu's ⌘N / ⌘⇧N, so the two cannot drift apart.
   const { newNote: handleNewNote, newFolder: handleNewFolder } = useNewItemActions();
   const handleNewChat = useCallback(() => void newChat(), [newChat]);
+  const handleOpenSearch = useCallback(() => openSearch(), [openSearch]);
 
   if (sidebarCollapsed) {
     return null;
@@ -172,6 +172,19 @@ export function WorkspaceSidebar() {
       </div>
 
       <WorkspaceMenu />
+      <button
+        type="button"
+        className="sidebar-search"
+        onClick={handleOpenSearch}
+        disabled={!hasWorkspace}
+        aria-label="Search notes"
+      >
+        <Search size={16} strokeWidth={1.5} aria-hidden />
+        <span className="sidebar-search__label">Search notes</span>
+        <span className="sidebar-search__shortcut" aria-hidden>
+          ⌘⇧F
+        </span>
+      </button>
 
       <div className="sidebar-tabs" role="tablist" aria-label="Sidebar">
         <button
@@ -239,16 +252,6 @@ export function WorkspaceSidebar() {
           {hasWorkspace ? `${noteCount} note${noteCount === 1 ? "" : "s"}` : "No folder"}
         </span>
         <div className="sidebar-footer__actions">
-          <button
-            type="button"
-            className="sidebar-footer__btn"
-            onClick={() => openSearch()}
-            disabled={!hasWorkspace}
-            aria-label="Search workspace"
-            title="Search"
-          >
-            <Search size={16} aria-hidden />
-          </button>
           <button
             type="button"
             className="sidebar-footer__btn"

@@ -1,3 +1,4 @@
+import { File } from "lucide-react";
 import { memo, useCallback, useMemo } from "react";
 import { Close } from "@carbon/react/icons";
 import { useWorkspaceStore } from "../../app/workspaceStore";
@@ -59,6 +60,7 @@ const ExternalFileRow = memo(function ExternalFileRow({
         onClick={handleSelect}
       >
         <span aria-hidden />
+        <File size={16} strokeWidth={1.5} aria-hidden />
         <span className="truncate">{name}</span>
         <LooseRowDirtyDot path={path} />
       </button>

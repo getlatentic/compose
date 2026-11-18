@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type DragEvent,
   type MouseEvent,
   memo,
@@ -9,17 +10,28 @@ import {
   useState,
 } from "react";
 import { Menu, MenuItem, MenuItemDivider } from "@carbon/react";
-import { CaretDown, CaretRight } from "@carbon/react/icons";
+import { ChevronDown, ChevronRight, File, Folder } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
+import { useUiStore } from "../../app/store/uiStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { useConfirm } from "../dialogs/ConfirmProvider";
 import { persistTreeScroll, readTreeScroll } from "./treeScroll";
 
-/** Fixed row height in px — must match `.file-row` `block-size: 1.75rem` (28px)
- * in global.scss. The virtualizer needs it to place rows without measuring each. */
-const ROW_HEIGHT = 28;
+/** A row's slot: `.file-row-wrapper`'s 2rem plus the 2px gap, in rem
+ * (`_file-tree.scss`). The virtualizer places rows by it without measuring each. */
+const ROW_HEIGHT_REM = 2.125;
+
+/** The root font size is the webview's 16px default times app zoom. */
+function rowHeightPx(zoom: number): number {
+  return ROW_HEIGHT_REM * 16 * zoom;
+}
+
+/** Indent for a tree depth, read by `_file-tree.scss`. */
+function depthStyle(depth: number): CSSProperties {
+  return { "--depth": depth } as CSSProperties;
+}
 
 /** dataTransfer MIME for a file path dragged to move it into a folder. */
 const DRAG_FILE_MIME = "application/x-compose-file-path";
@@ -194,12 +206,12 @@ const FileRow = memo(function FileRow({
         className={["file-row", active ? "file-row--active" : ""]
           .filter(Boolean)
           .join(" ")}
-        style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
+        style={depthStyle(depth)}
         title={path}
       >
-        {/* No icon: the caret is what tells a folder from a file, and the
-          * column is kept so names line up under a folder's label. */}
+        {/* The empty disclosure slot lines a file's icon up under its folder's. */}
         <span aria-hidden />
+        <File size={16} strokeWidth={1.5} aria-hidden />
         <span className="truncate">{name}</span>
         <FileRowDirtyDot path={path} />
       </button>
@@ -253,12 +265,17 @@ const FolderRow = memo(function FolderRow({
       <button
         type="button"
         className="file-row file-row--folder"
-        style={{ paddingInlineStart: `calc(0.5rem + ${depth} * 0.5rem)` }}
+        style={depthStyle(depth)}
         onClick={handleActivate}
         aria-expanded={open}
         title={name}
       >
-        {open ? <CaretDown size={16} /> : <CaretRight size={16} />}
+        {open ? (
+          <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
+        ) : (
+          <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
+        )}
+        <Folder size={16} strokeWidth={1.5} aria-hidden />
         <span className="truncate">{name}</span>
       </button>
     </div>
@@ -582,10 +599,12 @@ function FileTreeInner({
   // folders, so the count is exactly the currently-visible rows. Fixed row
   // height means no per-row measurement.
   const scrollRef = useRef<HTMLElement>(null);
+  const zoom = useUiStore((state) => state.zoom);
+  const rowHeight = rowHeightPx(zoom);
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: 12,
     getItemKey: (index) => rowKey(rows[index]),
     // Without an initial rect the first render sizes its window against a
@@ -602,6 +621,10 @@ function FileTreeInner({
     initialOffset: () => readTreeScroll(workspaceRoot),
     onChange: (instance) => persistTreeScroll(workspaceRoot, instance.scrollOffset ?? 0),
   });
+  // Rows are sized in rem, so zoom resizes them; the slots have to follow.
+  useEffect(() => {
+    virtualizer.measure();
+  }, [virtualizer, rowHeight]);
 
   // Open a workspace fully collapsed — only top-level folders and files show,
   // plus the ancestor chain of the active file so it stays revealed. Runs

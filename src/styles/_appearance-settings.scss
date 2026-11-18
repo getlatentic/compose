@@ -1,0 +1,292 @@
+// Settings → Appearance (`features/settings/appearance/`).
+//
+// The swatches and font cards set `data-palette` / `data-reading-font` on
+// themselves, so everything inside them reads `--color-*` and `--reading-*`
+// directly. The `--cds-*` aliases would carry the window's palette, resolved
+// at the root, into a swatch that should show another.
+
+.appearance-settings {
+  display: grid;
+  gap: 2.5rem;
+  padding: 1.5rem 2rem 3rem;
+}
+
+.appearance-settings__group {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+
+  h3 {
+    margin: 0;
+    color: var(--color-text-primary);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    letter-spacing: -0.01em;
+  }
+
+  h3 + .settings-helper {
+    margin-block-start: -0.5rem;
+  }
+}
+
+.appearance-settings__row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-block-start: 0.25rem;
+}
+
+.appearance-settings__row-label {
+  min-inline-size: 5rem;
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+}
+
+// ── Theme swatches ────────────────────────────────────────────────────────────
+
+.palette-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 7.75rem);
+  gap: 1rem 1.25rem;
+}
+
+.palette-option {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+  cursor: pointer;
+}
+
+.palette-swatch {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  inline-size: 7.75rem;
+  block-size: 4.875rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-app);
+  box-shadow: var(--shadow-raised);
+}
+
+.palette-option:hover .palette-swatch {
+  border-color: var(--color-border-strong);
+}
+
+.palette-option--selected .palette-swatch {
+  border-color: var(--color-border-focus);
+  outline: 1px solid var(--color-border-focus);
+}
+
+.palette-option input:focus-visible + .palette-swatch {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.palette-swatch__sidebar {
+  display: grid;
+  align-content: start;
+  gap: 0.3125rem;
+  padding: 0.6875rem 0.4375rem;
+  background: var(--color-sidebar-bg);
+}
+
+.palette-swatch__row {
+  block-size: 3px;
+  border-radius: 1px;
+  background: var(--color-sidebar-muted);
+}
+
+.palette-swatch__row--marker {
+  inline-size: 70%;
+  background: var(--color-sidebar-marker);
+}
+
+.palette-swatch__page {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  padding: 0.875rem 0.625rem;
+}
+
+.palette-swatch__title {
+  inline-size: 60%;
+  block-size: 5px;
+  border-radius: 1px;
+  background: var(--color-doc-heading);
+}
+
+.palette-swatch__rule {
+  block-size: 1px;
+  margin-block-end: 0.125rem;
+  background: var(--color-rule);
+}
+
+.palette-swatch__line {
+  block-size: 2px;
+  background: var(--color-border-strong);
+}
+
+.palette-swatch__line--short {
+  inline-size: 70%;
+}
+
+.palette-swatch__button {
+  inline-size: 1.375rem;
+  block-size: 0.4375rem;
+  margin-block-start: 0.25rem;
+  border-radius: 999px;
+  background: var(--color-accent-default);
+}
+
+.palette-option__label {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.palette-option--selected .palette-option__label {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+// ── Reading font cards ────────────────────────────────────────────────────────
+
+.font-cards {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 8.5rem));
+  gap: 0.75rem;
+  inline-size: 100%;
+}
+
+.font-card {
+  display: grid;
+  gap: 0.125rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-default);
+  cursor: pointer;
+}
+
+.font-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.font-card--selected {
+  border-color: var(--color-border-focus);
+  outline: 1px solid var(--color-border-focus);
+  background: var(--color-accent-surface);
+}
+
+.font-card:has(input:focus-visible) {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.font-card__sample {
+  margin-block-end: 0.5rem;
+  color: var(--color-text-primary);
+  font-family: var(--reading-family-body);
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+}
+
+.font-card__name {
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.font-card__family {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// ── Preview ───────────────────────────────────────────────────────────────────
+
+.reading-preview {
+  inline-size: 100%;
+  margin: 0;
+  padding: 1.5rem;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-default);
+}
+
+.reading-preview__heading {
+  margin: 0 0 0.5rem;
+  color: var(--color-doc-heading);
+  font-family: var(--reading-family-heading);
+  font-size: var(--reading-size-h3);
+  font-weight: var(--reading-weight-heading);
+  line-height: var(--reading-line-h3);
+}
+
+.reading-preview__body {
+  margin: 0;
+  max-inline-size: 68ch;
+  color: var(--color-doc-text);
+  font-family: var(--reading-family-body);
+  font-size: var(--reading-size-body);
+  line-height: var(--reading-line-body);
+}
+
+// ── Zoom ──────────────────────────────────────────────────────────────────────
+
+.zoom-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.zoom-control__group {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-default);
+}
+
+.zoom-control__step {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.zoom-control__step:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.zoom-control__step:disabled {
+  color: var(--cds-icon-disabled);
+  cursor: not-allowed;
+}
+
+.zoom-control__step:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.zoom-control__value {
+  min-inline-size: 3rem;
+  padding-inline: 0.25rem;
+  border-inline: 1px solid var(--color-border-default);
+  color: var(--color-text-primary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.75rem;
+  text-align: center;
+}

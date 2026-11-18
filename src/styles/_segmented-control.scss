@@ -1,0 +1,41 @@
+// macOS segmented control (`features/shared/SegmentedControl.tsx`).
+
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+}
+
+.segmented__option {
+  position: relative;
+  cursor: pointer;
+}
+
+.segmented__label {
+  display: block;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-xs);
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.segmented__option:hover .segmented__label {
+  color: var(--color-text-primary);
+}
+
+.segmented__option--selected .segmented__label {
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-raised);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.segmented__option input:focus-visible + .segmented__label {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}

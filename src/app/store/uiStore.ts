@@ -1,5 +1,12 @@
 import { create } from "zustand";
 import { persistUiPrefs } from "../../lib/prefs/uiPrefs";
+import { normalizePalette } from "../../lib/theme/palettes";
+import {
+  normalizeReadingFont,
+  normalizeReadingSize,
+  type ReadingFont,
+  type ReadingSize,
+} from "../../lib/theme/reading";
 import { normalizeTheme, type ThemeChoice } from "../../lib/theme/theme";
 import { clampZoom } from "../../lib/zoom/zoom";
 import { INITIAL_UI_PREFS } from "./initialPrefs";
@@ -72,6 +79,13 @@ export interface UiState {
   /** Light, dark, or follow the system. */
   theme: ThemeChoice;
   setTheme: (choice: ThemeChoice) => void;
+  /** The colour theme's id. */
+  palette: string;
+  setPalette: (id: string) => void;
+  readingFont: ReadingFont;
+  setReadingFont: (font: ReadingFont) => void;
+  readingSize: ReadingSize;
+  setReadingSize: (size: ReadingSize) => void;
 }
 
 function persistAll(get: () => UiState): void {
@@ -84,6 +98,9 @@ function persistAll(get: () => UiState): void {
     chatWidthPx: state.chatWidthPx,
     zoom: state.zoom,
     theme: state.theme,
+    palette: state.palette,
+    readingFont: state.readingFont,
+    readingSize: state.readingSize,
   });
 }
 
@@ -194,6 +211,33 @@ export const useUiStore = create<UiState>((set, get) => ({
       return;
     }
     set({ theme: next });
+    persistAll(get);
+  },
+  palette: INITIAL_UI_PREFS.palette,
+  setPalette: (id) => {
+    const next = normalizePalette(id);
+    if (next === get().palette) {
+      return;
+    }
+    set({ palette: next });
+    persistAll(get);
+  },
+  readingFont: INITIAL_UI_PREFS.readingFont,
+  setReadingFont: (font) => {
+    const next = normalizeReadingFont(font);
+    if (next === get().readingFont) {
+      return;
+    }
+    set({ readingFont: next });
+    persistAll(get);
+  },
+  readingSize: INITIAL_UI_PREFS.readingSize,
+  setReadingSize: (size) => {
+    const next = normalizeReadingSize(size);
+    if (next === get().readingSize) {
+      return;
+    }
+    set({ readingSize: next });
     persistAll(get);
   },
   zoom: INITIAL_UI_PREFS.zoom,

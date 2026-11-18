@@ -35,6 +35,7 @@ import { useUiStore } from "../../app/store/uiStore";
 import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
 import { useWorkspaceLinkTargets } from "../../app/useWorkspaceLinkTargets";
 import { documentCapabilities, documentRef, type Workspace } from "../../app/workspaceModel";
+import { documentStyle } from "./documentStyle";
 
 /**
  * How long after the last edit the active file is auto-written to disk. Stacks
@@ -46,6 +47,8 @@ const AUTOSAVE_TO_DISK_MS = 1000;
 
 /** Stable empty list so the comments selectors return a constant reference. */
 const EMPTY_COMMENTS: Workspace["comments"] = [];
+
+const DOCUMENT_EXTENSIONS = [documentStyle];
 
 // ── DocumentEditor — the per-keystroke leaf ─────────────────────────────────
 
@@ -383,6 +386,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
     <>
       <CodeMirrorMarkdownEditor
         mode={editorMode}
+        extensions={DOCUMENT_EXTENSIONS}
         value={content}
         workspaceRoot={workspacePath ?? undefined}
         filePath={activeFilePath || undefined}

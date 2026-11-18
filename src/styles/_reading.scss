@@ -1,0 +1,90 @@
+// Font stacks, and the `--reading-*` properties the note editor reads.
+//
+// A palette names a font for each part (`--font-ui`, `--font-doc-body`, …;
+// see `lib/theme/paletteCss.ts`). The reading font in Settings either keeps
+// those (`theme`) or replaces the three note fonts. The text size scales the
+// note only; app zoom (⌘+ / ⌘−) still scales everything, because all of
+// these are in `rem`.
+//
+// The selectors also match a child with its own `data-palette` or
+// `data-reading-font`, so a Settings preview resolves its fonts in its own
+// context instead of inheriting the window's already-resolved values.
+
+:root {
+  --font-plex-sans: "IBM Plex Sans Variable", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-plex-serif: "IBM Plex Serif", "New York", Georgia, serif;
+  --font-jetbrains-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-chalkboard: "Chalkboard SE", "Comic Neue", "Comic Sans MS", cursive;
+}
+
+// The default palette's fonts, for a page that never sets `data-palette`.
+// Guarded so it cannot outrank the palette stylesheet, which comes first.
+:root:not([data-palette]) {
+  --font-ui: var(--font-plex-sans);
+  --font-doc-body: var(--font-plex-serif);
+  --font-doc-heading: var(--font-plex-sans);
+  --font-doc-heading-weight: 600;
+  --font-doc-code: var(--font-jetbrains-mono);
+}
+
+@mixin reading-fonts($body, $heading, $weight, $code) {
+  --reading-family-body: #{$body};
+  --reading-family-heading: #{$heading};
+  --reading-weight-heading: #{$weight};
+  --reading-family-code: #{$code};
+}
+
+:root,
+[data-palette],
+[data-reading-font="theme"] {
+  @include reading-fonts(var(--font-doc-body), var(--font-doc-heading), var(--font-doc-heading-weight), var(--font-doc-code));
+}
+
+[data-reading-font="serif"],
+[data-reading-font="serif"] [data-palette] {
+  @include reading-fonts(var(--font-plex-serif), var(--font-plex-sans), 600, var(--font-jetbrains-mono));
+}
+
+[data-reading-font="sans"],
+[data-reading-font="sans"] [data-palette] {
+  @include reading-fonts(var(--font-plex-sans), var(--font-plex-sans), 600, var(--font-jetbrains-mono));
+}
+
+[data-reading-font="mono"],
+[data-reading-font="mono"] [data-palette] {
+  @include reading-fonts(var(--font-jetbrains-mono), var(--font-jetbrains-mono), 700, var(--font-jetbrains-mono));
+}
+
+[data-reading-font="chalkboard"],
+[data-reading-font="chalkboard"] [data-palette] {
+  @include reading-fonts(var(--font-chalkboard), var(--font-chalkboard), 700, var(--font-jetbrains-mono));
+}
+
+// Sizes and line heights from the Figma "Reading size" collection, in px / 16.
+@mixin reading-sizes($body, $h1, $h2, $h3, $h4, $code) {
+  --reading-size-body: #{nth($body, 1) * 0.0625rem};
+  --reading-line-body: #{nth($body, 2) * 0.0625rem};
+  --reading-size-h1: #{nth($h1, 1) * 0.0625rem};
+  --reading-line-h1: #{nth($h1, 2) * 0.0625rem};
+  --reading-size-h2: #{nth($h2, 1) * 0.0625rem};
+  --reading-line-h2: #{nth($h2, 2) * 0.0625rem};
+  --reading-size-h3: #{nth($h3, 1) * 0.0625rem};
+  --reading-line-h3: #{nth($h3, 2) * 0.0625rem};
+  --reading-size-h4: #{nth($h4, 1) * 0.0625rem};
+  --reading-line-h4: #{nth($h4, 2) * 0.0625rem};
+  --reading-size-code: #{nth($code, 1) * 0.0625rem};
+  --reading-line-code: #{nth($code, 2) * 0.0625rem};
+}
+
+:root,
+[data-reading-size="default"] {
+  @include reading-sizes(18 30, 32 40, 26 34, 21 28, 18 26, 15 24);
+}
+
+[data-reading-size="small"] {
+  @include reading-sizes(16 26, 28 36, 23 30, 19 26, 16 24, 13 20);
+}
+
+[data-reading-size="large"] {
+  @include reading-sizes(20 32, 36 44, 29 38, 24 32, 20 28, 17 28);
+}

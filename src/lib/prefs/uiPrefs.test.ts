@@ -26,6 +26,9 @@ describe("uiPrefs", () => {
       chatWidthPx: 480,
       zoom: 1.25,
       theme: "dark",
+      palette: "paper",
+      readingFont: "chalkboard",
+      readingSize: "large",
     });
     expect(loadUiPrefs()).toEqual({
       soundOnComplete: false,
@@ -35,6 +38,9 @@ describe("uiPrefs", () => {
       chatWidthPx: 480,
       zoom: 1.25,
       theme: "dark",
+      palette: "paper",
+      readingFont: "chalkboard",
+      readingSize: "large",
     });
   });
 
@@ -48,7 +54,18 @@ describe("uiPrefs", () => {
       chatWidthPx: null,
       zoom: 1,
       theme: "system",
+      palette: "walnut",
+      readingFont: "theme",
+      readingSize: "default",
     });
+  });
+
+  it("drops a palette, font or size this build does not know", () => {
+    localStorage.setItem(
+      "compose.uiPrefs.v1",
+      JSON.stringify({ palette: "neon", readingFont: "papyrus", readingSize: "huge" }),
+    );
+    expect(loadUiPrefs()).toMatchObject({ palette: "walnut", readingFont: "theme", readingSize: "default" });
   });
 
   it("falls back wholesale on a corrupt payload", () => {
@@ -61,6 +78,9 @@ describe("uiPrefs", () => {
       chatWidthPx: null,
       zoom: 1,
       theme: "system",
+      palette: "walnut",
+      readingFont: "theme",
+      readingSize: "default",
     });
   });
 

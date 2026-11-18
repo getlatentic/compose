@@ -40,27 +40,22 @@
 @use "@carbon/react/scss/components/text-area";
 @use "@carbon/react/scss/components/text-input";
 @use "@carbon/react/scss/components/toggle";
+@use "utilities";
+@use "segmented-control";
+@use "appearance-settings";
+@use "sidebar";
+@use "workspace-switcher";
+@use "new-menu";
+@use "file-tree";
+@use "editor-tabs";
+@use "editor-toolbar";
+@use "status-bar";
 
-// One UI typeface for the whole app. Carbon is loaded with
-// `$css--font-face: false`, IBM Plex is not bundled (no `@ibm/plex` dep, no
-// self-hosted woff2, no CDN <link>), so every `"IBM Plex Sans", …` declaration
-// silently falls back — and the *fallbacks* differed file to file ("system-ui,
-// sans-serif" vs "ui-sans-serif, …"), which is what made the chrome look mixed.
-// Standardising every UI chain on this one `system-ui` stack gives a single,
-// consistent native typeface everywhere (chrome, sidebar, editor UI, menus).
-// Carbon DOES declare `"IBM Plex Sans"` on its own body + components, so those
-// are overridden just below. Code/mono stacks are intentionally left alone.
-$ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-
-// === Palette: neutral gray, one blue accent ==================================
-// The interaction spec calls for neutral grays with a single blue accent, so
-// the `--cds-*` neutrals carry no undertone: white surfaces, plain grays, and
-// interactive blue (#0f62fe) reserved for the accent. Overriding the tokens
-// here propagates through every Carbon component AND every rule in this
-// stylesheet that reads `var(--cds-layer-01, …)` / etc. — the per-rule hex
-// fallbacks stay as last-resort safety (they only fire if a variable is unset,
-// which never happens here). Interactive / support / link / focus tokens are
-// Carbon-standard; the neutral scale is Carbon's default warm-neutral gray.
+// The palette's UI font (`--font-ui`, IBM Plex Sans in every palette today)
+// for all chrome. Carbon declares `"IBM Plex Sans"` on its own body and
+// components, which would bypass the palette, so the rule below the root
+// block puts the one variable back on every Carbon surface.
+$ui-font: var(--font-ui);
 
 :root {
   color: var(--cds-text-primary, #161616);
@@ -122,13 +117,8 @@ body {
   overflow: hidden;
 }
 
-// Carbon's compiled CSS DOES declare `font-family: "IBM Plex Sans", …` on its
-// body reset and components (the `$css--font-face: false` flag only skips
-// loading the webfont, not these declarations), and those win over the
-// inherited `:root`. Force the one UI font on the body + every Carbon surface,
-// so a machine that has IBM Plex installed doesn't render Carbon controls in
-// Plex while the rest of the chrome is `system-ui`. Mono/code stacks set their
-// own family explicitly and are unaffected.
+// Carbon's compiled CSS declares its own `font-family` on its body reset and
+// components, and those win over the inherited `:root`.
 body,
 [class*="cds--"] {
   font-family: $ui-font;
@@ -223,521 +213,6 @@ select {
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
   background: var(--cds-layer-01, #f4f4f4);
-}
-
-.sidebar {
-  display: flex;
-  min-block-size: 0;
-  max-block-size: 36vh;
-  flex-direction: column;
-  overflow: hidden;
-  border-inline-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
-  // White, same as the editor + chat panel — every primary pane reads as
-  // one document surface. The gray-20 border at the right is what
-  // separates the sidebar visually; a tinted background was double-marking
-  // the boundary and competing with the panes' own surfaces.
-  background: var(--cds-layer-02, #ffffff);
-}
-
-// === Sidebar: workspace switcher (pinned top) ===
-.workspace-switcher {
-  position: relative;
-  // Match the editor toolbar's *rendered* height: its controls bow the toolbar
-  // to 41px, past its 2.25rem basis, so the folder-name row takes that same
-  // height and the two header segments share one bottom-border line across the
-  // sidebar/editor divide.
-  flex: 0 0 2.5625rem;
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-.workspace-switcher__trigger {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  inline-size: 100%;
-  block-size: 100%;
-  padding: 0 0.5rem 0 0.625rem;
-  border: 0;
-  background: transparent;
-  text-align: start;
-  color: var(--cds-text-primary, #161616);
-  cursor: pointer;
-}
-
-.workspace-switcher__trigger:hover {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-}
-
-.workspace-switcher__trigger-icon {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 4px;
-
-  svg {
-    fill: var(--cds-icon-secondary, #525252);
-  }
-}
-
-.workspace-switcher__name {
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.workspace-switcher__chevron {
-  flex: 0 0 auto;
-  fill: var(--cds-icon-secondary, #525252);
-}
-
-// The dropdown is portaled to <body> and fixed-positioned in JS (the sidebar
-// clips overflow and is short), so these rules can't assume any parent.
-.workspace-switcher__popover {
-  position: fixed;
-  z-index: 9000;
-  max-block-size: min(28rem, 70vh);
-  overflow-y: auto;
-  padding-block: 0.25rem;
-  background: var(--cds-background, #ffffff);
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 8px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-}
-
-.workspace-switcher__list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.ws-item {
-  position: relative;
-}
-
-.ws-item__open {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  inline-size: 100%;
-  // Right padding reserves room for the trailing check / hover-✕.
-  padding: 0.5rem 2.25rem 0.5rem 0.75rem;
-  border: 0;
-  background: transparent;
-  text-align: start;
-  color: var(--cds-text-primary, #161616);
-  cursor: pointer;
-
-  &:hover,
-  &:focus-visible {
-    background: var(--cds-layer-hover-01, #e8e8e8);
-    outline: none;
-  }
-}
-
-.ws-item__icon {
-  flex: 0 0 auto;
-  fill: var(--cds-icon-secondary, #525252);
-}
-
-.ws-item__name {
-  // Don't shrink: keep the name whole and let the path truncate instead.
-  flex: 0 0 auto;
-  max-inline-size: 12rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-}
-
-.ws-item__path {
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  font-size: 0.6875rem;
-}
-
-.ws-item__check {
-  position: absolute;
-  inset-block-start: 50%;
-  inset-inline-end: 0.625rem;
-  transform: translateY(-50%);
-  fill: var(--cds-icon-primary, #161616);
-  pointer-events: none;
-}
-
-.ws-item__remove {
-  position: absolute;
-  inset-block-start: 50%;
-  inset-inline-end: 0.375rem;
-  transform: translateY(-50%);
-  display: grid;
-  place-items: center;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  opacity: 0;
-
-  svg {
-    fill: var(--cds-icon-secondary, #525252);
-  }
-
-  &:hover {
-    background: var(--cds-layer-selected-01, #e0e0e0);
-
-    svg {
-      fill: var(--cds-icon-primary, #161616);
-    }
-  }
-}
-
-.ws-item:hover .ws-item__remove,
-.ws-item__remove:focus-visible {
-  opacity: 1;
-}
-
-.ws-item--active {
-  // Accent bar + tint live on the button: an inset shadow on the <li> would be
-  // painted over by the button's own background.
-  .ws-item__open {
-    background: var(--cds-layer-selected-01, #e0e0e0);
-    box-shadow: inset 3px 0 0 var(--cds-border-interactive, #0f62fe);
-
-    &:hover {
-      background: var(--cds-layer-selected-hover-01, #d1d1d1);
-    }
-  }
-
-  .ws-item__name {
-    font-weight: 600;
-  }
-}
-
-.workspace-switcher__footer {
-  margin-block-start: 0.25rem;
-  padding-block-start: 0.25rem;
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-// === Sidebar title-bar row — owned by the OS, sized by --titlebar-height ===
-// macOS owns the visual: traffic-light position, baseline, native size.
-// We don't shift or restyle the lights. The row height is tuned so the
-// OS-fixed light position *is* the row's vertical center. The 78px spacer
-// reserves the lights' left-edge home; `justify-content: flex-end` parks
-// the sidebar toggle at the right edge of the pane (Obsidian convention)
-// so it's not crowding the lights.
-.sidebar-titlebar {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: flex-end;
-  block-size: var(--titlebar-height);
-  padding-inline: var(--traffic-lights-inset, 78px) 0.5rem;
-  background: var(--cds-layer-01, #f4f4f4);
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  // Chrome, like the tab strip it lines up with — pinned so zoom cannot push
-  // its contents out of a row whose height the traffic lights fix.
-  font-size: 13px;
-}
-
-.sidebar-titlebar__btn {
-  display: inline-grid;
-  place-items: center;
-  inline-size: var(--titlebar-btn-size);
-  block-size: var(--titlebar-btn-size);
-  border: 0;
-  background: transparent;
-  color: var(--cds-icon-secondary, #525252);
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.sidebar-titlebar__btn:hover:not(:disabled),
-.sidebar-titlebar__btn:focus-visible {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-  color: var(--cds-text-primary, #161616);
-  outline: none;
-}
-
-.sidebar-titlebar__btn:disabled {
-  color: var(--cds-icon-disabled, #c6c6c6);
-  cursor: not-allowed;
-}
-
-
-// === Sidebar: Files | Chat tabs + the context-aware New button ===
-.sidebar-tabs {
-  display: flex;
-  flex: 0 0 auto;
-  // A fixed height + stretched tabs put the tab labels and the "+ New" button on
-  // one vertical centre line, while each tab's underline still lands on the row's
-  // bottom border.
-  align-items: stretch;
-  gap: 0.25rem;
-  padding-inline: 0.5rem;
-  block-size: 2.75rem;
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-// Underline tabs (interaction spec §03) — no fill; the active tab is marked by a
-// 2px blue bottom border that sits on the tab-row's own divider.
-.sidebar-tab {
-  display: inline-flex;
-  align-items: center;
-  // Shrinkable, so a narrow pane takes width from the labels rather than
-  // overflowing the row — an overflowing row eats its own end padding, and the
-  // New button ends up flush against the sidebar border.
-  min-inline-size: 0;
-  flex: 0 1 auto;
-  border: 0;
-  border-block-end: 2px solid transparent;
-  margin-block-end: -1px;
-  background: transparent;
-  cursor: pointer;
-  padding-inline: 0.25rem;
-  // Inactive tab: a light gray-50 at regular weight, well below the active tab's
-  // dark semibold.
-  color: var(--cds-text-placeholder, #8d8d8d);
-  font-size: 0.875rem;
-  font-weight: 400;
-  border-radius: 0;
-}
-
-.sidebar-tab:hover {
-  color: var(--cds-text-primary, #161616);
-}
-
-.sidebar-tab--active {
-  color: var(--cds-text-primary, #161616);
-  border-block-end-color: var(--cds-border-interactive, #0f62fe);
-  font-weight: 600;
-}
-
-// The "+ New" create menu (interaction spec §03) — a custom dropdown pinned to
-// the end of the tab row.
-.new-menu {
-  position: relative;
-  // Never shrink, never grow: the button keeps its size while the tabs give way.
-  flex: 0 0 auto;
-  // Centre the button on the row's mid-line — the same line the tab labels sit
-  // on — with symmetric breathing room from the fixed row height.
-  align-self: center;
-  margin-inline-start: auto;
-}
-
-// Trigger: a compact primary button — plus, label, then a bare caret (no boxed
-// divider section).
-.new-menu__trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4375rem;
-  block-size: 2.125rem;
-  padding: 0 0.5625rem 0 0.75rem;
-  border: 0;
-  background: var(--cds-button-primary, #0f62fe);
-  color: var(--cds-text-on-color, #ffffff);
-  font-size: 0.875rem;
-  // "New" is regular weight — the same as the leading "+" and the chevron.
-  font-weight: 400;
-  cursor: pointer;
-}
-
-.new-menu__trigger:hover:not(:disabled) {
-  background: var(--cds-button-primary-hover, #0043ce);
-}
-
-.new-menu__trigger:disabled {
-  background: var(--cds-button-disabled, #c6c6c6);
-  cursor: not-allowed;
-}
-
-.new-menu__plus {
-  font-size: 1rem;
-  font-weight: 400;
-  line-height: 1;
-}
-
-.new-menu__caret {
-  flex: 0 0 auto;
-}
-
-// Panel: a 246px white surface anchored under the button's right edge. White +
-// a neutral #e0e0e0 border — the white layer-02, not the light-gray layer-01,
-// so the menu reads as a white surface (spec).
-// Portaled to <body> and fixed-positioned in JS — the sidebar clips its
-// overflow, so an absolutely-positioned panel lost its left edge the moment the
-// pane was narrower than the panel. Width and offsets come from the hook.
-.new-menu__panel {
-  position: fixed;
-  z-index: 9000;
-  // A menu is as wide as its widest row needs, not a fixed slab.
-  padding-block: 0.25rem;
-  background: var(--cds-layer-02, #ffffff);
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-}
-
-// A neutral divider between the file-system group and chat.
-.new-menu__group + .new-menu__group {
-  margin-block-start: 0.25rem;
-  padding-block-start: 0.25rem;
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-// Item: a 46px row — 16px icon, 12px gap, label, right-aligned mono shortcut.
-.new-menu__item {
-  display: flex;
-  align-items: center;
-  // macOS menu proportions. At the previous 46px the 16px icon and the 14px
-  // label floated in a lot of empty height, which read as loose rather than
-  // roomy — and it left the icon looking stranded beside its own label.
-  gap: 0.5rem;
-  inline-size: 100%;
-  block-size: 1.875rem;
-  padding-inline: 0.75rem;
-  border: 0;
-  background: transparent;
-  color: var(--cds-text-primary, #161616);
-  font-size: 0.875rem;
-  font-weight: 400;
-  text-align: start;
-  cursor: pointer;
-}
-
-// Neutral hover — the spec background-hover overlay.
-.new-menu__item:hover {
-  background: var(--cds-layer-01, #f4f4f4);
-}
-
-.new-menu__item-icon {
-  flex: 0 0 auto;
-  color: var(--cds-icon-secondary, #525252);
-}
-
-.new-menu__item:hover .new-menu__item-icon {
-  color: var(--cds-link-primary, #0f62fe);
-}
-
-.new-menu__item-label {
-  flex: 1 1 auto;
-}
-
-.new-menu__item-shortcut {
-  flex: 0 0 auto;
-  // NOT a mono font: `SF Mono` has no glyph for ⌘ (U+2318) or ⇧ (U+21E7), so
-  // each fell back on its own to a symbol face — drawn at a different size and
-  // off the text baseline, which read as tiny mismatched emoji. The system font
-  // has them, and draws them the way the menu bar does.
-  font-family: inherit;
-  // The same size as the label, as the menu bar sets them — a smaller shortcut
-  // reads as a different kind of thing rather than as the row's other half.
-  font-size: 0.875rem;
-  line-height: 1;
-  color: var(--cds-text-placeholder, #8d8d8d);
-  // The two shortcuts differ by a modifier (⌘N vs ⌘⇧N); aligning their ends
-  // keeps the column straight rather than ragged.
-  font-variant-numeric: tabular-nums;
-}
-
-// Both panes (Files / Chat) stay mounted to make Notes <-> Chat switching
-// a paint-only operation. The wrap collapses out of the flex flow when
-// `hidden`; the visible one fills available height and scrolls.
-.sidebar-pane-wrap {
-  display: flex;
-  min-block-size: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-}
-
-.sidebar-pane-wrap[hidden] {
-  display: none;
-}
-
-// The active tab body fills the remaining height and scrolls; each tab owns
-// its own layout below.
-.sidebar-pane {
-  display: flex;
-  min-block-size: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  overflow: auto;
-}
-
-.sidebar-pane--chat {
-  padding: 0.25rem 0.25rem 0.5rem;
-}
-
-.sidebar-files {
-  display: flex;
-  min-block-size: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 0.25rem;
-  // No right padding: the file tree (and its scrollbar) reaches the sidebar's
-  // right border. The classic 8px scrollbar reserves its own space, so the
-  // rows stay clear of it.
-  padding: 0.75rem 0 0.5rem 0.5rem;
-}
-
-// === Sidebar: footer (pinned bottom) ===
-// "X notes" counter on the left + Search/Settings icons on the right. Replaces
-// the older "Settings" labeled row — Compose is deliberately local-first, so
-// the footer carries NO account avatar and NO "Synced" string (saying
-// "Synced" would lie about a folder that lives only on this Mac).
-.sidebar-footer {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  block-size: 2.25rem;
-  padding-inline: 0.5rem 0.25rem;
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  background: var(--cds-layer-02, #ffffff);
-}
-
-.sidebar-footer__count {
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-footer__actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.125rem;
-}
-
-.sidebar-footer__btn {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  border: 0;
-  background: transparent;
-  color: var(--cds-icon-secondary, #525252);
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.sidebar-footer__btn:hover:not(:disabled),
-.sidebar-footer__btn:focus-visible {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-  color: var(--cds-text-primary, #161616);
-  outline: none;
-}
-
-.sidebar-footer__btn:disabled {
-  color: var(--cds-icon-disabled, #c6c6c6);
-  cursor: not-allowed;
 }
 
 // === Search popover (sidebar footer trigger → centered modal) ===
@@ -856,21 +331,6 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-// === Editor tab strip: collapsed-sidebar leading chrome ===
-// When the sidebar is collapsed, the tab strip's leading region REUSES the
-// sidebar titlebar's styling (`.sidebar-titlebar` + `.sidebar-titlebar__btn`)
-// so the show-sidebar toggle sits exactly where it does with the sidebar open
-// — same position, same vertical alignment with the traffic lights. This only
-// adds the fixed sidebar width (so the tabs don't shift on collapse) and the
-// vertical border that separates it from the tabs (the sidebar's own
-// `border-inline-end` in the open state). The expanded-state styling is
-// untouched.
-.tab-strip__lead {
-  // Matches the sidebar grid column width, so collapsing doesn't move the tabs.
-  flex: 0 0 15rem;
-  border-inline-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
 .chat-context {
@@ -1025,16 +485,14 @@ select {
   }
 }
 
-.icon-button,
-.file-row {
+.icon-button {
   border: 0;
   color: inherit;
   background: transparent;
   cursor: pointer;
 }
 
-.icon-button:hover,
-.file-row:hover {
+.icon-button:hover {
   background: var(--cds-layer-hover-01, #e8e8e8);
 }
 
@@ -1064,53 +522,6 @@ select {
   min-inline-size: 0;
   max-inline-size: none;
   margin-block: 0.25rem 0;
-}
-
-.file-tree {
-  // Scroll container for the virtualized row list (see FileTree.tsx). Not a
-  // flex container itself — the rows are absolutely placed inside the sizer.
-  min-block-size: 0;
-  flex: 1 1 auto;
-  // Vertical scroll only — long names truncate (`.truncate`), so a horizontal
-  // bar must never appear. A custom `::-webkit-scrollbar` forces a thin,
-  // always-classic bar instead of the macOS overlay one (which is wider,
-  // toggles size, and overlaid the rows' trailing edge so a click there
-  // scrolled instead). The classic bar takes its own 8px outside the content
-  // box, clear of the rows.
-  overflow-x: hidden;
-  overflow-y: auto;
-  // `::-webkit-scrollbar` is a legacy pseudo-element that honours physical
-  // `width`/`height` only — the logical `inline-size`/`block-size` are ignored,
-  // which is why the bar stayed full-width before.
-  &::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: var(--cds-border-strong-01, #8d8d8d);
-    border-radius: 4px;
-  }
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-}
-
-// Spans the full virtual height so the scrollbar reflects ALL rows; the mounted
-// rows are absolutely positioned within it at their computed offsets.
-.file-tree__sizer {
-  position: relative;
-  inline-size: 100%;
-}
-
-.file-tree__row {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: 0;
-}
-
-.file-tree__row > .file-row,
-.file-tree__row > .file-row-wrapper {
-  inline-size: 100%;
 }
 
 // Deeper focus: the strip that replaces the tab strip — clears the
@@ -1176,239 +587,6 @@ body.pane-resizing {
   margin-inline: auto;
 }
 
-// ── External files — the sidebar group above the tree ───────────────
-// Files opened from outside any workspace. Rows echo `.file-row`'s metrics
-// (28px, same hover/active layers) but are NOT tree rows — no folder
-// indentation, no kebab; a hover-revealed ✕ removes the entry instead.
-.external-files {
-  padding-block-end: 0.25rem;
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-.external-files__heading {
-  padding: 0.375rem 0.5rem 0.25rem;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.external-files__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  block-size: 1.75rem;
-
-  &:hover {
-    background: var(--cds-layer-hover-01, #e8e8e8);
-  }
-
-  &--active {
-    color: var(--cds-text-primary, #161616);
-    background: var(--cds-layer-selected-01, #e0e0e0);
-    font-weight: 600;
-
-    svg {
-      color: var(--cds-icon-primary, #161616);
-    }
-  }
-}
-
-.external-files__open {
-  // The same geometry as `.file-row`, not an approximation of it: these rows
-  // sit directly above the tree, so the empty leading column that lines a file
-  // name up under a folder's label has to be here too.
-  display: grid;
-  grid-template-columns: 1rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.5rem;
-  min-inline-size: 0;
-  block-size: 100%;
-  padding-inline: 0.5rem 0.25rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  // `font: inherit` takes the sidebar's size, not the tree's — these rows sit
-  // directly above `.file-row` and have to read as the same list.
-  font-size: 0.875rem;
-  text-align: start;
-  cursor: pointer;
-}
-
-.external-files__remove {
-  display: grid;
-  place-items: center;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-  margin-inline-end: 0.25rem;
-  border: 0;
-  border-radius: 2px;
-  background: transparent;
-  color: var(--cds-icon-secondary, #525252);
-  cursor: pointer;
-  opacity: 0;
-
-  .external-files__row:hover &,
-  &:focus-visible {
-    opacity: 1;
-  }
-
-  &:hover {
-    background: var(--cds-layer-selected-01, #e0e0e0);
-    color: var(--cds-icon-primary, #161616);
-  }
-}
-
-.sidebar-index {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.75rem 0.5rem;
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-.search-field {
-  display: grid;
-  grid-template-columns: 1rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.5rem;
-  block-size: 2rem;
-  padding-inline: 0.5rem;
-  background: var(--cds-field-01, #ffffff);
-  border-block-end: 1px solid var(--cds-border-strong-01, #8d8d8d);
-  color: var(--cds-icon-secondary, #525252);
-}
-
-.search-field:focus-within {
-  outline: 2px solid var(--cds-focus, #0f62fe);
-  outline-offset: -2px;
-}
-
-.search-field input {
-  min-inline-size: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--cds-text-primary, #161616);
-  font-size: 0.8125rem;
-}
-
-.search-field input:disabled {
-  color: var(--cds-text-disabled, #a8a8a8);
-  cursor: not-allowed;
-}
-
-.index-message {
-  margin: 0;
-  padding-inline: 0.5rem;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-.search-results {
-  display: grid;
-  gap: 1px;
-  min-block-size: 0;
-}
-
-.search-results {
-  max-block-size: 12rem;
-  overflow: auto;
-}
-
-.search-result {
-  display: grid;
-  gap: 0.125rem;
-  min-inline-size: 0;
-  border: 0;
-  padding: 0.5rem;
-  background: transparent;
-  color: var(--cds-text-primary, #161616);
-  text-align: start;
-  cursor: pointer;
-}
-
-.search-result:hover,
-.search-result:focus-visible {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-  outline: none;
-}
-
-.search-result__title {
-  overflow: hidden;
-  color: var(--cds-text-primary, #161616);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.125rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.search-result__path {
-  overflow: hidden;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.6875rem;
-  line-height: 1rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.search-result__snippet {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.75rem;
-  line-height: 1rem;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.file-row {
-  display: grid;
-  grid-template-columns: 1rem minmax(0, 1fr) auto;
-  align-items: center;
-  block-size: 1.75rem;
-  gap: 0.5rem;
-  // A small end inset keeps the name off the scrollbar gutter.
-  padding-inline: 0.5rem 0.5rem;
-  color: var(--cds-text-secondary, #525252);
-  font-size: 0.875rem;
-  line-height: 1.75rem;
-  text-align: start;
-  // Rows are navigation, not prose — don't let a click/right-click select the
-  // row label as text.
-  user-select: none;
-}
-
-.file-row--folder {
-  color: var(--cds-text-primary, #161616);
-  font-weight: 500;
-}
-
-.file-row svg {
-  color: var(--cds-icon-secondary, #6f6f6f);
-}
-
-.file-row--active {
-  color: var(--cds-text-primary, #161616);
-  background: var(--cds-layer-selected-01, #e0e0e0);
-  font-weight: 600;
-}
-
-.file-row--active svg {
-  color: var(--cds-icon-primary, #161616);
-}
-
-.dirty-dot {
-  inline-size: 0.375rem;
-  block-size: 0.375rem;
-  margin-inline-start: 0.25rem;
-  border-radius: 50%;
-  background: var(--cds-button-primary, #0f62fe);
-}
-
 .editor-region,
 .chat-region {
   display: flex;
@@ -1420,8 +598,9 @@ body.pane-resizing {
 }
 
 .chat-region {
-  background: var(--cds-layer-02, #ffffff);
+  background: var(--color-bg-app);
   position: relative;
+  border-inline-start: 1px solid var(--color-border-subtle);
 }
 
 // Border-pulse: a ~600ms inset ring drawn over the panel when a conversation
@@ -1501,197 +680,6 @@ body.pane-resizing {
   white-space: nowrap;
 }
 
-.status-bar {
-  display: flex;
-  // Match the sidebar footer's block-size so the two bottom bars line up.
-  flex: 0 0 2.25rem;
-  align-items: center;
-  // Only the Rich/Raw + word-count meta remains (no path), kept to the right.
-  justify-content: flex-end;
-  gap: 0.5rem;
-  padding-inline: 0.75rem;
-  background: var(--cds-layer-02, #ffffff);
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.6875rem;
-  letter-spacing: 0.015625rem;
-}
-
-.status-bar__path {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.status-bar__meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  white-space: nowrap;
-}
-
-.status-bar__dot {
-  display: inline-block;
-  inline-size: 0.3125rem;
-  block-size: 0.3125rem;
-  border-radius: 50%;
-  background: var(--cds-border-strong-01, #8d8d8d);
-}
-
-.status-bar__dot--dirty {
-  background: var(--cds-button-primary, #0f62fe);
-}
-
-.mode-toggle {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px;
-  background: var(--cds-layer-02, #ffffff);
-  border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
-  border-radius: 3px;
-  // Status bar is 24px tall; the toggle has to fit inside without
-  // pushing the bar height up. Internal padding stays tight.
-  block-size: 1.125rem;
-}
-
-.mode-toggle__option {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 0.5rem;
-  block-size: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.625rem;
-  font-weight: 500;
-  letter-spacing: 0.03125rem;
-  text-transform: uppercase;
-  cursor: pointer;
-  border-radius: 2px;
-  transition: background 80ms ease, color 80ms ease;
-}
-
-.mode-toggle__option:hover {
-  color: var(--cds-text-primary, #161616);
-}
-
-.mode-toggle__option--active {
-  background: var(--cds-layer-selected-01, #e0e0e0);
-  color: var(--cds-text-primary, #161616);
-}
-
-.mode-toggle__option:focus-visible {
-  outline: 2px solid var(--cds-focus, #0f62fe);
-  outline-offset: -2px;
-}
-
-.tab-strip {
-  display: flex;
-  flex: 0 0 var(--titlebar-height);
-  min-inline-size: 0;
-  overflow: hidden;
-  background: var(--cds-layer-02, #ffffff);
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  // Window chrome, so it holds its size under app zoom — same rule browsers
-  // apply to their own toolbars. The strip's height is pinned to keep the
-  // macOS traffic lights centred in it, and text that kept growing inside a
-  // pinned row would simply clip. `px` on purpose: `rem` would scale.
-  font-size: 13px;
-}
-
-// Only the tabs scroll; the leading traffic-light spacer + show-sidebar toggle
-// are siblings of this scroller, so they stay pinned at the strip's start
-// instead of sliding under the macOS window controls when tabs overflow.
-.tab-strip__scroll {
-  display: flex;
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-.tab-strip__scroll::-webkit-scrollbar {
-  block-size: 0.1875rem;
-}
-
-.editor-tab {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 1.5rem;
-  align-items: center;
-  flex: 0 0 auto;
-  min-inline-size: 6.5rem;
-  max-inline-size: 14rem;
-  padding-inline-end: 0.125rem;
-  border-inline-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  background: var(--cds-layer-02, #ffffff);
-  color: var(--cds-text-helper, #6f6f6f);
-}
-
-.editor-tab:hover {
-  background: var(--cds-layer-hover-02, #e8e8e8);
-}
-
-.editor-tab--active {
-  background: var(--cds-layer-01, #f4f4f4);
-  color: var(--cds-text-primary, #161616);
-  box-shadow: inset 0 2px 0 var(--cds-focus, #0f62fe);
-}
-
-.editor-tab--active:hover {
-  background: var(--cds-layer-01, #f4f4f4);
-}
-
-// Drop indicator while dragging a tab to reorder: a left bar marks where
-// the dragged tab will land (just before this one).
-.editor-tab--drop {
-  box-shadow: inset 2px 0 0 0 var(--cds-border-interactive, #0f62fe);
-}
-
-.tab-button,
-.tab-close {
-  border: 0;
-  color: inherit;
-  background: transparent;
-  cursor: pointer;
-}
-
-.tab-button {
-  display: grid;
-  grid-template-columns: 0.875rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem;
-  min-inline-size: 0;
-  padding-inline: 0.75rem 0.25rem;
-  font-size: 0.8125rem;
-  line-height: 2.125rem;
-  text-align: start;
-}
-
-.editor-tab--active .tab-button {
-  font-weight: 500;
-}
-
-.tab-close {
-  display: grid;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-  margin-block: auto;
-  place-items: center;
-  border-radius: 2px;
-  color: var(--cds-icon-secondary, #525252);
-}
-
-.tab-close:hover {
-  background: var(--cds-layer-hover-01, #d0d0d0);
-}
-
-.tab-button:focus-visible,
-.tab-close:focus-visible {
-  outline: 2px solid var(--cds-focus, #0f62fe);
-  outline-offset: -2px;
-}
-
 .editor-body {
   display: flex;
   min-block-size: 0;
@@ -1706,30 +694,12 @@ body.pane-resizing {
   min-block-size: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  background: var(--cds-layer-02, #ffffff);
+  background: var(--color-bg-app);
 }
 
 .editor-host {
   min-block-size: 0;
   flex: 1 1 auto;
-}
-
-// CodeMirror 6 editor — the v1.2 engine, behind
-// `localStorage["compose.editorEngine.v1"] = "codemirror"`. Lives
-// inside the existing `.tiptap-editor` flex shell so the rest of
-// the document workspace layout (status bar, comments panel sibling)
-// stays unchanged through the cut-over.
-
-.cm-toolbar__engine-label {
-  display: inline-flex;
-  align-items: center;
-  height: 100%;
-  padding-inline: 0.5rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-weight: 600;
 }
 
 // Sizes the editor's mount slot. CM6 owns everything *inside*
@@ -1752,106 +722,13 @@ body.pane-resizing {
   min-block-size: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  background: var(--cds-layer-02, #ffffff);
+  background: var(--color-bg-app);
 }
 
 .tiptap-editor__scroll {
   flex: 1 1 auto;
   min-block-size: 0;
   overflow: auto;
-}
-
-.tiptap-toolbar {
-  display: flex;
-  align-items: center;
-  flex: 0 0 2.25rem;
-  gap: 2px;
-  padding: 4px 0.75rem;
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  background: var(--cds-layer-01, #f4f4f4);
-}
-
-// Pushes the current-file group to the right edge of the (shared) toolbar.
-.tiptap-toolbar__spacer {
-  flex: 1 1 auto;
-}
-
-.tiptap-toolbar__file-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-// The Carbon OverflowMenu "Export" trigger. Unlike the icon-only toolbar
-// buttons this one carries a text label + caret, so it auto-sizes to its
-// content (height pinned to the toolbar's 1.75rem rhythm) instead of being a
-// fixed square. Tinted to match the icon buttons' resting colour.
-.tiptap-toolbar__export.cds--overflow-menu {
-  inline-size: auto;
-  block-size: 1.75rem;
-  color: var(--cds-icon-secondary, #525252);
-  border-radius: 2px;
-
-  // Carbon centres the trigger's icon slot in a fixed square; let it grow to
-  // fit the label and give the text horizontal breathing room.
-  .cds--overflow-menu__icon {
-    inline-size: auto;
-  }
-
-  &:hover {
-    background: var(--cds-layer-hover-02, #e8e8e8);
-    color: var(--cds-icon-primary, #161616);
-  }
-}
-
-.tiptap-toolbar__export-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.125rem;
-  padding-inline: 0.375rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  color: inherit;
-}
-
-.tiptap-toolbar__button {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--cds-icon-secondary, #525252);
-  border-radius: 2px;
-  cursor: pointer;
-  transition: background 80ms ease, color 80ms ease;
-}
-
-.tiptap-toolbar__button:hover {
-  background: var(--cds-layer-hover-02, #e8e8e8);
-  color: var(--cds-icon-primary, #161616);
-}
-
-.tiptap-toolbar__button--active {
-  background: var(--cds-layer-selected-01, #e0e0e0);
-  color: var(--cds-text-primary, #161616);
-}
-
-.tiptap-toolbar__button:focus-visible,
-.tiptap-toolbar__heading:focus-visible {
-  outline: 2px solid var(--cds-focus, #0f62fe);
-  outline-offset: -2px;
-}
-
-.tiptap-toolbar__divider {
-  display: inline-block;
-  inline-size: 1px;
-  block-size: 1.125rem;
-  margin: 0 0.25rem;
-  background: var(--cds-border-subtle-02, #c6c6c6);
 }
 
 .file-picker {
@@ -1903,173 +780,6 @@ body.pane-resizing {
   font-size: 0.875rem;
 }
 
-.tiptap-toolbar__heading-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-}
-
-.tiptap-toolbar__heading {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-inline-size: 1.875rem;
-  block-size: 1.75rem;
-  padding: 0 0.375rem;
-  border: 0;
-  background: transparent;
-  color: var(--cds-text-secondary, #525252);
-  font-family: $ui-font;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.03125rem;
-  border-radius: 2px;
-  cursor: pointer;
-  transition: background 80ms ease, color 80ms ease;
-}
-
-.tiptap-toolbar__heading:hover {
-  background: var(--cds-layer-hover-02, #e8e8e8);
-  color: var(--cds-text-primary, #161616);
-}
-
-.tiptap-toolbar__heading--active {
-  background: var(--cds-layer-selected-01, #e0e0e0);
-  color: var(--cds-text-primary, #161616);
-}
-
-.tiptap-editor__content {
-  flex: 1 1 auto;
-  min-block-size: 0;
-  padding: 2rem 3rem;
-  font-family: $ui-font;
-  font-size: 1.0625rem;
-  line-height: 1.6;
-  color: var(--cds-text-primary, #161616);
-
-  // ProseMirror's editable container.
-  .ProseMirror {
-    min-block-size: 12rem;
-    outline: none;
-  }
-
-  // Typographic hierarchy mirrors the canvas-era look so docs feel
-  // continuous across the migration.
-  h1 {
-    font-size: 2rem;
-    font-weight: 600;
-    margin: 1.5rem 0 0.75rem;
-    color: var(--cds-text-primary, #161616);
-  }
-  h2 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin: 1.25rem 0 0.5rem;
-    color: var(--cds-text-primary, #161616);
-  }
-  h3 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin: 1rem 0 0.5rem;
-  }
-  p {
-    margin: 0.5rem 0;
-  }
-  // Tailwind's preflight strips `list-style` from ul/ol globally
-  // (it's part of their CSS reset). Restore inside the editor so
-  // bullets and numbers render for the user.
-  ul {
-    margin: 0.5rem 0;
-    padding-inline-start: 1.5rem;
-    list-style: disc outside;
-  }
-  ol {
-    margin: 0.5rem 0;
-    padding-inline-start: 1.5rem;
-    list-style: decimal outside;
-  }
-  li {
-    margin: 0.125rem 0;
-  }
-  // Nested lists get a different bullet style for visual hierarchy.
-  ul ul {
-    list-style: circle outside;
-  }
-  ul ul ul {
-    list-style: square outside;
-  }
-  blockquote {
-    margin: 0.5rem 0;
-    padding-inline-start: 1rem;
-    border-inline-start: 3px solid var(--cds-border-subtle-02, #c6c6c6);
-    color: var(--cds-text-secondary, #525252);
-  }
-  hr {
-    border: 0;
-    border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-    margin: 1.5rem 0;
-  }
-  code {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 0.9em;
-    padding: 0.125rem 0.25rem;
-    background: var(--cds-layer-01, #f4f4f4);
-    border-radius: 2px;
-  }
-  pre {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    background: var(--cds-layer-01, #f4f4f4);
-    padding: 0.75rem 1rem;
-    border-radius: 4px;
-    overflow-x: auto;
-  }
-  pre code {
-    padding: 0;
-    background: transparent;
-  }
-  a {
-    color: var(--cds-link-primary, #0f62fe);
-    text-decoration: underline;
-  }
-  img {
-    max-inline-size: 100%;
-    height: auto;
-    display: block;
-    margin: 0.5rem 0;
-  }
-  table {
-    border-collapse: collapse;
-    margin: 0.75rem 0;
-  }
-  th,
-  td {
-    border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-    padding: 0.375rem 0.625rem;
-    text-align: start;
-  }
-  th {
-    background: var(--cds-layer-01, #f4f4f4);
-    font-weight: 600;
-  }
-  // Task list checkboxes.
-  ul[data-type="taskList"] {
-    list-style: none;
-    padding-inline-start: 0.25rem;
-    li {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.5rem;
-    }
-    li > label {
-      flex: 0 0 auto;
-      user-select: none;
-    }
-    li > div {
-      flex: 1 1 auto;
-    }
-  }
-}
-
 .tiptap-source {
   display: flex;
   flex: 1 1 auto;
@@ -2081,7 +791,7 @@ body.pane-resizing {
   flex: 1 1 auto;
   min-inline-size: 0;
   padding: 2rem 3rem;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-jetbrains-mono);
   font-size: 0.875rem;
   line-height: 1.65;
   color: var(--cds-text-primary, #161616);
@@ -2548,19 +1258,16 @@ body.pane-resizing {
   background: var(--cds-button-primary-hover, #0353e9);
 }
 
-// Shares --titlebar-height with the sidebar title row and editor tab
-// strip so the bottom border line is continuous across the whole window.
-// Border-subtle-01 (not 02) matches the bottom edge color the rest of the
-// title bar uses.
+// Shares --titlebar-height with the sidebar title row and the editor tab
+// strip, so the three line up across the window.
 .chat-header {
   display: flex;
   flex: 0 0 var(--titlebar-height);
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding-inline: 0.75rem;
-  background: var(--cds-layer-02, #ffffff);
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  padding-inline: 1.25rem 0.75rem;
+  background: var(--color-bg-app);
 }
 
 .chat-header__title {
@@ -2569,9 +1276,10 @@ body.pane-resizing {
   flex: 1 1 auto;
   align-items: center;
   gap: 0.5rem;
-  color: var(--cds-text-primary, #161616);
-  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .chat-header__meta {
@@ -2650,10 +1358,8 @@ body.pane-resizing {
   flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
-  // White, like the editor — the chat is a document-like surface, not a
-  // platform panel. The user-turn bordered card (which IS gray-10) is
-  // what separates messages; the panel itself should fade into the chrome.
-  background: var(--cds-layer-02, #ffffff);
+  // The page colour, like the note: the chat is a document-like surface.
+  background: var(--color-bg-app);
 }
 
 .chat-messages {
@@ -2662,7 +1368,7 @@ body.pane-resizing {
   flex: 1 1 auto;
   flex-direction: column;
   overflow: auto;
-  padding: 1rem 0.75rem;
+  padding: 0.75rem 1.25rem 1rem;
 }
 
 // Reserves room under the last turn for the floating composer. Sized inline to
@@ -2833,19 +1539,16 @@ body.pane-resizing {
   overflow-wrap: anywhere;
 }
 
-// User turns are a contained, bordered block — Carbon `--cds-layer-02`, a
-// subtle 1px border, modest padding, and rounded corners. The block is what
-// marks the turn as the user's; the assistant reply stays open prose.
-// Whitespace preserves the newlines the user typed.
+// User turns are a sunken bubble on the right; the assistant's reply stays
+// open prose on the left. Whitespace keeps the newlines the user typed.
 .message-body--user {
   white-space: pre-wrap;
-  align-self: flex-start;
-  max-inline-size: min(36rem, 100%);
+  align-self: flex-end;
+  max-inline-size: min(36rem, 88%);
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 8px;
-  background: var(--cds-layer-02, #ffffff);
-  color: var(--cds-text-primary, #161616);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-primary);
 }
 
 // A commented passage sent to chat, rendered as a chip inside the user bubble.
@@ -3097,7 +1800,7 @@ body.pane-resizing {
   padding: 0.0625rem 0.25rem;
   border-radius: 4px;
   background: var(--cds-layer-accent-01, #e0e0e0);
-  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-family: var(--font-jetbrains-mono);
   // Slightly smaller than body so monospace doesn't look oversized, but
   // breakable so a long token can't widen the bubble.
   font-size: 0.85em;
@@ -3250,7 +1953,7 @@ body.pane-resizing {
   padding: 0.0625rem 0.25rem;
   border-radius: 4px;
   background: var(--cds-layer-accent-01, #e0e0e0);
-  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-family: var(--font-jetbrains-mono);
   font-size: 0.85em;
   overflow-wrap: anywhere;
 }
@@ -3459,7 +2162,7 @@ body.pane-resizing {
 }
 
 .trace-tool__name {
-  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-family: var(--font-jetbrains-mono);
   font-weight: 600;
 }
 
@@ -3553,7 +2256,7 @@ body.pane-resizing {
   max-inline-size: 100%;
   overflow: hidden;
   color: var(--cds-link-primary, #0f62fe);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-jetbrains-mono);
   font-size: 0.75rem;
   text-align: start;
   text-overflow: ellipsis;
@@ -3688,7 +2391,7 @@ body.pane-resizing {
   overflow: auto;
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   background: var(--cds-layer-02, #ffffff);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-jetbrains-mono);
   line-height: 1.1rem;
 }
 
@@ -3791,16 +2494,10 @@ body.pane-resizing {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.625rem 0.75rem 0.75rem;
-  // White, like the transcript above it — the footer is not a coloured strip.
-  // Only the field below carries a subtle fill, so the input zone reads as one
-  // element (textarea + send) on an otherwise seamless surface. Opaque so the
-  // transcript scrolling under it stays occluded.
-  background: var(--cds-layer-02, #ffffff);
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  // Soft upward lift (tinted, low-alpha — not a glow) to separate the floating
-  // composer from the messages passing beneath it.
-  box-shadow: 0 -8px 16px -12px rgba(22, 22, 22, 0.2);
+  padding: 0.5rem 1.25rem 1.25rem;
+  // Opaque, in the page colour, so the transcript scrolling under it stays
+  // hidden; the field below is the card that reads as the composer.
+  background: var(--color-bg-app);
 }
 
 .chat-setup-notice {
@@ -3840,7 +2537,7 @@ body.pane-resizing {
 .chat-setup-notice__command {
   margin-inline-start: 0.375rem;
   padding: 0.0625rem 0.25rem;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-jetbrains-mono);
   font-size: 0.75rem;
   color: var(--cds-text-primary, #161616);
   background: var(--cds-layer-02, #ffffff);
@@ -3980,16 +2677,19 @@ body.pane-resizing {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 0.25rem;
-  padding: 0.1875rem;
-  background: var(--cds-layer-01, #f4f4f4);
-  border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
-  border-radius: 8px;
-  transition: border-color 80ms ease, box-shadow 80ms ease;
+  padding: 0.375rem;
+  background: var(--color-surface-default);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .chat-input-field:focus-within {
-  border-color: var(--cds-focus, #0f62fe);
-  box-shadow: inset 0 0 0 1px var(--cds-focus, #0f62fe);
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 1px var(--color-border-focus);
 }
 
 .chat-input-field textarea {
@@ -4025,14 +2725,14 @@ body.pane-resizing {
 .chat-send {
   display: grid;
   place-items: center;
-  inline-size: 2rem;
-  block-size: 2rem;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
   border: 0;
-  border-radius: 6px;
-  background: var(--cds-button-primary, #0f62fe);
-  color: var(--cds-text-on-color, #ffffff);
+  border-radius: 999px;
+  background: var(--color-accent-default);
+  color: var(--color-text-on-accent);
   cursor: pointer;
-  transition: background 80ms ease;
+  transition: background var(--motion-fast) var(--ease-standard);
 }
 
 .chat-send:hover:not(:disabled) {
@@ -4102,7 +2802,7 @@ body.pane-resizing {
   border-radius: 4px;
   background: var(--cds-layer-01, #f4f4f4);
   color: var(--cds-text-secondary, #525252);
-  font-family: var(--cds-code-01-font-family, "IBM Plex Mono", monospace);
+  font-family: var(--font-jetbrains-mono);
   font-size: 0.6875rem;
   line-height: 1rem;
   white-space: pre-wrap;
@@ -5040,204 +3740,6 @@ body.pane-resizing {
   color: var(--cds-text-primary, #161616);
 }
 
-// ── Appearance (Settings → General) ───────────────────────────────────────────
-//
-// The theme previews are the ONE place literal colours are correct rather than
-// tokens: a "Light" tile has to look light while the app is dark, so these
-// describe the themes, not the current one. Everything else here is tokenised.
-$theme-light-bg: #ffffff;
-$theme-light-panel: #f4f4f4;
-$theme-light-line: #c6c6c6;
-$theme-dark-bg: #161616;
-$theme-dark-panel: #262626;
-$theme-dark-line: #525252;
-
-.theme-picker {
-  display: flex;
-  gap: 0.75rem;
-  margin-block-end: 0.5rem;
-}
-
-.theme-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.375rem;
-  cursor: pointer;
-}
-
-// The input carries the semantics and the keyboard; the tile carries the paint.
-// Not `display: none`, which would take it out of the tab order and mute it to
-// a screen reader.
-.theme-option__input {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.theme-preview {
-  display: flex;
-  overflow: hidden;
-  inline-size: 4.5rem;
-  block-size: 3rem;
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 0.375rem;
-  // Two rings rather than a thicker border, so selecting a tile cannot change
-  // its size and nudge the row.
-  box-shadow: none;
-  transition: box-shadow 120ms ease;
-}
-
-.theme-option:hover .theme-preview {
-  box-shadow: 0 0 0 1px var(--cds-border-strong-01, #8d8d8d);
-}
-
-.theme-option__input:focus-visible + .theme-preview {
-  outline: 2px solid var(--cds-focus, #0f62fe);
-  outline-offset: 2px;
-}
-
-// `--cds-border-interactive`, NOT `--cds-focus`: Carbon's focus ring is white
-// in dark by design, so a selected tile was outlined in white — which reads as
-// a border, not a selection, and competed with the Light tile beside it.
-// Interactive blue stays blue in both themes. The border takes it too, so the
-// signal is one solid edge rather than a hairline plus a halo.
-.theme-option--selected .theme-preview {
-  border-color: var(--cds-border-interactive, #0f62fe);
-  box-shadow: 0 0 0 2px var(--cds-border-interactive, #0f62fe);
-}
-
-.theme-preview__sidebar {
-  flex: 0 0 30%;
-  block-size: 100%;
-}
-
-.theme-preview__body {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.25rem;
-  padding-inline: 0.375rem;
-}
-
-.theme-preview__line {
-  block-size: 0.1875rem;
-  border-radius: 1px;
-  inline-size: 100%;
-}
-
-.theme-preview__line--title {
-  block-size: 0.3125rem;
-  inline-size: 70%;
-}
-
-.theme-preview__line--short {
-  inline-size: 55%;
-}
-
-.theme-preview--light {
-  background: $theme-light-bg;
-
-  .theme-preview__sidebar {
-    background: $theme-light-panel;
-  }
-  .theme-preview__line {
-    background: $theme-light-line;
-  }
-}
-
-.theme-preview--dark {
-  background: $theme-dark-bg;
-
-  .theme-preview__sidebar {
-    background: $theme-dark-panel;
-  }
-  .theme-preview__line {
-    background: $theme-dark-line;
-  }
-}
-
-// Split, which is what "System" means — whichever the Mac is.
-//
-// ONE gradient, on the tile. Putting a matching gradient on the sidebar and the
-// body instead made each split at its OWN midpoint — the sidebar is 30% wide,
-// so its seam landed at 15% of the tile and the body's at 65%, giving three
-// ragged edges where there should be one. The children go translucent and let
-// the tile's single seam show through, so it cannot fall out of step.
-.theme-preview--system {
-  background: linear-gradient(115deg, $theme-light-bg 0 50%, $theme-dark-bg 50% 100%);
-
-  .theme-preview__sidebar {
-    background: rgba(128, 128, 128, 0.22);
-  }
-  // A mid grey, because these cross the seam and must read on both halves.
-  .theme-preview__line {
-    background: #8d8d8d;
-  }
-}
-
-.theme-option__label {
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary, #525252);
-}
-
-.theme-option--selected .theme-option__label {
-  color: var(--cds-text-primary, #161616);
-  font-weight: 600;
-}
-
-// Text size: one bordered group rather than three separate controls, so the
-// steppers read as belonging to the number between them — and small, because
-// this is a preference row, not a primary action.
-.text-size {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-block-end: 0.5rem;
-}
-
-.text-size__group {
-  display: inline-flex;
-  align-items: center;
-  overflow: hidden;
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 0.25rem;
-}
-
-.text-size__step {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--cds-icon-primary, #161616);
-  font-size: 0.875rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.text-size__step:hover:not(:disabled) {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-}
-
-.text-size__step:disabled {
-  color: var(--cds-icon-disabled, rgba(22, 22, 22, 0.25));
-  cursor: not-allowed;
-}
-
-.text-size__step:focus-visible {
-  outline: 2px solid var(--cds-focus, #0f62fe);
-  outline-offset: -2px;
-}
-
 // A quiet text action beside a control — Carbon's ghost Button is a 32px
 // target, which outweighs the row it sits in.
 .settings-link-button {
@@ -5256,17 +3758,6 @@ $theme-dark-line: #525252;
 .settings-link-button:disabled {
   color: var(--cds-text-disabled, rgba(22, 22, 22, 0.25));
   cursor: not-allowed;
-}
-
-.text-size__value {
-  min-inline-size: 3rem;
-  padding-inline: 0.25rem;
-  border-inline: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  line-height: 1.75rem;
-  color: var(--cds-text-primary, #161616);
 }
 
 .settings-helper {
@@ -5341,7 +3832,7 @@ $theme-dark-line: #525252;
 .model-picker__suggest {
   padding: 0;
   font: inherit;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-jetbrains-mono);
   color: var(--cds-link-primary, #0f62fe);
   background: none;
   border: none;
@@ -5412,7 +3903,7 @@ $theme-dark-line: #525252;
   min-inline-size: 0;
   overflow-x: auto;
   padding: 0.375rem 0.5rem;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-jetbrains-mono);
   font-size: 0.75rem;
   white-space: nowrap;
   background: var(--cds-layer-01, #f4f4f4);
@@ -5427,7 +3918,7 @@ $theme-dark-line: #525252;
 }
 
 .agent-install-hint__command {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-jetbrains-mono);
   font-size: 0.6875rem;
   padding: 0.0625rem 0.25rem;
   background: var(--cds-layer-01, #f4f4f4);
@@ -5443,7 +3934,7 @@ $theme-dark-line: #525252;
   background: var(--cds-layer-01, #f4f4f4);
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   border-radius: 3px;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-jetbrains-mono);
   font-size: 0.6875rem;
   line-height: 1.2rem;
   white-space: pre-wrap;
@@ -5626,7 +4117,7 @@ $theme-dark-line: #525252;
 
 .runtime-detail__path {
   margin: 0;
-  font-family: var(--cds-code-01-font-family, "IBM Plex Mono", monospace);
+  font-family: var(--font-jetbrains-mono);
   font-size: 0.75rem;
   color: var(--cds-text-primary, #161616);
   overflow-wrap: anywhere;
@@ -6088,6 +4579,7 @@ $theme-dark-line: #525252;
 
 .app-skeleton__pane--sidebar {
   border-inline-end: 1px solid var(--cds-border-subtle-02, #c6c6c6);
+  background: var(--color-sidebar-bg);
 }
 
 .app-skeleton__pane--chat {
@@ -6444,70 +4936,6 @@ $theme-dark-line: #525252;
   }
 }
 
-.file-row-wrapper {
-  // Clamped to the virtualizer's fixed row height (ROW_HEIGHT in FileTree.tsx).
-  block-size: 1.75rem;
-}
-
-// Neutral hover — the spec background-hover overlay (interaction spec §01).
-.file-row-wrapper:hover {
-  background: rgba(141, 141, 141, 0.12);
-}
-
-// The selected row — the single "you are here" marker: a 3px blue left bar over
-// a neutral fill, sharp corners. The bar lives ONLY here (not on hover, not on
-// the new-note target), so it never competes (interaction spec §01).
-.file-row-wrapper--active {
-  background: rgba(141, 141, 141, 0.2);
-  box-shadow: inset 3px 0 0 0 var(--cds-border-interactive, #0f62fe);
-  border-radius: 0;
-}
-
-// The creation TARGET (newNoteDir) — the folder "+ New" note/folder lands in.
-// A persistent neutral fill, deliberately without the blue bar: the bar marks
-// the active DOCUMENT (tab-bound); the target marks creation context. Both can
-// show at once — a selected note plus its (or another) folder as target.
-.file-row-wrapper--target {
-  background: rgba(141, 141, 141, 0.16);
-}
-
-// The custom drag ghost (a name chip) — appended offscreen for setDragImage;
-// the virtualizer's translateY rows make the default drag snapshot capture the
-// wrong region entirely.
-.file-drag-ghost {
-  position: fixed;
-  inset-block-start: -100px;
-  inset-inline-start: 0;
-  padding: 0.25rem 0.625rem;
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 6px;
-  background: var(--cds-layer-02, #ffffff);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  color: var(--cds-text-primary, #161616);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-}
-
-// Drop target while dragging a file onto a folder: a tinted fill + ring so
-// the folder clearly reads as the destination.
-.file-row-wrapper--drop {
-  background: var(--cds-highlight, #d0e2ff);
-  box-shadow: inset 0 0 0 2px var(--cds-border-interactive, #0f62fe);
-  border-radius: 4px;
-}
-
-// The button IS the row: full width, so a click (and a drag) lands anywhere on
-// the line, and the pointer cursor matches everywhere. The wrapper carries the
-// hover/selection background, so the button's own stays off.
-.file-row-wrapper .file-row {
-  inline-size: 100%;
-  background: transparent;
-}
-
-.file-row-wrapper .file-row:hover {
-  background: transparent;
-}
-
 // The tree's right-click context menu (Carbon Menu) — the same white surface
 // treatment as the kebab menus below.
 .cds--menu {
@@ -6570,37 +4998,6 @@ $theme-dark-line: #525252;
   display: none;
 }
 
-.file-tree--empty {
-  padding: 0.75rem 0.5rem;
-  color: var(--cds-text-helper, #6f6f6f);
-  font-size: 0.8125rem;
-  line-height: 1.25rem;
-  display: grid;
-  gap: 0.125rem;
-}
-
-.file-tree--empty p {
-  margin: 0;
-}
-
-// Manual retry for a failed scan — the escape hatch once the boot auto-retry
-// gives up. A quiet inline button (the auto-retry is the primary recovery).
-.file-tree__retry {
-  justify-self: start;
-  margin-block-start: 0.375rem;
-  padding: 0.125rem 0.5rem;
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  border-radius: 4px;
-  background: var(--cds-layer-02, #ffffff);
-  color: var(--cds-link-primary, #0f62fe);
-  font-size: 0.75rem;
-  cursor: pointer;
-}
-
-.file-tree__retry:hover {
-  background: var(--cds-background-hover, rgba(141, 141, 141, 0.12));
-}
-
 .conflict-banner {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -6641,29 +5038,6 @@ $theme-dark-line: #525252;
 }
 
 /* === Editor toolbar: Comments button badge === */
-.tiptap-toolbar__comments-icon {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-}
-
-.tiptap-toolbar__comments-badge {
-  position: absolute;
-  inset-block-start: -0.375rem;
-  inset-inline-start: 0.5rem;
-  min-inline-size: 0.875rem;
-  block-size: 0.875rem;
-  padding-inline: 0.1875rem;
-  border-radius: 0.4375rem;
-  background: var(--cds-button-primary, #0f62fe);
-  color: var(--cds-text-on-color, #ffffff);
-  font-size: 0.5625rem;
-  font-weight: 600;
-  line-height: 0.875rem;
-  text-align: center;
-  pointer-events: none;
-}
-
 /* === No-workspace welcome (replaces the standalone dashboard) === */
 .no-workspace {
   display: flex;

@@ -1,0 +1,130 @@
+// The sidebar's "+ New" button and its portaled menu.
+
+// The "+ New" create menu (interaction spec §03) — a custom dropdown pinned to
+// the end of the tab row.
+.new-menu {
+  position: relative;
+  // Never shrink, never grow: the button keeps its size while the tabs give way.
+  flex: 0 0 auto;
+  // Centre the button on the row's mid-line — the same line the tab labels sit
+  // on — with symmetric breathing room from the fixed row height.
+  align-self: center;
+  margin-inline-start: auto;
+}
+
+// Trigger: a compact primary button — plus, label, then a bare caret (no boxed
+// divider section).
+.new-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  block-size: 2.125rem;
+  padding: 0 0.5625rem 0 0.75rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--cds-button-primary, #0f62fe);
+  color: var(--cds-text-on-color, #ffffff);
+  font-size: 0.8125rem;
+  // "New" is regular weight — the same as the leading "+" and the chevron.
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.new-menu__trigger:hover:not(:disabled) {
+  background: var(--cds-button-primary-hover, #0043ce);
+}
+
+.new-menu__trigger:disabled {
+  background: var(--cds-button-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
+.new-menu__plus {
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.new-menu__caret {
+  flex: 0 0 auto;
+}
+
+// Panel: a 246px white surface anchored under the button's right edge. White +
+// a neutral #e0e0e0 border — the white layer-02, not the light-gray layer-01,
+// so the menu reads as a white surface (spec).
+// Portaled to <body> and fixed-positioned in JS — the sidebar clips its
+// overflow, so an absolutely-positioned panel lost its left edge the moment the
+// pane was narrower than the panel. Width and offsets come from the hook.
+.new-menu__panel {
+  position: fixed;
+  z-index: 9000;
+  // A menu is as wide as its widest row needs, not a fixed slab.
+  padding-block: 0.25rem;
+  background: var(--cds-layer-02, #ffffff);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+}
+
+// A neutral divider between the file-system group and chat.
+.new-menu__group + .new-menu__group {
+  margin-block-start: 0.25rem;
+  padding-block-start: 0.25rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+// Item: a 46px row — 16px icon, 12px gap, label, right-aligned mono shortcut.
+.new-menu__item {
+  display: flex;
+  align-items: center;
+  // macOS menu proportions. At the previous 46px the 16px icon and the 14px
+  // label floated in a lot of empty height, which read as loose rather than
+  // roomy — and it left the icon looking stranded beside its own label.
+  gap: 0.5rem;
+  inline-size: 100%;
+  block-size: 1.875rem;
+  padding-inline: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-primary, #161616);
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-align: start;
+  cursor: pointer;
+}
+
+// Neutral hover — the spec background-hover overlay.
+.new-menu__item:hover {
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.new-menu__item-icon {
+  flex: 0 0 auto;
+  color: var(--cds-icon-secondary, #525252);
+}
+
+.new-menu__item:hover .new-menu__item-icon {
+  color: var(--cds-link-primary, #0f62fe);
+}
+
+.new-menu__item-label {
+  flex: 1 1 auto;
+}
+
+.new-menu__item-shortcut {
+  flex: 0 0 auto;
+  // NOT a mono font: `SF Mono` has no glyph for ⌘ (U+2318) or ⇧ (U+21E7), so
+  // each fell back on its own to a symbol face — drawn at a different size and
+  // off the text baseline, which read as tiny mismatched emoji. The system font
+  // has them, and draws them the way the menu bar does.
+  font-family: inherit;
+  // The same size as the label, as the menu bar sets them — a smaller shortcut
+  // reads as a different kind of thing rather than as the row's other half.
+  font-size: 0.875rem;
+  line-height: 1;
+  color: var(--cds-text-placeholder, #8d8d8d);
+  // The two shortcuts differ by a modifier (⌘N vs ⌘⇧N); aligning their ends
+  // keeps the column straight rather than ragged.
+  font-variant-numeric: tabular-nums;
+}
+

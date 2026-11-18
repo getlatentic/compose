@@ -1,0 +1,278 @@
+// The sidebar: title-bar row, workspace switcher, search, Notes | Chat tabs,
+// the New menu and the footer. The tree's rows are in `_file-tree.scss`.
+
+.sidebar {
+  display: flex;
+  min-block-size: 0;
+  max-block-size: 36vh;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--color-sidebar-text);
+  background: var(--color-sidebar-bg);
+
+  // The sidebar is its own surface: dark walnut in Walnut, a tinted panel in
+  // the lighter palettes. Every rule inside it reads Carbon's tokens, so they
+  // are pointed at the sidebar's colours here once, rather than restating
+  // each rule. Menus are portaled to <body> and keep the window's tokens.
+  --cds-background: var(--color-sidebar-bg);
+  --cds-layer-01: var(--color-sidebar-bg);
+  --cds-layer-02: var(--color-sidebar-bg);
+  --cds-layer-hover-01: var(--color-sidebar-hover);
+  --cds-background-hover: var(--color-sidebar-hover);
+  --cds-layer-selected-01: var(--color-sidebar-active);
+  --cds-layer-selected-hover-01: var(--color-sidebar-active);
+  --cds-background-selected: var(--color-sidebar-active);
+  --cds-field: var(--color-sidebar-field);
+  --cds-field-01: var(--color-sidebar-field);
+  --cds-field-02: var(--color-sidebar-field);
+  --cds-field-hover-01: var(--color-sidebar-hover);
+  --cds-text-primary: var(--color-sidebar-text);
+  --cds-text-secondary: var(--color-sidebar-muted);
+  --cds-text-helper: var(--color-sidebar-muted);
+  --cds-text-placeholder: var(--color-sidebar-muted);
+  --cds-text-disabled: color-mix(in srgb, var(--color-sidebar-text) 35%, transparent);
+  --cds-icon-primary: var(--color-sidebar-text);
+  --cds-icon-secondary: var(--color-sidebar-muted);
+  --cds-icon-disabled: color-mix(in srgb, var(--color-sidebar-text) 35%, transparent);
+  --cds-border-subtle-00: color-mix(in srgb, var(--color-sidebar-text) 10%, transparent);
+  --cds-border-subtle-01: color-mix(in srgb, var(--color-sidebar-text) 10%, transparent);
+  --cds-border-subtle-02: color-mix(in srgb, var(--color-sidebar-text) 14%, transparent);
+  --cds-border-strong-01: color-mix(in srgb, var(--color-sidebar-text) 30%, transparent);
+  --cds-border-interactive: var(--color-sidebar-marker);
+  --cds-button-primary: var(--color-sidebar-active);
+  --cds-button-primary-hover: color-mix(in srgb, var(--color-sidebar-active) 85%, var(--color-sidebar-text));
+  --cds-text-on-color: var(--color-sidebar-text);
+  --cds-highlight: var(--color-sidebar-active);
+  --cds-link-primary: var(--color-sidebar-text);
+}
+
+// === Sidebar title-bar row — owned by the OS, sized by --titlebar-height ===
+// macOS owns the visual: traffic-light position, baseline, native size.
+// We don't shift or restyle the lights. The row height is tuned so the
+// OS-fixed light position *is* the row's vertical center. The 78px spacer
+// reserves the lights' left-edge home; `justify-content: flex-end` parks
+// the sidebar toggle at the right edge of the pane (Obsidian convention)
+// so it's not crowding the lights.
+.sidebar-titlebar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  block-size: var(--titlebar-height);
+  padding-inline: var(--traffic-lights-inset, 78px) 0.5rem;
+  background: transparent;
+  // Chrome, like the tab strip it lines up with — pinned so zoom cannot push
+  // its contents out of a row whose height the traffic lights fix.
+  font-size: 13px;
+}
+
+.sidebar-titlebar__btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--titlebar-btn-size);
+  block-size: var(--titlebar-btn-size);
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.sidebar-titlebar__btn:hover:not(:disabled),
+.sidebar-titlebar__btn:focus-visible {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+  outline: none;
+}
+
+.sidebar-titlebar__btn:disabled {
+  color: var(--cds-icon-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
+
+// === Sidebar: Files | Chat tabs + the context-aware New button ===
+.sidebar-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  // A fixed height + stretched tabs put the tab labels and the "+ New" button on
+  // one vertical centre line, while each tab's underline still lands on the row's
+  // bottom border.
+  align-items: stretch;
+  gap: 0.25rem;
+  padding-inline: 0.5rem;
+  block-size: 2.75rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+}
+
+// Underline tabs (interaction spec §03) — no fill; the active tab is marked by a
+// 2px blue bottom border that sits on the tab-row's own divider.
+.sidebar-tab {
+  display: inline-flex;
+  align-items: center;
+  // Shrinkable, so a narrow pane takes width from the labels rather than
+  // overflowing the row — an overflowing row eats its own end padding, and the
+  // New button ends up flush against the sidebar border.
+  min-inline-size: 0;
+  flex: 0 1 auto;
+  border: 0;
+  border-block-end: 2px solid transparent;
+  margin-block-end: -1px;
+  background: transparent;
+  cursor: pointer;
+  padding-inline: 0.25rem;
+  // Inactive tab: a light gray-50 at regular weight, well below the active tab's
+  // dark semibold.
+  color: var(--cds-text-placeholder, #8d8d8d);
+  font-size: 0.875rem;
+  font-weight: 400;
+  border-radius: 0;
+}
+
+.sidebar-tab:hover {
+  color: var(--cds-text-primary, #161616);
+}
+
+.sidebar-tab--active {
+  color: var(--cds-text-primary, #161616);
+  border-block-end-color: var(--cds-border-interactive, #0f62fe);
+  font-weight: 600;
+}
+
+// Both panes (Files / Chat) stay mounted to make Notes <-> Chat switching
+// a paint-only operation. The wrap collapses out of the flex flow when
+// `hidden`; the visible one fills available height and scrolls.
+.sidebar-pane-wrap {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.sidebar-pane-wrap[hidden] {
+  display: none;
+}
+
+// The active tab body fills the remaining height and scrolls; each tab owns
+// its own layout below.
+.sidebar-pane {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.sidebar-pane--chat {
+  padding: 0.25rem 0.25rem 0.5rem;
+}
+
+.sidebar-files {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.25rem;
+  // No right padding: the file tree (and its scrollbar) reaches the sidebar's
+  // right border. The classic 8px scrollbar reserves its own space, so the
+  // rows stay clear of it.
+  padding: 0.75rem 0 0.5rem 0.5rem;
+}
+
+// === Sidebar: footer (pinned bottom) ===
+// "X notes" counter on the left + Search/Settings icons on the right. Replaces
+// the older "Settings" labeled row — Compose is deliberately local-first, so
+// the footer carries NO account avatar and NO "Synced" string (saying
+// "Synced" would lie about a folder that lives only on this Mac).
+.sidebar-footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  block-size: 2.25rem;
+  padding-inline: 0.5rem 0.25rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-02, #ffffff);
+}
+
+.sidebar-footer__count {
+  color: var(--cds-text-helper, #6f6f6f);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-footer__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.sidebar-footer__btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary, #525252);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.sidebar-footer__btn:hover:not(:disabled),
+.sidebar-footer__btn:focus-visible {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+  color: var(--cds-text-primary, #161616);
+  outline: none;
+}
+
+.sidebar-footer__btn:disabled {
+  color: var(--cds-icon-disabled, #c6c6c6);
+  cursor: not-allowed;
+}
+
+// "Search notes": looks like a field, opens the search popover (⌘⇧F).
+.sidebar-search {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.125rem 0.625rem 0.5rem;
+  padding: 0.375rem 0.625rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-sidebar-field);
+  color: var(--color-sidebar-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  text-align: start;
+  cursor: text;
+}
+
+.sidebar-search:hover:not(:disabled) {
+  background: var(--color-sidebar-hover);
+}
+
+.sidebar-search:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.sidebar-search:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.sidebar-search__label {
+  flex: 1 1 auto;
+}
+
+.sidebar-search__shortcut {
+  color: var(--color-sidebar-muted);
+  font-size: 0.75rem;
+}

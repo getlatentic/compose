@@ -1,24 +1,27 @@
 import { useEffect } from "react";
 
 import { useUiStore } from "../../app/store/uiStore";
-import { applyTheme } from "../../lib/theme/theme";
+import { applyAppearance } from "../../lib/theme/appearance";
 
 /**
- * Keeps the theme choice on the document.
+ * Keeps the appearance choices (light/dark, palette, reading font and size) on
+ * the document.
  *
- * `main.tsx` applies the stored choice before the first paint, which is what
+ * `main.tsx` applies the stored choices before the first paint, which is what
  * stops a launch flashing the wrong theme. This is the other half: without it
- * the store and the preferences file update, the radio moves, and the app keeps
- * the theme it booted with until the next launch.
+ * the store and the preferences update, the control moves, and the app keeps
+ * what it booted with until the next launch.
  *
- * Following the system needs no listener — the `prefers-color-scheme` block in
- * `_tokens.scss` does that in CSS, which is why "system" removes the attribute
- * instead of resolving it here.
+ * Following the system needs no listener: the `prefers-color-scheme` rules do
+ * that in CSS, which is why "system" removes `data-theme` instead of resolving it.
  */
 export function useAppTheme(): void {
   const theme = useUiStore((state) => state.theme);
+  const palette = useUiStore((state) => state.palette);
+  const readingFont = useUiStore((state) => state.readingFont);
+  const readingSize = useUiStore((state) => state.readingSize);
 
   useEffect(() => {
-    applyTheme(theme, document.documentElement);
-  }, [theme]);
+    applyAppearance({ theme, palette, readingFont, readingSize }, document.documentElement);
+  }, [theme, palette, readingFont, readingSize]);
 }
