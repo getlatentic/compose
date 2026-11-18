@@ -1,3 +1,5 @@
+@use "sass:list";
+
 // Font stacks, and the `--reading-*` properties the note editor reads.
 //
 // A palette names a font for each part (`--font-ui`, `--font-doc-body`, …;
@@ -62,18 +64,18 @@
 
 // Sizes and line heights from the Figma "Reading size" collection, in px / 16.
 @mixin reading-sizes($body, $h1, $h2, $h3, $h4, $code) {
-  --reading-size-body: #{nth($body, 1) * 0.0625rem};
-  --reading-line-body: #{nth($body, 2) * 0.0625rem};
-  --reading-size-h1: #{nth($h1, 1) * 0.0625rem};
-  --reading-line-h1: #{nth($h1, 2) * 0.0625rem};
-  --reading-size-h2: #{nth($h2, 1) * 0.0625rem};
-  --reading-line-h2: #{nth($h2, 2) * 0.0625rem};
-  --reading-size-h3: #{nth($h3, 1) * 0.0625rem};
-  --reading-line-h3: #{nth($h3, 2) * 0.0625rem};
-  --reading-size-h4: #{nth($h4, 1) * 0.0625rem};
-  --reading-line-h4: #{nth($h4, 2) * 0.0625rem};
-  --reading-size-code: #{nth($code, 1) * 0.0625rem};
-  --reading-line-code: #{nth($code, 2) * 0.0625rem};
+  --reading-size-body: #{list.nth($body, 1) * 0.0625rem};
+  --reading-line-body: #{list.nth($body, 2) * 0.0625rem};
+  --reading-size-h1: #{list.nth($h1, 1) * 0.0625rem};
+  --reading-line-h1: #{list.nth($h1, 2) * 0.0625rem};
+  --reading-size-h2: #{list.nth($h2, 1) * 0.0625rem};
+  --reading-line-h2: #{list.nth($h2, 2) * 0.0625rem};
+  --reading-size-h3: #{list.nth($h3, 1) * 0.0625rem};
+  --reading-line-h3: #{list.nth($h3, 2) * 0.0625rem};
+  --reading-size-h4: #{list.nth($h4, 1) * 0.0625rem};
+  --reading-line-h4: #{list.nth($h4, 2) * 0.0625rem};
+  --reading-size-code: #{list.nth($code, 1) * 0.0625rem};
+  --reading-line-code: #{list.nth($code, 2) * 0.0625rem};
 }
 
 :root,
