@@ -6,6 +6,7 @@ import { createLooseFilesSlice } from "./store/looseFilesSlice";
 import { createFsEventsSlice } from "./store/fsEventsSlice";
 import { createCommentsSlice } from "./store/commentsSlice";
 import { createChatSlice } from "./store/chatSlice";
+import { createReviewMarginSlice } from "./store/reviewMarginSlice";
 import { createConversationsSlice } from "./store/conversationsSlice";
 import { createNavSlice } from "./store/navSlice";
 import { createOnboardingSlice } from "./store/onboardingSlice";
@@ -34,6 +35,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   ...createFsEventsSlice(set, get),
   ...createCommentsSlice(set, get),
   ...createChatSlice(set, get),
+  ...createReviewMarginSlice(set, get),
   ...createConversationsSlice(set, get),
   ...createNavSlice(set, get),
   ...createOnboardingSlice(set, get),

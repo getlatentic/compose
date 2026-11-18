@@ -100,6 +100,12 @@ export interface WorkspaceState {
   appendUserChatMessage: (userContent: string, preparedCommand: string | null) => void;
   acceptSuggestedEdit: (suggestionId: string) => void;
   /**
+   * Record a decision made in the note's review margin on one change block:
+   * `kept` when the change stays in the note, not when it was undone or
+   * rejected. The margin has already edited the note itself.
+   */
+  decideReviewBlock: (reviewId: string, key: string, kept: boolean) => void;
+  /**
    * Open the chat panel, push a user message that quotes `selection.text`
    * as context, and stream the reply into the chat thread.
    *

@@ -209,6 +209,15 @@ function segmentHunks(ops: Op[], context: number): DiffHunk[] {
   return hunks;
 }
 
+/**
+ * Every line of both texts in document order, each marked kept, removed or
+ * added. The review margin groups these into change blocks.
+ */
+export function diffLines(before: string, after: string): { lines: DiffLine[]; truncated: boolean } {
+  const { ops, truncated } = computeOps(splitLines(before), splitLines(after));
+  return { lines: ops, truncated };
+}
+
 export function computeUnifiedDiff(
   before: string,
   after: string,

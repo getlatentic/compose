@@ -237,6 +237,18 @@ export interface WorkspaceRewriteSuggestion extends WorkspaceSuggestionBase {
   previewOmitted: boolean;
   /** The live file changed since the run started — accepting overwrites it. */
   stale: boolean;
+  /** Change blocks decided one at a time in the note's review margin. */
+  review?: ReviewDecisions;
+}
+
+/**
+ * Per-block decisions made in the review margin, by block key
+ * (`features/review/changeBlocks.ts`). `kept`: the change is in the note
+ * (kept, or accepted); `dropped`: it is not (undone, or rejected).
+ */
+export interface ReviewDecisions {
+  kept: readonly string[];
+  dropped: readonly string[];
 }
 
 /** A file the assistant deleted in the sandbox. */
@@ -274,6 +286,8 @@ export interface WorkspaceReviewSuggestionDraft {
  *  the chat as an informational diff (undo via version history), never an
  *  accept/reject. No `stale`: there is nothing pending to overwrite. */
 export interface WorkspaceAppliedChange {
+  /** Unique within the conversation; the review margin records against it. */
+  id: string;
   kind: "create" | "rewrite" | "delete";
   filePath: string;
   originalText: string | null;
@@ -281,6 +295,7 @@ export interface WorkspaceAppliedChange {
   originalSize: number;
   newSize: number;
   previewOmitted: boolean;
+  review?: ReviewDecisions;
 }
 
 export interface SuggestedEditInput {
@@ -1883,7 +1898,8 @@ export function appendAppliedChanges(
         return message;
       }
       const existing = message.appliedChanges ?? [];
-      const next: WorkspaceAppliedChange[] = drafts.map((draft) => ({
+      const next: WorkspaceAppliedChange[] = drafts.map((draft, index) => ({
+        id: `${messageId}-applied-${existing.length + index + 1}`,
         kind: draft.kind,
         filePath: draft.filePath,
         originalText: draft.originalText,

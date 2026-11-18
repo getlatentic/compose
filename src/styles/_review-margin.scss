@@ -1,0 +1,182 @@
+// The note's review margin (`features/review/`): a card per agent change and
+// per comment, beside the line it touches, tied to it by a hairline leader.
+// Without room beside the note, a change's card folds under its paragraph.
+
+// Inside the editor's scroller, so the cards scroll with the note. Zero-size:
+// the cards and leaders are placed in scroller coordinates.
+.cm-review-margin {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 2;
+  inline-size: 0;
+  block-size: 0;
+}
+
+.review-margin__leaders {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: visible;
+  pointer-events: none;
+
+  path {
+    fill: none;
+    stroke: var(--color-ai-leader);
+    stroke-width: 1;
+  }
+}
+
+.review-card {
+  position: absolute;
+  box-sizing: border-box;
+  inline-size: 16.5rem;
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-raised);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.25rem;
+  white-space: normal;
+  user-select: none;
+  transition: top var(--motion-base) var(--ease-standard);
+
+  &:focus-within {
+    border-color: var(--color-border-focus);
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.review-card__head {
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.review-card__author {
+  color: var(--color-ai-text);
+  font-weight: 600;
+}
+
+.review-card__author--you {
+  color: var(--color-text-primary);
+}
+
+.review-card__body {
+  margin-block-start: 0.375rem;
+}
+
+.review-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-start: 0.625rem;
+}
+
+.review-card__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  block-size: 2rem;
+  padding: 0 0.625rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard);
+
+  &:hover {
+    background: var(--color-surface-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 1px;
+  }
+}
+
+.review-card__button--primary {
+  background: var(--color-accent-default);
+  color: var(--color-text-on-accent);
+
+  &:hover {
+    background: var(--color-accent-hover);
+  }
+}
+
+.review-card__button--outline {
+  border-color: var(--color-border-default);
+  background: var(--color-surface-default);
+}
+
+// Folded under its paragraph: one row, on the AI tint, in the note column.
+.review-card--inline {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  inline-size: auto;
+  margin: 0.5rem 0 1rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
+  border-color: transparent;
+  background: var(--color-ai-surface);
+  box-shadow: none;
+
+  .review-card__head {
+    font-size: 0.8125rem;
+  }
+
+  .review-card__body {
+    flex: 1 1 12rem;
+    margin: 0;
+  }
+
+  .review-card__actions {
+    margin: 0;
+  }
+}
+
+// The toolbar's "Review N changes": the one primary action while changes wait.
+.review-changes-button {
+  block-size: 2rem;
+  margin-inline-start: 0.5rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-default);
+  color: var(--color-text-on-accent);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-accent-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-card {
+    transition: none;
+  }
+}

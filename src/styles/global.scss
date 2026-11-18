@@ -50,6 +50,7 @@
 @use "editor-tabs";
 @use "editor-toolbar";
 @use "status-bar";
+@use "review-margin";
 
 // The palette's UI font (`--font-ui`, IBM Plex Sans in every palette today)
 // for all chrome. Carbon declares `"IBM Plex Sans"` on its own body and

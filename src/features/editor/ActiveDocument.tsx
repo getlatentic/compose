@@ -36,6 +36,10 @@ import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
 import { useWorkspaceLinkTargets } from "../../app/useWorkspaceLinkTargets";
 import { documentCapabilities, documentRef, type Workspace } from "../../app/workspaceModel";
 import { documentStyle } from "./documentStyle";
+import { reviewMargin } from "../review/reviewExtension";
+import { ReviewMargin } from "../review/ReviewMargin";
+import { ReviewChangesButton } from "../review/ReviewChangesButton";
+import { useAgentName, useReviewInputs } from "../review/useReviewInputs";
 
 /**
  * How long after the last edit the active file is auto-written to disk. Stacks
@@ -48,7 +52,7 @@ const AUTOSAVE_TO_DISK_MS = 1000;
 /** Stable empty list so the comments selectors return a constant reference. */
 const EMPTY_COMMENTS: Workspace["comments"] = [];
 
-const DOCUMENT_EXTENSIONS = [documentStyle];
+const DOCUMENT_EXTENSIONS = [documentStyle, reviewMargin];
 
 // ── DocumentEditor — the per-keystroke leaf ─────────────────────────────────
 
@@ -296,17 +300,20 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
   // editor's toolbar memo holds.
   const fileActions = useMemo(
     () => (
-      <EditorFileActions
-        onSave={saveActiveFile}
-        onShowVersionHistory={onShowVersionHistory}
-        onExport={handleExport}
-        markdownExport={!plainText}
-        onToggleComments={commentsEnabled ? toggleComments : undefined}
-        commentsOpen={commentsOpen}
-        commentCount={activeFileComments.length}
-        onToggleChat={toggleChat}
-        chatOpen={chatOpen}
-      />
+      <>
+        <EditorFileActions
+          onSave={saveActiveFile}
+          onShowVersionHistory={onShowVersionHistory}
+          onExport={handleExport}
+          markdownExport={!plainText}
+          onToggleComments={commentsEnabled ? toggleComments : undefined}
+          commentsOpen={commentsOpen}
+          commentCount={activeFileComments.length}
+          onToggleChat={toggleChat}
+          chatOpen={chatOpen}
+        />
+        {plainText ? null : <ReviewChangesButton />}
+      </>
     ),
     [
       saveActiveFile,
@@ -363,6 +370,9 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
     [handleAskAboutSelection, handleQueueComment, commentsEnabled],
   );
 
+  const agentName = useAgentName();
+  useReviewInputs(plainText ? "" : activeFilePath, agentName);
+
   // A plain-text file keeps the file actions but none of the formatting.
   const plainTextToolbar = useMemo(
     () => <CodeMirrorToolbar view={null} mode="source" fileActions={fileActions} />,
@@ -403,6 +413,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
         onAfterContentSwap={markTabSwitchEnd}
         onFlushReady={registerActiveEditorFlush}
       />
+      <ReviewMargin agentName={agentName} />
       {tableComment ? (
         <CommentComposer
           selectionText={tableComment.excerpt.text}
