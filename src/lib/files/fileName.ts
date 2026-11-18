@@ -32,3 +32,17 @@ export function renameRelativePath(originalPath: string, newBase: string): strin
   const { dir, ext } = splitFileName(originalPath);
   return `${dir}${newBase.trim()}${ext}`;
 }
+
+/**
+ * Why `base` cannot name a file, or `null` when it can. A slash would move the
+ * file into a folder, which the rename dialog does not offer; Finder shows a
+ * colon as a slash; a leading dot hides the note, since the workspace scan
+ * skips dot-names.
+ */
+export function baseNameProblem(base: string): string | null {
+  const name = base.trim();
+  if (name === "") return "Enter a name.";
+  if (/[/\\:]/.test(name)) return "A name cannot contain / \\ or :.";
+  if (name.startsWith(".")) return "A name cannot start with a dot: the note would be hidden.";
+  return null;
+}

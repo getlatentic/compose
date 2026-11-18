@@ -65,6 +65,21 @@ export function pruneNavHistory(
   };
 }
 
+/** Point every history entry for a renamed file at its new path, so Back and
+ *  Forward follow the file rather than reopen the old name. */
+export function renameNavHistory(
+  state: { navHistory: NavEntry[]; navIndex: number },
+  workspaceId: string,
+  from: string,
+  to: string,
+): { navHistory: NavEntry[] } {
+  return {
+    navHistory: state.navHistory.map((entry) =>
+      entry.kind === "file" && entry.workspaceId === workspaceId && entry.id === from ? { ...entry, id: to } : entry,
+    ),
+  };
+}
+
 /** Re-apply a nav entry without pushing a new one (the flag does the work).
  * Reads through the live store so the entry can target a different workspace
  * than the current one. */

@@ -36,9 +36,11 @@ import {
   flushActiveEditor,
 } from "../../lib/editor/editorFlush";
 import {
+  newNoteFolder,
   nextUntitledPath,
   updateWorkspace,
 } from "./internals";
+import { saveBeforeRemoval } from "./saveBeforeRemoval";
 import {
   persistComments,
   persistTabs,
@@ -46,6 +48,7 @@ import {
 import {
   pruneNavHistory,
   pushNavEntry,
+  renameNavHistory,
 } from "./navigation";
 
 /** Files whose buffer is being read, keyed `${workspaceId}\n${path}`, so the
@@ -174,7 +177,7 @@ export async function loadBufferIfMissing(
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "deleteFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "updateFileContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "deleteFile" | "renameActiveFile" | "renameFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "updateFileContent" | "dismissConflict"> => ({
   activeFileBuffer: () => {
     const workspace = get().focusedWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -264,7 +267,7 @@ export const createFilesSlice = (
     // A seed (the empty view's first "New note") writes the welcome note; the
     // plain `+` falls back to a blank untitled note — in the chosen folder
     // (`newNoteDir`, set by selecting a folder/file in the tree) or the root.
-    const dir = seed?.dir ?? get().newNoteDir;
+    const dir = seed?.dir ?? newNoteFolder(workspace, get().newNoteDir);
     const relativePath = seed?.relativePath ?? nextUntitledPath(workspace, dir, creating);
     const content = seed?.content ?? `# Untitled\n\n`;
     const reserved = `${workspace.id}\n${relativePath}`;
@@ -329,9 +332,10 @@ export const createFilesSlice = (
     if (!workspace) {
       return;
     }
+    const prefix = `${folderPath}/`;
+    await saveBeforeRemoval(get, workspace.id, (path) => path.startsWith(prefix));
     try {
       await deleteFolderIpc(workspace.id, folderPath);
-      const prefix = `${folderPath}/`;
       set((state) => ({
         workspaces: updateWorkspace(state.workspaces, workspace.id, (item) =>
           removeWorkspaceFolder(item, folderPath),
@@ -373,28 +377,7 @@ export const createFilesSlice = (
       return;
     }
 
-    // Persist any unsaved edits first, so the trashed copy — and the history
-    // snapshot the backend takes on soft-delete — hold the user's latest work
-    //. The active file's buffer lags the editor by the 500ms debounce, so
-    // flush it; a background tab's buffer is already current. Best-effort: a
-    // write failure must not block the deletion the user asked for.
-    if (workspace.activeFilePath === relativePath) {
-      flushActiveEditor();
-    }
-    const buffer = get().activeWorkspace()?.fileContents[relativePath];
-    if (buffer?.dirty) {
-      try {
-        await writeFileIpc(
-          workspace.id,
-          relativePath,
-          buffer.content,
-          buffer.conflict ? null : buffer.lastModifiedMs,
-          buffer.pendingChanges,
-        );
-      } catch {
-        // The soft-delete still snapshots the on-disk content to history.
-      }
-    }
+    await saveBeforeRemoval(get, workspace.id, (path) => path === relativePath);
 
     try {
       await deleteFileIpc(workspace.id, relativePath);
@@ -430,18 +413,25 @@ export const createFilesSlice = (
       showErrorToast("External files can't be renamed from Compose.");
       return;
     }
+    const from = get().activeWorkspace()?.activeFilePath;
+    if (from) {
+      await get().renameFile(from, toRelativePath);
+    }
+  },
+  renameFile: async (from: string, toRelativePath: string) => {
     const workspace = get().activeWorkspace();
-    if (!workspace || !workspace.activeFilePath) {
+    if (!workspace) {
       return;
     }
-    const from = workspace.activeFilePath;
     const trimmed = toRelativePath.trim();
     if (!trimmed || trimmed === from) {
       return;
     }
 
     // The editor's last edits belong to the old path's buffer, which moves.
-    flushActiveEditor();
+    if (workspace.activeFilePath === from) {
+      flushActiveEditor();
+    }
     try {
       await renameFileIpc(workspace.id, from, trimmed);
       set((state) => ({
@@ -471,6 +461,7 @@ export const createFilesSlice = (
           };
           return moveWorkspaceComments(renamed, from, trimmed, Date.now());
         }),
+        ...renameNavHistory(state, workspace.id, from, trimmed),
       }));
       persistTabs(get().workspaces, workspace.id);
       persistComments(get().workspaces, workspace.id, showErrorToast);

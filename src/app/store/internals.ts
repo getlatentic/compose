@@ -48,6 +48,14 @@ export function nextUntitledPath(
   return `${prefix}untitled-${index}.md`;
 }
 
+/** The folder a new note goes in: the one last chosen in the tree while it is
+ *  still a folder of this workspace, else the top level. The choice outlives a
+ *  folder's deletion and a switch to another workspace; this is where it
+ *  stops applying. */
+export function newNoteFolder(workspace: Workspace, chosen: string): string {
+  return chosen && workspace.folders.includes(chosen) ? chosen : "";
+}
+
 /**
  * Prefix the sent prompt with the one piece of context only the app knows: which
  * file the user is currently looking at, as an absolute path. The working
