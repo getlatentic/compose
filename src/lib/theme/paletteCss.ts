@@ -22,6 +22,8 @@ const FONT_STACKS: Readonly<Record<string, string>> = {
   "IBM Plex Serif": "var(--font-plex-serif)",
   "JetBrains Mono": "var(--font-jetbrains-mono)",
   "Chalkboard SE": "var(--font-chalkboard)",
+  System: "var(--font-system)",
+  "System Mono": "var(--font-system-mono)",
 };
 
 export function fontStack(family: string): string {

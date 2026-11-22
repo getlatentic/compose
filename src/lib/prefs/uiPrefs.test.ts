@@ -54,7 +54,7 @@ describe("uiPrefs", () => {
       chatWidthPx: null,
       zoom: 1,
       theme: "system",
-      palette: "walnut",
+      palette: "classic",
       readingFont: "theme",
       readingSize: "default",
     });
@@ -65,7 +65,7 @@ describe("uiPrefs", () => {
       "compose.uiPrefs.v1",
       JSON.stringify({ palette: "neon", readingFont: "papyrus", readingSize: "huge" }),
     );
-    expect(loadUiPrefs()).toMatchObject({ palette: "walnut", readingFont: "theme", readingSize: "default" });
+    expect(loadUiPrefs()).toMatchObject({ palette: "classic", readingFont: "theme", readingSize: "default" });
   });
 
   it("falls back wholesale on a corrupt payload", () => {
@@ -78,7 +78,7 @@ describe("uiPrefs", () => {
       chatWidthPx: null,
       zoom: 1,
       theme: "system",
-      palette: "walnut",
+      palette: "classic",
       readingFont: "theme",
       readingSize: "default",
     });

@@ -106,6 +106,14 @@ describe("paletteCss", () => {
     expect(css.split(darkValue)).toHaveLength(3);
   });
 
+  it("draws Classic, the default, in the system font throughout", () => {
+    expect(DEFAULT_PALETTE).toBe("classic");
+    const classicRule = css.slice(css.indexOf('[data-palette="classic"] {'));
+    expect(classicRule).toContain("--font-ui: var(--font-system);");
+    expect(classicRule).toContain("--font-doc-body: var(--font-system);");
+    expect(classicRule).toContain("--font-doc-code: var(--font-system-mono);");
+  });
+
   it("gives Paper its own note fonts and leaves its UI in Plex Sans", () => {
     const paperRule = css.slice(css.indexOf('[data-palette="paper"] {'));
     expect(paperRule).toContain("--font-doc-body: var(--font-chalkboard);");
@@ -115,11 +123,11 @@ describe("paletteCss", () => {
 
 describe("splashCss", () => {
   const css = splashCss();
-  const walnut = PALETTES.find((p) => p.id === "walnut")!;
+  const classic = PALETTES.find((p) => p.id === "classic")!;
   const paper = PALETTES.find((p) => p.id === "paper")!;
 
   it("draws the default palette on a root with no palette, or one this build does not know", () => {
-    expect(css.startsWith(`:root {\n  --splash-bg: ${walnut.light["bg/app"]};`)).toBe(true);
+    expect(css.startsWith(`:root {\n  --splash-bg: ${classic.light["bg/app"]};`)).toBe(true);
   });
 
   it("gives each palette its own sidebar colour, in light and dark", () => {

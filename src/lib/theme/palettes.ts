@@ -1,10 +1,12 @@
 /**
- * The colour themes ("palettes"): Walnut, Graphite, Sepia, Forest, Carbon and
- * Paper. Each sets a colour and a font for every part of the window — the
- * app's own UI, note text, note headings and code — in light and dark.
+ * The colour themes ("palettes"): Classic, Walnut, Graphite, Sepia, Forest,
+ * Carbon and Paper. Each sets a colour and a font for every part of the
+ * window — the app's own UI, note text, note headings and code — in light and
+ * dark.
  *
- * `palettes.json` holds the values exactly as the Figma Theme collection has
- * them. `paletteCss.ts` turns them into custom properties; this module is
+ * `palettes.json` holds the values: Classic is Compose's original Carbon
+ * gray-and-blue look in the system font, the rest are exactly as the Figma
+ * Theme collection has them. `paletteCss.ts` turns them into custom properties; this module is
  * the typed list and the one attribute that picks a palette.
  *
  * Light and dark are a separate choice (`theme.ts`): a palette names both
