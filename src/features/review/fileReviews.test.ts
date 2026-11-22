@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createWorkspaceFromPath, type Workspace, type WorkspaceChatMessage } from "../../app/workspaceModel";
 import { fileReviewsFor, recordReviewDecision } from "./fileReviews";
-import { reviewBlockKeys } from "./liveBlocks";
+import { agentEditKeys } from "./agentEdits";
 
 const BEFORE = "---\ntags: [a]\n---\nOne.\n\nTwo.\n";
 const AFTER = "---\ntags: [a]\n---\nOne, changed.\n\nTwo, changed.\n";
@@ -43,6 +43,13 @@ describe("fileReviewsFor", () => {
     expect(fileReviewsFor(pending().chatThread, "b.md", "Claude")).toEqual([]);
   });
 
+  it("credits a change to the agent whose run made it, not the one selected now", () => {
+    const workspace = pending();
+    const [message] = workspace.chatThread.messages;
+    const thread = { ...workspace.chatThread, messages: [{ ...message, agentName: "Claude Code" }] };
+    expect(fileReviewsFor(thread, "a.md", "Codex")[0].agentName).toBe("Claude Code");
+  });
+
   it("reviews an applied change as applied", () => {
     const workspace = workspaceWith({
       appliedChanges: [
@@ -54,9 +61,9 @@ describe("fileReviewsFor", () => {
 });
 
 describe("recordReviewDecision", () => {
-  const keys = reviewBlockKeys({ original: "One.\n\nTwo.\n", proposed: "One, changed.\n\nTwo, changed.\n" });
+  const keys = agentEditKeys("One.\n\nTwo.\n", "One, changed.\n\nTwo, changed.\n");
 
-  it("settles a pending change only once every block is decided, accepted if any was kept", () => {
+  it("settles a pending change only once every edit is decided, accepted if any was kept", () => {
     const first = recordReviewDecision(pending(), "s1", keys[0], false);
     expect(first.settled).toBeNull();
     const second = recordReviewDecision(first.workspace, "s1", keys[1], true);
@@ -68,8 +75,8 @@ describe("recordReviewDecision", () => {
     expect(recordReviewDecision(first.workspace, "s1", keys[1], false).settled?.anyKept).toBe(false);
   });
 
-  it("hides a decided block from the next review", () => {
+  it("hands a decision to the next review", () => {
     const { workspace } = recordReviewDecision(pending(), "s1", keys[0], true);
-    expect(fileReviewsFor(workspace.chatThread, "a.md", "Claude")[0].decided).toEqual([keys[0]]);
+    expect(fileReviewsFor(workspace.chatThread, "a.md", "Claude")[0]).toMatchObject({ kept: [keys[0]], dropped: [] });
   });
 });

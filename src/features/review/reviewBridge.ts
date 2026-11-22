@@ -1,6 +1,6 @@
 import type { EditorView } from "@codemirror/view";
 
-import type { FileReview, LiveBlock } from "./liveBlocks";
+import type { FileReview, LiveEdit } from "./liveEdits";
 
 /** An open comment on the note, as the margin shows it. */
 export interface MarginComment {
@@ -18,7 +18,7 @@ export interface LiveComment extends MarginComment {
 
 /** Where the margin's cards go, read from the editor's layout. */
 export interface MarginGeometry {
-  /** Top of each anchored line, by block key or comment id, in scroller pixels. */
+  /** Top of each card's anchor line, by edit id or comment id, in scroller pixels. */
   readonly tops: ReadonlyMap<string, number>;
   /** Right edge of the note column, in scroller pixels. */
   readonly contentRight: number;
@@ -26,27 +26,30 @@ export interface MarginGeometry {
 
 export interface ReviewSnapshot {
   readonly view: EditorView | null;
-  readonly blocks: readonly LiveBlock[];
+  readonly edits: readonly LiveEdit[];
   readonly comments: readonly LiveComment[];
-  /** No room beside the note: AI changes fold under their paragraph instead. */
-  readonly folded: boolean;
+  /** Review mode is on: every edit has a card and the note has given up the margin's width. */
+  readonly reviewing: boolean;
+  /** The pane is wide enough for the margin without narrowing the note. */
+  readonly roomBeside: boolean;
+  /** The edit the caret is in: its card is opened and lined up with its words. */
+  readonly caretEditId: string | null;
   readonly geometry: MarginGeometry;
   /** The element inside the scroller that the margin renders into. */
   readonly marginHost: HTMLElement | null;
-  /** Folded mode: the element under each block that its card renders into. */
-  readonly slots: ReadonlyMap<string, HTMLElement>;
 }
 
 const EMPTY_GEOMETRY: MarginGeometry = { tops: new Map(), contentRight: 0 };
 
 const EMPTY: ReviewSnapshot = {
   view: null,
-  blocks: [],
+  edits: [],
   comments: [],
-  folded: false,
+  reviewing: false,
+  roomBeside: false,
+  caretEditId: null,
   geometry: EMPTY_GEOMETRY,
   marginHost: null,
-  slots: new Map(),
 };
 
 /**

@@ -22,7 +22,7 @@ use crate::db::MetadataStore;
 use crate::harness::chat_event::{run_event_to_chat, ChatEvent};
 use crate::harness::registry::compose_harness_by_id;
 use crate::harness::{ApprovalMode, ChatMode};
-use crate::review::{prepare_edit_guard, EditGuard, ReviewSessionStore};
+use crate::review::{apply_sandbox_overlay, prepare_edit_guard, EditGuard, ReviewSessionStore, SandboxFile};
 use crate::workspace::WorkspaceRegistry;
 use crate::harness::orphan_runs;
 use harness::{
@@ -73,6 +73,11 @@ pub struct HarnessRunRequest {
     /// it for every harness.
     #[serde(default)]
     pub edit_guard: EditGuard,
+    /// For a `clone` run: earlier runs' proposals the writer has not decided
+    /// yet, written into the sandbox so the agent starts from what its
+    /// conversation says it did. Ignored by the other guards.
+    #[serde(default)]
+    pub sandbox_files: Vec<SandboxFile>,
     /// Extra CLI args the frontend builds from config (the per-harness
     /// permission-mode setting + Compose's default) and threads to the harness
     /// via `RunTuning.extra_args`. Run *policy* lives in the frontend; the
@@ -387,6 +392,14 @@ fn run_via_harness(
             return Err(error);
         }
     };
+    if request.edit_guard == EditGuard::Clone && !request.sandbox_files.is_empty() {
+        if let Err(error) = apply_sandbox_overlay(&cwd, &request.sandbox_files) {
+            review.close(&run_id);
+            emit_error_and_exit(&app, &run_id, &error);
+            runner.unregister(&run_id);
+            return Err(error);
+        }
+    }
 
     // bob's chat modes collapse to the harness-neutral Ask/Edit: the
     // edit-capable modes map to Edit (so CLI harnesses get their
@@ -591,10 +604,27 @@ mod tests {
             effort: None,
             max_turns: None,
             edit_guard: EditGuard::None,
+            sandbox_files: Vec::new(),
             extra_args: Vec::new(),
             extra_instructions: instructions.map(str::to_owned),
             binary_path: binary.map(str::to_owned),
         }
+    }
+
+    #[test]
+    fn sandbox_files_arrive_in_the_shape_the_frontend_sends() {
+        let request: HarnessRunRequest = serde_json::from_str(
+            r#"{"approvalMode":"default","chatMode":"code","prompt":"p","runId":"r","workspaceId":"w",
+               "editGuard":"clone","sandboxFiles":[{"relativePath":"a.md","content":"new"},{"relativePath":"b.md","content":null}]}"#,
+        )
+        .expect("request");
+        assert_eq!(
+            request.sandbox_files,
+            vec![
+                SandboxFile { relative_path: "a.md".to_owned(), content: Some("new".to_owned()) },
+                SandboxFile { relative_path: "b.md".to_owned(), content: None },
+            ]
+        );
     }
 
     #[test]

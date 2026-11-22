@@ -6,20 +6,17 @@ import type {
   WorkspaceAppliedChange,
   WorkspaceChatMessage,
   WorkspaceChatThread,
+  WorkspaceDocumentSuggestion,
   WorkspaceRewriteSuggestion,
 } from "../../app/workspaceModel";
-import { reviewBlockKeys, type FileReview } from "./liveBlocks";
+import { agentEditKeys } from "./agentEdits";
+import type { FileReview } from "./liveEdits";
 
-const NO_DECISIONS: ReviewDecisions = { kept: [], dropped: [] };
+const NO_DECISIONS: ReviewDecisions = { kept: [], dropped: [], reported: [] };
 
 /** The editor shows the body only, so the review compares bodies. */
-function body(markdown: string): string {
+export function reviewBody(markdown: string): string {
   return parseFrontmatter(markdown).body;
-}
-
-function decided(review: ReviewDecisions | undefined): string[] {
-  const { kept, dropped } = review ?? NO_DECISIONS;
-  return [...kept, ...dropped];
 }
 
 function fromSuggestion(suggestion: WorkspaceRewriteSuggestion, agentName: string): FileReview | null {
@@ -29,9 +26,10 @@ function fromSuggestion(suggestion: WorkspaceRewriteSuggestion, agentName: strin
     id: suggestion.id,
     mode: "pending",
     agentName,
-    original: body(suggestion.originalText),
-    proposed: body(suggestion.newText),
-    decided: decided(suggestion.review),
+    original: reviewBody(suggestion.originalText),
+    proposed: reviewBody(suggestion.newText),
+    kept: suggestion.review?.kept ?? [],
+    dropped: suggestion.review?.dropped ?? [],
   };
 }
 
@@ -42,13 +40,15 @@ function fromAppliedChange(change: WorkspaceAppliedChange, agentName: string): F
     id: change.id,
     mode: "applied",
     agentName,
-    original: body(change.originalText),
-    proposed: body(change.newText),
-    decided: decided(change.review),
+    original: reviewBody(change.originalText),
+    proposed: reviewBody(change.newText),
+    kept: change.review?.kept ?? [],
+    dropped: change.review?.dropped ?? [],
   };
 }
 
-function messageReviews(message: WorkspaceChatMessage, filePath: string, agentName: string): FileReview[] {
+function messageReviews(message: WorkspaceChatMessage, filePath: string, fallbackAgentName: string): FileReview[] {
+  const agentName = message.agentName ?? fallbackAgentName;
   const reviews: (FileReview | null)[] = [];
   for (const suggestion of message.suggestions ?? []) {
     if (suggestion.kind === "rewrite" && suggestion.filePath === filePath) {
@@ -63,41 +63,49 @@ function messageReviews(message: WorkspaceChatMessage, filePath: string, agentNa
   return reviews.filter((review): review is FileReview => review !== null);
 }
 
-/** Every agent change to `filePath` in the open conversation that can be reviewed in the note. */
-export function fileReviewsFor(chatThread: WorkspaceChatThread | undefined, filePath: string, agentName: string): FileReview[] {
+/**
+ * Every agent change to `filePath` in the open conversation that can be
+ * reviewed in the note, each credited to the agent whose run made it;
+ * `fallbackAgentName` names a reply that carries no agent.
+ */
+export function fileReviewsFor(
+  chatThread: WorkspaceChatThread | undefined,
+  filePath: string,
+  fallbackAgentName: string,
+): FileReview[] {
   if (!chatThread || !filePath) return [];
-  return chatThread.messages.flatMap((message) => messageReviews(message, filePath, agentName));
+  return chatThread.messages.flatMap((message) => messageReviews(message, filePath, fallbackAgentName));
 }
 
 function withDecision(review: ReviewDecisions | undefined, key: string, kept: boolean): ReviewDecisions {
   const current = review ?? NO_DECISIONS;
   const keptWithout = current.kept.filter((existing) => existing !== key);
   const dropped = current.dropped.filter((existing) => existing !== key);
-  return kept ? { kept: [...keptWithout, key], dropped } : { kept: keptWithout, dropped: [...dropped, key] };
+  return kept
+    ? { ...current, kept: [...keptWithout, key], dropped }
+    : { ...current, kept: keptWithout, dropped: [...dropped, key] };
 }
 
-/** True once every block of the change has a decision. */
+/** True once every edit of the change has a decision. */
 function allDecided(
   record: { originalText: string | null; newText: string | null },
   review: ReviewDecisions,
 ): boolean {
   if (record.originalText === null || record.newText === null) return false;
   const done = new Set([...review.kept, ...review.dropped]);
-  return reviewBlockKeys({ original: body(record.originalText), proposed: body(record.newText) }).every((key) =>
-    done.has(key),
-  );
+  return agentEditKeys(reviewBody(record.originalText), reviewBody(record.newText)).every((key) => done.has(key));
 }
 
 export interface DecisionResult {
   readonly workspace: Workspace;
-  /** A pending suggestion whose blocks are now all decided: the caller settles it. */
+  /** A pending suggestion whose edits are now all decided: the caller settles it. */
   readonly settled: { suggestionId: string; runId: string; anyKept: boolean } | null;
 }
 
 /**
- * Record that block `key` of review `reviewId` was kept (the change is in the
+ * Record that edit `key` of review `reviewId` was kept (the change is in the
  * note) or dropped (it is not). The note itself was already edited by the
- * margin; this only remembers the decision so the block stops being offered.
+ * margin; this only remembers the decision so the edit stops being offered.
  */
 export function recordReviewDecision(workspace: Workspace, reviewId: string, key: string, kept: boolean): DecisionResult {
   let settled: DecisionResult["settled"] = null;
@@ -120,4 +128,60 @@ export function recordReviewDecision(workspace: Workspace, reviewId: string, key
     return changed ? { ...message, suggestions, appliedChanges } : message;
   });
   return { workspace: { ...workspace, chatThread: { ...workspace.chatThread, messages } }, settled };
+}
+
+/** One dropped edit, named by the review it belongs to and its edit key;
+ *  `key` is null for a whole new file or deletion the writer rejected. */
+export interface ReviewEditRef {
+  readonly reviewId: string;
+  readonly key: string | null;
+}
+
+function withReported(review: ReviewDecisions | undefined, keys: readonly string[]): ReviewDecisions {
+  const current = review ?? NO_DECISIONS;
+  const fresh = keys.filter((key) => !current.reported.includes(key));
+  return fresh.length === 0 ? current : { ...current, reported: [...current.reported, ...fresh] };
+}
+
+interface SentIndex {
+  readonly keysByReview: ReadonlyMap<string, readonly string[]>;
+  readonly wholeFiles: ReadonlySet<string>;
+}
+
+function indexSent(sent: readonly ReviewEditRef[]): SentIndex {
+  const keysByReview = new Map<string, string[]>();
+  const wholeFiles = new Set<string>();
+  for (const { reviewId, key } of sent) {
+    if (key === null) wholeFiles.add(reviewId);
+    else keysByReview.set(reviewId, [...(keysByReview.get(reviewId) ?? []), key]);
+  }
+  return { keysByReview, wholeFiles };
+}
+
+function markSuggestion(suggestion: WorkspaceDocumentSuggestion, index: SentIndex): WorkspaceDocumentSuggestion {
+  if (suggestion.kind === "create" || suggestion.kind === "delete") {
+    return index.wholeFiles.has(suggestion.id) ? { ...suggestion, rejectionReported: true } : suggestion;
+  }
+  const keys = index.keysByReview.get(suggestion.id);
+  return keys && suggestion.kind === "rewrite" ? { ...suggestion, review: withReported(suggestion.review, keys) } : suggestion;
+}
+
+function markAppliedChange(change: WorkspaceAppliedChange, index: SentIndex): WorkspaceAppliedChange {
+  const keys = index.keysByReview.get(change.id);
+  return keys ? { ...change, review: withReported(change.review, keys) } : change;
+}
+
+/** Remember what the agent has been told, so it is told once. */
+export function recordReviewFeedbackSent(workspace: Workspace, sent: readonly ReviewEditRef[]): Workspace {
+  if (sent.length === 0) return workspace;
+  const index = indexSent(sent);
+  const messages = workspace.chatThread.messages.map((message) => {
+    const suggestions = message.suggestions?.map((suggestion) => markSuggestion(suggestion, index));
+    const appliedChanges = message.appliedChanges?.map((change) => markAppliedChange(change, index));
+    const changed =
+      suggestions?.some((item, i) => item !== message.suggestions?.[i]) ||
+      appliedChanges?.some((item, i) => item !== message.appliedChanges?.[i]);
+    return changed ? { ...message, suggestions, appliedChanges } : message;
+  });
+  return { ...workspace, chatThread: { ...workspace.chatThread, messages } };
 }

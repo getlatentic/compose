@@ -23,9 +23,13 @@ import {
   byteOffsetToLineColumn,
 } from "../../features/text/positionMapper";
 import { formatExcerptPreamble } from "../../features/chat/excerptPreamble";
+import { reviewFeedbackFor, withReviewFeedback } from "../../features/review/reviewFeedback";
+import { NO_WAITING_PROPOSALS, waitingProposals } from "../../features/review/waitingProposals";
+import { markReviewFeedbackSent } from "./reviewMarginSlice";
 import {
   editGuardFor,
   harnessCapabilitiesOf,
+  harnessDisplayName,
   harnessExtraArgs,
 } from "./harnessConfig";
 import {
@@ -34,6 +38,7 @@ import {
 } from "./internals";
 import {
   finishReviewRun,
+  retireCarriedProposals,
 } from "./reviewFlow";
 import {
 } from "../../lib/ipc/conversationsClient";
@@ -176,6 +181,7 @@ export async function runAskAboutSelection(
         appendUserChatMessage(item.chatThread, userMessage, null, null, excerpt),
         runId,
         null,
+        harnessDisplayName(harnessCatalog, harnessId),
       ),
     })),
   }));
@@ -199,6 +205,7 @@ export async function runAskAboutSelection(
   // reads on demand, so it can't blow a small context window. The chat-visible
   // message + excerpt chip stay the full original text.
   const sentUserMessage = await spillChatInputForPrompt(workspaceId, userMessage);
+  const reviewFeedback = reviewFeedbackFor(workspace.chatThread);
 
   try {
     // The note decides intent — the assistant may answer OR edit based on
@@ -211,6 +218,8 @@ export async function runAskAboutSelection(
       useHarnessStore.getState().allowEdits,
       useHarnessStore.getState().reviewEdits,
     );
+    // A sandboxed run starts from the proposals still waiting for the writer.
+    const waiting = editGuard === "clone" ? waitingProposals(get().activeWorkspace() ?? workspace) : NO_WAITING_PROPOSALS;
     const chatMode = capabilities.previewsEdits ? "plan" : useHarnessStore.getState().allowEdits ? "code" : "plan";
 
     // Snapshot mode edits real files mid-run — attribute the watcher's events
@@ -226,7 +235,9 @@ export async function runAskAboutSelection(
         if (!cancelled && useUiStore.getState().soundOnComplete) {
           void playCompletionChime();
         }
-        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
+        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled).then((landed) => {
+          if (landed) retireCarriedProposals(set, get, workspaceId, waiting.suggestionIds);
+        });
       });
     });
     activeRunSubscriptions.set(runId, releaseSubscription);
@@ -234,7 +245,12 @@ export async function runAskAboutSelection(
     await runHarnessStream({
       approvalMode: "default",
       chatMode,
-      prompt: prefixWorkspaceContext(sentUserMessage, workspace.path, workspace.activeFilePath),
+      prompt: prefixWorkspaceContext(
+        withReviewFeedback(sentUserMessage, reviewFeedback),
+        workspace.path,
+        workspace.activeFilePath,
+        editGuard === "clone",
+      ),
       runId,
       workspaceId,
       harnessId,
@@ -242,10 +258,12 @@ export async function runAskAboutSelection(
       effort: tuning.effort,
       maxTurns: tuning.maxTurns,
       editGuard,
+      sandboxFiles: waiting.files,
       extraArgs: harnessExtraArgs(harnessId, tuning),
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
       binaryPath: tuning.binaryPath,
     });
+    markReviewFeedbackSent(set, workspaceId, reviewFeedback);
   } catch (error) {
     const message = formatHarnessError(error);
     const currentThread =

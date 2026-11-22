@@ -10,6 +10,24 @@
 #[cfg(target_os = "macos")]
 pub(crate) const CURRENT_BUNDLE_ID: &str = "ai.latentic.compose";
 
+/// The identifier of the copy that is running, which is what macOS keys its
+/// profile by. A test build under its own id must read and reset its own
+/// profile, never the installed app's. An unbundled dev binary has none and
+/// uses the shipped id, as Tauri does.
+#[cfg(target_os = "macos")]
+pub(crate) fn running_bundle_id() -> String {
+    objc2_foundation::NSBundle::mainBundle()
+        .bundleIdentifier()
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| CURRENT_BUNDLE_ID.to_owned())
+}
+
+/// True for the shipped app, whose profile older bundle ids are carried into.
+#[cfg(target_os = "macos")]
+pub(crate) fn is_shipped_identity() -> bool {
+    running_bundle_id() == CURRENT_BUNDLE_ID
+}
+
 /// Bundle ids this app shipped under earlier, newest first. The first one whose
 /// profile still exists is carried forward.
 #[cfg(target_os = "macos")]
@@ -31,7 +49,7 @@ pub fn profile_dir() -> Option<std::path::PathBuf> {
         std::path::PathBuf::from(home)
             .join("Library")
             .join("Application Support")
-            .join(CURRENT_BUNDLE_ID)
+            .join(running_bundle_id())
     })
 }
 
@@ -46,6 +64,9 @@ pub fn profile_dir() -> Option<std::path::PathBuf> {
 pub fn migrate_legacy_profile() {
     use std::path::PathBuf;
 
+    if !is_shipped_identity() {
+        return;
+    }
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
         return;
     };

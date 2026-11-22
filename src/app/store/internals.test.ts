@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Workspace } from "../workspaceModel";
-import { errorMessage, nextUntitledPath } from "./internals";
+import { errorMessage, nextUntitledPath, prefixWorkspaceContext } from "./internals";
 
 // nextUntitledPath only reads `files` (their relative paths) + `openFilePaths`,
 // so a minimal stand-in exercises the real collision logic without a full
@@ -62,5 +62,23 @@ describe("errorMessage", () => {
     expect(errorMessage("   ", "fallback")).toBe("fallback");
     expect(errorMessage(undefined, "fallback")).toBe("fallback");
     expect(errorMessage({ code: 500 }, "fallback")).toBe("fallback");
+  });
+});
+
+describe("prefixWorkspaceContext", () => {
+  it("names the open note by its absolute path", () => {
+    expect(prefixWorkspaceContext("Fix it.", "/notes/", "Method draft.md")).toBe(
+      "The user is currently viewing the file `/notes/Method draft.md`.\n\nFix it.",
+    );
+  });
+
+  it("names it relative to the sandbox in a reviewed run, never by the real note's path", () => {
+    const prompt = prefixWorkspaceContext("Fix it.", "/notes", "Method draft.md", true);
+    expect(prompt).toBe("The user is currently viewing the file `Method draft.md` (relative to your working directory).\n\nFix it.");
+    expect(prompt).not.toContain("/notes");
+  });
+
+  it("keeps a loose file's own path, which is outside any sandbox", () => {
+    expect(prefixWorkspaceContext("Fix it.", undefined, "/elsewhere/a.md", true)).toContain("`/elsewhere/a.md`");
   });
 });

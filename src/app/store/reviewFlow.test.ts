@@ -8,7 +8,7 @@ vi.mock("../../lib/ipc/reviewClient", () => ({
   snapshotDiff: vi.fn(),
 }));
 
-const { findWorkspaceSuggestion, maybeCleanupReview, reviewChangeToDraft } = await import(
+const { findWorkspaceSuggestion, maybeCleanupReview, retireCarriedProposals, reviewChangeToDraft } = await import(
   "./reviewFlow"
 );
 type Suggestion = Record<string, unknown>;
@@ -117,5 +117,27 @@ describe("finding a suggestion", () => {
     expect(findWorkspaceSuggestion(workspace, "old")).not.toBeNull();
     expect(findWorkspaceSuggestion(workspace, "new")).not.toBeNull();
     expect(findWorkspaceSuggestion(workspace, "missing")).toBeNull();
+  });
+});
+
+describe("retiring proposals a newer run carried forward", () => {
+  function liveStore(suggestions: Suggestion[]) {
+    let state = { workspaces: [{ id: "ws", chatThread: { messages: [{ id: "m1", suggestions }] } }] } as never;
+    const get = () => state;
+    const set = (update: (current: never) => Partial<never>) => {
+      state = { ...(state as object), ...(update(state) as object) } as never;
+    };
+    return { get, set };
+  }
+
+  it("marks them replaced and frees their sandbox, leaving other proposals alone", () => {
+    const { get, set } = liveStore([suggestion(), suggestion({ id: "s2", runId: "r2" })]);
+    retireCarriedProposals(set as never, get as never, "ws", ["s1"]);
+    const [first, second] = (get() as { workspaces: { chatThread: { messages: { suggestions: Suggestion[] }[] } }[] }).workspaces[0].chatThread
+      .messages[0].suggestions;
+    expect(first).toMatchObject({ status: "replaced" });
+    expect(second).toMatchObject({ status: "pending" });
+    expect(reviewCleanup).toHaveBeenCalledWith("r1");
+    expect(reviewCleanup).not.toHaveBeenCalledWith("r2");
   });
 });

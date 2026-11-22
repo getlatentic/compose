@@ -49,22 +49,31 @@ export function nextUntitledPath(
 }
 
 /**
- * Prefix the sent prompt with the one piece of context only the app knows: which
- * file the user is currently looking at, as an absolute path. The working
- * directory itself is stated by the harness — in the openai-compatible system
- * prompt's trailing environment section, and by the Claude/Codex CLIs' own
- * environment — so it isn't repeated here. Added to the *sent* prompt only; the
- * user-visible chat message stays clean.
+ * Prefix the sent prompt with the one piece of context only the app knows:
+ * which file the user is currently looking at. The working directory itself
+ * is stated by the harness — in the openai-compatible system prompt's
+ * trailing environment section, and by the Claude/Codex CLIs' own
+ * environment — so it isn't repeated here. Added to the *sent* prompt only;
+ * the user-visible chat message stays clean.
+ *
+ * Normally an absolute path. A `sandboxed` run works on a copy of the notes,
+ * so it gets the path relative to its working directory: given the real
+ * file's absolute path, an agent edits the real file and the review is
+ * bypassed.
  */
 export function prefixWorkspaceContext(
   prompt: string,
   workspaceRoot: string | undefined,
   activeFilePath: string | null | undefined,
+  sandboxed = false,
 ): string {
   if (!activeFilePath) {
     return prompt;
   }
   const root = workspaceRoot?.trim().replace(/\/+$/, "");
+  if (sandboxed && root) {
+    return `The user is currently viewing the file \`${activeFilePath}\` (relative to your working directory).\n\n${prompt}`;
+  }
   const absolutePath = root ? `${root}/${activeFilePath}` : activeFilePath;
   return `The user is currently viewing the file \`${absolutePath}\`.\n\n${prompt}`;
 }

@@ -30,6 +30,7 @@ import {
 import {
   editGuardFor,
   harnessCapabilitiesOf,
+  harnessDisplayName,
   inlinesFileContent,
   harnessExtraArgs,
 } from "./harnessConfig";
@@ -40,7 +41,11 @@ import {
 } from "./internals";
 import {
   finishReviewRun,
+  retireCarriedProposals,
 } from "./reviewFlow";
+import { markReviewFeedbackSent } from "./reviewMarginSlice";
+import { reviewFeedbackFor, withReviewFeedback } from "../../features/review/reviewFeedback";
+import { NO_WAITING_PROPOSALS, waitingProposals } from "../../features/review/waitingProposals";
 import {
 } from "../../lib/ipc/conversationsClient";
 import {
@@ -191,8 +196,11 @@ export async function runSendChatPrompt(
   // `thread` is the pre-append snapshot, so `thread.messages` are the
   // *prior* turns — replay them into the prompt for harness-neutral
   // continuity (the agent "remembers" the conversation). Trace excluded.
+  // What the writer undid or rejected since the agent's last turn, so it
+  // doesn't read its missing edit as its own mistake and make it again.
+  const reviewFeedback = reviewFeedbackFor(thread);
   const promptWithContext = createPromptWithContext(
-    sentUserMessage,
+    withReviewFeedback(sentUserMessage, reviewFeedback),
     thread.contextItems,
     thread.messages,
     fileContextContent,
@@ -296,7 +304,7 @@ export async function runSendChatPrompt(
           ? { ...message, llmThreadId: llmThreadId ?? undefined }
           : message,
       );
-      return startRun({ ...current, messages }, runId, llmThreadId);
+      return startRun({ ...current, messages }, runId, llmThreadId, harnessDisplayName(harnessCatalog, harnessId));
     });
 
     // Resolve the run's capabilities + tuning + edit-review mode up front so
@@ -308,6 +316,9 @@ export async function runSendChatPrompt(
     // so a read-only ask can't write, whatever the global Auto-apply toggle is.
     const allowEdits = options?.readOnly ? false : useHarnessStore.getState().allowEdits;
     const editGuard = editGuardFor(capabilities, allowEdits, useHarnessStore.getState().reviewEdits);
+    // A sandboxed run starts from the proposals still waiting for the writer,
+    // so the agent finds what its conversation says it did.
+    const waiting = editGuard === "clone" ? waitingProposals(get().activeWorkspace() ?? workspace) : NO_WAITING_PROPOSALS;
 
     // Snapshot mode edits the user's real files mid-run; open the agent-edit
     // window so the file watcher attributes those changes to this run (and
@@ -325,7 +336,9 @@ export async function runSendChatPrompt(
         if (!cancelled && useUiStore.getState().soundOnComplete) {
           void playCompletionChime();
         }
-        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
+        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled).then((landed) => {
+          if (landed) retireCarriedProposals(set, get, workspaceId, waiting.suggestionIds);
+        });
       });
     });
     activeRunSubscriptions.set(runId, releaseSubscription);
@@ -351,6 +364,7 @@ export async function runSendChatPrompt(
         promptWithContext,
         viewingLoose ? undefined : workspace.path,
         focused?.activeFilePath ?? workspace.activeFilePath,
+        editGuard === "clone",
       ),
       runId,
       workspaceId,
@@ -359,10 +373,12 @@ export async function runSendChatPrompt(
       effort: tuning.effort,
       maxTurns: tuning.maxTurns,
       editGuard,
+      sandboxFiles: waiting.files,
       extraArgs: harnessExtraArgs(harnessId, tuning),
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
       binaryPath: tuning.binaryPath,
     });
+    markReviewFeedbackSent(set, workspaceId, reviewFeedback);
   } catch (error) {
     const message = formatHarnessError(error);
     const currentThread =

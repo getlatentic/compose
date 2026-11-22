@@ -11,7 +11,7 @@ mod macos {
     use std::ffi::OsStr;
     use std::path::{Path, PathBuf};
 
-    use crate::profile_migration::{CURRENT_BUNDLE_ID, LEGACY_BUNDLE_IDS, PROFILE_SUBDIRS};
+    use crate::profile_migration::{is_shipped_identity, running_bundle_id, LEGACY_BUNDLE_IDS, PROFILE_SUBDIRS};
 
     /// Left in Application Support to carry a pending reset across the restart.
     const MARKER: &str = ".reset-pending";
@@ -24,7 +24,7 @@ mod macos {
     }
 
     fn support_dir() -> Option<PathBuf> {
-        library().map(|lib| lib.join("Application Support").join(CURRENT_BUNDLE_ID))
+        library().map(|lib| lib.join("Application Support").join(running_bundle_id()))
     }
 
     pub fn request_reset() -> Result<(), String> {
@@ -44,8 +44,9 @@ mod macos {
         // localStorage and any older-bundle profile would otherwise repopulate
         // settings or be re-migrated on the way up — remove them wholesale.
         if let Some(lib) = library() {
-            let _ = std::fs::remove_dir_all(lib.join("WebKit").join(CURRENT_BUNDLE_ID));
-            for legacy in LEGACY_BUNDLE_IDS {
+            let _ = std::fs::remove_dir_all(lib.join("WebKit").join(running_bundle_id()));
+            let legacy_ids = if is_shipped_identity() { LEGACY_BUNDLE_IDS } else { &[] };
+            for legacy in legacy_ids {
                 for subdir in PROFILE_SUBDIRS {
                     let _ = std::fs::remove_dir_all(lib.join(subdir).join(legacy));
                 }

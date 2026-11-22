@@ -74,6 +74,8 @@ export type ChatRunState = "idle" | "starting" | "streaming" | "error";
 
 export interface WorkspaceChatThread {
   activeLlmThreadId: string | null;
+  /** The agent the active run goes to, as the chat names it; its reply carries it. */
+  activeAgentName?: string;
   activeRunId: string | null;
   /** The persisted conversation this thread maps to (the `conversations`
    * row). Null until the first send / load creates one. */
@@ -114,6 +116,9 @@ export interface WorkspaceChatMessage {
   llmThreadId?: string;
   role: "assistant" | "user";
   runId?: string;
+  /** The agent that wrote this reply, named when its run started, so its
+   *  changes stay credited to it after the writer switches agents. */
+  agentName?: string;
   streaming?: boolean;
   /** This reply's run never finished — the app quit/crashed mid-stream, so it
    * was loaded still marked streaming. Renders a "Response interrupted" note
@@ -182,7 +187,8 @@ export function sumChatThreadStats(thread: WorkspaceChatThread): WorkspaceRunSta
   return { totalTokens, coins };
 }
 
-export type WorkspaceSuggestionStatus = "pending" | "accepted" | "rejected" | "stale";
+/** `replaced`: a newer run started from this proposal and carries it forward. */
+export type WorkspaceSuggestionStatus = "pending" | "accepted" | "rejected" | "stale" | "replaced";
 
 /** Fields every previewable change carries, whatever its shape. */
 interface WorkspaceSuggestionBase {
@@ -225,6 +231,8 @@ export interface WorkspaceCreateSuggestion extends WorkspaceSuggestionBase {
   newText: string | null;
   newSize: number;
   previewOmitted: boolean;
+  /** The agent has been told the writer rejected this file. */
+  rejectionReported?: boolean;
 }
 
 /** A whole-file rewrite the assistant made in the sandbox. */
@@ -237,18 +245,21 @@ export interface WorkspaceRewriteSuggestion extends WorkspaceSuggestionBase {
   previewOmitted: boolean;
   /** The live file changed since the run started — accepting overwrites it. */
   stale: boolean;
-  /** Change blocks decided one at a time in the note's review margin. */
+  /** Edits decided one at a time in the note's review margin. */
   review?: ReviewDecisions;
 }
 
 /**
- * Per-block decisions made in the review margin, by block key
- * (`features/review/changeBlocks.ts`). `kept`: the change is in the note
+ * Per-edit decisions made in the review margin, by edit key
+ * (`features/review/agentEdits.ts`). `kept`: the change is in the note
  * (kept, or accepted); `dropped`: it is not (undone, or rejected).
+ * `reported`: dropped edits the agent has been told about
+ * (`features/review/reviewFeedback.ts`), so each is told once.
  */
 export interface ReviewDecisions {
   kept: readonly string[];
   dropped: readonly string[];
+  reported: readonly string[];
 }
 
 /** A file the assistant deleted in the sandbox. */
@@ -258,6 +269,8 @@ export interface WorkspaceDeleteSuggestion extends WorkspaceSuggestionBase {
   originalSize: number;
   previewOmitted: boolean;
   stale: boolean;
+  /** The agent has been told the writer rejected this deletion. */
+  rejectionReported?: boolean;
 }
 
 /** bob's byte-range edit draft, before it becomes a pending suggestion. */
@@ -1483,9 +1496,11 @@ export function startRun(
   chatThread: WorkspaceChatThread,
   runId: string,
   llmThreadId: string | null = null,
+  agentName?: string,
 ): WorkspaceChatThread {
   return {
     ...chatThread,
+    activeAgentName: agentName,
     activeLlmThreadId: llmThreadId,
     activeRunId: runId,
     runError: null,
@@ -1505,6 +1520,7 @@ export function markRunStreaming(
     content: "",
     id: newMessageId(),
     ...(chatThread.activeLlmThreadId ? { llmThreadId: chatThread.activeLlmThreadId } : {}),
+    ...(chatThread.activeAgentName ? { agentName: chatThread.activeAgentName } : {}),
     role: "assistant",
     runId,
     streaming: true,
@@ -1529,6 +1545,7 @@ function ensureAssistantMessage(
     content: "",
     id: newMessageId(),
     ...(chatThread.activeLlmThreadId ? { llmThreadId: chatThread.activeLlmThreadId } : {}),
+    ...(chatThread.activeAgentName ? { agentName: chatThread.activeAgentName } : {}),
     role: "assistant",
     runId,
     streaming: true,

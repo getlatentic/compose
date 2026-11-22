@@ -1,37 +1,44 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { EditorView } from "@codemirror/view";
 
-import { blockId } from "./liveBlocks";
 import { reviewBridge } from "./reviewBridge";
+import { setReviewMode } from "./reviewExtension";
 
 /**
- * "Review 2 changes": the one primary action while a run's changes wait.
- * Each press moves to the next change after the caret, wrapping round, and
- * puts focus on its card so the keyboard can decide it.
+ * The way into review mode, like Track Changes' review: "Review 2 changes"
+ * opens the margin and puts the caret on the next change after it, whose
+ * card opens level with its words. "Done reviewing" closes the margin and
+ * gives the note its width back; the changes stay marked in the text.
  */
 export function ReviewChangesButton() {
   const snapshot = useSyncExternalStore(reviewBridge.subscribe, reviewBridge.getSnapshot);
-  const { view, blocks } = snapshot;
+  const { view, edits, reviewing } = snapshot;
 
   const handleClick = useCallback(() => {
-    if (!view || blocks.length === 0) return;
+    if (!view || edits.length === 0) return;
+    if (reviewing) {
+      setReviewMode(view, false);
+      return;
+    }
     const caret = view.state.selection.main.head;
-    const next = blocks.find((block) => block.from > caret) ?? blocks[0];
+    const next = edits.find((edit) => edit.from > caret) ?? edits[0];
+    setReviewMode(view, true);
     view.dispatch({
       selection: { anchor: next.from },
       effects: EditorView.scrollIntoView(next.from, { y: "center" }),
     });
-    // After the scroll has laid the card out.
-    requestAnimationFrame(() => {
-      const card = document.querySelector<HTMLElement>(`[data-review-id="${CSS.escape(blockId(next))}"]`);
-      card?.querySelector<HTMLButtonElement>("button")?.focus();
-    });
-  }, [view, blocks]);
+    view.focus();
+  }, [view, edits, reviewing]);
 
-  if (blocks.length === 0) return null;
+  if (edits.length === 0) return null;
   return (
-    <button type="button" className="review-changes-button" onClick={handleClick}>
-      Review {blocks.length} change{blocks.length === 1 ? "" : "s"}
+    <button
+      type="button"
+      className={`review-changes-button${reviewing ? " review-changes-button--done" : ""}`}
+      aria-pressed={reviewing}
+      onClick={handleClick}
+    >
+      {reviewing ? "Done reviewing" : `Review ${edits.length} change${edits.length === 1 ? "" : "s"}`}
     </button>
   );
 }
