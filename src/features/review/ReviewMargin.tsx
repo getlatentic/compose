@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { EditorView } from "@codemirror/view";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { placeCards } from "./cardLayout";
 import { editId, type LiveEdit } from "./liveEdits";
 import { reviewBridge, type LiveComment, type ReviewSnapshot } from "./reviewBridge";
 import { ChangeCard, CommentCard } from "./ReviewCard";
@@ -10,25 +11,30 @@ import { EDIT_ATTRIBUTE, editDomId } from "./reviewDecorations";
 import { currentEdits } from "./reviewExtension";
 
 /** Gap between the note column and a card; the leader runs across it. */
-const GAP_PX = 40;
-const CARD_GAP_PX = 8;
+const GAP_PX = 32;
+const CARD_GAP_PX = 6;
 /** Where on a card its leader arrives: level with the card's first line. */
-const LEADER_Y_PX = 15;
+const LEADER_Y_PX = 14;
 
 type MarginItem =
   | { kind: "change"; id: string; top: number; edit: LiveEdit }
   | { kind: "comment"; id: string; top: number; comment: LiveComment };
 
+/** What the margin shows: every edit's card while reviewing; comments while reviewing or when they fit beside the note. */
 function marginItems(snapshot: ReviewSnapshot): MarginItem[] {
   const { tops } = snapshot.geometry;
   const items: MarginItem[] = [];
-  for (const edit of snapshot.edits) {
-    const top = tops.get(editId(edit));
-    if (top !== undefined) items.push({ kind: "change", id: editId(edit), top, edit });
+  if (snapshot.reviewing) {
+    for (const edit of snapshot.edits) {
+      const top = tops.get(editId(edit));
+      if (top !== undefined) items.push({ kind: "change", id: editId(edit), top, edit });
+    }
   }
-  for (const comment of snapshot.comments) {
-    const top = tops.get(comment.id);
-    if (top !== undefined) items.push({ kind: "comment", id: comment.id, top, comment });
+  if (snapshot.reviewing || snapshot.roomBeside) {
+    for (const comment of snapshot.comments) {
+      const top = tops.get(comment.id);
+      if (top !== undefined) items.push({ kind: "comment", id: comment.id, top, comment });
+    }
   }
   return items.sort((a, b) => a.top - b.top);
 }
@@ -81,25 +87,26 @@ function useHoveredEdit(view: EditorView | null): [string | null, (domId: string
   return [hovered, setHovered];
 }
 
-/** Stacks the cards level with their lines, pushed down where they would overlap, and draws the leaders. */
-function useCardLayout(items: readonly MarginItem[], contentRight: number) {
+/**
+ * Places the cards beside their lines without overlap, the active one level
+ * with its words, and draws the leaders.
+ */
+function useCardLayout(items: readonly MarginItem[], activeId: string | null, contentRight: number) {
   const cards = useRef(new Map<string, HTMLElement>());
   const [leaders, setLeaders] = useState<string[]>([]);
   const left = contentRight + GAP_PX;
   useLayoutEffect(() => {
-    let floor = -Infinity;
-    const paths: string[] = [];
-    for (const item of items) {
-      const card = cards.current.get(item.id);
-      if (!card) continue;
-      const top = Math.max(item.top, floor);
-      card.style.top = `${top}px`;
-      card.style.left = `${left}px`;
-      floor = top + card.offsetHeight + CARD_GAP_PX;
-      paths.push(`M${contentRight + 8} ${item.top + LEADER_Y_PX} H${left - 12} L${left} ${top + LEADER_Y_PX}`);
-    }
+    const placed = items.filter((item) => cards.current.has(item.id));
+    const elements = placed.map((item) => cards.current.get(item.id) as HTMLElement);
+    const slots = placed.map((item, index) => ({ anchor: item.top, height: elements[index].offsetHeight }));
+    const tops = placeCards(slots, placed.findIndex((item) => item.id === activeId), CARD_GAP_PX);
+    const paths = placed.map((item, index) => {
+      elements[index].style.top = `${tops[index]}px`;
+      elements[index].style.left = `${left}px`;
+      return `M${contentRight + 6} ${item.top + LEADER_Y_PX} H${left - 10} L${left} ${tops[index] + LEADER_Y_PX}`;
+    });
     setLeaders((previous) => (previous.join() === paths.join() ? previous : paths));
-  }, [items, left, contentRight]);
+  }, [items, activeId, left, contentRight]);
   const register = useCallback(
     (id: string) => (element: HTMLElement | null) => {
       if (element) cards.current.set(id, element);
@@ -110,19 +117,28 @@ function useCardLayout(items: readonly MarginItem[], contentRight: number) {
   return { leaders, register };
 }
 
+/** The active edit: the card the writer last clicked, until the caret moves into an edit of its own. */
+function useActiveEdit(caretEditId: string | null): [string | null, (id: string) => void] {
+  const [clicked, setClicked] = useState<string | null>(null);
+  useEffect(() => setClicked(null), [caretEditId]);
+  return [clicked ?? caretEditId, setClicked];
+}
+
 /**
- * A card per agent edit and per comment beside the note, each level with
- * its line and tied back to it by a hairline leader.
+ * A card per agent edit (while reviewing) and per comment beside the note,
+ * each tied back to its line by a hairline leader.
  */
 function Margin({ snapshot, agentName }: { snapshot: ReviewSnapshot; agentName: string }) {
   const items = useMemo(() => marginItems(snapshot), [snapshot]);
-  const { leaders, register } = useCardLayout(items, snapshot.geometry.contentRight);
+  const [activeId, setActiveId] = useActiveEdit(snapshot.caretEditId);
+  const { leaders, register } = useCardLayout(items, activeId, snapshot.geometry.contentRight);
   const decide = useDecide(snapshot.view);
   const [hovered, setHovered] = useHoveredEdit(snapshot.view);
   const sendCommentToChat = useWorkspaceStore((state) => state.sendCommentToChat);
   const setCommentResolved = useWorkspaceStore((state) => state.setCommentResolved);
   const handleSend = useCallback((id: string) => void sendCommentToChat(id), [sendCommentToChat]);
   const handleResolve = useCallback((id: string) => setCommentResolved(id, true), [setCommentResolved]);
+  if (items.length === 0) return null;
 
   return (
     <div className="review-margin" role="complementary" aria-label="Review">
@@ -138,9 +154,11 @@ function Margin({ snapshot, agentName }: { snapshot: ReviewSnapshot; agentName: 
             key={item.id}
             ref={register(item.id)}
             edit={item.edit}
-            active={hovered === editDomId(item.edit)}
+            expanded={activeId === item.id}
+            highlighted={hovered === editDomId(item.edit)}
             onDecide={decide}
             onHover={setHovered}
+            onActivate={setActiveId}
           />
         ) : (
           <CommentCard

@@ -7,19 +7,22 @@ import { locateComment } from "./locateComment";
 import { reviewBridge, type LiveComment } from "./reviewBridge";
 import { buildReviewDecorations } from "./reviewDecorations";
 
-/** Width the note gives up for the margin while it shows: the gap the
+/** Width the note gives up for the margin while reviewing: the gap the
  *  leaders cross, a card, and an edge. Kept in step with `_review-margin.scss`. */
-export const MARGIN_ROOM_PX = 40 + 264 + 16;
+export const MARGIN_ROOM_PX = 32 + 224 + 16;
 /** Recompute edits this long after the last edit, not on every keystroke. */
 const RECOMPUTE_DELAY_MS = 250;
 
 interface ReviewState {
   readonly edits: readonly LiveEdit[];
   readonly comments: readonly LiveComment[];
+  /** Review mode: the margin shows every edit's card and the marks show both sides. */
+  readonly reviewing: boolean;
   readonly decorations: DecorationSet;
 }
 
 const setReview = StateEffect.define<{ edits: readonly LiveEdit[]; comments: readonly LiveComment[] }>();
+const setReviewing = StateEffect.define<boolean>();
 
 function mapEdit(edit: LiveEdit, changes: ChangeDesc): LiveEdit {
   const from = changes.mapPos(edit.from, 1);
@@ -27,12 +30,12 @@ function mapEdit(edit: LiveEdit, changes: ChangeDesc): LiveEdit {
 }
 
 const reviewField = StateField.define<ReviewState>({
-  create: () => ({ edits: [], comments: [], decorations: buildReviewDecorations("", []) }),
+  create: () => ({ edits: [], comments: [], reviewing: false, decorations: buildReviewDecorations("", [], false) }),
   update(value, tr) {
     if (!tr.docChanged && tr.effects.length === 0) {
       return value;
     }
-    let { edits, comments } = value;
+    let { edits, comments, reviewing } = value;
     let rebuild = false;
     if (tr.docChanged) {
       edits = edits.map((edit) => mapEdit(edit, tr.changes));
@@ -42,20 +45,34 @@ const reviewField = StateField.define<ReviewState>({
       if (effect.is(setReview)) {
         ({ edits, comments } = effect.value);
         rebuild = true;
+      } else if (effect.is(setReviewing) && effect.value !== reviewing) {
+        reviewing = effect.value;
+        rebuild = true;
       }
     }
+    // Nothing left to review ends review mode, and the note gets its width back.
+    if (reviewing && edits.length === 0) {
+      reviewing = false;
+      rebuild = true;
+    }
     const decorations = rebuild
-      ? buildReviewDecorations(tr.state.doc.toString(), edits)
+      ? buildReviewDecorations(tr.state.doc.toString(), edits, reviewing)
       : value.decorations.map(tr.changes);
-    return { edits, comments, decorations };
+    return { edits, comments, reviewing, decorations };
   },
   provide: (field) => [
     EditorView.decorations.from(field, (state) => state.decorations),
     EditorView.editorAttributes.from(field, (state): Record<string, string> =>
-      state.edits.length > 0 || state.comments.length > 0 ? { class: "cm-review-wide" } : {},
+      state.reviewing ? { class: "cm-review-wide" } : {},
     ),
   ],
 });
+
+/** The undecided edit the caret is in, if any: the one whose card is lined up and opened. */
+function caretEdit(state: ReviewState, head: number): string | null {
+  const edit = state.edits.find((candidate) => candidate.from <= head && head <= candidate.to);
+  return edit ? editId(edit) : null;
+}
 
 function computeReview(view: EditorView): { edits: LiveEdit[]; comments: LiveComment[] } {
   const note = view.state.doc.toString();
@@ -68,7 +85,7 @@ function computeReview(view: EditorView): { edits: LiveEdit[]; comments: LiveCom
 
 /**
  * Keeps the field in step with the review data and reports where each
- * card's line is.
+ * card's line is, and which edit the caret is in.
  */
 const reviewPlugin = ViewPlugin.fromClass(
   class {
@@ -93,6 +110,8 @@ const reviewPlugin = ViewPlugin.fromClass(
       const after = update.state.field(reviewField);
       if (update.docChanged || update.geometryChanged || update.viewportChanged || before !== after) {
         this.measure();
+      } else if (update.selectionSet) {
+        reviewBridge.publish({ caretEditId: caretEdit(after, update.state.selection.main.head) });
       }
     }
 
@@ -121,10 +140,22 @@ const reviewPlugin = ViewPlugin.fromClass(
           }
           for (const comment of state.comments) tops.set(comment.id, lineTop(comment.from));
           const content = view.contentDOM.getBoundingClientRect();
-          return { state, tops, contentRight: content.right - scroller.left + view.scrollDOM.scrollLeft };
+          return {
+            state,
+            tops,
+            contentRight: content.right - scroller.left + view.scrollDOM.scrollLeft,
+            room: view.scrollDOM.clientWidth - content.width >= MARGIN_ROOM_PX * 2,
+          };
         },
-        write: ({ state, tops, contentRight }) => {
-          reviewBridge.publish({ edits: state.edits, comments: state.comments, geometry: { tops, contentRight } });
+        write: ({ state, tops, contentRight, room }, view) => {
+          reviewBridge.publish({
+            edits: state.edits,
+            comments: state.comments,
+            reviewing: state.reviewing,
+            roomBeside: room,
+            caretEditId: caretEdit(state, view.state.selection.main.head),
+            geometry: { tops, contentRight },
+          });
         },
       });
     }
@@ -139,8 +170,8 @@ const reviewPlugin = ViewPlugin.fromClass(
 );
 
 const reviewTheme = EditorView.theme({
-  // With the margin showing, the note keeps to the left and gives up the
-  // margin's width, so every card fits beside it however narrow the pane.
+  // Reviewing, the note keeps to the left and gives up the margin's width,
+  // so every card fits beside it however narrow the pane.
   "&.cm-review-wide .cm-content": {
     marginLeft: "0",
     marginRight: "auto",
@@ -156,6 +187,22 @@ const reviewTheme = EditorView.theme({
   ".cm-review-out": {
     color: "var(--color-danger-text)",
     textDecoration: "line-through",
+  },
+  ".cm-review-quiet": {
+    textDecoration: "underline dotted",
+    textDecorationColor: "var(--color-ai-leader)",
+    textUnderlineOffset: "0.25em",
+  },
+  ".cm-review-quiet-line": {
+    boxShadow: "inset 2px 0 0 var(--color-ai-leader)",
+  },
+  ".cm-review-quiet-point": {
+    display: "inline-block",
+    inlineSize: "2px",
+    blockSize: "1em",
+    marginInline: "1px",
+    verticalAlign: "text-bottom",
+    background: "var(--color-ai-leader)",
   },
   ".cm-review-other--replaced": {
     marginInlineEnd: "0.3em",
@@ -181,4 +228,9 @@ export const reviewMargin: MarkdownExtension = {
 /** The undecided edits as the editor has them now, positions current. */
 export function currentEdits(view: EditorView): readonly LiveEdit[] {
   return view.state.field(reviewField, false)?.edits ?? [];
+}
+
+/** Turn review mode on or off. Off, the note keeps its width and marks only the agent's words. */
+export function setReviewMode(view: EditorView, on: boolean): void {
+  view.dispatch({ effects: setReviewing.of(on) });
 }

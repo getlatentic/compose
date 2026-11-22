@@ -98,10 +98,56 @@ function lineMarks(edit: LiveEdit, note: string, out: Range<Decoration>[]): void
   }
 }
 
-export function buildReviewDecorations(note: string, edits: readonly LiveEdit[]): DecorationSet {
+/** A zero-width marker where words were taken out, outside review mode. */
+class PointWidget extends WidgetType {
+  constructor(private readonly domId: string) {
+    super();
+  }
+
+  eq(other: PointWidget): boolean {
+    return other.domId === this.domId;
+  }
+
+  toDOM(): HTMLElement {
+    const element = document.createElement("span");
+    element.className = "cm-review-quiet-point";
+    element.setAttribute("aria-hidden", "true");
+    element.setAttribute(EDIT_ATTRIBUTE, this.domId);
+    return element;
+  }
+}
+
+/**
+ * Outside review mode an edit is only marked where it is: the agent's words
+ * underlined, a bar beside whole lines, a marker where words went. The old
+ * words stay hidden until the writer reviews.
+ */
+function quietMarks(edit: LiveEdit, note: string, out: Range<Decoration>[]): void {
+  const domId = editDomId(edit);
+  const inNote = note.slice(edit.from, edit.to);
+  if (edit.wholeLines && inNote) {
+    const line = Decoration.line({ class: "cm-review-quiet-line", attributes: { [EDIT_ATTRIBUTE]: domId } });
+    let at = edit.from;
+    for (const text of inNote.split("\n")) {
+      if (text.trim()) out.push(line.range(at));
+      at += text.length + 1;
+    }
+    return;
+  }
+  if (inNote.trim()) {
+    const from = edit.from + (inNote.length - inNote.trimStart().length);
+    const to = edit.to - (inNote.length - inNote.trimEnd().length);
+    out.push(Decoration.mark({ class: "cm-review-quiet", attributes: { [EDIT_ATTRIBUTE]: domId } }).range(from, to));
+    return;
+  }
+  out.push(Decoration.widget({ widget: new PointWidget(domId), side: 1 }).range(edit.from));
+}
+
+export function buildReviewDecorations(note: string, edits: readonly LiveEdit[], reviewing: boolean): DecorationSet {
   const ranges: Range<Decoration>[] = [];
   for (const edit of edits) {
-    if (edit.wholeLines) lineMarks(edit, note, ranges);
+    if (!reviewing) quietMarks(edit, note, ranges);
+    else if (edit.wholeLines) lineMarks(edit, note, ranges);
     else wordMarks(edit, note, ranges);
   }
   return Decoration.set(ranges, true);

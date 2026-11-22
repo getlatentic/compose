@@ -28,6 +28,12 @@ export interface ReviewSnapshot {
   readonly view: EditorView | null;
   readonly edits: readonly LiveEdit[];
   readonly comments: readonly LiveComment[];
+  /** Review mode is on: every edit has a card and the note has given up the margin's width. */
+  readonly reviewing: boolean;
+  /** The pane is wide enough for the margin without narrowing the note. */
+  readonly roomBeside: boolean;
+  /** The edit the caret is in: its card is opened and lined up with its words. */
+  readonly caretEditId: string | null;
   readonly geometry: MarginGeometry;
   /** The element inside the scroller that the margin renders into. */
   readonly marginHost: HTMLElement | null;
@@ -39,6 +45,9 @@ const EMPTY: ReviewSnapshot = {
   view: null,
   edits: [],
   comments: [],
+  reviewing: false,
+  roomBeside: false,
+  caretEditId: null,
   geometry: EMPTY_GEOMETRY,
   marginHost: null,
 };

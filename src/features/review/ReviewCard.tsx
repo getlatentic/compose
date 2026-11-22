@@ -2,7 +2,7 @@ import { forwardRef, useCallback, type MouseEvent } from "react";
 import { Check, MessageSquare, Undo2, X } from "lucide-react";
 
 import { useLeaveAnimation } from "../shared/useLeaveAnimation";
-import type { LiveEdit } from "./liveEdits";
+import { editId, type LiveEdit } from "./liveEdits";
 import type { LiveComment } from "./reviewBridge";
 import { editDomId } from "./reviewDecorations";
 
@@ -25,12 +25,13 @@ export function describeEdit(edit: Pick<LiveEdit, "removed" | "added">): string 
 }
 
 /** The edit's own words: the old struck through, the new underlined. */
-function EditWords({ edit }: { edit: Pick<LiveEdit, "removed" | "added"> }) {
+function EditWords({ edit, compact }: { edit: Pick<LiveEdit, "removed" | "added">; compact: boolean }) {
   const removed = clip(edit.removed);
   const added = clip(edit.added);
-  if (!removed && !added) return <p className="review-card__body">Changed the spacing.</p>;
+  const className = `review-card__body${compact ? " review-card__body--compact" : ""}`;
+  if (!removed && !added) return <p className={className}>Changed the spacing.</p>;
   return (
-    <p className="review-card__body">
+    <p className={className}>
       {!removed ? <span className="review-card__verb">Added </span> : null}
       {!added ? <span className="review-card__verb">Removed </span> : null}
       {removed ? <del className="review-card__old">{removed}</del> : null}
@@ -42,22 +43,29 @@ function EditWords({ edit }: { edit: Pick<LiveEdit, "removed" | "added"> }) {
 
 interface ChangeCardProps {
   readonly edit: LiveEdit;
-  readonly active: boolean;
+  /** The active card: opened, with the agent's name and labelled buttons. */
+  readonly expanded: boolean;
+  readonly highlighted: boolean;
   readonly onDecide: (edit: LiveEdit, takeOtherSide: boolean, kept: boolean) => void;
   readonly onHover: (domId: string | null) => void;
+  readonly onActivate: (id: string) => void;
 }
 
 /**
  * One agent edit. Applied (the default): Keep or Undo, since the edit is
  * already in the note. Pending ("Review changes before applying"): Accept or
- * Reject.
+ * Reject. One row of words and two icon buttons until it is the active
+ * card, which opens to name the agent and label the buttons.
  */
 export const ChangeCard = forwardRef<HTMLElement, ChangeCardProps>(function ChangeCard(
-  { edit, active, onDecide, onHover },
+  { edit, expanded, highlighted, onDecide, onHover, onActivate },
   ref,
 ) {
   const applied = edit.mode === "applied";
   const domId = editDomId(edit);
+  const id = editId(edit);
+  const primaryLabel = applied ? "Keep" : "Accept";
+  const secondaryLabel = applied ? "Undo" : "Reject";
   // Applied: Keep leaves the note alone; Undo swaps the old words back.
   // Pending: Accept swaps the new words in; Reject leaves the note alone.
   const { leaving, leave } = useLeaveAnimation();
@@ -71,29 +79,45 @@ export const ChangeCard = forwardRef<HTMLElement, ChangeCardProps>(function Chan
   );
   const handleEnter = useCallback(() => onHover(domId), [onHover, domId]);
   const handleLeave = useCallback(() => onHover(null), [onHover]);
+  const handleActivate = useCallback(() => onActivate(id), [onActivate, id]);
+  const classes = [
+    "review-card",
+    expanded ? "review-card--expanded" : "review-card--compact",
+    highlighted ? "review-card--active" : "",
+    leaving ? "review-card--leaving" : "",
+  ];
   return (
     <article
       ref={ref}
-      className={`review-card${active ? " review-card--active" : ""}${leaving ? " review-card--leaving" : ""}`}
+      className={classes.filter(Boolean).join(" ")}
       data-review-id={domId}
       aria-label={`${edit.agentName} ${applied ? "changed" : "suggests"}: ${describeEdit(edit)}`}
+      title={expanded ? undefined : `${edit.agentName} ${applied ? "changed" : "suggests"}: ${describeEdit(edit)}`}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
-      onFocus={handleEnter}
-      onBlur={handleLeave}
+      onFocus={handleActivate}
+      onClick={handleActivate}
     >
-      <p className="review-card__head">
-        <span className="review-card__author">{edit.agentName}</span> {applied ? "changed" : "suggests"}
-      </p>
-      <EditWords edit={edit} />
+      {expanded ? (
+        <p className="review-card__head">
+          <span className="review-card__author">{edit.agentName}</span> {applied ? "changed" : "suggests"}
+        </p>
+      ) : null}
+      <EditWords edit={edit} compact={!expanded} />
       <div className="review-card__actions">
-        <button type="button" className="review-card__button review-card__button--primary" onClick={handlePrimary}>
+        <button
+          type="button"
+          className="review-card__button review-card__button--primary"
+          aria-label={primaryLabel}
+          title={primaryLabel}
+          onClick={handlePrimary}
+        >
           <Check size={14} strokeWidth={2} aria-hidden />
-          {applied ? "Keep" : "Accept"}
+          {expanded ? primaryLabel : null}
         </button>
-        <button type="button" className="review-card__button" onClick={handleSecondary}>
+        <button type="button" className="review-card__button" aria-label={secondaryLabel} title={secondaryLabel} onClick={handleSecondary}>
           {applied ? <Undo2 size={14} strokeWidth={2} aria-hidden /> : <X size={14} strokeWidth={2} aria-hidden />}
-          {applied ? "Undo" : "Reject"}
+          {expanded ? secondaryLabel : null}
         </button>
       </div>
     </article>
