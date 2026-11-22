@@ -49,7 +49,8 @@ function fromAppliedChange(change: WorkspaceAppliedChange, agentName: string): F
   };
 }
 
-function messageReviews(message: WorkspaceChatMessage, filePath: string, agentName: string): FileReview[] {
+function messageReviews(message: WorkspaceChatMessage, filePath: string, fallbackAgentName: string): FileReview[] {
+  const agentName = message.agentName ?? fallbackAgentName;
   const reviews: (FileReview | null)[] = [];
   for (const suggestion of message.suggestions ?? []) {
     if (suggestion.kind === "rewrite" && suggestion.filePath === filePath) {
@@ -64,10 +65,18 @@ function messageReviews(message: WorkspaceChatMessage, filePath: string, agentNa
   return reviews.filter((review): review is FileReview => review !== null);
 }
 
-/** Every agent change to `filePath` in the open conversation that can be reviewed in the note. */
-export function fileReviewsFor(chatThread: WorkspaceChatThread | undefined, filePath: string, agentName: string): FileReview[] {
+/**
+ * Every agent change to `filePath` in the open conversation that can be
+ * reviewed in the note, each credited to the agent whose run made it;
+ * `fallbackAgentName` names a reply that carries no agent.
+ */
+export function fileReviewsFor(
+  chatThread: WorkspaceChatThread | undefined,
+  filePath: string,
+  fallbackAgentName: string,
+): FileReview[] {
   if (!chatThread || !filePath) return [];
-  return chatThread.messages.flatMap((message) => messageReviews(message, filePath, agentName));
+  return chatThread.messages.flatMap((message) => messageReviews(message, filePath, fallbackAgentName));
 }
 
 function withDecision(review: ReviewDecisions | undefined, key: string, kept: boolean): ReviewDecisions {

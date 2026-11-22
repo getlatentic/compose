@@ -43,6 +43,13 @@ describe("fileReviewsFor", () => {
     expect(fileReviewsFor(pending().chatThread, "b.md", "Claude")).toEqual([]);
   });
 
+  it("credits a change to the agent whose run made it, not the one selected now", () => {
+    const workspace = pending();
+    const [message] = workspace.chatThread.messages;
+    const thread = { ...workspace.chatThread, messages: [{ ...message, agentName: "Claude Code" }] };
+    expect(fileReviewsFor(thread, "a.md", "Codex")[0].agentName).toBe("Claude Code");
+  });
+
   it("reviews an applied change as applied", () => {
     const workspace = workspaceWith({
       appliedChanges: [

@@ -28,6 +28,7 @@ import { markReviewFeedbackSent } from "./reviewMarginSlice";
 import {
   editGuardFor,
   harnessCapabilitiesOf,
+  harnessDisplayName,
   harnessExtraArgs,
 } from "./harnessConfig";
 import {
@@ -178,6 +179,7 @@ export async function runAskAboutSelection(
         appendUserChatMessage(item.chatThread, userMessage, null, null, excerpt),
         runId,
         null,
+        harnessDisplayName(harnessCatalog, harnessId),
       ),
     })),
   }));

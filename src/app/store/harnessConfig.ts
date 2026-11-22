@@ -123,6 +123,11 @@ export function inlinesFileContent(catalog: HarnessInfo[], harnessId: string): b
   return catalog.find((entry) => entry.id === harnessId)?.provider != null;
 }
 
+/** The agent's name as the chat shows it, e.g. "Claude Code". */
+export function harnessDisplayName(catalog: HarnessInfo[], harnessId: string | null): string {
+  return catalog.find((entry) => entry.id === harnessId)?.displayName ?? "Assistant";
+}
+
 export function harnessCapabilitiesOf(
   catalog: HarnessInfo[],
   harnessId: string,

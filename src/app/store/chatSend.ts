@@ -30,6 +30,7 @@ import {
 import {
   editGuardFor,
   harnessCapabilitiesOf,
+  harnessDisplayName,
   inlinesFileContent,
   harnessExtraArgs,
 } from "./harnessConfig";
@@ -301,7 +302,7 @@ export async function runSendChatPrompt(
           ? { ...message, llmThreadId: llmThreadId ?? undefined }
           : message,
       );
-      return startRun({ ...current, messages }, runId, llmThreadId);
+      return startRun({ ...current, messages }, runId, llmThreadId, harnessDisplayName(harnessCatalog, harnessId));
     });
 
     // Resolve the run's capabilities + tuning + edit-review mode up front so

@@ -74,6 +74,8 @@ export type ChatRunState = "idle" | "starting" | "streaming" | "error";
 
 export interface WorkspaceChatThread {
   activeLlmThreadId: string | null;
+  /** The agent the active run goes to, as the chat names it; its reply carries it. */
+  activeAgentName?: string;
   activeRunId: string | null;
   /** The persisted conversation this thread maps to (the `conversations`
    * row). Null until the first send / load creates one. */
@@ -114,6 +116,9 @@ export interface WorkspaceChatMessage {
   llmThreadId?: string;
   role: "assistant" | "user";
   runId?: string;
+  /** The agent that wrote this reply, named when its run started, so its
+   *  changes stay credited to it after the writer switches agents. */
+  agentName?: string;
   streaming?: boolean;
   /** This reply's run never finished — the app quit/crashed mid-stream, so it
    * was loaded still marked streaming. Renders a "Response interrupted" note
@@ -1490,9 +1495,11 @@ export function startRun(
   chatThread: WorkspaceChatThread,
   runId: string,
   llmThreadId: string | null = null,
+  agentName?: string,
 ): WorkspaceChatThread {
   return {
     ...chatThread,
+    activeAgentName: agentName,
     activeLlmThreadId: llmThreadId,
     activeRunId: runId,
     runError: null,
@@ -1512,6 +1519,7 @@ export function markRunStreaming(
     content: "",
     id: newMessageId(),
     ...(chatThread.activeLlmThreadId ? { llmThreadId: chatThread.activeLlmThreadId } : {}),
+    ...(chatThread.activeAgentName ? { agentName: chatThread.activeAgentName } : {}),
     role: "assistant",
     runId,
     streaming: true,
@@ -1536,6 +1544,7 @@ function ensureAssistantMessage(
     content: "",
     id: newMessageId(),
     ...(chatThread.activeLlmThreadId ? { llmThreadId: chatThread.activeLlmThreadId } : {}),
+    ...(chatThread.activeAgentName ? { agentName: chatThread.activeAgentName } : {}),
     role: "assistant",
     runId,
     streaming: true,

@@ -755,6 +755,14 @@ describe("workspace model", () => {
     expect(assistantMessageContentForRun(t4, runId)).toBe("Hello world");
   });
 
+  it("a run's reply carries the agent it went to", () => {
+    const workspace = createWorkspaceFromPath("/tmp/alpha");
+    const runId = "run-1";
+    const streaming = markRunStreaming(startRun(workspace.chatThread, runId, null, "Codex"), runId);
+    const reply = appendAssistantText(streaming, runId, "done");
+    expect(reply.messages[reply.messages.length - 1]?.agentName).toBe("Codex");
+  });
+
   it("finalizeRun marks success and clears the streaming flag", () => {
     const workspace = createWorkspaceFromPath("/tmp/alpha");
     const runId = "run-1";
