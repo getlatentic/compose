@@ -267,7 +267,7 @@
 }
 
 .zoom-control__step:hover:not(:disabled) {
-  background: var(--color-surface-hover);
+  background: var(--state-hover);
 }
 
 .zoom-control__step:disabled {

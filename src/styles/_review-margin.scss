@@ -99,7 +99,7 @@
   transition: background var(--motion-fast) var(--ease-standard);
 
   &:hover {
-    background: var(--color-surface-hover);
+    background: var(--state-hover);
   }
 
   &:focus-visible {

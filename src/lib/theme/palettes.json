@@ -4,6 +4,7 @@
     {
       "id": "classic",
       "label": "Classic",
+      "solidStates": true,
       "fonts": {
         "ui": "System",
         "docBody": "System",

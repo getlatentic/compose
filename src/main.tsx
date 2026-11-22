@@ -7,6 +7,7 @@ import { markBoot } from "./lib/perf";
 import { PerfProfiler } from "./lib/perf/PerfProfiler";
 import { startBootTrace } from "./lib/perf/bootTrace";
 import { applyAppearance } from "./lib/theme/appearance";
+import { enableMotionAfterLaunch } from "./lib/theme/motion";
 import { installPaletteStyles } from "./lib/theme/paletteCss";
 import { applyZoom } from "./lib/zoom/zoom";
 import "./styles/fonts.css";
@@ -25,6 +26,7 @@ installGlobalErrorReporter();
 applyZoom(INITIAL_UI_PREFS.zoom, document.documentElement);
 installPaletteStyles(document);
 applyAppearance(INITIAL_UI_PREFS, document.documentElement);
+enableMotionAfterLaunch(document.documentElement);
 
 // react-scan note: its overlay is NOT wired here. It must initialize
 // before React evaluates, which a dynamic import in this module can't do

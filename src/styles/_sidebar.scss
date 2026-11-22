@@ -44,6 +44,10 @@
   --cds-text-on-color: var(--color-sidebar-text);
   --cds-highlight: var(--color-sidebar-active);
   --cds-link-primary: var(--color-sidebar-text);
+  // The sidebar keeps its palette's own hover and selected colours.
+  --state-hover: var(--color-sidebar-hover);
+  --state-pressed: var(--color-sidebar-active);
+  --color-edge: color-mix(in srgb, var(--color-sidebar-text) 10%, transparent);
 }
 
 // === Sidebar title-bar row — owned by the OS, sized by --titlebar-height ===

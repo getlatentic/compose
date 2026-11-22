@@ -50,6 +50,9 @@ $indent: 1.375rem;
   // FileTree.tsx) is 2px taller, which is the gap between rows.
   block-size: $row-height;
   border-radius: var(--radius-sm);
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .file-row-wrapper:hover {
@@ -69,7 +72,7 @@ $indent: 1.375rem;
 
 .file-row-wrapper--drop {
   background: var(--color-sidebar-active);
-  box-shadow: inset 0 0 0 2px var(--color-border-focus);
+  box-shadow: inset 0 0 0 1px var(--color-sidebar-marker);
 }
 
 // The button is the row: full width, so a click or a drag lands anywhere on
@@ -120,20 +123,35 @@ $indent: 1.375rem;
   background: var(--color-sidebar-marker);
 }
 
-// The custom drag ghost (a name chip), appended offscreen for setDragImage:
-// the rows' translateY makes the default snapshot capture the wrong region.
+// The drag image: a small raised tile, the note's icon and name, appended
+// offscreen for setDragImage (the rows' translateY makes the default
+// snapshot capture the wrong region).
 .file-drag-ghost {
   position: fixed;
-  inset-block-start: -100px;
+  inset-block-start: -200px;
   inset-inline-start: 0;
-  padding: 0.25rem 0.625rem;
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-inline-size: 14rem;
+  padding: 0.375rem 0.625rem 0.375rem 0.5rem;
+  border-radius: var(--radius-md);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-popover);
   color: var(--color-text-primary);
+  font-family: var(--font-ui);
   font-size: 0.8125rem;
   white-space: nowrap;
+
+  svg {
+    flex: none;
+    color: var(--color-text-secondary);
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .file-tree--empty {

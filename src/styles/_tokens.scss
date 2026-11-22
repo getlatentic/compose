@@ -29,29 +29,29 @@
 
   // Backgrounds and layers
   --cds-background: var(--color-bg-app);
-  --cds-background-hover: var(--color-surface-hover);
-  --cds-background-active: var(--color-surface-pressed);
-  --cds-background-selected: var(--color-surface-pressed);
-  --cds-background-selected-hover: var(--color-surface-pressed);
+  --cds-background-hover: var(--state-hover);
+  --cds-background-active: var(--state-pressed);
+  --cds-background-selected: var(--state-pressed);
+  --cds-background-selected-hover: var(--state-pressed);
   --cds-background-inverse: var(--color-accent-default);
   --cds-background-inverse-hover: var(--color-accent-hover);
   --cds-layer-01: var(--color-surface-sunken);
   --cds-layer-02: var(--color-surface-default);
   --cds-layer-03: var(--color-surface-sunken);
-  --cds-layer-hover-01: var(--color-surface-hover);
-  --cds-layer-hover-02: var(--color-surface-hover);
+  --cds-layer-hover-01: var(--state-hover);
+  --cds-layer-hover-02: var(--state-hover);
   --cds-layer-accent-01: var(--color-surface-pressed);
   --cds-layer-accent-02: var(--color-surface-pressed);
   --cds-layer-accent-hover-01: var(--color-border-default);
   --cds-layer-active-01: var(--color-border-default);
-  --cds-layer-selected-01: var(--color-surface-pressed);
-  --cds-layer-selected-02: var(--color-surface-pressed);
+  --cds-layer-selected-01: var(--state-pressed);
+  --cds-layer-selected-02: var(--state-pressed);
   --cds-layer-selected-hover-01: var(--color-border-default);
   --cds-field: var(--color-surface-sunken);
   --cds-field-01: var(--color-surface-sunken);
   --cds-field-02: var(--color-surface-default);
-  --cds-field-hover-01: var(--color-surface-hover);
-  --cds-field-hover-02: var(--color-surface-hover);
+  --cds-field-hover-01: var(--state-hover);
+  --cds-field-hover-02: var(--state-hover);
 
   // Borders
   --cds-border-subtle-00: var(--color-border-subtle);
@@ -126,10 +126,15 @@
   // the way an app icon is.
   --brand-mark-bg: #0f1419;
 
-  // Elevation (Figma "Elevation" effect styles).
-  --shadow-raised: 0 1px 2px rgb(26 25 23 / 6%), 0 1px 1px rgb(26 25 23 / 4%);
-  --shadow-popover: 0 4px 12px rgb(26 25 23 / 8%), 0 1px 3px rgb(26 25 23 / 6%);
-  --shadow-dialog: 0 16px 40px rgb(26 25 23 / 14%), 0 2px 8px rgb(26 25 23 / 6%);
+  // Elevation: a hairline edge, then a few soft layers that widen with
+  // height. Few layers, because stacked wide blurs band into visible rings.
+  --shadow-raised: 0 0 0 1px var(--color-edge), 0 1px 2px -1px rgb(0 0 0 / 6%), 0 2px 4px rgb(0 0 0 / 3%);
+  --shadow-popover: 0 0 0 1px var(--color-edge), 0 2px 4px rgb(0 0 0 / 4%), 0 8px 16px -4px rgb(0 0 0 / 8%),
+    0 16px 32px -8px rgb(0 0 0 / 6%);
+  --shadow-dialog: 0 0 0 1px var(--color-edge), 0 2px 6px rgb(0 0 0 / 4%), 0 12px 24px -6px rgb(0 0 0 / 8%),
+    0 32px 64px -12px rgb(0 0 0 / 12%);
+  // The panels set into the window: an edge and the faintest lift.
+  --shadow-panel: 0 0 0 1px var(--color-edge), 0 1px 2px rgb(0 0 0 / 4%);
 
   // Radius and motion (Figma "Radius" and "Motion" collections).
   --radius-xs: 4px;
@@ -165,9 +170,16 @@
   --md-code-regexp: #56b6c2;
   --md-code-invalid: #be5046;
 
-  --shadow-raised: 0 1px 2px rgb(0 0 0 / 30%);
-  --shadow-popover: 0 4px 12px rgb(0 0 0 / 40%), 0 1px 3px rgb(0 0 0 / 30%);
-  --shadow-dialog: 0 16px 40px rgb(0 0 0 / 50%), 0 2px 8px rgb(0 0 0 / 30%);
+  // Dark: the edge is drawn inside, so a dark ring outside it does not read
+  // as a second border.
+  --shadow-raised: inset 0 0 0 1px var(--color-edge), 0 0 0 1px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 20%),
+    0 2px 4px rgb(0 0 0 / 12%);
+  --shadow-popover: inset 0 0 0 1px var(--color-edge), 0 0 0 1px rgb(0 0 0 / 18%), 0 1px 3px rgb(0 0 0 / 16%),
+    0 6px 18px -4px rgb(0 0 0 / 26%);
+  --shadow-dialog: inset 0 0 0 1px var(--color-edge), 0 0 0 1px rgb(0 0 0 / 20%), 0 2px 6px rgb(0 0 0 / 18%),
+    0 16px 40px -10px rgb(0 0 0 / 34%);
+  // Panels keep an outside edge: an inset one would sit under their toolbars.
+  --shadow-panel: 0 0 0 1px var(--color-edge);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -178,6 +190,14 @@
 
 :root[data-theme="dark"] {
   @include dark;
+}
+
+// State colours for a page that never sets `data-palette` (the palette
+// stylesheet defines them per palette; see `stateDeclarations`).
+:root:not([data-palette]) {
+  --state-hover: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+  --state-pressed: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+  --color-edge: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -10,7 +10,8 @@ import {
   useState,
 } from "react";
 import { Menu, MenuItem, MenuItemDivider } from "@carbon/react";
-import { ChevronDown, ChevronRight, File, Folder } from "lucide-react";
+import { ChevronRight, File, Folder } from "lucide-react";
+import { createDragGhost } from "./dragGhost";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useUiStore } from "../../app/store/uiStore";
@@ -161,11 +162,9 @@ const FileRow = memo(function FileRow({
       // Explicit drag image: the rows sit inside a virtualizer that positions
       // them with translateY, and WebKit's default drag snapshot captures the
       // UNTRANSFORMED origin region — the ghost showed whichever row paints
-      // first in the tree, not the one being dragged. A tiny name chip is
+      // first in the tree, not the one being dragged. A small tile with the note's name is
       // deterministic (and reads better than a full row snapshot).
-      const ghost = document.createElement("div");
-      ghost.className = "file-drag-ghost";
-      ghost.textContent = name;
+      const ghost = createDragGhost(document, name);
       document.body.appendChild(ghost);
       event.dataTransfer.setDragImage(ghost, 12, 12);
       setTimeout(() => ghost.remove(), 0);
@@ -270,11 +269,7 @@ const FolderRow = memo(function FolderRow({
         aria-expanded={open}
         title={name}
       >
-        {open ? (
-          <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
-        ) : (
-          <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
-        )}
+        <ChevronRight className="file-row__chevron" size={16} strokeWidth={1.5} aria-hidden />
         <Folder size={16} strokeWidth={1.5} aria-hidden />
         <span className="truncate">{name}</span>
       </button>

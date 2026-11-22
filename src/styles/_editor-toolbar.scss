@@ -41,7 +41,7 @@
 }
 
 .tiptap-toolbar__button:hover:not(:disabled) {
-  background: var(--color-surface-hover);
+  background: var(--state-hover);
   color: var(--color-text-primary);
 }
 
@@ -52,7 +52,7 @@
 
 // Marks the format the caret sits in.
 .tiptap-toolbar__button--active {
-  background: var(--color-surface-pressed);
+  background: var(--state-pressed);
   color: var(--color-text-primary);
 }
 
@@ -98,12 +98,12 @@
 }
 
 .tiptap-toolbar__heading:hover {
-  background: var(--color-surface-hover);
+  background: var(--state-hover);
   color: var(--color-text-primary);
 }
 
 .tiptap-toolbar__heading--active {
-  background: var(--color-surface-pressed);
+  background: var(--state-pressed);
   color: var(--color-text-primary);
 }
 
@@ -120,7 +120,7 @@
   }
 
   &:hover {
-    background: var(--color-surface-hover);
+    background: var(--state-hover);
     color: var(--color-text-primary);
   }
 }

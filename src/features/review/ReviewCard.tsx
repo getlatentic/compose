@@ -1,6 +1,7 @@
-import { forwardRef, useCallback } from "react";
+import { forwardRef, useCallback, type MouseEvent } from "react";
 import { Check, MessageSquare, Undo2, X } from "lucide-react";
 
+import { useLeaveAnimation } from "../shared/useLeaveAnimation";
 import { blockId, type LiveBlock } from "./liveBlocks";
 import type { LiveComment } from "./reviewBridge";
 import { wordCount, wordDiff } from "./wordDiff";
@@ -54,12 +55,19 @@ export const ChangeCard = forwardRef<HTMLElement, ChangeCardProps>(function Chan
   const applied = block.mode === "applied";
   // Applied: Keep leaves the note alone; Undo swaps the old text back.
   // Pending: Accept swaps the new text in; Reject leaves the note alone.
-  const handlePrimary = useCallback(() => onDecide(block, !applied, true), [onDecide, block, applied]);
-  const handleSecondary = useCallback(() => onDecide(block, applied, false), [onDecide, block, applied]);
+  const { leaving, leave } = useLeaveAnimation();
+  const handlePrimary = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => leave(event.currentTarget, () => onDecide(block, !applied, true)),
+    [leave, onDecide, block, applied],
+  );
+  const handleSecondary = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => leave(event.currentTarget, () => onDecide(block, applied, false)),
+    [leave, onDecide, block, applied],
+  );
   return (
     <article
       ref={ref}
-      className={`review-card${inline ? " review-card--inline" : ""}`}
+      className={`review-card${inline ? " review-card--inline" : ""}${leaving ? " review-card--leaving" : ""}`}
       data-review-id={blockId(block)}
       aria-label={`${block.agentName} ${applied ? "changed" : "suggests"}: ${describeChange(block)}`}
     >

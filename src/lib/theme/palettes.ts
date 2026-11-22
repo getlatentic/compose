@@ -29,6 +29,8 @@ export type PaletteColors = Readonly<Record<string, string>>;
 export interface Palette {
   readonly id: string;
   readonly label: string;
+  /** Hover, pressed and hairline colours are the palette's own flat greys, not tints of the text. */
+  readonly solidStates?: boolean;
   readonly fonts: PaletteFonts;
   readonly light: PaletteColors;
   readonly dark: PaletteColors;

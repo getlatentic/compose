@@ -53,6 +53,23 @@ function fontDeclarations(fonts: PaletteFonts): string[] {
   ];
 }
 
+/**
+ * Hover, pressed and hairline colours. Tints of the text colour read the same
+ * on every surface they land on (the note, a card, the chat), the way macOS
+ * draws them; Classic keeps its original flat greys.
+ */
+export function stateDeclarations(palette: Palette): string[] {
+  if (palette.solidStates) {
+    return [
+      "--state-hover: var(--color-surface-hover);",
+      "--state-pressed: var(--color-surface-pressed);",
+      "--color-edge: var(--color-border-default);",
+    ];
+  }
+  const tint = (percent: number) => `color-mix(in srgb, var(--color-text-primary) ${percent}%, transparent)`;
+  return [`--state-hover: ${tint(6)};`, `--state-pressed: ${tint(10)};`, `--color-edge: ${tint(8)};`];
+}
+
 function rule(selectors: string[], declarations: string[]): string {
   return `${selectors.join(",\n")} {\n  ${declarations.join("\n  ")}\n}`;
 }
@@ -87,7 +104,7 @@ function themedRules(selectors: string[], light: string[], dark: string[]): stri
 function paletteRules(palette: Palette): string {
   return themedRules(
     [`[data-palette="${palette.id}"]`],
-    [...colorDeclarations(palette.light), ...fontDeclarations(palette.fonts)],
+    [...colorDeclarations(palette.light), ...fontDeclarations(palette.fonts), ...stateDeclarations(palette)],
     colorDeclarations(palette.dark),
   );
 }

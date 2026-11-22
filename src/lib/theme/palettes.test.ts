@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { colorProperty, fontStack, paletteCss, splashCss } from "./paletteCss";
+import { colorProperty, fontStack, paletteCss, splashCss, stateDeclarations } from "./paletteCss";
 import { DEFAULT_PALETTE, PALETTES, normalizePalette, type PaletteColors } from "./palettes";
 
 function luminance(hex: string): number {
@@ -112,6 +112,15 @@ describe("paletteCss", () => {
     expect(classicRule).toContain("--font-ui: var(--font-system);");
     expect(classicRule).toContain("--font-doc-body: var(--font-system);");
     expect(classicRule).toContain("--font-doc-code: var(--font-system-mono);");
+  });
+
+  it("tints hover, pressed and hairlines from the text colour, except Classic, which keeps its own greys", () => {
+    const classic = PALETTES.find((p) => p.id === "classic")!;
+    const walnut = PALETTES.find((p) => p.id === "walnut")!;
+    expect(stateDeclarations(classic)).toContain("--state-hover: var(--color-surface-hover);");
+    expect(stateDeclarations(walnut)).toContain("--state-hover: color-mix(in srgb, var(--color-text-primary) 6%, transparent);");
+    const walnutRule = css.slice(css.indexOf('[data-palette="walnut"] {'));
+    expect(walnutRule.slice(0, walnutRule.indexOf("}"))).toContain("--color-edge: color-mix(");
   });
 
   it("gives Paper its own note fonts and leaves its UI in Plex Sans", () => {
