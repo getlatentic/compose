@@ -364,6 +364,7 @@ export async function runSendChatPrompt(
         promptWithContext,
         viewingLoose ? undefined : workspace.path,
         focused?.activeFilePath ?? workspace.activeFilePath,
+        editGuard === "clone",
       ),
       runId,
       workspaceId,

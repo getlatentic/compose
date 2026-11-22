@@ -249,6 +249,7 @@ export async function runAskAboutSelection(
         withReviewFeedback(sentUserMessage, reviewFeedback),
         workspace.path,
         workspace.activeFilePath,
+        editGuard === "clone",
       ),
       runId,
       workspaceId,
