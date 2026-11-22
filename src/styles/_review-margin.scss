@@ -1,6 +1,7 @@
-// The note's review margin (`features/review/`): a card per agent change and
+// The note's review margin (`features/review/`): a card per agent edit and
 // per comment, beside the line it touches, tied to it by a hairline leader.
-// Without room beside the note, a change's card folds under its paragraph.
+// The note column gives up the margin's width (`MARGIN_ROOM_PX` in
+// reviewExtension.ts: the 40px gap, this 16.5rem card, a 16px edge).
 
 // Inside the editor's scroller, so the cards scroll with the note. Zero-size:
 // the cards and leaders are placed in scroller coordinates.
@@ -52,6 +53,10 @@
     border-color: var(--color-border-focus);
   }
 
+  &--active {
+    border-color: var(--color-ai-leader);
+  }
+
   p {
     margin: 0;
   }
@@ -74,6 +79,27 @@
 
 .review-card__body {
   margin-block-start: 0.375rem;
+  overflow-wrap: anywhere;
+}
+
+.review-card__verb {
+  color: var(--color-text-secondary);
+}
+
+.review-card__old {
+  color: var(--color-danger-text);
+  text-decoration: line-through;
+}
+
+.review-card__new {
+  color: var(--color-ai-text);
+  text-decoration: underline;
+  text-decoration-color: var(--color-ai-leader);
+  text-underline-offset: 0.2em;
+}
+
+.review-card__arrow {
+  color: var(--color-text-tertiary);
 }
 
 .review-card__actions {
@@ -120,34 +146,6 @@
 .review-card__button--outline {
   border-color: var(--color-border-default);
   background: var(--color-surface-default);
-}
-
-// Folded under its paragraph: one row, on the AI tint, in the note column.
-.review-card--inline {
-  position: static;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.75rem;
-  inline-size: auto;
-  margin: 0.5rem 0 1rem;
-  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
-  border-color: transparent;
-  background: var(--color-ai-surface);
-  box-shadow: none;
-
-  .review-card__head {
-    font-size: 0.8125rem;
-  }
-
-  .review-card__body {
-    flex: 1 1 12rem;
-    margin: 0;
-  }
-
-  .review-card__actions {
-    margin: 0;
-  }
 }
 
 // The toolbar's "Review N changes": the one primary action while changes wait.

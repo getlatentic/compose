@@ -244,15 +244,15 @@ export interface WorkspaceRewriteSuggestion extends WorkspaceSuggestionBase {
   previewOmitted: boolean;
   /** The live file changed since the run started — accepting overwrites it. */
   stale: boolean;
-  /** Change blocks decided one at a time in the note's review margin. */
+  /** Edits decided one at a time in the note's review margin. */
   review?: ReviewDecisions;
 }
 
 /**
- * Per-block decisions made in the review margin, by block key
- * (`features/review/changeBlocks.ts`). `kept`: the change is in the note
+ * Per-edit decisions made in the review margin, by edit key
+ * (`features/review/agentEdits.ts`). `kept`: the change is in the note
  * (kept, or accepted); `dropped`: it is not (undone, or rejected).
- * `reported`: dropped blocks the agent has been told about
+ * `reported`: dropped edits the agent has been told about
  * (`features/review/reviewFeedback.ts`), so each is told once.
  */
 export interface ReviewDecisions {

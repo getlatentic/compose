@@ -2,79 +2,90 @@ import { forwardRef, useCallback, type MouseEvent } from "react";
 import { Check, MessageSquare, Undo2, X } from "lucide-react";
 
 import { useLeaveAnimation } from "../shared/useLeaveAnimation";
-import { blockId, type LiveBlock } from "./liveBlocks";
+import type { LiveEdit } from "./liveEdits";
 import type { LiveComment } from "./reviewBridge";
-import { wordCount, wordDiff } from "./wordDiff";
+import { editDomId } from "./reviewDecorations";
 
-function words(count: number): string {
-  return `${count} word${count === 1 ? "" : "s"}`;
+/** Longest run of an edit's words a card quotes; the note shows the rest. */
+const MAX_CARD_CHARS = 160;
+
+function clip(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > MAX_CARD_CHARS ? `${flat.slice(0, MAX_CARD_CHARS - 1).trimEnd()}…` : flat;
 }
 
-/** Words the change took out and put in, not counting the words it kept. */
-function changedWords(block: Pick<LiveBlock, "removed" | "added">): { removed: number; added: number } {
-  const removedLines = block.removed.split("\n");
-  const addedLines = block.added.split("\n");
-  if (removedLines.length !== addedLines.length) {
-    return { removed: wordCount(block.removed), added: wordCount(block.added) };
-  }
-  let removed = 0;
-  let added = 0;
-  removedLines.forEach((line, index) => {
-    for (const segment of wordDiff(line, addedLines[index])) {
-      if (segment.kind === "removed") removed += wordCount(segment.text);
-      if (segment.kind === "added") added += wordCount(segment.text);
-    }
-  });
-  return { removed, added };
+/** The edit in words, for a screen reader: what was there and what is. */
+export function describeEdit(edit: Pick<LiveEdit, "removed" | "added">): string {
+  const removed = clip(edit.removed);
+  const added = clip(edit.added);
+  if (removed && added) return `replaced "${removed}" with "${added}"`;
+  if (added) return `added "${added}"`;
+  if (removed) return `removed "${removed}"`;
+  return "changed the spacing";
 }
 
-/** A plain, true account of what the change did: the agent gives no reason per change. */
-export function describeChange(block: Pick<LiveBlock, "removed" | "added">): string {
-  const { removed, added } = changedWords(block);
-  if (removed > 0 && added > 0) return `Replaced ${words(removed)} with ${words(added)}.`;
-  if (added > 0) return `Added ${words(added)}.`;
-  if (removed > 0) return `Removed ${words(removed)}.`;
-  return "Changed the layout of this passage.";
+/** The edit's own words: the old struck through, the new underlined. */
+function EditWords({ edit }: { edit: Pick<LiveEdit, "removed" | "added"> }) {
+  const removed = clip(edit.removed);
+  const added = clip(edit.added);
+  if (!removed && !added) return <p className="review-card__body">Changed the spacing.</p>;
+  return (
+    <p className="review-card__body">
+      {!removed ? <span className="review-card__verb">Added </span> : null}
+      {!added ? <span className="review-card__verb">Removed </span> : null}
+      {removed ? <del className="review-card__old">{removed}</del> : null}
+      {removed && added ? <span className="review-card__arrow" aria-hidden> → </span> : null}
+      {added ? <ins className="review-card__new">{added}</ins> : null}
+    </p>
+  );
 }
 
 interface ChangeCardProps {
-  readonly block: LiveBlock;
-  readonly inline?: boolean;
-  readonly onDecide: (block: LiveBlock, takeOtherSide: boolean, kept: boolean) => void;
+  readonly edit: LiveEdit;
+  readonly active: boolean;
+  readonly onDecide: (edit: LiveEdit, takeOtherSide: boolean, kept: boolean) => void;
+  readonly onHover: (domId: string | null) => void;
 }
 
 /**
- * One agent change. Applied (the default): Keep or Undo, since the change is
+ * One agent edit. Applied (the default): Keep or Undo, since the edit is
  * already in the note. Pending ("Review changes before applying"): Accept or
  * Reject.
  */
 export const ChangeCard = forwardRef<HTMLElement, ChangeCardProps>(function ChangeCard(
-  { block, inline = false, onDecide },
+  { edit, active, onDecide, onHover },
   ref,
 ) {
-  const applied = block.mode === "applied";
-  // Applied: Keep leaves the note alone; Undo swaps the old text back.
-  // Pending: Accept swaps the new text in; Reject leaves the note alone.
+  const applied = edit.mode === "applied";
+  const domId = editDomId(edit);
+  // Applied: Keep leaves the note alone; Undo swaps the old words back.
+  // Pending: Accept swaps the new words in; Reject leaves the note alone.
   const { leaving, leave } = useLeaveAnimation();
   const handlePrimary = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => leave(event.currentTarget, () => onDecide(block, !applied, true)),
-    [leave, onDecide, block, applied],
+    (event: MouseEvent<HTMLButtonElement>) => leave(event.currentTarget, () => onDecide(edit, !applied, true)),
+    [leave, onDecide, edit, applied],
   );
   const handleSecondary = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => leave(event.currentTarget, () => onDecide(block, applied, false)),
-    [leave, onDecide, block, applied],
+    (event: MouseEvent<HTMLButtonElement>) => leave(event.currentTarget, () => onDecide(edit, applied, false)),
+    [leave, onDecide, edit, applied],
   );
+  const handleEnter = useCallback(() => onHover(domId), [onHover, domId]);
+  const handleLeave = useCallback(() => onHover(null), [onHover]);
   return (
     <article
       ref={ref}
-      className={`review-card${inline ? " review-card--inline" : ""}${leaving ? " review-card--leaving" : ""}`}
-      data-review-id={blockId(block)}
-      aria-label={`${block.agentName} ${applied ? "changed" : "suggests"}: ${describeChange(block)}`}
+      className={`review-card${active ? " review-card--active" : ""}${leaving ? " review-card--leaving" : ""}`}
+      data-review-id={domId}
+      aria-label={`${edit.agentName} ${applied ? "changed" : "suggests"}: ${describeEdit(edit)}`}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      onFocus={handleEnter}
+      onBlur={handleLeave}
     >
       <p className="review-card__head">
-        <span className="review-card__author">{block.agentName}</span> {applied ? "changed" : "suggests"}
+        <span className="review-card__author">{edit.agentName}</span> {applied ? "changed" : "suggests"}
       </p>
-      <p className="review-card__body">{describeChange(block)}</p>
+      <EditWords edit={edit} />
       <div className="review-card__actions">
         <button type="button" className="review-card__button review-card__button--primary" onClick={handlePrimary}>
           <Check size={14} strokeWidth={2} aria-hidden />

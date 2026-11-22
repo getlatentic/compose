@@ -1,29 +1,37 @@
-import type { EditorState, Range } from "@codemirror/state";
+import type { Range } from "@codemirror/state";
 import { Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
 
-import { blockId, type LiveBlock } from "./liveBlocks";
-import { reviewBridge } from "./reviewBridge";
-import { wordDiff } from "./wordDiff";
+import { editId, type LiveEdit } from "./liveEdits";
 
-/** Classes for text a change put in the note, and text it took out. */
+/** Classes for text an edit put in the note, and text it took out. */
 const IN = "cm-review-in";
 const OUT = "cm-review-out";
+/** Ties an edit's marks to its card, for the hover link between them. */
+export const EDIT_ATTRIBUTE = "data-review-edit";
 
-const inMark = Decoration.mark({ class: IN });
-const outMark = Decoration.mark({ class: OUT });
+/** An edit's id as a DOM attribute value: safe inside a quoted CSS selector. */
+export function editDomId(edit: Pick<LiveEdit, "reviewId" | "key">): string {
+  return encodeURIComponent(editId(edit));
+}
 
-/** The other side of a change, drawn in place but not part of the note. */
+/** The other side of an edit, drawn in place but not part of the note. */
 class OtherSideWidget extends WidgetType {
   constructor(
     private readonly text: string,
     private readonly className: string,
     private readonly asBlock: boolean,
+    private readonly domId: string,
   ) {
     super();
   }
 
   eq(other: OtherSideWidget): boolean {
-    return other.text === this.text && other.className === this.className && other.asBlock === this.asBlock;
+    return (
+      other.text === this.text &&
+      other.className === this.className &&
+      other.asBlock === this.asBlock &&
+      other.domId === this.domId
+    );
   }
 
   toDOM(): HTMLElement {
@@ -31,6 +39,7 @@ class OtherSideWidget extends WidgetType {
     element.className = `${this.className} cm-review-other${this.asBlock ? " cm-review-other--block" : ""}`;
     element.textContent = this.text;
     element.setAttribute("aria-hidden", "true");
+    element.setAttribute(EDIT_ATTRIBUTE, this.domId);
     return element;
   }
 
@@ -40,103 +49,60 @@ class OtherSideWidget extends WidgetType {
 }
 
 /**
- * Folded mode: an empty element under the block's paragraph. React renders
- * the block's card into it through the bridge.
+ * A word edit: its words in the note are marked, and the other side's words
+ * are drawn beside them, before the new words (applied) or after the old
+ * (pending), so a replacement reads old then new.
  */
-class CardSlotWidget extends WidgetType {
-  constructor(private readonly id: string) {
-    super();
+function wordMarks(edit: LiveEdit, note: string, out: Range<Decoration>[]): void {
+  const applied = edit.mode === "applied";
+  const domId = editDomId(edit);
+  const inNote = note.slice(edit.from, edit.to);
+  if (inNote.trim()) {
+    // The space an insertion or deletion carries with it is not marked.
+    const from = edit.from + (inNote.length - inNote.trimStart().length);
+    const to = edit.to - (inNote.length - inNote.trimEnd().length);
+    out.push(Decoration.mark({ class: applied ? IN : OUT, attributes: { [EDIT_ATTRIBUTE]: domId } }).range(from, to));
   }
-
-  eq(other: CardSlotWidget): boolean {
-    return other.id === this.id;
-  }
-
-  toDOM(): HTMLElement {
-    const slot = document.createElement("div");
-    slot.className = "cm-review-slot";
-    const slots = new Map(reviewBridge.getSnapshot().slots);
-    slots.set(this.id, slot);
-    reviewBridge.publish({ slots });
-    return slot;
-  }
-
-  destroy(dom: HTMLElement): void {
-    const current = reviewBridge.getSnapshot().slots;
-    if (current.get(this.id) === dom) {
-      const slots = new Map(current);
-      slots.delete(this.id);
-      reviewBridge.publish({ slots });
-    }
-  }
-
-  // The card's buttons handle their own clicks; the editor must not move the
-  // caret or start a selection under them.
-  ignoreEvent(): boolean {
-    return true;
-  }
+  const other = edit.replacement.trim();
+  if (!other) return;
+  // Drawn trimmed; a margin stands in for the space on each side it had,
+  // or that keeps a replacement's two sides apart.
+  const replacing = inNote.trim() !== "";
+  const spaceBefore = /^\s/.test(edit.replacement) || (replacing && !applied);
+  const spaceAfter = /\s$/.test(edit.replacement) || (replacing && applied);
+  const className = [applied ? OUT : IN, spaceAfter ? "cm-review-other--replaced" : "", spaceBefore ? "cm-review-other--after" : ""]
+    .filter(Boolean)
+    .join(" ");
+  const widget = new OtherSideWidget(other, className, false, domId);
+  out.push(Decoration.widget({ widget, side: applied ? -1 : 1 }).range(applied ? edit.from : edit.to));
 }
 
-/**
- * Marks for one line pair: the words both sides share stay plain, the words
- * in the note are marked, and the other side's words appear as widgets.
- */
-function wordMarks(at: number, lineInNote: string, otherLine: string, mode: LiveBlock["mode"], out: Range<Decoration>[]): void {
-  // `wordDiff(before, after)`: an applied note holds `after`, a pending one `before`.
-  const segments = mode === "applied" ? wordDiff(otherLine, lineInNote) : wordDiff(lineInNote, otherLine);
-  const inNote = mode === "applied" ? "added" : "removed";
-  const noteMark = mode === "applied" ? inMark : outMark;
-  const otherClass = mode === "applied" ? OUT : IN;
-  let position = at;
-  segments.forEach((segment, index) => {
-    if (segment.kind === "same") {
-      position += segment.text.length;
-    } else if (segment.kind === inNote) {
-      if (segment.text.trim()) out.push(noteMark.range(position, position + segment.text.length));
-      position += segment.text.length;
-    } else if (segment.text.trim()) {
-      // A replacement's two sides share no space between them; keep the words apart.
-      const touchesNext = segments[index + 1]?.kind === inNote;
-      const className = touchesNext ? `${otherClass} cm-review-other--replaced` : otherClass;
-      out.push(Decoration.widget({ widget: new OtherSideWidget(segment.text, className, false), side: -1 }).range(position));
-    }
-  });
-}
-
-function blockMarks(block: LiveBlock, note: string, out: Range<Decoration>[]): void {
-  const other = block.mode === "applied" ? block.removed : block.added;
-  const noteLines = block.from === block.to ? [] : note.slice(block.from, block.to).split("\n");
-  const otherLines = other === "" ? [] : other.split("\n");
-  if (noteLines.length > 0 && noteLines.length === otherLines.length) {
-    let at = block.from;
-    noteLines.forEach((line, index) => {
-      wordMarks(at, line, otherLines[index], block.mode, out);
-      at += line.length + 1;
-    });
-    return;
-  }
-  const noteMark = block.mode === "applied" ? inMark : outMark;
-  let at = block.from;
+/** A whole-lines edit: its lines in the note are marked, the other side drawn as a block above them. */
+function lineMarks(edit: LiveEdit, note: string, out: Range<Decoration>[]): void {
+  const applied = edit.mode === "applied";
+  const domId = editDomId(edit);
+  const mark = Decoration.mark({ class: applied ? IN : OUT, attributes: { [EDIT_ATTRIBUTE]: domId } });
+  const noteLines = edit.from === edit.to ? [] : note.slice(edit.from, edit.to).split("\n");
+  let at = edit.from;
   for (const line of noteLines) {
-    if (line.trim()) out.push(noteMark.range(at, at + line.length));
+    if (line.trim()) out.push(mark.range(at, at + line.length));
     at += line.length + 1;
   }
-  if (otherLines.some((line) => line.trim())) {
-    const otherClass = block.mode === "applied" ? OUT : IN;
-    const text = otherLines.filter((line) => line.trim()).join("\n");
-    out.push(Decoration.widget({ widget: new OtherSideWidget(text, otherClass, true), block: true, side: -1 }).range(block.from));
+  const other = (applied ? edit.removed : edit.added)
+    .split("\n")
+    .filter((line) => line.trim())
+    .join("\n");
+  if (other) {
+    const widget = new OtherSideWidget(other, applied ? OUT : IN, true, domId);
+    out.push(Decoration.widget({ widget, block: true, side: -1 }).range(edit.from));
   }
 }
 
-export function buildReviewDecorations(state: EditorState, blocks: readonly LiveBlock[], folded: boolean): DecorationSet {
-  const note = state.doc.toString();
+export function buildReviewDecorations(note: string, edits: readonly LiveEdit[]): DecorationSet {
   const ranges: Range<Decoration>[] = [];
-  for (const block of blocks) {
-    blockMarks(block, note, ranges);
-    if (folded) {
-      const end = state.doc.lineAt(Math.min(block.to, note.length)).to;
-      ranges.push(Decoration.widget({ widget: new CardSlotWidget(blockId(block)), block: true, side: 1 }).range(end));
-    }
+  for (const edit of edits) {
+    if (edit.wholeLines) lineMarks(edit, note, ranges);
+    else wordMarks(edit, note, ranges);
   }
   return Decoration.set(ranges, true);
 }

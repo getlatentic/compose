@@ -9,18 +9,14 @@ import type {
   WorkspaceDocumentSuggestion,
   WorkspaceRewriteSuggestion,
 } from "../../app/workspaceModel";
-import { reviewBlockKeys, type FileReview } from "./liveBlocks";
+import { agentEditKeys } from "./agentEdits";
+import type { FileReview } from "./liveEdits";
 
 const NO_DECISIONS: ReviewDecisions = { kept: [], dropped: [], reported: [] };
 
 /** The editor shows the body only, so the review compares bodies. */
 export function reviewBody(markdown: string): string {
   return parseFrontmatter(markdown).body;
-}
-
-function decided(review: ReviewDecisions | undefined): string[] {
-  const { kept, dropped } = review ?? NO_DECISIONS;
-  return [...kept, ...dropped];
 }
 
 function fromSuggestion(suggestion: WorkspaceRewriteSuggestion, agentName: string): FileReview | null {
@@ -32,7 +28,8 @@ function fromSuggestion(suggestion: WorkspaceRewriteSuggestion, agentName: strin
     agentName,
     original: reviewBody(suggestion.originalText),
     proposed: reviewBody(suggestion.newText),
-    decided: decided(suggestion.review),
+    kept: suggestion.review?.kept ?? [],
+    dropped: suggestion.review?.dropped ?? [],
   };
 }
 
@@ -45,7 +42,8 @@ function fromAppliedChange(change: WorkspaceAppliedChange, agentName: string): F
     agentName,
     original: reviewBody(change.originalText),
     proposed: reviewBody(change.newText),
-    decided: decided(change.review),
+    kept: change.review?.kept ?? [],
+    dropped: change.review?.dropped ?? [],
   };
 }
 
@@ -88,28 +86,26 @@ function withDecision(review: ReviewDecisions | undefined, key: string, kept: bo
     : { ...current, kept: keptWithout, dropped: [...dropped, key] };
 }
 
-/** True once every block of the change has a decision. */
+/** True once every edit of the change has a decision. */
 function allDecided(
   record: { originalText: string | null; newText: string | null },
   review: ReviewDecisions,
 ): boolean {
   if (record.originalText === null || record.newText === null) return false;
   const done = new Set([...review.kept, ...review.dropped]);
-  return reviewBlockKeys({ original: reviewBody(record.originalText), proposed: reviewBody(record.newText) }).every((key) =>
-    done.has(key),
-  );
+  return agentEditKeys(reviewBody(record.originalText), reviewBody(record.newText)).every((key) => done.has(key));
 }
 
 export interface DecisionResult {
   readonly workspace: Workspace;
-  /** A pending suggestion whose blocks are now all decided: the caller settles it. */
+  /** A pending suggestion whose edits are now all decided: the caller settles it. */
   readonly settled: { suggestionId: string; runId: string; anyKept: boolean } | null;
 }
 
 /**
- * Record that block `key` of review `reviewId` was kept (the change is in the
+ * Record that edit `key` of review `reviewId` was kept (the change is in the
  * note) or dropped (it is not). The note itself was already edited by the
- * margin; this only remembers the decision so the block stops being offered.
+ * margin; this only remembers the decision so the edit stops being offered.
  */
 export function recordReviewDecision(workspace: Workspace, reviewId: string, key: string, kept: boolean): DecisionResult {
   let settled: DecisionResult["settled"] = null;
@@ -134,9 +130,9 @@ export function recordReviewDecision(workspace: Workspace, reviewId: string, key
   return { workspace: { ...workspace, chatThread: { ...workspace.chatThread, messages } }, settled };
 }
 
-/** One dropped block, named by the review it belongs to and its block key;
+/** One dropped edit, named by the review it belongs to and its edit key;
  *  `key` is null for a whole new file or deletion the writer rejected. */
-export interface ReviewBlockRef {
+export interface ReviewEditRef {
   readonly reviewId: string;
   readonly key: string | null;
 }
@@ -152,7 +148,7 @@ interface SentIndex {
   readonly wholeFiles: ReadonlySet<string>;
 }
 
-function indexSent(sent: readonly ReviewBlockRef[]): SentIndex {
+function indexSent(sent: readonly ReviewEditRef[]): SentIndex {
   const keysByReview = new Map<string, string[]>();
   const wholeFiles = new Set<string>();
   for (const { reviewId, key } of sent) {
@@ -176,7 +172,7 @@ function markAppliedChange(change: WorkspaceAppliedChange, index: SentIndex): Wo
 }
 
 /** Remember what the agent has been told, so it is told once. */
-export function recordReviewFeedbackSent(workspace: Workspace, sent: readonly ReviewBlockRef[]): Workspace {
+export function recordReviewFeedbackSent(workspace: Workspace, sent: readonly ReviewEditRef[]): Workspace {
   if (sent.length === 0) return workspace;
   const index = indexSent(sent);
   const messages = workspace.chatThread.messages.map((message) => {

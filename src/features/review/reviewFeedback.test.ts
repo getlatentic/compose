@@ -9,15 +9,12 @@ import {
   type WorkspaceRewriteSuggestion,
 } from "../../app/workspaceModel";
 import { recordReviewDecision, recordReviewFeedbackSent } from "./fileReviews";
-import { reviewBlockKeys } from "./liveBlocks";
+import { agentEditKeys } from "./agentEdits";
 import { reviewFeedbackFor, withReviewFeedback } from "./reviewFeedback";
 
 const BEFORE = "---\ntags: [a]\n---\nBraun and Clarke describe thematic analysis.\n\nSecond paragraph.\n";
 const AFTER = "---\ntags: [a]\n---\nBraun and Clarke (2006) describe thematic analysis.\n\nSecond paragraph, revised.\n";
-const [YEAR_KEY, REVISED_KEY] = reviewBlockKeys({
-  original: "Braun and Clarke describe thematic analysis.\n\nSecond paragraph.\n",
-  proposed: "Braun and Clarke (2006) describe thematic analysis.\n\nSecond paragraph, revised.\n",
-});
+const [YEAR_KEY, REVISED_KEY] = agentEditKeys("Braun and Clarke describe thematic analysis.\n\nSecond paragraph.\n", "Braun and Clarke (2006) describe thematic analysis.\n\nSecond paragraph, revised.\n");
 
 function workspaceWith(message: Partial<WorkspaceChatMessage>): Workspace {
   const base = createWorkspaceFromPath("/tmp/notes");
@@ -138,7 +135,7 @@ describe("reviewFeedbackFor", () => {
     const before = `${lines.join("\n\n")}\n`;
     const after = `${lines.map((line) => `${line} Edited.`).join("\n\n")}\n`;
     let workspace = applied({ originalText: before, newText: after });
-    for (const key of reviewBlockKeys({ original: before, proposed: after })) {
+    for (const key of agentEditKeys(before, after)) {
       workspace = recordReviewDecision(workspace, "c1", key, false).workspace;
     }
     const feedback = reviewFeedbackFor(workspace.chatThread);
@@ -151,7 +148,7 @@ describe("reviewFeedbackFor", () => {
     const long = "word ".repeat(60).trim();
     const before = "Intro.\n";
     const after = `Intro.\n\n${long}\n`;
-    const [key] = reviewBlockKeys({ original: before, proposed: after });
+    const [key] = agentEditKeys(before, after);
     const undone = recordReviewDecision(applied({ originalText: before, newText: after }), "c1", key, false).workspace;
     const note = reviewFeedbackFor(undone.chatThread)?.note ?? "";
     expect(note).toMatch(/you had added "word( word)*…"/);

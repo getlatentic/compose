@@ -8,9 +8,8 @@ import type {
   WorkspaceDocumentSuggestion,
   WorkspaceRewriteSuggestion,
 } from "../../app/workspaceModel";
-import { blockKeys, changeBlocks, type ChangeBlock } from "./changeBlocks";
-import { reviewBody, type ReviewBlockRef } from "./fileReviews";
-import { wordDiff, type WordSegment } from "./wordDiff";
+import { agentBlocks, type AgentEdit } from "./agentEdits";
+import { reviewBody, type ReviewEditRef } from "./fileReviews";
 
 /**
  * What the writer took back out of the agent's edits since the agent last
@@ -20,14 +19,12 @@ import { wordDiff, type WordSegment } from "./wordDiff";
  */
 export interface ReviewFeedback {
   readonly note: string;
-  /** The blocks the note tells of: record them once the prompt is sent. */
-  readonly sent: readonly ReviewBlockRef[];
+  /** The edits the note tells of: record them once the prompt is sent. */
+  readonly sent: readonly ReviewEditRef[];
 }
 
 /** Changes named one by one; the rest are counted. */
 const MAX_LISTED_CHANGES = 12;
-/** Word changes described per block. */
-const MAX_PHRASES_PER_BLOCK = 3;
 const MAX_QUOTE_CHARS = 80;
 const CONTEXT_WORDS = 3;
 
@@ -35,15 +32,15 @@ type Verb = "undid" | "rejected";
 
 /** One change the agent is told of, described only if it is listed. */
 interface FeedbackItem {
-  readonly ref: ReviewBlockRef;
+  readonly ref: ReviewEditRef;
   readonly describe: () => string;
 }
 
-interface DroppedBlock {
-  readonly ref: ReviewBlockRef;
+interface DroppedEdit {
+  readonly ref: ReviewEditRef;
   readonly filePath: string;
   readonly verb: Verb;
-  readonly block: ChangeBlock;
+  readonly edit: AgentEdit;
 }
 
 interface ReviewRecord {
@@ -54,7 +51,7 @@ interface ReviewRecord {
   readonly newText: string | null;
   readonly previewOmitted: boolean;
   readonly review: ReviewDecisions | undefined;
-  /** Rejected as a whole from the chat card: every block not kept is dropped. */
+  /** Rejected as a whole from the chat card: every edit not kept is dropped. */
   readonly wholeRejected: boolean;
 }
 
@@ -95,12 +92,12 @@ function fileRejection(suggestion: WorkspaceCreateSuggestion | WorkspaceDeleteSu
   return [{ ref: { reviewId: suggestion.id, key: null }, describe: () => line }];
 }
 
-function blockItems(record: ReviewRecord): FeedbackItem[] {
+function editItems(record: ReviewRecord): FeedbackItem[] {
   return unreportedDrops(record).map((drop) => ({ ref: drop.ref, describe: () => describeDrop(drop) }));
 }
 
 function suggestionItems(suggestion: WorkspaceDocumentSuggestion): FeedbackItem[] {
-  if (suggestion.kind === "rewrite") return blockItems(fromSuggestion(suggestion));
+  if (suggestion.kind === "rewrite") return editItems(fromSuggestion(suggestion));
   if (suggestion.kind === "create" || suggestion.kind === "delete") return fileRejection(suggestion);
   return [];
 }
@@ -110,22 +107,20 @@ function messageItems(message: WorkspaceChatMessage): FeedbackItem[] {
     ...(message.suggestions ?? []).flatMap(suggestionItems),
     ...(message.appliedChanges ?? [])
       .filter((change) => change.kind === "rewrite")
-      .flatMap((change) => blockItems(fromAppliedChange(change))),
+      .flatMap((change) => editItems(fromAppliedChange(change))),
   ];
 }
 
-function unreportedDrops(record: ReviewRecord): DroppedBlock[] {
+function unreportedDrops(record: ReviewRecord): DroppedEdit[] {
   if (record.previewOmitted || record.originalText === null || record.newText === null) return [];
   const kept = new Set(record.review?.kept ?? []);
   const dropped = new Set(record.review?.dropped ?? []);
   const reported = new Set(record.review?.reported ?? []);
-  const blocks = changeBlocks(reviewBody(record.originalText), reviewBody(record.newText));
-  const keys = blockKeys(blocks);
-  return blocks.flatMap((block, index) => {
-    const key = keys[index];
-    const isDropped = dropped.has(key) || (record.wholeRejected && !kept.has(key));
-    if (!isDropped || reported.has(key)) return [];
-    return [{ ref: { reviewId: record.id, key }, filePath: record.filePath, verb: record.verb, block }];
+  const edits = agentBlocks(reviewBody(record.originalText), reviewBody(record.newText)).flatMap((block) => block.edits);
+  return edits.flatMap((edit) => {
+    const isDropped = dropped.has(edit.key) || (record.wholeRejected && !kept.has(edit.key));
+    if (!isDropped || reported.has(edit.key)) return [];
+    return [{ ref: { reviewId: record.id, key: edit.key }, filePath: record.filePath, verb: record.verb, edit }];
   });
 }
 
@@ -151,36 +146,9 @@ function phrase(removed: string, added: string, before: string): string {
   return context ? `${change} after ${quote(context)}` : change;
 }
 
-function blockPhrases(block: ChangeBlock): string[] {
-  const segments: readonly WordSegment[] = wordDiff(block.removed.join("\n"), block.added.join("\n"));
-  const phrases: string[] = [];
-  let before = "";
-  let removed = "";
-  let added = "";
-  const flush = () => {
-    if (removed.trim() || added.trim()) phrases.push(phrase(removed, added, before));
-    removed = "";
-    added = "";
-  };
-  for (const segment of segments) {
-    if (segment.kind === "same") {
-      flush();
-      before = segment.text;
-    } else if (segment.kind === "removed") {
-      removed += segment.text;
-    } else {
-      added += segment.text;
-    }
-  }
-  flush();
-  if (phrases.length > MAX_PHRASES_PER_BLOCK) {
-    return [...phrases.slice(0, MAX_PHRASES_PER_BLOCK), "and more in the same passage"];
-  }
-  return phrases;
-}
-
-function describeDrop(drop: DroppedBlock): string {
-  return `- The writer ${drop.verb} your change to \`${drop.filePath}\`: you had ${blockPhrases(drop.block).join("; ")}.`;
+function describeDrop(drop: DroppedEdit): string {
+  const { removed, added, before } = drop.edit;
+  return `- The writer ${drop.verb} your change to \`${drop.filePath}\`: you had ${phrase(removed, added, before)}.`;
 }
 
 /** The note for the agent's next prompt, or null when nothing was undone or rejected since it last heard. */

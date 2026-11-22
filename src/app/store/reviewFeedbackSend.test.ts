@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runHarnessStream } from "../../lib/ipc/harnessClient";
 import { recordLlmThread } from "../../lib/ipc/llmContextClient";
 import { _resetFallbackConversationsForTests } from "../../lib/ipc/conversationsClient";
-import { reviewBlockKeys } from "../../features/review/liveBlocks";
+import { agentEditKeys } from "../../features/review/agentEdits";
 import { useWorkspaceStore } from "../workspaceStore";
 import { useHarnessStore } from "./harnessStore";
 import { useUiStore } from "./uiStore";
@@ -28,7 +28,7 @@ vi.mock("../../lib/ipc/harnessClient", () => ({
 
 const BEFORE = "Braun and Clarke describe thematic analysis.\n";
 const AFTER = "Braun and Clarke (2006) describe thematic analysis.\n";
-const [YEAR_KEY] = reviewBlockKeys({ original: BEFORE, proposed: AFTER });
+const [YEAR_KEY] = agentEditKeys(BEFORE, AFTER);
 const NOTE_LINE = 'you had added "(2006)" after "Braun and Clarke"';
 
 /** A workspace whose last agent turn added "(2006)" to the open note. */

@@ -5,11 +5,11 @@ import { harnessDisplayName } from "../../app/store/harnessConfig";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { fileReviewsFor } from "./fileReviews";
-import type { FileReview } from "./liveBlocks";
+import type { FileReview } from "./liveEdits";
 import { reviewBridge, type MarginComment } from "./reviewBridge";
 
 function sameReview(a: FileReview, b: FileReview): boolean {
-  return a.id === b.id && a.agentName === b.agentName && a.decided.length === b.decided.length;
+  return a.id === b.id && a.agentName === b.agentName && a.kept.length === b.kept.length && a.dropped.length === b.dropped.length;
 }
 
 /** The selected agent's name: who a comment is sent to, and who wrote a reply that names no agent. */
