@@ -2,7 +2,7 @@
 // agent edit, and per comment, beside the line it touches, tied to it by a
 // hairline leader. Reviewing, the note column gives up the margin's width
 // (`MARGIN_ROOM_PX` in reviewExtension.ts: the 32px gap, this 14rem card, a
-// 16px edge). An edit's card is one row until it is the active one.
+// 16px edge). An edit's card is one row (two lines at most) until it is the active one.
 
 // Inside the editor's scroller, so the cards scroll with the note. Zero-size:
 // the cards and leaders are placed in scroller coordinates.
@@ -83,7 +83,7 @@
   overflow-wrap: anywhere;
 }
 
-// One row: the words, clipped, then two icon buttons.
+// One row: the words, then two icon buttons.
 .review-card--compact {
   display: flex;
   align-items: center;
@@ -112,13 +112,16 @@
   }
 }
 
+// Up to two lines, so a replacement's new words show beside its old ones.
 .review-card__body--compact {
+  display: -webkit-box;
   flex: 1 1 auto;
   min-inline-size: 0;
   margin: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .review-card__verb {
