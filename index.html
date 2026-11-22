@@ -16,6 +16,14 @@
        * src/lib/prefs/uiPrefs.ts. An absent value deliberately sets nothing, so
        * the defaults below decide.
        */
+      /*
+       * Inside Compose on a Mac the window is transparent over the system's
+       * sidebar material (tauri.conf.json `windowEffects`), so the page must
+       * not paint over it. Mirrors `hasVibrancy` in src/lib/theme/windowChrome.ts.
+       */
+      if (window.__TAURI_INTERNALS__ && /Mac/.test(navigator.platform)) {
+        document.documentElement.setAttribute("data-vibrancy", "");
+      }
       try {
         var prefs = JSON.parse(localStorage.getItem("compose.uiPrefs.v1") || "{}");
         var root = document.documentElement;
@@ -82,6 +90,17 @@
         height: 100%;
         background: var(--splash-bg);
         color: var(--splash-fg);
+      }
+      /* Over the window's material: the page stays clear and only the note
+         and chat panels paint. */
+      :root[data-vibrancy],
+      :root[data-vibrancy] body,
+      :root[data-vibrancy] .app-skeleton,
+      :root[data-vibrancy] .app-skeleton__pane--sidebar {
+        background: transparent;
+      }
+      :root[data-vibrancy] .app-skeleton__pane--sidebar {
+        border-inline-end: 0;
       }
       #root {
         height: 100%;

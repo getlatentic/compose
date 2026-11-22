@@ -17,6 +17,20 @@
   flex: 1 1 auto;
 }
 
+// Folds the formatting buttons away; set apart from them by a little space.
+.tiptap-toolbar__collapse {
+  margin-inline-end: 0.375rem;
+}
+
+.tiptap-toolbar__collapse[aria-expanded="true"] {
+  color: var(--color-text-primary);
+}
+
+// Folded: the row keeps the toggle and the file actions, a little shorter.
+.tiptap-toolbar--collapsed {
+  padding-block: 0.25rem;
+}
+
 .tiptap-toolbar__file-actions {
   display: flex;
   align-items: center;

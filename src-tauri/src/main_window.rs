@@ -52,13 +52,6 @@ fn build(app: &AppHandle, boot_script: String) -> tauri::Result<WebviewWindow> {
     let window = WebviewWindowBuilder::from_config(app, &config)?
         .initialization_script(boot_script)
         .build()?;
-    // The window paints its configured background before the web view has
-    // anything to show; configured white, that is a white flash for a dark-mode
-    // user. The OS appearance is the best answer this early — a stored "always
-    // light" is not readable before the front end runs — and the splash corrects it.
-    if window.theme().is_ok_and(|theme| theme == tauri::Theme::Dark) {
-        let _ = window.set_background_color(Some(tauri::window::Color(0x16, 0x16, 0x16, 0xff)));
-    }
     crate::boot_native_mark("pre-focus");
     // Hidden until drawn: `launch_window` shows it, or its deadline does.
     launch_window::arm_deadline(app.clone());

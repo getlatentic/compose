@@ -28,6 +28,9 @@ export interface UiPrefs {
   /** Focus mode: sidebar + chat hidden, the document centered. A
    *  writing posture worth keeping across restarts. */
   focusMode: boolean;
+  /** The formatting buttons above the note folded away, leaving the row's
+   *  file actions. A preference about the workspace, so it is kept. */
+  formatBarCollapsed: boolean;
   /** User-dragged pane widths in px; null = the default grid width. */
   sidebarWidthPx: number | null;
   chatWidthPx: number | null;
@@ -47,6 +50,7 @@ const FALLBACK: UiPrefs = {
   soundOnComplete: true,
   analyticsEnabled: true,
   focusMode: false,
+  formatBarCollapsed: false,
   sidebarWidthPx: null,
   chatWidthPx: null,
   zoom: DEFAULT_ZOOM,
@@ -80,6 +84,8 @@ export function loadUiPrefs(): UiPrefs {
           ? parsed.analyticsEnabled
           : FALLBACK.analyticsEnabled,
       focusMode: typeof parsed.focusMode === "boolean" ? parsed.focusMode : FALLBACK.focusMode,
+      formatBarCollapsed:
+        typeof parsed.formatBarCollapsed === "boolean" ? parsed.formatBarCollapsed : FALLBACK.formatBarCollapsed,
       sidebarWidthPx: widthOrNull(parsed.sidebarWidthPx),
       chatWidthPx: widthOrNull(parsed.chatWidthPx),
       zoom: clampZoom(parsed.zoom),

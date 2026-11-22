@@ -1,0 +1,71 @@
+// The window's chrome sits on the system's sidebar material (tauri.conf.json
+// `windowEffects`), so its colours are the Mac's, not the palette's: label
+// greys, tinted hovers and the user's accent colour, in every palette. The
+// palette colours the note and chat panels only.
+//
+// Outside Compose on a Mac (the browser dev build) there is no material, and
+// the frame paints a Mac window's own grey instead.
+
+:root {
+  --frame-bg: #ececec;
+  --glass-label: rgb(0 0 0 / 85%);
+  --glass-secondary: rgb(0 0 0 / 50%);
+  --glass-tertiary: rgb(0 0 0 / 28%);
+  --glass-hover: rgb(0 0 0 / 5%);
+  --glass-active: rgb(0 0 0 / 9%);
+  --glass-field: rgb(0 0 0 / 5%);
+  --system-accent: #007aff;
+  --system-accent-text: #ffffff;
+}
+
+@mixin glass-dark {
+  --frame-bg: #2a2a2c;
+  --glass-label: rgb(255 255 255 / 86%);
+  --glass-secondary: rgb(255 255 255 / 55%);
+  --glass-tertiary: rgb(255 255 255 / 30%);
+  --glass-hover: rgb(255 255 255 / 7%);
+  --glass-active: rgb(255 255 255 / 12%);
+  --glass-field: rgb(255 255 255 / 8%);
+  --system-accent: #0a84ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    @include glass-dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  @include glass-dark;
+}
+
+// WebKit's name for the accent colour chosen in System Settings.
+@supports (color: -apple-system-control-accent) {
+  :root,
+  :root[data-theme] {
+    --system-accent: -apple-system-control-accent;
+  }
+}
+
+:root[data-vibrancy] {
+  --frame-bg: transparent;
+}
+
+:root[data-vibrancy],
+:root[data-vibrancy] body {
+  background: transparent;
+}
+
+// A window behind another loses its accent and its controls dim, as every
+// native window does.
+:root[data-window="inactive"] {
+  --system-accent: var(--glass-active);
+  --system-accent-text: var(--glass-label);
+
+  .tiptap-toolbar,
+  .tab-strip,
+  .sidebar-titlebar__btn,
+  .sidebar-footer__btn {
+    opacity: 0.55;
+  }
+}

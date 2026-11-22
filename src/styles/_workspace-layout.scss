@@ -1,6 +1,7 @@
 // The window: the sidebar is part of the frame, and the editor and the chat
 // are panels set into it, rounded, with one narrow gutter around and between
-// them. The frame takes the sidebar's colour so the panels read as cards on it.
+// them. The frame is the window's material (`_glass.scss`), so the panels
+// read as cards set into it.
 
 $gutter: 6px;
 $panel-radius: 10px;
@@ -10,7 +11,7 @@ $panel-radius: 10px;
   block-size: 100%;
   flex-direction: column;
   color: var(--cds-text-primary);
-  background: var(--color-sidebar-bg);
+  background: var(--frame-bg);
 }
 
 .workspace {
@@ -20,7 +21,7 @@ $panel-radius: 10px;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
-  background: var(--color-sidebar-bg);
+  background: var(--frame-bg);
 }
 
 .editor-region,

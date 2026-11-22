@@ -10,10 +10,18 @@
   color: var(--color-sidebar-text);
   background: var(--color-sidebar-bg);
 
-  // The sidebar is its own surface: dark walnut in Walnut, a tinted panel in
-  // the lighter palettes. Every rule inside it reads Carbon's tokens, so they
-  // are pointed at the sidebar's colours here once, rather than restating
-  // each rule. Menus are portaled to <body> and keep the window's tokens.
+  // On the window's material, in every palette: the Mac's own label greys
+  // and tinted fills (see `_glass.scss`), not the palette's sidebar colours.
+  --color-sidebar-bg: transparent;
+  --color-sidebar-text: var(--glass-label);
+  --color-sidebar-muted: var(--glass-secondary);
+  --color-sidebar-hover: var(--glass-hover);
+  --color-sidebar-active: var(--glass-active);
+  --color-sidebar-field: var(--glass-field);
+  --color-sidebar-marker: var(--system-accent);
+
+  // Every rule inside the sidebar reads Carbon's tokens, so they are pointed
+  // at the sidebar's colours here once, rather than restating each rule. Menus are portaled to <body> and keep the window's tokens.
   --cds-background: var(--color-sidebar-bg);
   --cds-layer-01: var(--color-sidebar-bg);
   --cds-layer-02: var(--color-sidebar-bg);

@@ -14,7 +14,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools", "protocol-asset"] }
+tauri = { version = "2", features = ["devtools", "protocol-asset", "macos-private-api"] }
 agent-harness = { version = "0.6.0-alpha.2", features = [
   "acp",
   "openai-compatible",

@@ -60,6 +60,9 @@ export interface UiState {
   /** Focus mode: sidebar + chat hidden, document centered. Persisted. */
   focusMode: boolean;
   toggleFocusMode: () => void;
+  /** Formatting buttons above the note folded away. Persisted. */
+  formatBarCollapsed: boolean;
+  toggleFormatBar: () => void;
   /** User-dragged pane widths; null = default. Committed on drag
    *  release, never per-move (the splitter writes the CSS var directly). */
   sidebarWidthPx: number | null;
@@ -94,6 +97,7 @@ function persistAll(get: () => UiState): void {
     soundOnComplete: state.soundOnComplete,
     analyticsEnabled: state.analyticsEnabled,
     focusMode: state.focusMode,
+    formatBarCollapsed: state.formatBarCollapsed,
     sidebarWidthPx: state.sidebarWidthPx,
     chatWidthPx: state.chatWidthPx,
     zoom: state.zoom,
@@ -188,6 +192,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   focusMode: INITIAL_UI_PREFS.focusMode,
   toggleFocusMode: () => {
     set({ focusMode: !get().focusMode });
+    persistAll(get);
+  },
+  formatBarCollapsed: INITIAL_UI_PREFS.formatBarCollapsed,
+  toggleFormatBar: () => {
+    set({ formatBarCollapsed: !get().formatBarCollapsed });
     persistAll(get);
   },
   sidebarWidthPx: INITIAL_UI_PREFS.sidebarWidthPx,

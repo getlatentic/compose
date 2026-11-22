@@ -34,6 +34,9 @@ const documentTheme = EditorView.theme({
     // The one red rule: under the note's title. Padding, not margin, keeps
     // CodeMirror's click metrics exact.
     borderBottom: "0.125rem solid var(--color-rule)",
+    // A note's title opens it: no space above it beyond the editor's own
+    // inset, or the page starts with a gap.
+    paddingTop: "0",
     paddingBottom: "0.35em",
     marginBottom: "0",
   },

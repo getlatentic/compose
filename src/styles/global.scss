@@ -52,6 +52,7 @@
 @use "status-bar";
 @use "review-margin";
 @use "workspace-layout";
+@use "glass";
 @use "motion";
 
 // The palette's UI font (`--font-ui`, IBM Plex Sans in every palette today)
@@ -274,9 +275,7 @@ select {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.03125rem;
   line-height: 1rem;
-  text-transform: uppercase;
 }
 
 .section-label--compact {
@@ -658,31 +657,65 @@ select {
   color: var(--cds-icon-primary, #161616);
 }
 
+// The bar over selected text: inline formats, then "Comment". Centred on
+// the selection (`left` is its middle), translucent like a macOS popover.
 .selection-actions {
   position: fixed;
   z-index: 90;
   display: inline-flex;
-  align-items: stretch;
-  padding: 2px;
-  background: var(--cds-layer-02, #ffffff);
-  border: 1px solid var(--cds-border-subtle-02, #c6c6c6);
-  border-radius: 999px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  animation: selection-actions-in 100ms ease-out;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-raised) 86%, transparent);
+  box-shadow: var(--shadow-popover);
+  translate: -50% 0;
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  animation: motion-pop-in var(--motion-fast) var(--ease-enter);
+}
+
+.selection-actions__format {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.625rem;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--state-hover);
+    color: var(--color-text-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: -2px;
+  }
+}
+
+.selection-actions__format--active {
+  background: var(--state-pressed);
+  color: var(--color-text-primary);
 }
 
 .selection-actions__button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 12px;
+  block-size: 1.625rem;
+  padding: 0 10px;
   border: 0;
   background: transparent;
-  color: var(--cds-text-primary, #161616);
-  font-family: $ui-font;
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
   font-size: 0.75rem;
   font-weight: 600;
-  border-radius: 999px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
@@ -711,17 +744,6 @@ select {
   align-self: center;
   background: var(--cds-border-subtle-02, #c6c6c6);
   margin: 0 2px;
-}
-
-@keyframes selection-actions-in {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .selection-composer {
@@ -2978,9 +3000,7 @@ select {
   color: var(--cds-text-helper, #6f6f6f);
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.03125rem;
   line-height: 1rem;
-  text-transform: uppercase;
 }
 
 .sidebar-chat__list {
