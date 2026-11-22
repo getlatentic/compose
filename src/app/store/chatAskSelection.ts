@@ -23,6 +23,8 @@ import {
   byteOffsetToLineColumn,
 } from "../../features/text/positionMapper";
 import { formatExcerptPreamble } from "../../features/chat/excerptPreamble";
+import { reviewFeedbackFor, withReviewFeedback } from "../../features/review/reviewFeedback";
+import { markReviewFeedbackSent } from "./reviewMarginSlice";
 import {
   editGuardFor,
   harnessCapabilitiesOf,
@@ -199,6 +201,7 @@ export async function runAskAboutSelection(
   // reads on demand, so it can't blow a small context window. The chat-visible
   // message + excerpt chip stay the full original text.
   const sentUserMessage = await spillChatInputForPrompt(workspaceId, userMessage);
+  const reviewFeedback = reviewFeedbackFor(workspace.chatThread);
 
   try {
     // The note decides intent — the assistant may answer OR edit based on
@@ -234,7 +237,11 @@ export async function runAskAboutSelection(
     await runHarnessStream({
       approvalMode: "default",
       chatMode,
-      prompt: prefixWorkspaceContext(sentUserMessage, workspace.path, workspace.activeFilePath),
+      prompt: prefixWorkspaceContext(
+        withReviewFeedback(sentUserMessage, reviewFeedback),
+        workspace.path,
+        workspace.activeFilePath,
+      ),
       runId,
       workspaceId,
       harnessId,
@@ -246,6 +253,7 @@ export async function runAskAboutSelection(
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
       binaryPath: tuning.binaryPath,
     });
+    markReviewFeedbackSent(set, workspaceId, reviewFeedback);
   } catch (error) {
     const message = formatHarnessError(error);
     const currentThread =

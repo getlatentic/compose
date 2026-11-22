@@ -41,6 +41,8 @@ import {
 import {
   finishReviewRun,
 } from "./reviewFlow";
+import { markReviewFeedbackSent } from "./reviewMarginSlice";
+import { reviewFeedbackFor, withReviewFeedback } from "../../features/review/reviewFeedback";
 import {
 } from "../../lib/ipc/conversationsClient";
 import {
@@ -191,8 +193,11 @@ export async function runSendChatPrompt(
   // `thread` is the pre-append snapshot, so `thread.messages` are the
   // *prior* turns — replay them into the prompt for harness-neutral
   // continuity (the agent "remembers" the conversation). Trace excluded.
+  // What the writer undid or rejected since the agent's last turn, so it
+  // doesn't read its missing edit as its own mistake and make it again.
+  const reviewFeedback = reviewFeedbackFor(thread);
   const promptWithContext = createPromptWithContext(
-    sentUserMessage,
+    withReviewFeedback(sentUserMessage, reviewFeedback),
     thread.contextItems,
     thread.messages,
     fileContextContent,
@@ -363,6 +368,7 @@ export async function runSendChatPrompt(
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
       binaryPath: tuning.binaryPath,
     });
+    markReviewFeedbackSent(set, workspaceId, reviewFeedback);
   } catch (error) {
     const message = formatHarnessError(error);
     const currentThread =

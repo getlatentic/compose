@@ -10,10 +10,10 @@ import type {
 } from "../../app/workspaceModel";
 import { reviewBlockKeys, type FileReview } from "./liveBlocks";
 
-const NO_DECISIONS: ReviewDecisions = { kept: [], dropped: [] };
+const NO_DECISIONS: ReviewDecisions = { kept: [], dropped: [], reported: [] };
 
 /** The editor shows the body only, so the review compares bodies. */
-function body(markdown: string): string {
+export function reviewBody(markdown: string): string {
   return parseFrontmatter(markdown).body;
 }
 
@@ -29,8 +29,8 @@ function fromSuggestion(suggestion: WorkspaceRewriteSuggestion, agentName: strin
     id: suggestion.id,
     mode: "pending",
     agentName,
-    original: body(suggestion.originalText),
-    proposed: body(suggestion.newText),
+    original: reviewBody(suggestion.originalText),
+    proposed: reviewBody(suggestion.newText),
     decided: decided(suggestion.review),
   };
 }
@@ -42,8 +42,8 @@ function fromAppliedChange(change: WorkspaceAppliedChange, agentName: string): F
     id: change.id,
     mode: "applied",
     agentName,
-    original: body(change.originalText),
-    proposed: body(change.newText),
+    original: reviewBody(change.originalText),
+    proposed: reviewBody(change.newText),
     decided: decided(change.review),
   };
 }
@@ -73,7 +73,9 @@ function withDecision(review: ReviewDecisions | undefined, key: string, kept: bo
   const current = review ?? NO_DECISIONS;
   const keptWithout = current.kept.filter((existing) => existing !== key);
   const dropped = current.dropped.filter((existing) => existing !== key);
-  return kept ? { kept: [...keptWithout, key], dropped } : { kept: keptWithout, dropped: [...dropped, key] };
+  return kept
+    ? { ...current, kept: [...keptWithout, key], dropped }
+    : { ...current, kept: keptWithout, dropped: [...dropped, key] };
 }
 
 /** True once every block of the change has a decision. */
@@ -83,7 +85,7 @@ function allDecided(
 ): boolean {
   if (record.originalText === null || record.newText === null) return false;
   const done = new Set([...review.kept, ...review.dropped]);
-  return reviewBlockKeys({ original: body(record.originalText), proposed: body(record.newText) }).every((key) =>
+  return reviewBlockKeys({ original: reviewBody(record.originalText), proposed: reviewBody(record.newText) }).every((key) =>
     done.has(key),
   );
 }
@@ -120,4 +122,42 @@ export function recordReviewDecision(workspace: Workspace, reviewId: string, key
     return changed ? { ...message, suggestions, appliedChanges } : message;
   });
   return { workspace: { ...workspace, chatThread: { ...workspace.chatThread, messages } }, settled };
+}
+
+/** One dropped block, named by the review it belongs to and its block key. */
+export interface ReviewBlockRef {
+  readonly reviewId: string;
+  readonly key: string;
+}
+
+function withReported(review: ReviewDecisions | undefined, keys: readonly string[]): ReviewDecisions {
+  const current = review ?? NO_DECISIONS;
+  const fresh = keys.filter((key) => !current.reported.includes(key));
+  return fresh.length === 0 ? current : { ...current, reported: [...current.reported, ...fresh] };
+}
+
+/** Remember that the agent has been told about these dropped blocks. */
+export function recordReviewFeedbackSent(workspace: Workspace, sent: readonly ReviewBlockRef[]): Workspace {
+  if (sent.length === 0) return workspace;
+  const keysByReview = new Map<string, string[]>();
+  for (const { reviewId, key } of sent) {
+    keysByReview.set(reviewId, [...(keysByReview.get(reviewId) ?? []), key]);
+  }
+  const messages = workspace.chatThread.messages.map((message) => {
+    let changed = false;
+    const suggestions = message.suggestions?.map((suggestion) => {
+      const keys = keysByReview.get(suggestion.id);
+      if (!keys || suggestion.kind !== "rewrite") return suggestion;
+      changed = true;
+      return { ...suggestion, review: withReported(suggestion.review, keys) };
+    });
+    const appliedChanges = message.appliedChanges?.map((change) => {
+      const keys = keysByReview.get(change.id);
+      if (!keys) return change;
+      changed = true;
+      return { ...change, review: withReported(change.review, keys) };
+    });
+    return changed ? { ...message, suggestions, appliedChanges } : message;
+  });
+  return { ...workspace, chatThread: { ...workspace.chatThread, messages } };
 }

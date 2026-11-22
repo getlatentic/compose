@@ -1,4 +1,5 @@
-import { recordReviewDecision } from "../../features/review/fileReviews";
+import { recordReviewDecision, recordReviewFeedbackSent } from "../../features/review/fileReviews";
+import type { ReviewFeedback } from "../../features/review/reviewFeedback";
 import { markWorkspaceSuggestion } from "../workspaceModel";
 import { updateWorkspace } from "./internals";
 import { maybeCleanupReview } from "./reviewFlow";
@@ -36,3 +37,17 @@ export const createReviewMarginSlice = (
     maybeCleanupReview(get, workspace.id, settled.runId);
   },
 });
+
+/** The prompt carrying `feedback` reached the agent: it is not told again. */
+export function markReviewFeedbackSent(
+  set: WorkspaceStoreSet,
+  workspaceId: string,
+  feedback: ReviewFeedback | null,
+): void {
+  if (!feedback) return;
+  set((state) => ({
+    workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
+      recordReviewFeedbackSent(item, feedback.sent),
+    ),
+  }));
+}

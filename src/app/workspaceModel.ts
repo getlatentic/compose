@@ -245,10 +245,13 @@ export interface WorkspaceRewriteSuggestion extends WorkspaceSuggestionBase {
  * Per-block decisions made in the review margin, by block key
  * (`features/review/changeBlocks.ts`). `kept`: the change is in the note
  * (kept, or accepted); `dropped`: it is not (undone, or rejected).
+ * `reported`: dropped blocks the agent has been told about
+ * (`features/review/reviewFeedback.ts`), so each is told once.
  */
 export interface ReviewDecisions {
   kept: readonly string[];
   dropped: readonly string[];
+  reported: readonly string[];
 }
 
 /** A file the assistant deleted in the sandbox. */
