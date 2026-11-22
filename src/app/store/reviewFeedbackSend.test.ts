@@ -89,7 +89,7 @@ describe("telling the agent what the writer undid", () => {
     vi.mocked(recordLlmThread).mockResolvedValue({ llmThreadId: "llm-1" });
     useWorkspaceStore.setState({ activeWorkspaceId: null, conversations: {}, workspaces: [] });
     useUiStore.setState({ chatOpen: true, settingsOpen: false });
-    useHarnessStore.setState({ harnessCatalog: [], harnessOptions: {}, allowEdits: true, selectedHarnessId: "claude" });
+    useHarnessStore.setState({ harnessCatalog: [], harnessOptions: {}, allowEdits: true, reviewEdits: false, selectedHarnessId: "claude" });
   });
 
   it("sends the undo with the next message, then not again", async () => {
@@ -133,5 +133,54 @@ describe("telling the agent what the writer undid", () => {
 
     expect(sentPrompt(0)).toContain(NOTE_LINE);
     expect(sentPrompt(0)).toContain("About this excerpt from `Slip Box review.md`");
+  });
+
+  it("starts a reviewed run's sandbox from the proposal still waiting for the writer", async () => {
+    const id = useWorkspaceStore.getState().addWorkspace("/tmp/feedback-vault");
+    useWorkspaceStore.setState((state) => ({
+      workspaces: updateWorkspace(state.workspaces, id, (item) => ({
+        ...item,
+        chatThread: {
+          ...item.chatThread,
+          messages: [
+            {
+              id: "a1",
+              role: "assistant",
+              content: "Proposed it.",
+              activity: null,
+              runId: "run-1",
+              suggestions: [
+                {
+                  id: "s1",
+                  runId: "run-1",
+                  filePath: "Slip Box review.md",
+                  title: "Edit",
+                  status: "pending",
+                  statusMessage: null,
+                  createdAt: 1,
+                  updatedAt: 1,
+                  kind: "rewrite",
+                  originalText: BEFORE,
+                  newText: AFTER,
+                  originalSize: BEFORE.length,
+                  newSize: AFTER.length,
+                  previewOmitted: false,
+                  stale: false,
+                },
+              ],
+            },
+          ],
+        },
+      })),
+    }));
+    useHarnessStore.setState({ reviewEdits: true });
+
+    useWorkspaceStore.getState().setChatPrompt("Now shorten that sentence.");
+    await useWorkspaceStore.getState().sendChatPrompt();
+
+    expect(vi.mocked(runHarnessStream).mock.calls[0][0]).toMatchObject({
+      editGuard: "clone",
+      sandboxFiles: [{ relativePath: "Slip Box review.md", content: AFTER }],
+    });
   });
 });

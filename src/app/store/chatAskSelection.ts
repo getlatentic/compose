@@ -24,6 +24,7 @@ import {
 } from "../../features/text/positionMapper";
 import { formatExcerptPreamble } from "../../features/chat/excerptPreamble";
 import { reviewFeedbackFor, withReviewFeedback } from "../../features/review/reviewFeedback";
+import { NO_WAITING_PROPOSALS, waitingProposals } from "../../features/review/waitingProposals";
 import { markReviewFeedbackSent } from "./reviewMarginSlice";
 import {
   editGuardFor,
@@ -37,6 +38,7 @@ import {
 } from "./internals";
 import {
   finishReviewRun,
+  retireCarriedProposals,
 } from "./reviewFlow";
 import {
 } from "../../lib/ipc/conversationsClient";
@@ -216,6 +218,8 @@ export async function runAskAboutSelection(
       useHarnessStore.getState().allowEdits,
       useHarnessStore.getState().reviewEdits,
     );
+    // A sandboxed run starts from the proposals still waiting for the writer.
+    const waiting = editGuard === "clone" ? waitingProposals(get().activeWorkspace() ?? workspace) : NO_WAITING_PROPOSALS;
     const chatMode = capabilities.previewsEdits ? "plan" : useHarnessStore.getState().allowEdits ? "code" : "plan";
 
     // Snapshot mode edits real files mid-run — attribute the watcher's events
@@ -231,7 +235,9 @@ export async function runAskAboutSelection(
         if (!cancelled && useUiStore.getState().soundOnComplete) {
           void playCompletionChime();
         }
-        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
+        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled).then((landed) => {
+          if (landed) retireCarriedProposals(set, get, workspaceId, waiting.suggestionIds);
+        });
       });
     });
     activeRunSubscriptions.set(runId, releaseSubscription);
@@ -251,6 +257,7 @@ export async function runAskAboutSelection(
       effort: tuning.effort,
       maxTurns: tuning.maxTurns,
       editGuard,
+      sandboxFiles: waiting.files,
       extraArgs: harnessExtraArgs(harnessId, tuning),
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
       binaryPath: tuning.binaryPath,

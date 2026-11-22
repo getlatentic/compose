@@ -187,7 +187,8 @@ export function sumChatThreadStats(thread: WorkspaceChatThread): WorkspaceRunSta
   return { totalTokens, coins };
 }
 
-export type WorkspaceSuggestionStatus = "pending" | "accepted" | "rejected" | "stale";
+/** `replaced`: a newer run started from this proposal and carries it forward. */
+export type WorkspaceSuggestionStatus = "pending" | "accepted" | "rejected" | "stale" | "replaced";
 
 /** Fields every previewable change carries, whatever its shape. */
 interface WorkspaceSuggestionBase {

@@ -17,6 +17,12 @@ export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
  */
 export type EditGuard = "none" | "snapshot" | "clone";
 
+/** A file a `clone` run's sandbox starts with in place of the real one; `content: null` deletes it. */
+export interface SandboxFile {
+  relativePath: string;
+  content: string | null;
+}
+
 export interface HarnessRunRequest {
   approvalMode: ApprovalMode;
   chatMode: ChatMode;
@@ -45,6 +51,12 @@ export interface HarnessRunRequest {
    * harnesses depending on the user's review toggle.
    */
   editGuard?: EditGuard;
+  /**
+   * For a `clone` run: earlier runs' proposals the writer has not decided yet,
+   * written into the sandbox so the agent starts from what its conversation
+   * says it did. See `features/review/waitingProposals.ts`.
+   */
+  sandboxFiles?: readonly SandboxFile[];
   /**
    * Extra CLI args appended verbatim to the harness's argv (via
    * `RunTuning.extra_args`). The frontend builds these from per-harness config

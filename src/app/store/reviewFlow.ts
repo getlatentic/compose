@@ -67,6 +67,36 @@ function pendingReviewSuggestionCount(workspace: Workspace, runId: string): numb
   return count;
 }
 
+/**
+ * A newer run started from these proposals and its own proposal now holds
+ * them: retire them, so the writer reviews each change once, against the
+ * newest version, and free their sandboxes once nothing else waits on them.
+ */
+export function retireCarriedProposals(
+  set: WorkspaceStoreSet,
+  get: WorkspaceStoreGet,
+  workspaceId: string,
+  suggestionIds: readonly string[],
+) {
+  if (suggestionIds.length === 0) return;
+  const workspace = get().workspaces.find((item) => item.id === workspaceId);
+  const runIds = new Set<string>();
+  for (const message of workspace?.chatThread.messages ?? []) {
+    for (const suggestion of message.suggestions ?? []) {
+      if (suggestionIds.includes(suggestion.id) && suggestion.status === "pending") runIds.add(suggestion.runId);
+    }
+  }
+  set((state) => ({
+    workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
+      suggestionIds.reduce(
+        (current, id) => markWorkspaceSuggestion(current, id, "replaced", "Carried into the newer proposal below.", Date.now()),
+        item,
+      ),
+    ),
+  }));
+  for (const runId of runIds) maybeCleanupReview(get, workspaceId, runId);
+}
+
 /** Discard a run's review sandbox once no file-level changes remain pending. */
 export function maybeCleanupReview(get: WorkspaceStoreGet, workspaceId: string, runId: string) {
   const workspace = get().workspaces.find((item) => item.id === workspaceId);
@@ -86,7 +116,8 @@ export function maybeCleanupReview(get: WorkspaceStoreGet, workspaceId: string, 
  *    baseline against them and attach the changes as **informational** applied
  *    diffs (undo via version history).
  * A cancelled run, an empty diff, or a diff failure tears the run's review
- * state down instead. `none` (bob / read-only) does nothing.
+ * state down instead. `none` (bob / read-only) does nothing. Resolves true
+ * once a clone run's proposal is in: it supersedes what its sandbox started with.
  */
 export async function finishReviewRun(
   set: WorkspaceStoreSet,
@@ -94,12 +125,14 @@ export async function finishReviewRun(
   runId: string,
   editGuard: EditGuard,
   cancelled: boolean,
-): Promise<void> {
+): Promise<boolean> {
   if (editGuard === "clone") {
-    await finishCloneReview(set, workspaceId, runId, cancelled);
-  } else if (editGuard === "snapshot") {
+    return finishCloneReview(set, workspaceId, runId, cancelled);
+  }
+  if (editGuard === "snapshot") {
     await finishSnapshotReview(set, workspaceId, runId, cancelled);
   }
+  return false;
 }
 
 /** Clone gate: real files untouched mid-run; the diff becomes pending edits. */
@@ -108,10 +141,10 @@ async function finishCloneReview(
   workspaceId: string,
   runId: string,
   cancelled: boolean,
-): Promise<void> {
+): Promise<boolean> {
   if (cancelled) {
     await reviewCleanup(runId).catch(() => {});
-    return;
+    return false;
   }
   let changes: ReviewFileChange[];
   try {
@@ -119,11 +152,11 @@ async function finishCloneReview(
   } catch (error) {
     showErrorToast(errorMessage(error, "Could not compare the assistant's changes"));
     await reviewCleanup(runId).catch(() => {});
-    return;
+    return false;
   }
   if (changes.length === 0) {
     await reviewCleanup(runId).catch(() => {});
-    return;
+    return true;
   }
   const drafts = changes.map(reviewChangeToDraft);
   set((state) => ({
@@ -132,6 +165,7 @@ async function finishCloneReview(
       chatThread: appendReviewChangeSuggestions(workspace.chatThread, runId, drafts, Date.now()),
     })),
   }));
+  return true;
 }
 
 /**

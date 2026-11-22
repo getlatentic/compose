@@ -2145,6 +2145,11 @@ select {
   background: var(--pill-yellow-bg, #fcf4d6);
 }
 
+.suggestion__status--replaced {
+  color: var(--cds-text-secondary, #525252);
+  background: var(--pill-gray-bg, #e0e0e0);
+}
+
 /* Collapsible unified diff (replaces the side-by-side before/after). */
 .diff {
   border: 1px solid var(--cds-border-subtle-01, #e0e0e0);

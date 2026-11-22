@@ -19,6 +19,10 @@
 //! and sends it as [`EditGuard`]; the backend just acts on it. Cloning is
 //! copy-on-write where the platform allows (see [`crate::files::clone`]).
 
+mod overlay;
+
+pub use overlay::{apply_sandbox_overlay, SandboxFile};
+
 use crate::db::{BaselineCandidate, MetadataStore};
 use crate::files::clone::clone_workspace;
 use crate::files::diff::{
@@ -112,7 +116,7 @@ impl ReviewSessionStore {
 
     /// Drop a run's review state — the clone sandbox (removing it from disk)
     /// and the snapshot baseline. Idempotent; a run only ever set one.
-    fn close(&self, run_id: &str) {
+    pub(crate) fn close(&self, run_id: &str) {
         if let Ok(mut guard) = self.sessions.lock() {
             guard.remove(run_id);
         }
