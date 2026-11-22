@@ -99,7 +99,7 @@ describe("telling the agent what the writer undid", () => {
     useWorkspaceStore.getState().setChatPrompt("Tighten the second sentence.");
     await useWorkspaceStore.getState().sendChatPrompt();
     expect(sentPrompt(0)).toContain(NOTE_LINE);
-    expect(sentPrompt(0)).toMatch(/Leave them out unless the writer asks for them\.\n\nTighten the second sentence\.$/);
+    expect(sentPrompt(0)).toMatch(/Do not redo these changes unless the writer asks for them\.\n\nTighten the second sentence\.$/);
     const userMessages = useWorkspaceStore.getState().activeWorkspace()?.chatThread.messages.filter((message) => message.role === "user") ?? [];
     expect(userMessages[userMessages.length - 1]?.content).toBe("Tighten the second sentence.");
 

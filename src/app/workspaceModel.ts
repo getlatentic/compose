@@ -225,6 +225,8 @@ export interface WorkspaceCreateSuggestion extends WorkspaceSuggestionBase {
   newText: string | null;
   newSize: number;
   previewOmitted: boolean;
+  /** The agent has been told the writer rejected this file. */
+  rejectionReported?: boolean;
 }
 
 /** A whole-file rewrite the assistant made in the sandbox. */
@@ -261,6 +263,8 @@ export interface WorkspaceDeleteSuggestion extends WorkspaceSuggestionBase {
   originalSize: number;
   previewOmitted: boolean;
   stale: boolean;
+  /** The agent has been told the writer rejected this deletion. */
+  rejectionReported?: boolean;
 }
 
 /** bob's byte-range edit draft, before it becomes a pending suggestion. */

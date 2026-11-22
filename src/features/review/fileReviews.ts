@@ -6,6 +6,7 @@ import type {
   WorkspaceAppliedChange,
   WorkspaceChatMessage,
   WorkspaceChatThread,
+  WorkspaceDocumentSuggestion,
   WorkspaceRewriteSuggestion,
 } from "../../app/workspaceModel";
 import { reviewBlockKeys, type FileReview } from "./liveBlocks";
@@ -124,10 +125,11 @@ export function recordReviewDecision(workspace: Workspace, reviewId: string, key
   return { workspace: { ...workspace, chatThread: { ...workspace.chatThread, messages } }, settled };
 }
 
-/** One dropped block, named by the review it belongs to and its block key. */
+/** One dropped block, named by the review it belongs to and its block key;
+ *  `key` is null for a whole new file or deletion the writer rejected. */
 export interface ReviewBlockRef {
   readonly reviewId: string;
-  readonly key: string;
+  readonly key: string | null;
 }
 
 function withReported(review: ReviewDecisions | undefined, keys: readonly string[]): ReviewDecisions {
@@ -136,27 +138,44 @@ function withReported(review: ReviewDecisions | undefined, keys: readonly string
   return fresh.length === 0 ? current : { ...current, reported: [...current.reported, ...fresh] };
 }
 
-/** Remember that the agent has been told about these dropped blocks. */
+interface SentIndex {
+  readonly keysByReview: ReadonlyMap<string, readonly string[]>;
+  readonly wholeFiles: ReadonlySet<string>;
+}
+
+function indexSent(sent: readonly ReviewBlockRef[]): SentIndex {
+  const keysByReview = new Map<string, string[]>();
+  const wholeFiles = new Set<string>();
+  for (const { reviewId, key } of sent) {
+    if (key === null) wholeFiles.add(reviewId);
+    else keysByReview.set(reviewId, [...(keysByReview.get(reviewId) ?? []), key]);
+  }
+  return { keysByReview, wholeFiles };
+}
+
+function markSuggestion(suggestion: WorkspaceDocumentSuggestion, index: SentIndex): WorkspaceDocumentSuggestion {
+  if (suggestion.kind === "create" || suggestion.kind === "delete") {
+    return index.wholeFiles.has(suggestion.id) ? { ...suggestion, rejectionReported: true } : suggestion;
+  }
+  const keys = index.keysByReview.get(suggestion.id);
+  return keys && suggestion.kind === "rewrite" ? { ...suggestion, review: withReported(suggestion.review, keys) } : suggestion;
+}
+
+function markAppliedChange(change: WorkspaceAppliedChange, index: SentIndex): WorkspaceAppliedChange {
+  const keys = index.keysByReview.get(change.id);
+  return keys ? { ...change, review: withReported(change.review, keys) } : change;
+}
+
+/** Remember what the agent has been told, so it is told once. */
 export function recordReviewFeedbackSent(workspace: Workspace, sent: readonly ReviewBlockRef[]): Workspace {
   if (sent.length === 0) return workspace;
-  const keysByReview = new Map<string, string[]>();
-  for (const { reviewId, key } of sent) {
-    keysByReview.set(reviewId, [...(keysByReview.get(reviewId) ?? []), key]);
-  }
+  const index = indexSent(sent);
   const messages = workspace.chatThread.messages.map((message) => {
-    let changed = false;
-    const suggestions = message.suggestions?.map((suggestion) => {
-      const keys = keysByReview.get(suggestion.id);
-      if (!keys || suggestion.kind !== "rewrite") return suggestion;
-      changed = true;
-      return { ...suggestion, review: withReported(suggestion.review, keys) };
-    });
-    const appliedChanges = message.appliedChanges?.map((change) => {
-      const keys = keysByReview.get(change.id);
-      if (!keys) return change;
-      changed = true;
-      return { ...change, review: withReported(change.review, keys) };
-    });
+    const suggestions = message.suggestions?.map((suggestion) => markSuggestion(suggestion, index));
+    const appliedChanges = message.appliedChanges?.map((change) => markAppliedChange(change, index));
+    const changed =
+      suggestions?.some((item, i) => item !== message.suggestions?.[i]) ||
+      appliedChanges?.some((item, i) => item !== message.appliedChanges?.[i]);
     return changed ? { ...message, suggestions, appliedChanges } : message;
   });
   return { ...workspace, chatThread: { ...workspace.chatThread, messages } };

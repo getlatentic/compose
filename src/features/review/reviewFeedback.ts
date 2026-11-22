@@ -1,7 +1,11 @@
 import type {
   ReviewDecisions,
   WorkspaceAppliedChange,
+  WorkspaceChatMessage,
   WorkspaceChatThread,
+  WorkspaceCreateSuggestion,
+  WorkspaceDeleteSuggestion,
+  WorkspaceDocumentSuggestion,
   WorkspaceRewriteSuggestion,
 } from "../../app/workspaceModel";
 import { blockKeys, changeBlocks, type ChangeBlock } from "./changeBlocks";
@@ -20,14 +24,20 @@ export interface ReviewFeedback {
   readonly sent: readonly ReviewBlockRef[];
 }
 
-/** Blocks named one by one; the rest are counted. */
-const MAX_LISTED_BLOCKS = 12;
+/** Changes named one by one; the rest are counted. */
+const MAX_LISTED_CHANGES = 12;
 /** Word changes described per block. */
 const MAX_PHRASES_PER_BLOCK = 3;
 const MAX_QUOTE_CHARS = 80;
 const CONTEXT_WORDS = 3;
 
 type Verb = "undid" | "rejected";
+
+/** One change the agent is told of, described only if it is listed. */
+interface FeedbackItem {
+  readonly ref: ReviewBlockRef;
+  readonly describe: () => string;
+}
 
 interface DroppedBlock {
   readonly ref: ReviewBlockRef;
@@ -74,13 +84,34 @@ function fromAppliedChange(change: WorkspaceAppliedChange): ReviewRecord {
   };
 }
 
-function reviewRecords(thread: WorkspaceChatThread): ReviewRecord[] {
-  return thread.messages.flatMap((message) => [
-    ...(message.suggestions ?? [])
-      .filter((suggestion): suggestion is WorkspaceRewriteSuggestion => suggestion.kind === "rewrite")
-      .map(fromSuggestion),
-    ...(message.appliedChanges ?? []).filter((change) => change.kind === "rewrite").map(fromAppliedChange),
-  ]);
+/** A new file or a deletion the writer turned down from the chat card. */
+function fileRejection(suggestion: WorkspaceCreateSuggestion | WorkspaceDeleteSuggestion): FeedbackItem[] {
+  if (suggestion.status !== "rejected" || suggestion.rejectionReported) return [];
+  const path = `\`${suggestion.filePath}\``;
+  const line =
+    suggestion.kind === "create"
+      ? `- The writer rejected the new file you made, ${path}. It does not exist.`
+      : `- The writer rejected your deletion of ${path}. The file is still there.`;
+  return [{ ref: { reviewId: suggestion.id, key: null }, describe: () => line }];
+}
+
+function blockItems(record: ReviewRecord): FeedbackItem[] {
+  return unreportedDrops(record).map((drop) => ({ ref: drop.ref, describe: () => describeDrop(drop) }));
+}
+
+function suggestionItems(suggestion: WorkspaceDocumentSuggestion): FeedbackItem[] {
+  if (suggestion.kind === "rewrite") return blockItems(fromSuggestion(suggestion));
+  if (suggestion.kind === "create" || suggestion.kind === "delete") return fileRejection(suggestion);
+  return [];
+}
+
+function messageItems(message: WorkspaceChatMessage): FeedbackItem[] {
+  return [
+    ...(message.suggestions ?? []).flatMap(suggestionItems),
+    ...(message.appliedChanges ?? [])
+      .filter((change) => change.kind === "rewrite")
+      .flatMap((change) => blockItems(fromAppliedChange(change))),
+  ];
 }
 
 function unreportedDrops(record: ReviewRecord): DroppedBlock[] {
@@ -154,17 +185,17 @@ function describeDrop(drop: DroppedBlock): string {
 
 /** The note for the agent's next prompt, or null when nothing was undone or rejected since it last heard. */
 export function reviewFeedbackFor(thread: WorkspaceChatThread): ReviewFeedback | null {
-  const drops = reviewRecords(thread).flatMap(unreportedDrops);
-  if (drops.length === 0) return null;
-  const listed = drops.slice(0, MAX_LISTED_BLOCKS).map(describeDrop);
-  const unlisted = drops.length - listed.length;
+  const items = thread.messages.flatMap(messageItems);
+  if (items.length === 0) return null;
+  const listed = items.slice(0, MAX_LISTED_CHANGES).map((item) => item.describe());
+  const unlisted = items.length - listed.length;
   const lines = [
     "Since your last turn the writer took some of your edits back out:",
     ...listed,
     ...(unlisted > 0 ? [`- …and ${unlisted} more of your changes the writer undid or rejected.`] : []),
-    "These are not in the notes now on purpose. Leave them out unless the writer asks for them.",
+    "The writer chose this on purpose. Do not redo these changes unless the writer asks for them.",
   ];
-  return { note: lines.join("\n"), sent: drops.map((drop) => drop.ref) };
+  return { note: lines.join("\n"), sent: items.map((item) => item.ref) };
 }
 
 /** The user's message with the review note in front of it. */

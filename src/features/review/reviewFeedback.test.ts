@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createWorkspaceFromPath,
   type Workspace,
+  type WorkspaceDocumentSuggestion,
   type WorkspaceAppliedChange,
   type WorkspaceChatMessage,
   type WorkspaceRewriteSuggestion,
@@ -87,7 +88,7 @@ describe("reviewFeedbackFor", () => {
       [
         "Since your last turn the writer took some of your edits back out:",
         '- The writer undid your change to `Slip Box review.md`: you had added "(2006)" after "Braun and Clarke".',
-        "These are not in the notes now on purpose. Leave them out unless the writer asks for them.",
+        "The writer chose this on purpose. Do not redo these changes unless the writer asks for them.",
       ].join("\n"),
     );
     expect(feedback?.sent).toEqual([{ reviewId: "c1", key: YEAR_KEY }]);
@@ -155,6 +156,38 @@ describe("reviewFeedbackFor", () => {
     const note = reviewFeedbackFor(undone.chatThread)?.note ?? "";
     expect(note).toMatch(/you had added "word( word)*…"/);
     expect(note.length).toBeLessThan(400);
+  });
+});
+
+describe("reviewFeedbackFor, whole files", () => {
+  const base = { runId: "run-1", title: "File", statusMessage: null, createdAt: 1, updatedAt: 1, previewOmitted: false };
+  const created = (status: WorkspaceDocumentSuggestion["status"]): WorkspaceDocumentSuggestion => ({
+    ...base, id: "f1", filePath: "Ideas/New idea.md", status, kind: "create", newText: "Idea.\n", newSize: 6,
+  });
+  const deleted = (status: WorkspaceDocumentSuggestion["status"]): WorkspaceDocumentSuggestion => ({
+    ...base, id: "f2", filePath: "Old draft.md", status, kind: "delete", originalText: "Old.\n", originalSize: 5, stale: false,
+  });
+
+  it("says nothing about a new file or deletion still pending or accepted", () => {
+    for (const status of ["pending", "accepted"] as const) {
+      expect(reviewFeedbackFor(workspaceWith({ suggestions: [created(status), deleted(status)] }).chatThread)).toBeNull();
+    }
+  });
+
+  it("tells the agent a rejected new file does not exist and a rejected deletion kept the file", () => {
+    const feedback = reviewFeedbackFor(workspaceWith({ suggestions: [created("rejected"), deleted("rejected")] }).chatThread);
+    expect(feedback?.note).toContain("- The writer rejected the new file you made, `Ideas/New idea.md`. It does not exist.");
+    expect(feedback?.note).toContain("- The writer rejected your deletion of `Old draft.md`. The file is still there.");
+    expect(feedback?.sent).toEqual([
+      { reviewId: "f1", key: null },
+      { reviewId: "f2", key: null },
+    ]);
+  });
+
+  it("is told once", () => {
+    const rejected = workspaceWith({ suggestions: [created("rejected"), deleted("rejected")] });
+    const sent = recordReviewFeedbackSent(rejected, reviewFeedbackFor(rejected.chatThread)?.sent ?? []);
+    expect(reviewFeedbackFor(sent.chatThread)).toBeNull();
   });
 });
 
