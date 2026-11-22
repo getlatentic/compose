@@ -88,16 +88,19 @@ function wordMarks(at: number, lineInNote: string, otherLine: string, mode: Live
   const noteMark = mode === "applied" ? inMark : outMark;
   const otherClass = mode === "applied" ? OUT : IN;
   let position = at;
-  for (const segment of segments) {
+  segments.forEach((segment, index) => {
     if (segment.kind === "same") {
       position += segment.text.length;
     } else if (segment.kind === inNote) {
       if (segment.text.trim()) out.push(noteMark.range(position, position + segment.text.length));
       position += segment.text.length;
     } else if (segment.text.trim()) {
-      out.push(Decoration.widget({ widget: new OtherSideWidget(segment.text, otherClass, false), side: -1 }).range(position));
+      // A replacement's two sides share no space between them; keep the words apart.
+      const touchesNext = segments[index + 1]?.kind === inNote;
+      const className = touchesNext ? `${otherClass} cm-review-other--replaced` : otherClass;
+      out.push(Decoration.widget({ widget: new OtherSideWidget(segment.text, className, false), side: -1 }).range(position));
     }
-  }
+  });
 }
 
 function blockMarks(block: LiveBlock, note: string, out: Range<Decoration>[]): void {

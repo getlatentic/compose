@@ -162,6 +162,9 @@ const reviewTheme = EditorView.theme({
     color: "var(--color-danger-text)",
     textDecoration: "line-through",
   },
+  ".cm-review-other--replaced": {
+    marginInlineEnd: "0.3em",
+  },
   // A previewed paragraph sits where a line would, with a line's padding.
   ".cm-review-other--block": {
     whiteSpace: "pre-wrap",

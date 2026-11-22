@@ -51,6 +51,20 @@ describe("reviewMargin", () => {
     expect(currentBlocks(view)).toHaveLength(0);
   });
 
+  it("keeps a replacement's old words apart from the new ones, and leaves a plain deletion alone", () => {
+    reviewBridge.setInputs([applied], []);
+    vi.advanceTimersByTime(0);
+    expect(view.contentDOM.querySelector(".cm-review-out")?.classList.contains("cm-review-other--replaced")).toBe(true);
+
+    const deletion: FileReview = { ...applied, id: "r2", original: "Intro.\n\nWe recruited many nurses.\n\nEnd.", proposed: "Intro.\n\nWe recruited nurses.\n\nEnd." };
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: deletion.proposed } });
+    reviewBridge.setInputs([deletion], []);
+    vi.advanceTimersByTime(300);
+    const out = view.contentDOM.querySelector(".cm-review-out");
+    expect(out?.textContent?.trim()).toBe("many");
+    expect(out?.classList.contains("cm-review-other--replaced")).toBe(false);
+  });
+
   it("clears the marks when the review goes away", () => {
     reviewBridge.setInputs([applied], []);
     vi.advanceTimersByTime(0);
