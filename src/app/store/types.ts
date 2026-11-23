@@ -1,17 +1,7 @@
 import type { StoreApi } from "zustand";
 import type { ConversationSummary } from "../../lib/ipc/conversationsClient";
 import type { ReasoningEffort } from "../../lib/ipc/harnessClient";
-import type {
-  Workspace,
-  DocumentTextChange,
-  OnboardingState,
-  SourceRange,
-  WorkspaceCommentThread,
-  WorkspaceFileBuffer,
-  WorkspaceFileEntry,
-  WorkspaceFsEvent,
-  WorkspaceListResult,
-} from "../workspaceModel";
+import type { Workspace, DocumentTextChange, OnboardingState, SourceRange, WorkspaceCommentThread, WorkspaceFileBuffer, WorkspaceFileEntry, WorkspaceFsEvent, WorkspaceListResult } from "../workspace/types";
 
 /**
  * One entry in the unified file+chat navigation history. Either the user was

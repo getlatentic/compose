@@ -7,7 +7,7 @@ import {
 } from "react";
 import { Add, Close, Document, Send, StopFilledAlt, WarningAltFilled } from "@carbon/react/icons";
 
-import type { WorkspaceContextItem } from "../../app/workspaceModel";
+import type { WorkspaceContextItem } from "../../app/workspace/types";
 import { useUiStore } from "../../app/store/uiStore";
 import {
   pastedTextChipLabel,

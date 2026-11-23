@@ -7,14 +7,8 @@ import {
   createBatchedRunSetter,
   handleHarnessRunEvent,
 } from "./runEvents";
-import {
-  appendUserChatMessage,
-  finalizeRun,
-  startRun,
-  type ChatExcerptRef,
-  type FinalizeRunOptions,
-  type SourceRange,
-} from "../workspaceModel";
+import { appendUserChatMessage, finalizeRun, startRun, type FinalizeRunOptions } from "../workspace/chatRun";
+import type { ChatExcerptRef, SourceRange } from "../workspace/types";
 import {
   beginAgentEditWindow,
   endAgentEditWindow,

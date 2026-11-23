@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react";
 
-import type { DocumentRef } from "../../app/workspaceModel";
+import type { DocumentRef } from "../../app/workspace/documents";
 import type { FileExportResult } from "../../lib/export/documentExport";
 import { ImageExportDialog } from "./ImageExportDialog";
 

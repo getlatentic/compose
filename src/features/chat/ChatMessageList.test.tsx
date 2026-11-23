@@ -9,7 +9,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { WorkspaceChatMessage } from "../../app/workspaceModel";
+import type { WorkspaceChatMessage } from "../../app/workspace/types";
 import { ChatMessageList } from "./ChatMessageList";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

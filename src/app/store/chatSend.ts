@@ -14,15 +14,9 @@ import {
   appendLlmMessage,
   recordLlmThread,
 } from "../../lib/ipc/llmContextClient";
-import {
-  appendUserChatMessage,
-  createLlmContextSnapshots,
-  createPromptWithContext,
-  finalizeRun,
-  missingFileContextPaths,
-  startRun,
-  type FinalizeRunOptions,
-} from "../workspaceModel";
+import { appendUserChatMessage, finalizeRun, startRun, type FinalizeRunOptions } from "../workspace/chatRun";
+import { createLlmContextSnapshots, missingFileContextPaths } from "../workspace/chatContext";
+import { createPromptWithContext } from "../workspace/prompt";
 import {
   beginAgentEditWindow,
   endAgentEditWindow,

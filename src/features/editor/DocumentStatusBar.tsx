@@ -3,7 +3,7 @@ import { useMarkdownPreview } from "./useMarkdownPreview";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
-import { isActiveFilePresent } from "../../app/workspaceModel";
+import { isActiveFilePresent } from "../../app/workspace/tabs";
 import { isPlainTextPath } from "../../lib/documents/documentKind";
 import { PropertiesButton } from "./PropertiesButton";
 

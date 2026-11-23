@@ -1,6 +1,6 @@
 import { parseFrontmatter } from "@latentic/live-markdown";
 
-import type { ReviewDecisions, WorkspaceAppliedChange, WorkspaceRewriteSuggestion } from "../../app/workspaceModel";
+import type { ReviewDecisions, WorkspaceAppliedChange, WorkspaceRewriteSuggestion } from "../../app/workspace/types";
 import type { FileReview, ReviewMode } from "./liveEdits";
 
 /**

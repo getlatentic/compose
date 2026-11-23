@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { createWorkspaceFromPath, type Workspace, type WorkspaceChatMessage } from "../../app/workspaceModel";
+import { createWorkspaceFromPath } from "../../app/workspace/workspaces";
+import type { Workspace, WorkspaceChatMessage } from "../../app/workspace/types";
 import { fileReviewsFor, recordReviewDecision } from "./fileReviews";
 import { agentEditKeys } from "./agentEdits";
 

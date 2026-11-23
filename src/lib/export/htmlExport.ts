@@ -4,7 +4,7 @@ import {
   saveDocumentExport,
   type FileExportResult,
 } from "./documentExport";
-import { documentRefPath, type DocumentRef } from "../../app/workspaceModel";
+import { documentRefPath, type DocumentRef } from "../../app/workspace/documents";
 import type { ExportTypefaces } from "../theme/exportTypefaces";
 
 /**

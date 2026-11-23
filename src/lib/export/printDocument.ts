@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
 import { collectMermaidSvgs } from "./mermaidSvgs";
-import type { DocumentRef } from "../../app/workspaceModel";
+import type { DocumentRef } from "../../app/workspace/documents";
 import type { ExportTypefaces } from "../theme/exportTypefaces";
 
 /**

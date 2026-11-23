@@ -2,7 +2,7 @@ import type { EditGuard, SandboxFile } from "../../lib/ipc/harnessClient";
 import { readFile } from "../../lib/ipc/filesClient";
 import type { ReviewFeedback } from "../../features/review/reviewFeedback";
 import { NO_WAITING_PROPOSALS, notesToRead, waitingProposals, type NoteTexts } from "../../features/review/waitingProposals";
-import type { Workspace } from "../workspaceModel";
+import type { Workspace } from "../workspace/types";
 import { finishReviewRun, retireCarriedProposals } from "./reviewFlow";
 import { markReviewFeedbackSent } from "./reviewMarginSlice";
 import type { WorkspaceStoreGet, WorkspaceStoreSet } from "./types";

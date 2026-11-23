@@ -1,11 +1,4 @@
-import type {
-  ReviewDecisions,
-  Workspace,
-  WorkspaceAppliedChange,
-  WorkspaceChatMessage,
-  WorkspaceChatThread,
-  WorkspaceDocumentSuggestion,
-} from "../../app/workspaceModel";
+import type { ReviewDecisions, Workspace, WorkspaceAppliedChange, WorkspaceChatMessage, WorkspaceChatThread, WorkspaceDocumentSuggestion } from "../../app/workspace/types";
 import { agentEditKeys } from "./agentEdits";
 import type { FileReview } from "./liveEdits";
 import { appliedRecord, fileReviewOf, reviewBody, rewriteRecord } from "./reviewRecord";

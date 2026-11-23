@@ -39,12 +39,8 @@ vi.mock("../../lib/ipc/workspaceClient", async (importOriginal) => {
 vi.mock("../../lib/runtime/desktopRuntime", () => ({ isTauriRuntime: () => true }));
 
 import { useWorkspaceStore } from "../workspaceStore";
-import {
-  LOOSE_WORKSPACE_ID,
-  createLooseWorkspace,
-  createWorkspaceFromPath,
-  openWorkspaceFile,
-} from "../workspaceModel";
+import { LOOSE_WORKSPACE_ID, createLooseWorkspace, createWorkspaceFromPath } from "../workspace/workspaces";
+import { openWorkspaceFile } from "../workspace/tabs";
 
 const NOTE = "/Users/someone/Downloads/readme.md";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { TraceEntry } from "../../app/workspaceModel";
+import type { TraceEntry } from "../../app/workspace/types";
 import type { ToolKind } from "../../lib/ipc/harnessClient";
 import { appliedChangeBasenames, fileOpsFromTrace, readFilesFromTrace } from "./traceFiles";
 

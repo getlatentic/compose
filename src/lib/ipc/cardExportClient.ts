@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { DocumentRef } from "../../app/workspaceModel";
+import type { DocumentRef } from "../../app/workspace/documents";
 import type { CardColors } from "../export/cardColors";
 import type { CardContent } from "../export/cardContent";
 import { isTauriRuntime } from "../runtime/desktopRuntime";

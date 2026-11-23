@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useUiStore } from "../../app/store/uiStore";
-import type { DocumentRef } from "../../app/workspaceModel";
+import type { DocumentRef } from "../../app/workspace/documents";
 import { cardColorsFrom, cardColorsOn, type CardColors } from "../../lib/export/cardColors";
 import { cardContentFor, type CardContent } from "../../lib/export/cardContent";
 import { reportClientError } from "../../lib/diagnostics/errorReporter";

@@ -3,7 +3,7 @@ import { useCallback, useEffect, type ReactNode } from "react";
 
 import { useUiStore } from "../../app/store/uiStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
-import { documentRef, type DocumentRef } from "../../app/workspaceModel";
+import { documentRef, type DocumentRef } from "../../app/workspace/documents";
 import { reportExportResult, type FileExportResult } from "../../lib/export/documentExport";
 import { exportDocumentToHtml } from "../../lib/export/htmlExport";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";

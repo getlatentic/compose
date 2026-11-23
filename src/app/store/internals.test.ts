@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Workspace } from "../workspaceModel";
+import type { Workspace } from "../workspace/types";
 import { errorMessage, nextUntitledPath, prefixWorkspaceContext } from "./internals";
 
 // nextUntitledPath only reads `files` (their relative paths) + `openFilePaths`,

@@ -1,69 +1,17 @@
 import { describe, expect, it } from "vitest";
-import {
-  CONVERSATION_REPLAY_LIMIT,
-  FILE_CONTEXT_INLINE_LIMIT,
-  LOOSE_WORKSPACE_ID,
-  acceptWorkspaceSuggestion,
-  addFileContextItem,
-  appendAppliedChanges,
-  appendAssistantNotice,
-  appendAssistantSuggestions,
-  appendAssistantText,
-  appendAssistantThinking,
-  appendReviewChangeSuggestions,
-  appendUserChatMessage,
-  applyFileBuffer,
-  applyFileSnapshot,
-  applyFsEvent,
-  applyScanResult,
-  applyUneditedFileBuffer,
-  assistantMessageContentForRun,
-  buildFileContextBlock,
-  closeWorkspaceFileTab,
-  createLlmContextSnapshots,
-  createPromptWithContext,
-  createWorkspaceFromPath,
-  createWorkspaceFromRecord,
-  dismissBufferConflict,
-  documentRef,
-  documentRefPath,
-  endAssistantToolCall,
-  finalizeRun,
-  hydrateChatThread,
-  hydrateWorkspaceRecords,
-  isActiveFilePresent,
-  isSetupComplete,
-  markBufferConflict,
-  markBufferDirty,
-  markBufferSaved,
-  markRunStreaming,
-  markWorkspaceSuggestion,
-  missingFileContextPaths,
-  openWorkspaceFile,
-  prepareWorkspaceSuggestionDrafts,
-  rejectWorkspaceSuggestion,
-  removeContextItem,
-  removeDeletedFile,
-  removeWorkspaceFolder,
-  renameContextItemPath,
-  reorderOpenTabs,
-  resetChatThread,
-  resolveOpenTabs,
-  serializeChatMessages,
-  setAssistantActivity,
-  setAssistantSession,
-  setAssistantStats,
-  setCommentChatContext,
-  setCurrentTabContext,
-  startAssistantToolCall,
-  startRun,
-  type Workspace,
-  type WorkspaceChatThread,
-  type WorkspaceContextItem,
-  type WorkspaceFileContextItem,
-  type WorkspaceFileEntry,
-} from "./workspaceModel";
-import type { HarnessReadiness } from "../lib/ipc/harnessClient";
+import { CONVERSATION_REPLAY_LIMIT, FILE_CONTEXT_INLINE_LIMIT, buildFileContextBlock, createPromptWithContext } from "./prompt";
+import { LOOSE_WORKSPACE_ID, createWorkspaceFromPath, createWorkspaceFromRecord, hydrateWorkspaceRecords, isSetupComplete } from "./workspaces";
+import { acceptWorkspaceSuggestion, appendAppliedChanges, appendAssistantSuggestions, appendReviewChangeSuggestions, markWorkspaceSuggestion, prepareWorkspaceSuggestionDrafts, rejectWorkspaceSuggestion } from "./suggestions";
+import { addFileContextItem, createLlmContextSnapshots, missingFileContextPaths, removeContextItem, renameContextItemPath, setCommentChatContext, setCurrentTabContext } from "./chatContext";
+import { appendAssistantNotice, appendAssistantText, appendUserChatMessage, assistantMessageContentForRun, finalizeRun, markRunStreaming, resetChatThread, setAssistantActivity, setAssistantSession, setAssistantStats, startRun } from "./chatRun";
+import { appendAssistantThinking, endAssistantToolCall, startAssistantToolCall } from "./chatTrace";
+import { applyFileBuffer, applyFileSnapshot, applyScanResult, applyUneditedFileBuffer, dismissBufferConflict, markBufferConflict, markBufferDirty, markBufferSaved, removeDeletedFile, removeWorkspaceFolder } from "./files";
+import { applyFsEvent } from "./fsEvents";
+import { closeWorkspaceFileTab, isActiveFilePresent, openWorkspaceFile, reorderOpenTabs, resolveOpenTabs } from "./tabs";
+import { documentRef, documentRefPath } from "./documents";
+import { hydrateChatThread, serializeChatMessages } from "./chatPersistence";
+import type { Workspace, WorkspaceChatThread, WorkspaceContextItem, WorkspaceFileContextItem, WorkspaceFileEntry } from "./types";
+import type { HarnessReadiness } from "../../lib/ipc/harnessClient";
 
 function makeEntry(relativePath: string, lastModifiedMs = 1_000): WorkspaceFileEntry {
   return { relativePath, lastModifiedMs, sizeBytes: 16 };

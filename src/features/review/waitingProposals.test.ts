@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createWorkspaceFromPath,
-  type Workspace,
-  type WorkspaceChatMessage,
-  type WorkspaceDocumentSuggestion,
-} from "../../app/workspaceModel";
+import { createWorkspaceFromPath } from "../../app/workspace/workspaces";
+import type { Workspace, WorkspaceChatMessage, WorkspaceDocumentSuggestion } from "../../app/workspace/types";
 import { recordReviewDecision } from "./fileReviews";
 import { liveEdits } from "./liveEdits";
 import { notesToRead, waitingProposals } from "./waitingProposals";

@@ -3,7 +3,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { applyFileBuffer, createWorkspaceFromPath, openWorkspaceFile, type Workspace } from "../../app/workspaceModel";
+import { applyFileBuffer } from "../../app/workspace/files";
+import { createWorkspaceFromPath } from "../../app/workspace/workspaces";
+import { openWorkspaceFile } from "../../app/workspace/tabs";
+import type { Workspace } from "../../app/workspace/types";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { PropertiesButton } from "./PropertiesButton";
 

@@ -1,4 +1,4 @@
-import type { Workspace } from "../../app/workspaceModel";
+import type { Workspace } from "../../app/workspace/types";
 
 /**
  * How many of a workspace's open buffers hold unsaved edits. Removing a

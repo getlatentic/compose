@@ -1,10 +1,4 @@
-import type {
-  WorkspaceChatMessage,
-  WorkspaceChatThread,
-  WorkspaceCreateSuggestion,
-  WorkspaceDeleteSuggestion,
-  WorkspaceDocumentSuggestion,
-} from "../../app/workspaceModel";
+import type { WorkspaceChatMessage, WorkspaceChatThread, WorkspaceCreateSuggestion, WorkspaceDeleteSuggestion, WorkspaceDocumentSuggestion } from "../../app/workspace/types";
 import { agentBlocks, type AgentEdit } from "./agentEdits";
 import type { ReviewEditRef } from "./fileReviews";
 import { appliedRecord, reviewBody, rewriteRecord, type ReviewRecord } from "./reviewRecord";

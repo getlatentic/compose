@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 
-import type { ChatRunState, WorkspaceChatMessage } from "../../app/workspaceModel";
+import type { ChatRunState, WorkspaceChatMessage } from "../../app/workspace/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageRow, type MessageRowCallbacks } from "./MessageRow";
 import { WorkingIndicator } from "./WorkingIndicator";

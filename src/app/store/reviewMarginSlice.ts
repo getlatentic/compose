@@ -1,6 +1,6 @@
 import { recordReviewDecision, recordReviewFeedbackSent } from "../../features/review/fileReviews";
 import type { ReviewFeedback } from "../../features/review/reviewFeedback";
-import { markWorkspaceSuggestion } from "../workspaceModel";
+import { markWorkspaceSuggestion } from "../workspace/suggestions";
 import { updateWorkspace } from "./internals";
 import { maybeCleanupReview } from "./reviewFlow";
 import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./types";

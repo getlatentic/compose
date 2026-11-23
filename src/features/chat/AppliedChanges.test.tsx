@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { WorkspaceAppliedChange } from "../../app/workspaceModel";
+import type { WorkspaceAppliedChange } from "../../app/workspace/types";
 import { AppliedChanges } from "./AppliedChanges";
 
 describe("AppliedChanges", () => {

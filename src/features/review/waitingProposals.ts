@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceDocumentSuggestion, WorkspaceRewriteSuggestion } from "../../app/workspaceModel";
+import type { Workspace, WorkspaceDocumentSuggestion, WorkspaceRewriteSuggestion } from "../../app/workspace/types";
 import type { SandboxFile } from "../../lib/ipc/harnessClient";
 import { fileReviewOf, reviewBody, rewriteRecord } from "./reviewRecord";
 import { liveEdits, type LiveEdit } from "./liveEdits";

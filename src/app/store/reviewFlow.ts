@@ -6,15 +6,9 @@ import {
   type ReviewFileChange,
 } from "../../lib/ipc/reviewClient";
 import type { EditGuard } from "../../lib/ipc/harnessClient";
-import {
-  appendAppliedChanges,
-  appendReviewChangeSuggestions,
-  applyScanResult,
-  markWorkspaceSuggestion,
-  type Workspace,
-  type WorkspaceDocumentSuggestion,
-  type WorkspaceReviewSuggestionDraft,
-} from "../workspaceModel";
+import { appendAppliedChanges, appendReviewChangeSuggestions, markWorkspaceSuggestion } from "../workspace/suggestions";
+import { applyScanResult } from "../workspace/files";
+import type { Workspace, WorkspaceDocumentSuggestion, WorkspaceReviewSuggestionDraft } from "../workspace/types";
 import { scanWorkspace } from "../../lib/ipc/filesClient";
 import { errorMessage, updateWorkspace } from "./internals";
 import type { WorkspaceStoreGet, WorkspaceStoreSet } from "./types";

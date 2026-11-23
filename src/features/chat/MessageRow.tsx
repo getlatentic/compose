@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown } from "@carbon/react/icons";
 import { Check, Copy, RefreshCw } from "lucide-react";
 
-import type { WorkspaceChatMessage, WorkspaceRunStats } from "../../app/workspaceModel";
+import type { WorkspaceChatMessage, WorkspaceRunStats } from "../../app/workspace/types";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
 import { AgentTrace } from "./AgentTrace";
 import { AppliedChanges } from "./AppliedChanges";

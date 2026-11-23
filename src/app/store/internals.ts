@@ -1,5 +1,5 @@
 import type { EditGuard } from "../../lib/ipc/harnessClient";
-import type { Workspace } from "../workspaceModel";
+import type { Workspace } from "../workspace/types";
 
 /** Replace one workspace in the array via a transform, leaving the rest by
  * reference. The workhorse for every workspace-scoped state update. */

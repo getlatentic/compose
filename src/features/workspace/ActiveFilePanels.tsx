@@ -6,7 +6,7 @@ import {
   type Frontmatter,
 } from "@latentic/live-markdown";
 import { PropertiesPanel } from "./PropertiesPanel";
-import type { Workspace } from "../../app/workspaceModel";
+import type { Workspace } from "../../app/workspace/types";
 
 /**
  * The ACTIVE FILE's frontmatter (Properties), self-subscribing: it re-renders

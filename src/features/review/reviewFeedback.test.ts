@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createWorkspaceFromPath,
-  type Workspace,
-  type WorkspaceDocumentSuggestion,
-  type WorkspaceAppliedChange,
-  type WorkspaceChatMessage,
-  type WorkspaceRewriteSuggestion,
-} from "../../app/workspaceModel";
+import { createWorkspaceFromPath } from "../../app/workspace/workspaces";
+import type { Workspace, WorkspaceDocumentSuggestion, WorkspaceAppliedChange, WorkspaceChatMessage, WorkspaceRewriteSuggestion } from "../../app/workspace/types";
 import { recordReviewDecision, recordReviewFeedbackSent } from "./fileReviews";
 import { agentEditKeys } from "./agentEdits";
 import { reviewFeedbackFor, withReviewFeedback } from "./reviewFeedback";

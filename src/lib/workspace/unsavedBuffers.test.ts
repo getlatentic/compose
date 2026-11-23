@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { countUnsavedBuffers } from "./unsavedBuffers";
-import type { WorkspaceFileBuffer } from "../../app/workspaceModel";
+import type { WorkspaceFileBuffer } from "../../app/workspace/types";
 
 function buffer(dirty: boolean): WorkspaceFileBuffer {
   return { conflict: false, content: "", dirty, lastModifiedMs: 0, pendingChanges: [] };
