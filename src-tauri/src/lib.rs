@@ -1,3 +1,4 @@
+mod accessibility;
 mod app_group;
 mod app_identity;
 mod autocorrect;
@@ -79,6 +80,7 @@ pub fn run() {
         .menu(menu::build)
         .setup(move |app| launch::setup(app, boot_script))
         .invoke_handler(tauri::generate_handler![
+            accessibility::solid_window_frame,
             system_fonts::system_font_families,
             backgrounds::background_image_store,
             backgrounds::background_image_allow,

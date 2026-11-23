@@ -10,24 +10,34 @@
 
 :root {
   --frame-bg: #ececec;
+  --frame-solid: #ececec;
   --glass-label: rgb(0 0 0 / 85%);
-  --glass-secondary: rgb(0 0 0 / 50%);
+  // The open note's row: on its highlight, over the brightest wallpaper,
+  // the label needs every bit of contrast.
+  --glass-label-strong: rgb(0 0 0);
+  --glass-secondary: rgb(0 0 0 / 70%);
   --glass-tertiary: rgb(0 0 0 / 28%);
   --glass-hover: rgb(0 0 0 / 5%);
   --glass-active: rgb(0 0 0 / 9%);
   --glass-field: rgb(0 0 0 / 5%);
+  // Laid over the glass behind the sidebar's text: enough of the window's own
+  // colour that a bright or busy wallpaper cannot take labels below 4.5:1.
+  --glass-tint: rgb(246 246 246 / 70%);
   --system-accent: #007aff;
   --system-accent-text: #ffffff;
 }
 
 @mixin glass-dark {
   --frame-bg: #2a2a2c;
-  --glass-label: rgb(255 255 255 / 86%);
-  --glass-secondary: rgb(255 255 255 / 55%);
+  --frame-solid: #2a2a2c;
+  --glass-label: rgb(255 255 255 / 92%);
+  --glass-label-strong: rgb(255 255 255);
+  --glass-secondary: rgb(255 255 255 / 80%);
   --glass-tertiary: rgb(255 255 255 / 30%);
   --glass-hover: rgb(255 255 255 / 7%);
-  --glass-active: rgb(255 255 255 / 12%);
+  --glass-active: rgb(255 255 255 / 6%);
   --glass-field: rgb(255 255 255 / 8%);
+  --glass-tint: rgb(30 30 32 / 70%);
   --system-accent: #0a84ff;
 }
 
@@ -45,6 +55,12 @@
 
 :root[data-vibrancy] {
   --frame-bg: transparent;
+}
+
+// "Reduce transparency" or "Increase contrast" on the Mac: no glass, the
+// window's own solid grey behind the frame instead.
+:root[data-solid-frame] {
+  --glass-tint: var(--frame-solid);
 }
 
 :root[data-vibrancy],

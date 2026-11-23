@@ -8,7 +8,9 @@
   flex-direction: column;
   overflow: hidden;
   color: var(--color-sidebar-text);
-  background: var(--color-sidebar-bg);
+  // The tint keeps the text readable over the glass; the layers inside stay
+  // clear (`--color-sidebar-bg`) so they do not tint it twice.
+  background: var(--glass-tint);
 
   // On the window's material, in every palette: the Mac's own label greys
   // and tinted fills (see `_glass.scss`). A palette sets only `sidebar/bg`,

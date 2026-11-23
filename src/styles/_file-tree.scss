@@ -70,6 +70,10 @@ $indent: 1.375rem;
   background: var(--color-sidebar-active);
 }
 
+.file-row-wrapper--active .file-row {
+  color: var(--glass-label-strong);
+}
+
 // The accent only while the sidebar itself has focus, as in Finder; while
 // you write in the note the selection stays a quiet grey.
 .sidebar:focus-within .file-row-wrapper--active {
