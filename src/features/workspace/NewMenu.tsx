@@ -1,16 +1,14 @@
-import { useCallback } from "react";
+import { FilePlus, FolderPlus, MessageSquarePlus, Plus, type LucideIcon } from "lucide-react";
+import { useCallback, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Chat, ChevronDown, Document, Folder } from "@carbon/react/icons";
 
 import { useAnchoredPopover } from "../shared/useAnchoredPopover";
-
-type CarbonIcon = typeof Document;
 
 interface NewMenuItem {
   key: string;
   label: string;
   shortcut?: string;
-  Icon: CarbonIcon;
+  Icon: LucideIcon;
   run: () => void;
 }
 
@@ -23,63 +21,52 @@ interface NewMenuProps {
   onNewChat: () => void;
 }
 
+const MENU_WIDTH = 232;
+
 /**
- * The single "+ New" create menu at the end of the sidebar tab row. A custom
- * dropdown (not Carbon's `MenuButton`) so it can hold macOS menu proportions —
- * 30px rows in a panel sized to its widest row, 16px icon, label, right-aligned
- * shortcut in the system font — with neutral (not blue-tinted) hover, and a
- * trigger whose caret sits right after the label with no boxed divider. The
- * menu leads with the current tab's subject: New note on Notes, New chat on
- * Chat.
- *
- * It was originally specified at 246x46; the rows read as loose at that height,
- * with the icon stranded beside its label in the spare space.
+ * The sidebar footer's +: a menu of what can be made, opening upward and
+ * ending at the button's right edge so it stays over the sidebar. Each row
+ * is an icon, a label and its shortcut, in Compose's own surface (a native
+ * menu cannot draw icons this way). It leads with the current tab's subject:
+ * New note on Notes, New chat on Chat. Arrow keys move between rows.
  */
 export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: NewMenuProps) {
-  // Portaled and fixed-positioned, not absolute inside the sidebar: the sidebar
-  // clips its overflow, so a fixed-width panel anchored in it lost its left edge as
-  // soon as the pane was dragged narrower than the panel. Anchored to the
-  // trigger's RIGHT edge, which is where it has always appeared to hang from.
-  const { open, setOpen, coords, triggerRef, popoverRef } = useAnchoredPopover<
-    HTMLButtonElement,
-    HTMLDivElement
-  >({
-    placement: "below",
+  const { open, setOpen, coords, triggerRef, popoverRef } = useAnchoredPopover<HTMLButtonElement, HTMLDivElement>({
+    placement: "above",
     align: "end",
-    // Sized to the widest row ("New folder" + ⌘⇧N), not a fixed slab.
-    maxWidth: 208,
-    gap: 6,
+    maxWidth: MENU_WIDTH,
+    gap: 8,
     getInitialFocus: (pop) => pop.querySelector<HTMLButtonElement>(".new-menu__item"),
   });
 
-  const pick = useCallback((run: () => void) => {
-    setOpen(false);
-    run();
-  }, []);
-
-  const note: NewMenuItem = { key: "note", label: "New note", shortcut: "⌘N", Icon: Document, run: onNewNote };
-  const folder: NewMenuItem = { key: "folder", label: "New folder", shortcut: "⌘⇧N", Icon: Folder, run: onNewFolder };
-  const chat: NewMenuItem = { key: "chat", label: "New chat", Icon: Chat, run: onNewChat };
-  // A divider splits the file-system actions from chat; the leading group tracks
-  // the active tab so the button always opens with what that tab is about.
+  const note: NewMenuItem = { key: "note", label: "New note", shortcut: "⌘N", Icon: FilePlus, run: onNewNote };
+  const folder: NewMenuItem = { key: "folder", label: "New folder", shortcut: "⇧⌘N", Icon: FolderPlus, run: onNewFolder };
+  const chat: NewMenuItem = { key: "chat", label: "New chat", Icon: MessageSquarePlus, run: onNewChat };
   const groups: NewMenuItem[][] = tab === "files" ? [[note, folder], [chat]] : [[chat], [note, folder]];
 
+  const toggle = useCallback(() => setOpen((value) => !value), [setOpen]);
+  const pick = useCallback(
+    (run: () => void) => {
+      setOpen(false);
+      run();
+    },
+    [setOpen],
+  );
+
   return (
-    <div className="new-menu">
+    <>
       <button
         ref={triggerRef}
         type="button"
-        className="new-menu__trigger"
+        className="sidebar-footer__btn new-menu__trigger"
+        aria-label="New"
+        title="New note, folder or chat"
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggle}
       >
-        <span className="new-menu__plus" aria-hidden>
-          +
-        </span>
-        <span className="new-menu__label">New</span>
-        <ChevronDown size={16} className="new-menu__caret" aria-hidden />
+        <Plus size={16} strokeWidth={1.75} aria-hidden />
       </button>
       {open && coords
         ? createPortal(
@@ -87,29 +74,43 @@ export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: Ne
               ref={popoverRef}
               className="new-menu__panel"
               role="menu"
-              style={{ top: coords.top, left: coords.left, inlineSize: coords.width }}
+              aria-label="New"
+              onKeyDown={moveFocus}
+              style={{ bottom: coords.bottom, left: coords.left, inlineSize: coords.width }}
             >
-          {groups.map((group) => (
-            <div className="new-menu__group" key={group[0].key} role="none">
-              {group.map(({ key, label, shortcut, Icon, run }) => (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="new-menu__item"
-                  key={key}
-                  onClick={() => pick(run)}
-                >
-                  <Icon size={16} className="new-menu__item-icon" aria-hidden />
-                  <span className="new-menu__item-label">{label}</span>
-                  {shortcut ? <span className="new-menu__item-shortcut">{shortcut}</span> : null}
-                </button>
+              {groups.map((group) => (
+                <div className="new-menu__group" key={group[0].key} role="none">
+                  {group.map((item) => (
+                    <NewMenuRow key={item.key} item={item} onPick={pick} />
+                  ))}
+                </div>
               ))}
-            </div>
-          ))}
             </div>,
             document.body,
           )
         : null}
-    </div>
+    </>
   );
+}
+
+function NewMenuRow({ item, onPick }: { item: NewMenuItem; onPick: (run: () => void) => void }) {
+  const { label, shortcut, Icon, run } = item;
+  const click = useCallback(() => onPick(run), [onPick, run]);
+  return (
+    <button type="button" role="menuitem" className="new-menu__item" onClick={click}>
+      <Icon size={18} strokeWidth={1.75} className="new-menu__item-icon" aria-hidden />
+      <span className="new-menu__item-label">{label}</span>
+      {shortcut ? <span className="new-menu__item-shortcut">{shortcut}</span> : null}
+    </button>
+  );
+}
+
+/** Up and Down move between the rows, wrapping at the ends. */
+function moveFocus(event: KeyboardEvent<HTMLDivElement>): void {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  event.preventDefault();
+  const rows = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(".new-menu__item")];
+  const index = rows.indexOf(document.activeElement as HTMLButtonElement);
+  const step = event.key === "ArrowDown" ? 1 : -1;
+  rows[(index + step + rows.length) % rows.length]?.focus();
 }

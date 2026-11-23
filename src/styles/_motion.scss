@@ -108,8 +108,7 @@
 .cds--menu--open,
 .cds--overflow-menu-options--open,
 .assistant-picker__popover,
-.conv-menu,
-.new-menu__panel,
+.conv-menu__list,
 .workspace-switcher__popover {
   transform-origin: top left;
   animation: motion-pop-in var(--enter-fast) var(--ease-enter);

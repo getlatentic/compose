@@ -202,7 +202,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  block-size: 2.25rem;
+  block-size: var(--pane-footer-height);
   padding-inline: 0.5rem 0.25rem;
   border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
   background: var(--cds-layer-02, #ffffff);

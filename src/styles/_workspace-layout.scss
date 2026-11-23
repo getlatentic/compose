@@ -6,6 +6,12 @@
 $gutter: 6px;
 $panel-radius: 10px;
 
+// The three panes' footers (sidebar count, note status, chat model line)
+// share one height so their text sits on one line across the window.
+:root {
+  --pane-footer-height: 2.25rem;
+}
+
 .app-shell {
   display: flex;
   block-size: 100%;
@@ -155,11 +161,12 @@ body.pane-resizing {
     grid-template-columns: minmax(17rem, 1fr) var(--chat-w, 22rem);
   }
 
-  // The sidebar spans the full height, under the gutter, so the traffic
-  // lights keep their row.
+  // The sidebar reaches up under the top gutter, so the traffic lights keep
+  // their row, and stops at the panels' bottom line, so all three columns
+  // end together above the same strip of glass.
   .sidebar {
     max-block-size: none;
-    margin-block: (-$gutter);
+    margin-block-start: (-$gutter);
     border-block-end: 0;
   }
 

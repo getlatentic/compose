@@ -3,7 +3,7 @@ import { Add, TrashCan } from "@carbon/react/icons";
 import { type Frontmatter, type FrontmatterValue } from "@latentic/live-markdown";
 
 /**
- * Sidebar Properties section.
+ * The note's Properties, in the editor's Properties popover.
  *
  * Renders the active file's YAML frontmatter as editable key/value
  * rows. This is the user-facing surface for the metadata the
@@ -75,7 +75,7 @@ function PropertiesPanelInner({ frontmatter, onCommitFrontmatter }: PropertiesPa
   }
 
   return (
-    <div className="sidebar-properties">
+    <div className="properties-panel">
       <div className="section-label">
         <span>Properties</span>
         <span className="section-meta">

@@ -53,6 +53,11 @@
 @use "review-margin";
 @use "workspace-layout";
 @use "glass";
+@use "menus";
+@use "note-background";
+@use "image-export";
+@use "popup-picker";
+@use "toasts";
 @use "motion";
 
 // The palette's UI font (`--font-ui`, IBM Plex Sans in every palette today)
@@ -289,16 +294,12 @@ select {
   text-transform: none;
 }
 
-// Properties section — Obsidian-style frontmatter editor in the
-// left sidebar. Shows up below the file tree when a markdown
-// file is active. Edits push back through `updateActiveContent`
-// → store → editor's value sync.
-.sidebar-properties {
+// The note's frontmatter as editable rows, inside the editor's Properties
+// popover. Edits push back through `updateActiveContent` → store → editor.
+.properties-panel {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 0.5rem;
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
 }
 
 .properties-list {
@@ -2335,7 +2336,9 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.5rem 1.25rem 1.25rem;
+  // No bottom padding: the footer row below the field is the pane footer,
+  // the same height as the sidebar's and the note's.
+  padding: 0.5rem 1.25rem 0;
   // Opaque, in the page colour, so the transcript scrolling under it stays
   // hidden; the field below is the card that reads as the composer.
   background: var(--color-bg-app);
@@ -2678,7 +2681,7 @@ select {
   justify-content: space-between;
   flex-wrap: nowrap;
   gap: 0.25rem 0.5rem;
-  padding-block-start: 0.125rem;
+  block-size: var(--pane-footer-height);
   font-size: 0.75rem;
   color: var(--cds-text-helper, #6f6f6f);
 }
@@ -4725,67 +4728,6 @@ select {
   }
 }
 
-// The tree's right-click context menu (Carbon Menu) — the same white surface
-// treatment as the kebab menus below.
-.cds--menu {
-  background-color: var(--cds-layer-02, #ffffff);
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-// Context/kebab menu polish (interaction spec §02).
-// The menu is a WHITE surface with a neutral border — Carbon defaults it to the
-// light-gray layer-01, so pin it to the white layer.
-.cds--overflow-menu-options {
-  background-color: var(--cds-layer-02, #ffffff);
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-}
-
-// Options match the "+ New" menu's type exactly: 14px regular gray-100 in
-// generous 46px rows (Carbon defaults them to gray-70 in cramped 32px rows).
-.cds--overflow-menu-options__option,
-.cds--overflow-menu-options__btn {
-  block-size: 2.875rem;
-  max-block-size: none;
-}
-
-.cds--overflow-menu-options__btn {
-  padding: 0 1rem;
-  color: var(--cds-text-primary, #161616);
-  font-size: 0.875rem;
-  font-weight: 400;
-}
-
-// Neutral hover on an option — the spec background-hover overlay.
-.cds--overflow-menu-options__btn:hover {
-  background-color: var(--cds-background-hover, rgba(141, 141, 141, 0.12));
-}
-
-// Destructive Delete reads in the error colour — Carbon's `isDelete` flag alone
-// isn't colouring it under the app's cherry-picked styles, so force it (same
-// selector, declared later wins).
-.cds--overflow-menu-options__option--danger .cds--overflow-menu-options__btn {
-  color: var(--cds-text-error, #da1e28);
-}
-
-// Carbon auto-focuses the first option when the menu opens, and WebKit paints
-// its focus ring on that programmatic focus — so a mouse-opened menu shows the
-// first item "selected", which the spec doesn't want. Drop the focus ring on the
-// options; the menu stays keyboard-operable and the neutral hover marks the
-// pointer target. (No CSS reliably tells open-focus from keyboard nav here.)
-.cds--overflow-menu-options__btn:focus,
-.cds--overflow-menu-options__btn:focus-visible,
-.cds--overflow-menu-options__option:focus {
-  outline: none;
-  box-shadow: none;
-}
-
-// Carbon wraps the kebab trigger in an IconButton that pops an "Options" tooltip
-// on hover — suppress it. The button keeps its accessible name via
-// aria-labelledby (name-from-labelledby includes hidden content), so screen
-// readers are unaffected.
-.cds--overflow-menu__wrapper [role="tooltip"] {
-  display: none;
-}
 
 .conflict-banner {
   display: grid;

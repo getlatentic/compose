@@ -5,11 +5,12 @@ import { useUiStore } from "../../app/store/uiStore";
 import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
 import { isActiveFilePresent } from "../../app/workspaceModel";
 import { isPlainTextPath } from "../../lib/documents/documentKind";
+import { PropertiesButton } from "./PropertiesButton";
 
 /**
- * The editor status bar — file path, the Rich/Raw mode toggle (not for a
- * plain-text file, which has only its raw form), and the unsaved-dot +
- * word-count.
+ * The editor status bar: the note's Properties at the left, then the
+ * Rich/Raw mode toggle (not for a plain-text file, which has only its raw
+ * form), and the unsaved-dot + word-count.
  *
  * A self-subscribing leaf so the word count (which updates as you type) and the
  * dirty flip re-render HERE and not the whole {@link EditorRegion}. It reads the
@@ -54,6 +55,7 @@ export function DocumentStatusBar() {
 
   return (
     <div className="status-bar">
+      {activeFileExists && !plainText ? <PropertiesButton /> : null}
       <span className="status-bar__meta">
         {activeFileExists && !plainText ? (
           <span className="mode-toggle" role="group" aria-label="Editor mode">

@@ -9,13 +9,9 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import type { Workspace } from "../../app/workspaceModel";
 
 /**
- * Self-subscribing sidebar panel for the ACTIVE FILE's frontmatter
- * (Properties). Split out of `FilesTab` so it re-renders on its own narrow data
- * instead of dragging the file list with it: editing the body churns the buffer
- * + (on autosave) the workspace index, and the old structure passed both into
- * the files pane, re-rendering `<FileTree>` on every keystroke. This panel
- * subscribes to a STABLE projection, so the file list no longer re-renders when
- * you type.
+ * The ACTIVE FILE's frontmatter (Properties), self-subscribing: it re-renders
+ * on its own narrow data, never on a body keystroke. Shown in the editor's
+ * Properties popover (`editor/PropertiesButton.tsx`).
  */
 
 function activeWorkspace(state: { workspaces: Workspace[]; activeWorkspaceId: string | null }) {
@@ -46,14 +42,24 @@ function useActiveFileFrontmatter(): Frontmatter | null {
   }, [key]);
 }
 
+/** How many fields the active file's frontmatter has; re-renders only when that changes. */
+export function useActiveFileFieldCount(): number {
+  return useWorkspaceStore((state) => Object.keys(parseFrontmatter(activeContent(activeWorkspace(state))).frontmatter ?? {}).length);
+}
+
+/** Whether the workspace's active file is the one the editor shows, so its properties can be edited. */
+export function useCanEditActiveFileProperties(): boolean {
+  const hasActiveFile = useWorkspaceStore((state) => Boolean(activeWorkspace(state)?.activeFilePath));
+  const editorElsewhere = useWorkspaceStore((state) => state.focusedArea === "loose");
+  return hasActiveFile && !editorElsewhere;
+}
+
 export function ActiveFileProperties() {
   const frontmatter = useActiveFileFrontmatter();
-  const hasActiveFile = useWorkspaceStore((state) => Boolean(activeWorkspace(state)?.activeFilePath));
-  // While an external file is focused the editor shows a DIFFERENT
-  // document than this workspace-scoped panel — and `updateActiveContent`
-  // writes to the focused one, so a commit here would cross-write into it.
-  const editorElsewhere = useWorkspaceStore((state) => state.focusedArea === "loose");
-  if (!hasActiveFile || editorElsewhere) {
+  // While an external file is focused the editor shows a DIFFERENT document
+  // than this workspace-scoped panel, and `updateActiveContent` writes to the
+  // focused one, so a commit here would cross-write into it.
+  if (!useCanEditActiveFileProperties()) {
     return null;
   }
   const commit = (next: Frontmatter | null) => {
