@@ -1,381 +1,19 @@
-import {
-  type CSSProperties,
-  type DragEvent,
-  type MouseEvent,
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { ChevronRight, File, Folder } from "lucide-react";
-import { createDragGhost } from "./dragGhost";
-import { RowMenuList, useRowMenu, type OpenRowMenu, type RowMenuHandlers } from "./RowMenu";
+import { useMemo, useCallback, useRef, useEffect, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
+import { buildTree, ancestorFolders, flatten, rowKey } from "./treeModel";
+import { useWorkspaceStore } from "../../app/workspaceStore";
+import { type RowMenuHandlers, useRowMenu, RowMenuList } from "./RowMenu";
 import { useUiStore } from "../../app/store/uiStore";
 import { remInPx } from "../../lib/zoom/zoom";
-import { useWorkspaceStore } from "../../app/workspaceStore";
-import { useTextPrompt } from "../dialogs/TextPromptProvider";
-import { useConfirm } from "../dialogs/ConfirmProvider";
-import { persistTreeScroll, readTreeScroll } from "./treeScroll";
+import { readTreeScroll, persistTreeScroll } from "./treeScroll";
+import { useTreeActions } from "./useTreeActions";
+import { useExpandedFolders, useRevealRow } from "./useTreeExpansion";
+import { FolderRow, FileRow } from "./TreeRows";
 
 /** A row's slot: `.file-row-wrapper`'s 2rem plus the 2px gap, in rem
  * (`_file-tree.scss`). The virtualizer places rows by it without measuring each. */
 const ROW_HEIGHT_REM = 2.125;
-
-
-/** Indent for a tree depth, read by `_file-tree.scss`. */
-function depthStyle(depth: number): CSSProperties {
-  return { "--depth": depth } as CSSProperties;
-}
-
-/** dataTransfer MIME for a file path dragged to move it into a folder. */
-const DRAG_FILE_MIME = "application/x-compose-file-path";
-
-/** The path of the file row being dragged, tracked here rather than read back
- *  from `dataTransfer`: WebKit doesn't expose a custom MIME in `dataTransfer.types`
- *  during `dragover` (and protects `getData` until drop), so a folder couldn't tell
- *  an in-app file drag from any other, never called `preventDefault()`, and so never
- *  became a drop target (the drag showed a "copy" cursor and the drop was dropped).
- *  Set on dragstart, read on dragover/drop, cleared on dragend. */
-let draggedFilePath: string | null = null;
-
-/**
- * The unsaved-edit dot for one file row. Self-subscribes to just that file's
- * dirty flag (a boolean), so a dirty flip on first-edit / autosave re-renders
- * ONLY this dot — never the row or the FileTree. Mirrors {@link TabDirtyDot}
- * in PaneTabs: a `dirty` prop would flip twice per edit burst (dirty on first
- * keystroke, clean on autosave) and re-render the row each time.
- */
-function FileRowDirtyDot({ path }: { path: string }) {
-  const dirty = useWorkspaceStore((state) => {
-    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
-    return Boolean(ws?.fileContents[path]?.dirty);
-  });
-  return dirty ? <span className="dirty-dot" aria-label="Unsaved" /> : null;
-}
-
-/** The parent directory of a path ("" for a root item). */
-function parentDirOf(path: string): string {
-  const slash = path.lastIndexOf("/");
-  return slash >= 0 ? path.slice(0, slash) : "";
-}
-
-/** Drop handling for any row that accepts a dragged file into `targetDir` — a
- *  folder row (its own path) or a file row (its parent dir, VS Code-style, so you
- *  can drop onto a file to land beside it). Highlights while a draggable file is
- *  over it and moves the file in on drop, but stays inert when the file already
- *  lives in `targetDir` (a no-op move) so the source row and its siblings don't
- *  light up. Handlers are memoised (like {@link useRowMenu}) so the memoised rows
- *  keep stable identities across renders. */
-function useDropInto(
-  targetDir: string,
-  onMoveHere: (fromPath: string, folderPath: string) => void,
-) {
-  const [dropTarget, setDropTarget] = useState(false);
-  const onDragOver = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      if (draggedFilePath === null || parentDirOf(draggedFilePath) === targetDir) {
-        return;
-      }
-      // preventDefault is what marks this row a valid drop target — without it
-      // the browser rejects the drop (the "copy" cursor) and `onDrop` never fires.
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-      setDropTarget(true);
-    },
-    [targetDir],
-  );
-  const onDragLeave = useCallback(() => setDropTarget(false), []);
-  const onDrop = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      setDropTarget(false);
-      const from = draggedFilePath ?? event.dataTransfer.getData(DRAG_FILE_MIME);
-      draggedFilePath = null;
-      if (from) {
-        onMoveHere(from, targetDir);
-      }
-    },
-    [targetDir, onMoveHere],
-  );
-  return { dropTarget, onDragOver, onDragLeave, onDrop };
-}
-
-/**
- * One file row, memoised — with per-row memo + stable callbacks, selecting a
- * file only re-renders the two rows whose `active` flips. The whole row is one
- * click/drag target (the button fills the wrapper), and right-click anywhere on
- * it opens the tree's shared context menu — there is no per-row menu instance,
- * so a large vault mounts zero menu stacks. The unsaved dot is NOT a prop — it
- * self-subscribes via {@link FileRowDirtyDot}, so a dirty flip never re-renders
- * the row.
- */
-const FileRow = memo(function FileRow({
-  path,
-  name,
-  depth,
-  active,
-  onSelect,
-  onMenu,
-  onMoveHere,
-}: {
-  path: string;
-  name: string;
-  depth: number;
-  active: boolean;
-  onSelect: (relativePath: string) => void;
-  onMenu: OpenRowMenu;
-  onMoveHere: (fromPath: string, folderPath: string) => void;
-}) {
-  const onContextMenu = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => onMenu(event, "file", path),
-    [onMenu, path],
-  );
-  const handleSelect = useCallback(() => onSelect(path), [onSelect, path]);
-  const onDragStart = useCallback(
-    (event: DragEvent<HTMLButtonElement>) => {
-      event.dataTransfer.setData(DRAG_FILE_MIME, path);
-      event.dataTransfer.effectAllowed = "move";
-      draggedFilePath = path;
-      // Explicit drag image: rows sit in a translateY virtualizer, and
-      // WebKit's default snapshot captures the untransformed origin, i.e. the
-      // wrong row. A tile with the note's name is deterministic.
-      const ghost = createDragGhost(document, name);
-      document.body.appendChild(ghost);
-      event.dataTransfer.setDragImage(ghost, 12, 12);
-      setTimeout(() => ghost.remove(), 0);
-    },
-    [path, name],
-  );
-  // Clears the tracked path when a drag ends anywhere (dropped outside a folder,
-  // or cancelled) so a later dragover doesn't see a stale drag.
-  const onDragEnd = useCallback(() => {
-    draggedFilePath = null;
-  }, []);
-  // A file row is also a drop target: dropping onto it lands the dragged file in
-  // this file's folder (VS Code-style), so you needn't aim for the folder row.
-  const { dropTarget, onDragOver, onDragLeave, onDrop } = useDropInto(
-    parentDirOf(path),
-    onMoveHere,
-  );
-  return (
-    <div
-      className={[
-        "file-row-wrapper",
-        active ? "file-row-wrapper--active" : "",
-        dropTarget ? "file-row-wrapper--drop" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      onContextMenu={onContextMenu}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
-      <button
-        type="button"
-        draggable
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onClick={handleSelect}
-        className={["file-row", active ? "file-row--active" : ""]
-          .filter(Boolean)
-          .join(" ")}
-        style={depthStyle(depth)}
-        title={path}
-      >
-        {/* The empty disclosure slot lines a file's icon up under its folder's. */}
-        <span aria-hidden />
-        <File size={16} strokeWidth={1.5} aria-hidden />
-        <span className="truncate">{name}</span>
-        <FileRowDirtyDot path={path} />
-      </button>
-    </div>
-  );
-});
-
-/** One folder row, memoised — re-renders only when its open/selected state
- * flips. Mirrors {@link FileRow}: the whole row toggles the folder, and
- * right-click opens the tree's shared context menu with the folder actions.
- * `selected` marks it as the destination a plain "New note" lands in. */
-const FolderRow = memo(function FolderRow({
-  path,
-  name,
-  depth,
-  open,
-  selected,
-  onActivate,
-  onMenu,
-  onMoveHere,
-}: {
-  path: string;
-  name: string;
-  depth: number;
-  open: boolean;
-  selected: boolean;
-  onActivate: (path: string) => void;
-  onMenu: OpenRowMenu;
-  onMoveHere: (fromPath: string, folderPath: string) => void;
-}) {
-  const onContextMenu = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => onMenu(event, "folder", path),
-    [onMenu, path],
-  );
-  const handleActivate = useCallback(() => onActivate(path), [onActivate, path]);
-  const { dropTarget, onDragOver, onDragLeave, onDrop } = useDropInto(path, onMoveHere);
-  return (
-    <div
-      className={[
-        "file-row-wrapper",
-        selected ? "file-row-wrapper--target" : "",
-        dropTarget ? "file-row-wrapper--drop" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      onContextMenu={onContextMenu}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
-      <button
-        type="button"
-        className="file-row file-row--folder"
-        style={depthStyle(depth)}
-        onClick={handleActivate}
-        aria-expanded={open}
-        title={name}
-      >
-        <ChevronRight className="file-row__chevron" size={16} strokeWidth={1.5} aria-hidden />
-        <Folder size={16} strokeWidth={1.5} aria-hidden />
-        <span className="truncate">{name}</span>
-      </button>
-    </div>
-  );
-});
-
-interface FolderNode {
-  type: "folder";
-  name: string;
-  path: string;
-  depth: number;
-  children: TreeNode[];
-}
-
-interface FileNode {
-  type: "file";
-  name: string;
-  path: string;
-  depth: number;
-}
-
-type TreeNode = FolderNode | FileNode;
-
-/** Stable virtual-list key for a row, so collapse/expand reorders reconcile
- * by identity rather than index. */
-function rowKey(node: TreeNode): string {
-  return node.type === "folder" ? `folder:${node.path}` : `file:${node.path}`;
-}
-
-export function buildTree(files: WorkspaceFileEntry[], folders: string[]): TreeNode[] {
-  const root: TreeNode[] = [];
-
-  // Walk (creating as needed) the folder-node chain for a directory path,
-  // returning the deepest folder's `children` — where its files/subfolders go.
-  const ensureFolder = (segments: string[]): TreeNode[] => {
-    let level = root;
-    let pathSoFar = "";
-    segments.forEach((segment, index) => {
-      pathSoFar = pathSoFar ? `${pathSoFar}/${segment}` : segment;
-      let folder = level.find(
-        (node): node is FolderNode => node.type === "folder" && node.name === segment,
-      );
-      if (!folder) {
-        folder = { type: "folder", name: segment, path: pathSoFar, depth: index, children: [] };
-        level.push(folder);
-      }
-      level = folder.children;
-    });
-    return level;
-  };
-
-  // Materialise every directory first — incl. empty ones — so a folder with no
-  // markdown file still appears (and survives losing its last file).
-  for (const folder of folders) {
-    ensureFolder(folder.split("/").filter(Boolean));
-  }
-
-  for (const file of files) {
-    const segments = file.relativePath.split("/").filter(Boolean);
-    const fileName = segments.pop();
-    if (fileName === undefined) {
-      continue;
-    }
-    const level = segments.length > 0 ? ensureFolder(segments) : root;
-    level.push({ type: "file", name: fileName, path: file.relativePath, depth: segments.length });
-  }
-
-  const sort = (nodes: TreeNode[]) => {
-    nodes.sort((a, b) => {
-      if (a.type !== b.type) {
-        return a.type === "folder" ? -1 : 1;
-      }
-      return a.name.localeCompare(b.name);
-    });
-    for (const node of nodes) {
-      if (node.type === "folder") {
-        sort(node.children);
-      }
-    }
-  };
-  sort(root);
-
-  return root;
-}
-
-/** The rows a tree shows given the set of OPEN folder paths: a folder's children
- *  appear only when its path is in `expanded`, so an absent folder stays closed
- *  (the default, so the tree opens collapsed). */
-export function flatten(nodes: TreeNode[], expanded: Set<string>, out: TreeNode[] = []) {
-  for (const node of nodes) {
-    out.push(node);
-    if (node.type === "folder" && expanded.has(node.path)) {
-      flatten(node.children, expanded, out);
-    }
-  }
-  return out;
-}
-
-/** The document whose folders should be open. The `activePath` prop is blank
- *  while an external file holds focus — the tree drops its highlight then — but
- *  the workspace's own open file is still what the folders should be showing,
- *  so collapsing them on that blank is a jump with nothing behind it. */
-function revealedPath(activePath: string): string {
-  if (activePath) {
-    return activePath;
-  }
-  const state = useWorkspaceStore.getState();
-  return (
-    state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId)
-      ?.activeFilePath ?? ""
-  );
-}
-
-/** The folder paths leading to a file, outermost first — the ancestors that
- *  must be expanded for the file's row to appear in the flattened tree. */
-export function ancestorFolders(path: string): string[] {
-  const segments = path.split("/");
-  segments.pop(); // drop the file name itself
-  const out: string[] = [];
-  let acc = "";
-  for (const segment of segments) {
-    acc = acc ? `${acc}/${segment}` : segment;
-    out.push(acc);
-  }
-  return out;
-}
 
 function FileTreeInner({
   activePath,
@@ -395,15 +33,6 @@ function FileTreeInner({
   onSelectFile: (relativePath: string) => void;
 }) {
   const tree = useMemo(() => buildTree(files, folders), [files, folders]);
-  // Folders open by presence in this set — default (absent) is COLLAPSED, so the
-  // tree opens showing only top-level rows plus whatever the effects below add.
-  // Seeded from the open file rather than left to the effect that reveals it:
-  // a launch already knows which file is open, and expanding it a frame later
-  // moves every row below it — the scrollbar included.
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(ancestorFolders(revealedPath(activePath))),
-  );
-  const rows = useMemo(() => flatten(tree, expanded), [tree, expanded]);
   // The active workspace's scan runs in the background (MainApp no longer gates
   // the app on it), so an empty tree means "still scanning", not "no notes".
   const scanning = useWorkspaceStore((state) => {
@@ -425,122 +54,14 @@ function FileTreeInner({
     const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
     return ws?.path ?? "";
   });
+  const { expanded, setExpanded, toggleFolder } = useExpandedFolders(tree, workspaceRoot, activePath);
+  const rows = useMemo(() => flatten(tree, expanded), [tree, expanded]);
   // The folder a plain "New note" lands in. A string that changes only on a
   // deliberate select, so subscribing here re-renders the tree (and the two
   // folder rows whose `selected` flips) without touching the editing hot path.
-  const promptText = useTextPrompt();
   const newNoteDir = useWorkspaceStore((state) => state.newNoteDir);
-  const setNewNoteDir = useWorkspaceStore((state) => state.setNewNoteDir);
-  const createNote = useWorkspaceStore((state) => state.createNote);
-  const createFolder = useWorkspaceStore((state) => state.createFolder);
-  const deleteFolder = useWorkspaceStore((state) => state.deleteFolder);
-  const confirm = useConfirm();
-
-  // Stable so the memoised FolderRow doesn't re-render on every keystroke /
-  // file-select that re-renders FileTree.
-  const toggleFolder = useCallback((path: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
-      }
-      return next;
-    });
-  }, []);
-
-  // File-row actions needing the absolute path (workspace root + relative path).
-  const absPath = useCallback(
-    (relativePath: string) =>
-      workspaceRoot ? `${workspaceRoot.replace(/\/+$/, "")}/${relativePath}` : relativePath,
-    [workspaceRoot],
-  );
-  const copyPath = useCallback(
-    (relativePath: string) => void navigator.clipboard?.writeText(absPath(relativePath)),
-    [absPath],
-  );
-  const revealInFinder = useCallback(
-    (relativePath: string) => {
-      void import("@tauri-apps/plugin-opener")
-        .then(({ revealItemInDir }) => revealItemInDir(absPath(relativePath)))
-        .catch(() => {});
-    },
-    [absPath],
-  );
-
-  // Clicking a folder both toggles it and marks it as the new-note target;
-  // clicking a file targets its parent folder — so the highlighted target
-  // always tracks where the user is, and gives a way back to the root (open a
-  // root-level note). Stable so the memoised rows don't churn.
-  const activateFolder = useCallback(
-    (path: string) => {
-      toggleFolder(path);
-      setNewNoteDir(path);
-    },
-    [toggleFolder, setNewNoteDir],
-  );
-  const newNoteHere = useCallback(
-    (path: string) => {
-      setNewNoteDir(path);
-      void createNote({ dir: path });
-    },
-    [setNewNoteDir, createNote],
-  );
-  // "New folder here" creates a real empty directory. `path === ""` makes a
-  // top-level folder.
-  const newFolderHere = useCallback(
-    (path: string) => {
-      void (async () => {
-        const name = await promptText({
-          title: "New folder",
-          label: "Folder name",
-          submitLabel: "Create",
-        });
-        const trimmed = name?.trim();
-        if (!trimmed) {
-          return;
-        }
-        const dir = path ? `${path}/${trimmed}` : trimmed;
-        await createFolder(dir);
-      })();
-    },
-    [promptText, createFolder],
-  );
-  const handleDeleteFolder = useCallback(
-    (path: string) => {
-      void (async () => {
-        const state = useWorkspaceStore.getState();
-        const ws = state.workspaces.find((item) => item.id === state.activeWorkspaceId);
-        const count = ws
-          ? ws.files.filter(
-              (entry) => entry.relativePath === path || entry.relativePath.startsWith(`${path}/`),
-            ).length
-          : 0;
-        const confirmed = await confirm({
-          title: "Delete folder",
-          message:
-            count > 0
-              ? `Delete "${path}" and its ${count} note${count === 1 ? "" : "s"}? They move to trash.`
-              : `Delete the empty folder "${path}"?`,
-          confirmLabel: "Delete",
-          danger: true,
-        });
-        if (confirmed) {
-          await deleteFolder(path);
-        }
-      })();
-    },
-    [confirm, deleteFolder],
-  );
-  const selectFileTrackingDir = useCallback(
-    (relativePath: string) => {
-      onSelectFile(relativePath);
-      const slash = relativePath.lastIndexOf("/");
-      setNewNoteDir(slash >= 0 ? relativePath.slice(0, slash) : "");
-    },
-    [onSelectFile, setNewNoteDir],
-  );
+  const { copyPath, revealInFinder, activateFolder, newNoteHere, newFolderHere, handleDeleteFolder, selectFileTrackingDir } =
+    useTreeActions({ workspaceRoot, toggleFolder, onSelectFile });
 
   const rowMenuHandlers = useMemo<RowMenuHandlers>(
     () => ({
@@ -589,103 +110,17 @@ function FileTreeInner({
     virtualizer.measure();
   }, [virtualizer, rowHeight]);
 
-  // Open a workspace fully collapsed — only top-level folders and files show,
-  // plus the ancestor chain of the active file so it stays revealed. Runs
-  // once per workspace (keyed by workspaceRoot) when its tree first loads; the
-  // user's later expand/collapse is left untouched. Because folders default
-  // collapsed, a subfolder that loads late can't spring the tree open.
-  // The open-folder state above IS the initialisation, so this starts marked
-  // done for the workspace mounted with. The effect below then fires only on an
-  // actual switch, never a beat after the launch to undo the seed.
-  const initializedForWorkspace = useRef<string | null>(workspaceRoot ?? null);
-  useEffect(() => {
-    if (initializedForWorkspace.current === workspaceRoot || tree.length === 0) {
-      return;
-    }
-    initializedForWorkspace.current = workspaceRoot;
-    setExpanded(new Set(ancestorFolders(revealedPath(activePath))));
-  }, [tree, workspaceRoot, activePath]);
-
-  // Reveal the active file: expand its ancestor folders so its row exists in the
-  // flattened list, then scroll it into view. The ref bridges the two effects so
-  // that an unrelated collapse/expand (which also changes `rows`) doesn't yank
-  // the view back to the active file.
-  const pendingReveal = useRef<string | null>(null);
-  useEffect(() => {
-    if (!activePath) return;
-    pendingReveal.current = activePath;
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const folder of ancestorFolders(activePath)) {
-        if (!next.has(folder)) {
-          next.add(folder);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [activePath]);
-  useEffect(() => {
-    const target = pendingReveal.current;
-    if (!target) return;
-    const index = rows.findIndex((node) => node.type === "file" && node.path === target);
-    if (index >= 0) {
-      virtualizer.scrollToIndex(index, { align: "auto" });
-      pendingReveal.current = null;
-    }
-  }, [activePath, rows, virtualizer]);
-
-  // Keep the creation TARGET revealed, same two-step dance as the active file:
-  // expand its ancestor chain now, scroll once the rows include it. Covers a
-  // freshly created folder (createFolder sets newNoteDir), from the sidebar's
-  // "New folder" and the tree's "New folder here" alike; for a plain folder
-  // click everything is already visible, so this no-ops.
-  const pendingFolderReveal = useRef<string | null>(null);
-  useEffect(() => {
-    if (!newNoteDir) return;
-    pendingFolderReveal.current = newNoteDir;
-    setExpanded((previous) => {
-      // `ancestorFolders` of a path INSIDE the dir yields the chain up to and
-      // including the dir itself.
-      const chain = ancestorFolders(`${newNoteDir}/_`);
-      if (chain.every((dir) => previous.has(dir))) return previous;
-      const next = new Set(previous);
-      for (const dir of chain) next.add(dir);
-      return next;
-    });
-  }, [newNoteDir]);
-  useEffect(() => {
-    const target = pendingFolderReveal.current;
-    if (!target) return;
-    const index = rows.findIndex((node) => node.type === "folder" && node.path === target);
-    if (index >= 0) {
-      virtualizer.scrollToIndex(index, { align: "auto" });
-      pendingFolderReveal.current = null;
-    }
-  }, [newNoteDir, rows, virtualizer]);
+  useRevealRow({ path: activePath, type: "file", folders: ancestorFolders(activePath) }, rows, virtualizer, setExpanded);
+  // The folder a new note goes in, as when "New folder" has just made it.
+  useRevealRow(
+    { path: newNoteDir, type: "folder", folders: newNoteDir ? ancestorFolders(`${newNoteDir}/_`) : [] },
+    rows,
+    virtualizer,
+    setExpanded,
+  );
 
   if (files.length === 0) {
-    return (
-      <div className="file-tree file-tree--empty">
-        {scanning ? (
-          <p>Loading notes…</p>
-        ) : scanFailed ? (
-          <>
-            <p>Couldn't read your vault</p>
-            <p>It may still be syncing (iCloud) — your notes are safe.</p>
-            <button type="button" className="file-tree__retry" onClick={handleRetry}>
-              Retry
-            </button>
-          </>
-        ) : (
-          <>
-            <p>No notes yet</p>
-            <p>Create a note or open a folder to get started.</p>
-          </>
-        )}
-      </div>
-    );
+    return <EmptyTree scanning={scanning} scanFailed={scanFailed} onRetry={handleRetry} />;
   }
 
   return (
@@ -727,6 +162,36 @@ function FileTreeInner({
       </div>
       {openMenu ? <RowMenuList menu={openMenu} onClose={closeRowMenu} /> : null}
     </nav>
+  );
+}
+
+interface EmptyTreeProps {
+  readonly scanning: boolean;
+  readonly scanFailed: boolean;
+  readonly onRetry: () => void;
+}
+
+/** No rows yet: still reading the folder, unable to read it, or no notes. */
+function EmptyTree({ scanning, scanFailed, onRetry }: EmptyTreeProps) {
+  return (
+    <div className="file-tree file-tree--empty">
+      {scanning ? (
+        <p>Loading notes…</p>
+      ) : scanFailed ? (
+        <>
+          <p>Couldn't read your vault</p>
+          <p>It may still be syncing (iCloud) — your notes are safe.</p>
+          <button type="button" className="file-tree__retry" onClick={onRetry}>
+            Retry
+          </button>
+        </>
+      ) : (
+        <>
+          <p>No notes yet</p>
+          <p>Create a note or open a folder to get started.</p>
+        </>
+      )}
+    </div>
   );
 }
 
