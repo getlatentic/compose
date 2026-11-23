@@ -44,10 +44,9 @@ export async function saveDocumentExport(options: {
     const artifact = await options.produce(destinationPath);
     return { status: "exported", path: artifact.path };
   } catch (error) {
-    return {
-      status: "error",
-      message: error instanceof Error ? error.message : "Could not export the document.",
-    };
+    // A command's own error arrives as a plain string.
+    const message = error instanceof Error ? error.message : typeof error === "string" ? error : "Could not export the document.";
+    return { status: "error", message };
   }
 }
 

@@ -57,7 +57,6 @@ export async function exportCardImage(spec: CardSpec, format: ImageFormat, desti
   return invoke<{ path: string }>("document_export_image", { spec, format, destinationPath });
 }
 
-/** Draws the card as PNG onto the clipboard. */
 export async function copyCardImage(spec: CardSpec): Promise<void> {
   if (!isTauriRuntime()) {
     throw new Error("Copying an image is available in the desktop app.");

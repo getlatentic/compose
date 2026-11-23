@@ -12,21 +12,12 @@ import { pickImageFileForCaret } from "@latentic/live-markdown";
 import { CommentsPanel } from "../comments/CommentsPanel";
 import type { SourceRange } from "../comments/commentModel";
 import { VersionHistory } from "../history/VersionHistory";
-import { EditorFileActions, type DocumentExportFormat } from "./EditorFileActions";
-import { exportMarkdownFile } from "../../lib/export/markdownExport";
+import { EditorFileActions } from "./EditorFileActions";
+import { useDocumentExport } from "./useDocumentExport";
 import { markdownToClipboardHtml } from "../../lib/markdown/markdownToClipboardHtml";
-import { exportDocumentToPdf } from "../../lib/export/pdfExport";
-import { exportDocumentToHtml } from "../../lib/export/htmlExport";
-import { printDocument } from "../../lib/export/printDocument";
-import { exportTypefacesFor } from "../../lib/theme/exportTypefaces";
-import { reportExportResult, type FileExportResult } from "../../lib/export/documentExport";
-import { useImageExport } from "../export/useImageExport";
-import { activeEditorView } from "./editorChrome";
 import { imageWritePath, resolveDisplaySrc } from "./imagePaths";
 import { writeBinaryFile } from "../../lib/ipc/filesClient";
 import { openExternalUrl } from "../../lib/links/openExternal";
-import { listen } from "@tauri-apps/api/event";
-import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { markBoot, markTabSwitchEnd } from "../../lib/perf";
 import { registerActiveEditorFlush } from "../../lib/editor/editorFlush";
 import { useShownFileUpdate } from "./useShownFileUpdate";
@@ -38,7 +29,7 @@ import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
 import { useWorkspaceLinkTargets } from "../../app/useWorkspaceLinkTargets";
-import { documentCapabilities, documentRef, type Workspace } from "../../app/workspaceModel";
+import { documentCapabilities, type Workspace } from "../../app/workspaceModel";
 import { documentStyle } from "./documentStyle";
 import { reviewMargin } from "../review/reviewExtension";
 import { ReviewMargin } from "../review/ReviewMargin";
@@ -238,70 +229,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
     },
     [addCommentToActiveFile],
   );
-  // File-action callbacks read live state via the store rather than closing
-  // over the per-keystroke buffer, so they stay referentially stable.
-  const reportExport = useCallback((result: FileExportResult) => reportExportResult(result, showToast), []);
-  const imageExport = useImageExport(reportExport);
-  const openImageExport = imageExport.open;
-  const handleExport = useCallback(async (format: DocumentExportFormat) => {
-    const workspace = useWorkspaceStore.getState().focusedWorkspace();
-    const relativePath = workspace?.activeFilePath;
-    const buffer = relativePath ? workspace.fileContents[relativePath] : undefined;
-    if (!workspace || !relativePath || !buffer) {
-      return;
-    }
-    if (format === "markdown") {
-      reportExport(await exportMarkdownFile({ filePath: relativePath, markdown: buffer.content }));
-      return;
-    }
-    if (format === "image") {
-      const view = activeEditorView.get();
-      const range = view?.state.selection.main;
-      const selection = view && range && !range.empty ? view.state.sliceDoc(range.from, range.to) : "";
-      openImageExport({ markdown: buffer.content, filePath: relativePath, selection, document: documentRef(workspace, relativePath) });
-      return;
-    }
-    const exporter = format === "html" ? exportDocumentToHtml : exportDocumentToPdf;
-    const result = await exporter({
-      document: documentRef(workspace, relativePath),
-      content: buffer.content,
-      typefaces: exportTypefacesFor(useUiStore.getState()),
-    });
-    reportExport(result);
-  }, [openImageExport, reportExport]);
-
-  // Print the active document through the system print panel. Reads live state
-  // from the store (not the per-keystroke buffer prop), so it stays referentially
-  // stable like handleExport.
-  const handlePrint = useCallback(async () => {
-    const workspace = useWorkspaceStore.getState().focusedWorkspace();
-    const relativePath = workspace?.activeFilePath;
-    const buffer = relativePath ? workspace.fileContents[relativePath] : undefined;
-    if (!workspace || !relativePath || !buffer) {
-      return;
-    }
-    try {
-      await printDocument({
-        document: documentRef(workspace, relativePath),
-        content: buffer.content,
-        typefaces: exportTypefacesFor(useUiStore.getState()),
-      });
-    } catch (error) {
-      showToast({ kind: "error", title: "Print failed", message: String(error) });
-    }
-  }, []);
-
-  // File → Print / ⌘P (a native menu item) emits `menu://print`; open the system
-  // print panel (a printer, or Save as PDF from the panel) for the active note.
-  useEffect(() => {
-    if (!isTauriRuntime()) {
-      return;
-    }
-    const unlisten = listen("menu://print", () => void handlePrint());
-    return () => {
-      void unlisten.then((off) => off());
-    };
-  }, [handlePrint]);
+  const { exportNote, dialog: exportDialog } = useDocumentExport();
 
   // The host owns its toolbar actions and hands them to the editor as one
   // stable slot — the editor itself stays agnostic about save / export /
@@ -313,7 +241,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
         <EditorFileActions
           onSave={saveActiveFile}
           onShowVersionHistory={onShowVersionHistory}
-          onExport={handleExport}
+          onExport={exportNote}
           markdownExport={!plainText}
           onToggleComments={commentsEnabled ? toggleComments : undefined}
           commentsOpen={commentsOpen}
@@ -327,7 +255,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
     [
       saveActiveFile,
       onShowVersionHistory,
-      handleExport,
+      exportNote,
       plainText,
       toggleComments,
       commentsOpen,
@@ -399,7 +327,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
           onAfterContentSwap={markTabSwitchEnd}
           toolbar={focusMode ? undefined : plainTextToolbar}
         />
-        {imageExport.dialog}
+        {exportDialog}
       </>
     );
   }
@@ -426,7 +354,7 @@ function DocumentEditor({ onShowVersionHistory }: { onShowVersionHistory?: () =>
         onFlushReady={registerActiveEditorFlush}
       />
       <ReviewMargin agentName={agentName} />
-      {imageExport.dialog}
+      {exportDialog}
       {tableComment ? (
         <CommentComposer
           selectionText={tableComment.excerpt.text}

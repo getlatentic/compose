@@ -56,4 +56,18 @@ describe("ImageExportDialog", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("reports a failed export and lets the writer try again", async () => {
+    const onResult = vi.fn();
+    render(<ImageExportDialog markdown={NOTE} filePath="a.md" selection="" onClose={vi.fn()} onResult={onResult} />);
+    const exportButton = screen.getByRole("button", { name: "Export…" });
+    await userEvent.setup().click(exportButton);
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ status: "error" }));
+    expect(screen.getByRole("button", { name: "Export…" })).toHaveProperty("disabled", false);
+  });
+
+  it("says where the preview is drawn when there is no renderer", async () => {
+    render(<ImageExportDialog markdown={NOTE} filePath="a.md" selection="" onClose={vi.fn()} onResult={vi.fn()} />);
+    expect(await screen.findByText("The preview draws in the Compose app.")).toBeTruthy();
+  });
 });
