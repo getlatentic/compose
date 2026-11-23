@@ -58,8 +58,8 @@ export function effectiveReadingFont(font: ReadingFont, customFont: string | nul
 
 export function applyReadingStyle(font: ReadingFont, size: ReadingSize, customFont: string | null, root: HTMLElement): void {
   const custom = normalizeCustomFont(customFont);
-  root.setAttribute("data-reading-font", effectiveReadingFont(normalizeReadingFont(font), custom));
-  root.style.setProperty("--reading-base", `${normalizeReadingSize(size) / 16}rem`);
+  root.setAttribute("data-reading-font", effectiveReadingFont(font, custom));
+  root.style.setProperty("--reading-base", `${size / 16}rem`);
   if (custom) root.style.setProperty("--font-custom", cssFamily(custom));
   else root.style.removeProperty("--font-custom");
 }

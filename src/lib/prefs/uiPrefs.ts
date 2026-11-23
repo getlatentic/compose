@@ -5,20 +5,12 @@
  * owns one concern.
  */
 
-import { DEFAULT_PALETTE, normalizePalette } from "../theme/palettes";
-import {
-  DEFAULT_READING_FONT,
-  DEFAULT_READING_SIZE,
-  normalizeCustomFont,
-  normalizeReadingFont,
-  normalizeReadingSize,
-  type ReadingFont,
-  type ReadingSize,
-} from "../theme/reading";
-import { DEFAULT_EXPORT_FONT, normalizeExportFont, type ExportFont } from "../theme/exportFont";
-import { normalizeNoteBackground, THEME_BACKGROUND, type NoteBackground } from "../theme/noteBackground";
-import { DEFAULT_EDITOR_SCHEME, DEFAULT_THEME, normalizeEditorScheme, normalizeTheme, type EditorScheme, type ThemeChoice } from "../theme/theme";
-import { DEFAULT_ZOOM, clampZoom } from "../zoom/zoom";
+import { normalizePalette } from "../theme/palettes";
+import { normalizeCustomFont, normalizeReadingFont, normalizeReadingSize, type ReadingFont, type ReadingSize } from "../theme/reading";
+import { normalizeExportFont, type ExportFont } from "../theme/exportFont";
+import { normalizeNoteBackground, type NoteBackground } from "../theme/noteBackground";
+import { normalizeEditorScheme, normalizeTheme, type EditorScheme, type ThemeChoice } from "../theme/theme";
+import { clampZoom } from "../zoom/zoom";
 
 const UI_PREFS_KEY = "compose.uiPrefs.v1";
 
@@ -45,7 +37,6 @@ export interface UiPrefs {
   palette: string;
   /** The note font: the palette's own, or one chosen in Settings. */
   readingFont: ReadingFont;
-  /** The note text size. */
   readingSize: ReadingSize;
   /** The installed font the "custom" reading font uses. */
   customFont: string | null;
@@ -57,27 +48,58 @@ export interface UiPrefs {
   editorScheme: EditorScheme;
 }
 
-const FALLBACK: UiPrefs = {
-  soundOnComplete: true,
-  analyticsEnabled: true,
-  focusMode: false,
-  formatBarCollapsed: false,
-  sidebarWidthPx: null,
-  chatWidthPx: null,
-  zoom: DEFAULT_ZOOM,
-  theme: DEFAULT_THEME,
-  palette: DEFAULT_PALETTE,
-  readingFont: DEFAULT_READING_FONT,
-  readingSize: DEFAULT_READING_SIZE,
-  customFont: null,
-  exportFont: DEFAULT_EXPORT_FONT,
-  noteBackground: THEME_BACKGROUND,
-  editorScheme: DEFAULT_EDITOR_SCHEME,
-};
+function booleanOr(fallback: boolean): (value: unknown) => boolean {
+  return (value) => (typeof value === "boolean" ? value : fallback);
+}
 
 function widthOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
+
+/**
+ * Each preference's reader: whatever was stored (or nothing) in, a valid
+ * value out. The one place a preference is checked; everything past it
+ * trusts the value.
+ */
+const READERS: { readonly [K in keyof UiPrefs]: (value: unknown) => UiPrefs[K] } = {
+  soundOnComplete: booleanOr(true),
+  analyticsEnabled: booleanOr(true),
+  focusMode: booleanOr(false),
+  formatBarCollapsed: booleanOr(false),
+  sidebarWidthPx: widthOrNull,
+  chatWidthPx: widthOrNull,
+  zoom: clampZoom,
+  theme: normalizeTheme,
+  palette: normalizePalette,
+  readingFont: normalizeReadingFont,
+  readingSize: normalizeReadingSize,
+  customFont: normalizeCustomFont,
+  exportFont: normalizeExportFont,
+  noteBackground: normalizeNoteBackground,
+  editorScheme: normalizeEditorScheme,
+};
+
+const PREF_KEYS = Object.keys(READERS) as (keyof UiPrefs)[];
+
+/** A valid value for `key` from anything: the stored value, or a setter's argument. */
+export function readPref<K extends keyof UiPrefs>(key: K, value: unknown): UiPrefs[K] {
+  return READERS[key](value);
+}
+
+function readAll(source: Partial<Record<keyof UiPrefs, unknown>>): UiPrefs {
+  const prefs = {} as Record<keyof UiPrefs, unknown>;
+  for (const key of PREF_KEYS) prefs[key] = readPref(key, source[key]);
+  return prefs as UiPrefs;
+}
+
+/** The preferences out of a larger object that holds them, such as the UI store. */
+export function pickUiPrefs(source: UiPrefs): UiPrefs {
+  const prefs = {} as Record<keyof UiPrefs, unknown>;
+  for (const key of PREF_KEYS) prefs[key] = source[key];
+  return prefs as UiPrefs;
+}
+
+const FALLBACK: UiPrefs = readAll({});
 
 export function loadUiPrefs(): UiPrefs {
   if (typeof localStorage === "undefined") {
@@ -85,34 +107,7 @@ export function loadUiPrefs(): UiPrefs {
   }
   try {
     const raw = localStorage.getItem(UI_PREFS_KEY);
-    if (!raw) {
-      return FALLBACK;
-    }
-    const parsed = JSON.parse(raw) as Partial<UiPrefs>;
-    return {
-      soundOnComplete:
-        typeof parsed.soundOnComplete === "boolean"
-          ? parsed.soundOnComplete
-          : FALLBACK.soundOnComplete,
-      analyticsEnabled:
-        typeof parsed.analyticsEnabled === "boolean"
-          ? parsed.analyticsEnabled
-          : FALLBACK.analyticsEnabled,
-      focusMode: typeof parsed.focusMode === "boolean" ? parsed.focusMode : FALLBACK.focusMode,
-      formatBarCollapsed:
-        typeof parsed.formatBarCollapsed === "boolean" ? parsed.formatBarCollapsed : FALLBACK.formatBarCollapsed,
-      sidebarWidthPx: widthOrNull(parsed.sidebarWidthPx),
-      chatWidthPx: widthOrNull(parsed.chatWidthPx),
-      zoom: clampZoom(parsed.zoom),
-      theme: normalizeTheme(parsed.theme),
-      palette: normalizePalette(parsed.palette),
-      readingFont: normalizeReadingFont(parsed.readingFont),
-      readingSize: normalizeReadingSize(parsed.readingSize),
-      customFont: normalizeCustomFont(parsed.customFont),
-      exportFont: normalizeExportFont(parsed.exportFont),
-      noteBackground: normalizeNoteBackground(parsed.noteBackground),
-      editorScheme: normalizeEditorScheme(parsed.editorScheme),
-    };
+    return raw ? readAll(JSON.parse(raw) as Partial<Record<keyof UiPrefs, unknown>>) : FALLBACK;
   } catch {
     return FALLBACK;
   }

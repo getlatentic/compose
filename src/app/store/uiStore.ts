@@ -1,17 +1,9 @@
 import { create } from "zustand";
-import { persistUiPrefs } from "../../lib/prefs/uiPrefs";
-import { normalizePalette } from "../../lib/theme/palettes";
-import {
-  normalizeCustomFont,
-  normalizeReadingFont,
-  normalizeReadingSize,
-  type ReadingFont,
-  type ReadingSize,
-} from "../../lib/theme/reading";
-import { normalizeExportFont, type ExportFont } from "../../lib/theme/exportFont";
-import { normalizeNoteBackground, type NoteBackground } from "../../lib/theme/noteBackground";
-import { normalizeEditorScheme, normalizeTheme, type EditorScheme, type ThemeChoice } from "../../lib/theme/theme";
-import { clampZoom } from "../../lib/zoom/zoom";
+import { persistUiPrefs, pickUiPrefs, readPref, type UiPrefs } from "../../lib/prefs/uiPrefs";
+import type { ReadingFont, ReadingSize } from "../../lib/theme/reading";
+import type { ExportFont } from "../../lib/theme/exportFont";
+import type { NoteBackground } from "../../lib/theme/noteBackground";
+import type { EditorScheme, ThemeChoice } from "../../lib/theme/theme";
 import { INITIAL_UI_PREFS } from "./initialPrefs";
 import { useWorkspaceStore } from "../workspaceStore";
 
@@ -85,7 +77,6 @@ export interface UiState {
   /** Light, dark, or follow the system. */
   theme: ThemeChoice;
   setTheme: (choice: ThemeChoice) => void;
-  /** The colour theme's id. */
   palette: string;
   setPalette: (id: string) => void;
   readingFont: ReadingFont;
@@ -105,25 +96,25 @@ export interface UiState {
   setEditorScheme: (scheme: EditorScheme) => void;
 }
 
-function persistAll(get: () => UiState): void {
-  const state = get();
-  persistUiPrefs({
-    soundOnComplete: state.soundOnComplete,
-    analyticsEnabled: state.analyticsEnabled,
-    focusMode: state.focusMode,
-    formatBarCollapsed: state.formatBarCollapsed,
-    sidebarWidthPx: state.sidebarWidthPx,
-    chatWidthPx: state.chatWidthPx,
-    zoom: state.zoom,
-    theme: state.theme,
-    palette: state.palette,
-    readingFont: state.readingFont,
-    readingSize: state.readingSize,
-    customFont: state.customFont,
-    exportFont: state.exportFont,
-    noteBackground: state.noteBackground,
-    editorScheme: state.editorScheme,
-  });
+type StoreSet = (partial: Partial<UiState>) => void;
+
+/**
+ * Write preferences to the store and to disk. Each value is checked by its
+ * reader on the way in; one that would not change anything writes nothing.
+ */
+function savePrefs(set: StoreSet, get: () => UiState, changes: Partial<UiPrefs>): void {
+  const current = get();
+  const next: Partial<UiPrefs> = {};
+  let changed = false;
+  for (const key of Object.keys(changes) as (keyof UiPrefs)[]) {
+    const value = readPref(key, changes[key]);
+    if (Object.is(value, current[key])) continue;
+    (next as Record<keyof UiPrefs, unknown>)[key] = value;
+    changed = true;
+  }
+  if (!changed) return;
+  set(next);
+  persistUiPrefs(pickUiPrefs(get()));
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -198,31 +189,17 @@ export const useUiStore = create<UiState>((set, get) => ({
   openSettings: (agentId) => set({ settingsOpen: true, settingsAgentId: agentId ?? null }),
   closeSettings: () => set({ settingsOpen: false, settingsAgentId: null }),
   soundOnComplete: INITIAL_UI_PREFS.soundOnComplete,
-  setSoundOnComplete: (enabled) => {
-    set({ soundOnComplete: enabled });
-    persistAll(get);
-  },
+  setSoundOnComplete: (enabled) => savePrefs(set, get, { soundOnComplete: enabled }),
   analyticsEnabled: INITIAL_UI_PREFS.analyticsEnabled,
-  setAnalyticsEnabled: (enabled) => {
-    set({ analyticsEnabled: enabled });
-    persistAll(get);
-  },
+  setAnalyticsEnabled: (enabled) => savePrefs(set, get, { analyticsEnabled: enabled }),
   focusMode: INITIAL_UI_PREFS.focusMode,
-  toggleFocusMode: () => {
-    set({ focusMode: !get().focusMode });
-    persistAll(get);
-  },
+  toggleFocusMode: () => savePrefs(set, get, { focusMode: !get().focusMode }),
   formatBarCollapsed: INITIAL_UI_PREFS.formatBarCollapsed,
-  toggleFormatBar: () => {
-    set({ formatBarCollapsed: !get().formatBarCollapsed });
-    persistAll(get);
-  },
+  toggleFormatBar: () => savePrefs(set, get, { formatBarCollapsed: !get().formatBarCollapsed }),
   sidebarWidthPx: INITIAL_UI_PREFS.sidebarWidthPx,
   chatWidthPx: INITIAL_UI_PREFS.chatWidthPx,
-  setPaneWidth: (pane, widthPx) => {
-    set(pane === "sidebar" ? { sidebarWidthPx: widthPx } : { chatWidthPx: widthPx });
-    persistAll(get);
-  },
+  setPaneWidth: (pane, widthPx) =>
+    savePrefs(set, get, pane === "sidebar" ? { sidebarWidthPx: widthPx } : { chatWidthPx: widthPx }),
   composerFocusNonce: 0,
   requestComposerFocus: () => {
     set((state) => ({ composerFocusNonce: state.composerFocusNonce + 1 }));
@@ -232,76 +209,25 @@ export const useUiStore = create<UiState>((set, get) => ({
     set((state) => ({ chatOpen: true, chatPulseSignal: state.chatPulseSignal + 1 }));
   },
   theme: INITIAL_UI_PREFS.theme,
-  setTheme: (choice) => {
-    const next = normalizeTheme(choice);
-    if (next === get().theme) {
-      return;
-    }
-    set({ theme: next });
-    persistAll(get);
-  },
+  setTheme: (choice) => savePrefs(set, get, { theme: choice }),
   palette: INITIAL_UI_PREFS.palette,
-  setPalette: (id) => {
-    const next = normalizePalette(id);
-    if (next === get().palette) {
-      return;
-    }
-    set({ palette: next });
-    persistAll(get);
-  },
+  setPalette: (id) => savePrefs(set, get, { palette: id }),
   readingFont: INITIAL_UI_PREFS.readingFont,
-  setReadingFont: (font) => {
-    const next = normalizeReadingFont(font);
-    if (next === get().readingFont) {
-      return;
-    }
-    set({ readingFont: next });
-    persistAll(get);
-  },
+  setReadingFont: (font) => savePrefs(set, get, { readingFont: font }),
   readingSize: INITIAL_UI_PREFS.readingSize,
-  setReadingSize: (size) => {
-    const next = normalizeReadingSize(size);
-    if (next === get().readingSize) {
-      return;
-    }
-    set({ readingSize: next });
-    persistAll(get);
-  },
+  setReadingSize: (size) => savePrefs(set, get, { readingSize: size }),
   customFont: INITIAL_UI_PREFS.customFont,
   setCustomFont: (family) => {
-    const next = normalizeCustomFont(family);
-    if (!next) {
-      return;
-    }
-    set({ customFont: next, readingFont: "custom" });
-    persistAll(get);
+    if (readPref("customFont", family) === null) return;
+    savePrefs(set, get, { customFont: family, readingFont: "custom" });
   },
   exportFont: INITIAL_UI_PREFS.exportFont,
-  setExportFont: (font) => {
-    set({ exportFont: normalizeExportFont(font) });
-    persistAll(get);
-  },
+  setExportFont: (font) => savePrefs(set, get, { exportFont: font }),
   noteBackground: INITIAL_UI_PREFS.noteBackground,
-  setNoteBackground: (background) => {
-    set({ noteBackground: normalizeNoteBackground(background) });
-    persistAll(get);
-  },
-  resetToTheme: () => {
-    set({ readingFont: "theme", noteBackground: { kind: "theme" }, editorScheme: "app" });
-    persistAll(get);
-  },
+  setNoteBackground: (background) => savePrefs(set, get, { noteBackground: background }),
+  resetToTheme: () => savePrefs(set, get, { readingFont: "theme", noteBackground: { kind: "theme" }, editorScheme: "app" }),
   editorScheme: INITIAL_UI_PREFS.editorScheme,
-  setEditorScheme: (scheme) => {
-    set({ editorScheme: normalizeEditorScheme(scheme) });
-    persistAll(get);
-  },
+  setEditorScheme: (scheme) => savePrefs(set, get, { editorScheme: scheme }),
   zoom: INITIAL_UI_PREFS.zoom,
-  setZoom: (scale) => {
-    const next = clampZoom(scale);
-    if (next === get().zoom) {
-      return;
-    }
-    set({ zoom: next });
-    persistAll(get);
-  },
+  setZoom: (scale) => savePrefs(set, get, { zoom: scale }),
 }));

@@ -33,13 +33,11 @@ const documentTheme = EditorView.theme({
     fontSize: "var(--reading-size-h1)",
     lineHeight: "var(--reading-line-h1)",
     letterSpacing: "-0.02em",
-    // The one red rule: under the note's title. Padding, not margin, keeps
-    // CodeMirror's click metrics exact.
-    // A hairline in the palette's rule colour, softened: a mark of the theme,
-    // not a bar across the page.
+    // A hairline under the note's title, in the palette's rule colour,
+    // softened: a mark of the theme, not a bar across the page.
     borderBottom: "1px solid color-mix(in srgb, var(--color-rule) 55%, transparent)",
-    // A note's title opens it: no space above it beyond the editor's own
-    // inset, or the page starts with a gap.
+    // Padding, not margin, keeps CodeMirror's click metrics exact; none
+    // above, so the page opens on the title.
     paddingTop: "0",
     paddingBottom: "0.35em",
     marginBottom: "0",
