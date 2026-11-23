@@ -29,11 +29,12 @@ pub(super) struct SearchableNote {
 }
 
 /// `document` read from `workspace`, or `None` for a note not on this Mac — an
-/// iCloud placeholder, which reading would download — or one that cannot be
-/// read now. A later pass picks either up.
+/// iCloud placeholder, which reading would download — one too large to read
+/// whole, or one that cannot be read now. A later pass picks up the first
+/// and the last.
 pub(super) fn read(workspace: &WorkspaceRecord, document: &IndexableDocument) -> Option<SearchableNote> {
     let path = Path::new(&workspace.path).join(&document.relative_path);
-    if icloud::is_dataless(&path) {
+    if icloud::is_dataless(&path) || crate::files::too_large_to_hold(&path).is_some() {
         return None;
     }
     let bytes = std::fs::read(&path).ok()?;

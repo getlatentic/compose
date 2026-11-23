@@ -6833,6 +6833,26 @@ $theme-dark-line: #525252;
 
 /* Blank loading panel: nothing paints for fast reads; the hint fades in
    only when a read runs genuinely long (iCloud download, cold disk). */
+// A file shown a window at a time (LargeDocument.tsx).
+.large-document__note,
+.large-document__status {
+  margin: 0;
+  padding: 0.5rem 1.5rem;
+  color: var(--cds-text-secondary, #6f6f6f);
+  font-size: 0.8125rem;
+}
+
+.large-document__note {
+  border-block-end: 1px solid var(--cds-border-subtle, #e0e0e0);
+  background: var(--cds-layer-01, #f4f4f4);
+}
+
+.large-document__pages {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+}
+
 .editor-body__loading {
   align-items: center;
   block-size: 100%;

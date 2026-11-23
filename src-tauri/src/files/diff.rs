@@ -8,7 +8,7 @@
 //! looking at their bytes a second time.
 
 use super::{is_ignored_segment, FileError};
-use crate::db::content_hash_bytes;
+use crate::db::content_hash_file;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -133,12 +133,13 @@ fn index_tree(root: &Path) -> Result<BTreeMap<String, IndexedFile>, FileError> {
             .map_err(|error| FileError::from(error.to_string()))?
             .to_string_lossy()
             .replace('\\', "/");
-        let bytes = std::fs::read(path)?;
+        // Hashed a piece at a time: a workspace may hold a file too large
+        // to read whole.
         index.insert(
             relative_path,
             IndexedFile {
-                size: bytes.len() as u64,
-                hash: content_hash_bytes(&bytes),
+                size: entry.metadata().map_err(|error| FileError::from(error.to_string()))?.len(),
+                hash: content_hash_file(path)?,
             },
         );
     }

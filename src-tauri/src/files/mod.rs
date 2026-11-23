@@ -48,6 +48,8 @@ pub struct WorkspaceWriteResult {
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum FileError {
     Conflict { latest_last_modified_ms: i64 },
+    /// The file is not read whole: it is shown a window at a time (`paged`).
+    TooLarge { size_bytes: u64 },
     NotFound { message: String },
     AlreadyExists { message: String },
     Message { message: String },
@@ -58,6 +60,9 @@ impl std::fmt::Display for FileError {
         match self {
             FileError::Conflict { .. } => {
                 write!(formatter, "the file changed on disk since it was loaded")
+            }
+            FileError::TooLarge { size_bytes } => {
+                write!(formatter, "the file is too large to read whole ({size_bytes} bytes)")
             }
             FileError::NotFound { message }
             | FileError::AlreadyExists { message }
@@ -317,14 +322,19 @@ pub fn workspace_rename_file(
 ) -> Result<(), FileError> {
     let root = registry.workspace_root(&workspace_id)?;
     ensure_vault_metadata(&metadata, &workspace_id, &root)?;
-    let existing = read_file(&registry, &workspace_id, &from_relative)?;
-    metadata.record_document_written(
-        &workspace_id,
-        &from_relative,
-        &existing.content,
-        existing.last_modified_ms,
-        existing.content.len() as u64,
-    )?;
+    // The text as it stands goes into history under the old name. A file too
+    // large to read whole has no history, and is renamed all the same.
+    match read_file(&registry, &workspace_id, &from_relative) {
+        Ok(existing) => metadata.record_document_written(
+            &workspace_id,
+            &from_relative,
+            &existing.content,
+            existing.last_modified_ms,
+            existing.content.len() as u64,
+        )?,
+        Err(FileError::TooLarge { .. }) => {}
+        Err(error) => return Err(error),
+    }
     rename_file(&registry, &workspace_id, &from_relative, &to_relative)?;
     metadata.rename_document(&workspace_id, &from_relative, &to_relative)?;
     Ok(())
@@ -435,10 +445,26 @@ pub(crate) fn read_file(
     read_at(&absolute)
 }
 
+/// The largest file that is read whole. Above it the interface, the search
+/// index and version history would each hold a copy of the text, and every
+/// key and every save would cost in step with its length.
+pub(crate) const LARGEST_WHOLE_FILE: u64 = 5 * 1024 * 1024;
+
+/// The size of the file at `absolute` when it is over that, so a caller can
+/// leave it unread. A file that cannot be asked its size is left to the
+/// read, which says why.
+pub(crate) fn too_large_to_hold(absolute: &Path) -> Option<u64> {
+    let size = std::fs::metadata(absolute).ok()?.len();
+    (size > LARGEST_WHOLE_FILE).then_some(size)
+}
+
 /// Read a document at a RESOLVED absolute path — the shared core under both
 /// workspace files and external files, so behavior (the iCloud kick, the
 /// mtime read) can never drift between the two.
 pub(crate) fn read_at(absolute: &Path) -> Result<WorkspaceFileContent, FileError> {
+    if let Some(size_bytes) = too_large_to_hold(absolute) {
+        return Err(FileError::TooLarge { size_bytes });
+    }
     let content = match std::fs::read_to_string(absolute) {
         Ok(content) => content,
         Err(error) => {
@@ -709,6 +735,12 @@ pub(crate) fn document_inventory_for_entries(
             skipped.push(entry.relative_path.clone());
             continue;
         }
+        // A file too large to read whole has no history and is not searched,
+        // so it needs no content hash: hashing it would hold all of it.
+        if too_large_to_hold(&absolute).is_some() {
+            skipped.push(entry.relative_path.clone());
+            continue;
+        }
         // One unreadable file (a permission glitch, a path that vanished
         // mid-scan, an unmaterializable placeholder) must not abort the whole
         // build — skip it and carry on, mirroring the rebuild's content loop.
@@ -857,6 +889,24 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn a_file_over_the_limit_is_not_read_whole() {
+        let dir = tempdir().expect("tempdir");
+        let large = dir.path().join("large.md");
+        let small = dir.path().join("small.md");
+        fs::write(&large, vec![b'a'; LARGEST_WHOLE_FILE as usize + 1]).expect("write");
+        fs::write(&small, "text").expect("write");
+        assert_eq!(read_at(&large), Err(FileError::TooLarge { size_bytes: LARGEST_WHOLE_FILE + 1 }));
+        assert_eq!(read_at(&small).expect("read").content, "text");
+    }
+
+    #[test]
+    fn a_file_too_large_tells_the_interface_its_size() {
+        let error = FileError::TooLarge { size_bytes: 7 };
+        assert_eq!(serde_json::to_string(&error).expect("json"), r#"{"kind":"tooLarge","sizeBytes":7}"#);
+    }
+
 
     fn registry_with_workspace(root: &Path) -> (WorkspaceRegistry, String) {
         let registry = WorkspaceRegistry::default();

@@ -208,7 +208,12 @@ fn snapshot_baseline(
         // Non-UTF-8 files can't be stored as text history; skip them (a clone
         // run still surfaces their changes in the diff and the trash recovers
         // them).
-        let Ok(content) = std::fs::read_to_string(real_root.join(&entry.relative_path)) else {
+        // Nor can a file too large to read whole.
+        let path = real_root.join(&entry.relative_path);
+        if crate::files::too_large_to_hold(&path).is_some() {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(&path) else {
             continue;
         };
         metadata.record_document_written(

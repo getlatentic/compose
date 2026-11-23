@@ -19,3 +19,12 @@ export class FileNotFoundError extends Error {
     this.name = "FileNotFoundError";
   }
 }
+
+/** The file is over the size that is read whole. It is shown a window at a
+ *  time instead (`pagedClient`). */
+export class FileTooLargeError extends Error {
+  constructor(public readonly sizeBytes: number) {
+    super("File is too large to read whole");
+    this.name = "FileTooLargeError";
+  }
+}
