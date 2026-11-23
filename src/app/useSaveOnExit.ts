@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { saveLargeDocuments } from "../lib/editor/largeDocumentSaves";
 import { isTauriRuntime } from "../lib/runtime/desktopRuntime";
 import { useWorkspaceStore } from "./workspaceStore";
 
 /**
- * Persist every dirty buffer before the app closes.
+ * Persist every dirty buffer, and every large file on screen, before the app
+ * closes.
  *
  * On desktop we intercept the window's close request, write all unsaved edits
  * (active and background tabs), then destroy the window — so quitting never
@@ -27,7 +29,7 @@ export function useSaveOnExit() {
           event.preventDefault();
           closing = true;
           try {
-            await useWorkspaceStore.getState().saveAllDirtyBuffers();
+            await Promise.all([useWorkspaceStore.getState().saveAllDirtyBuffers(), saveLargeDocuments()]);
           } finally {
             try {
               // Requires `core:window:allow-destroy` in the capability — without

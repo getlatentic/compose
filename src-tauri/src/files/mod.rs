@@ -448,7 +448,7 @@ pub(crate) fn read_file(
 /// The largest file that is read whole. Above it the interface, the search
 /// index and version history would each hold a copy of the text, and every
 /// key and every save would cost in step with its length.
-pub(crate) const LARGEST_WHOLE_FILE: u64 = 5 * 1024 * 1024;
+pub(crate) const LARGEST_WHOLE_FILE: u64 = 2 * 1024 * 1024;
 
 /// The size of the file at `absolute` when it is over that, so a caller can
 /// leave it unread. A file that cannot be asked its size is left to the

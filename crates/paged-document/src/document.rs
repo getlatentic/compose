@@ -59,6 +59,10 @@ pub struct Saved {
 pub enum SaveError {
     /// The file on disk is not the one this document last read or wrote.
     ChangedOnDisk,
+    /// Another program wrote into the file this document reads from, so
+    /// the text the edits were made to is gone. Only a file put in the
+    /// place of the old one leaves the old one readable.
+    TextLost,
     Io(io::Error),
 }
 
@@ -72,6 +76,7 @@ impl std::fmt::Display for SaveError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SaveError::ChangedOnDisk => write!(formatter, "the file changed on disk since it was opened"),
+            SaveError::TextLost => write!(formatter, "another program wrote into the file, and the text these edits were made to is gone"),
             SaveError::Io(error) => write!(formatter, "{error}"),
         }
     }
@@ -144,6 +149,16 @@ impl PagedDocument {
     pub fn is_edited(&self) -> bool {
         let state = self.read();
         state.version != state.saved_version
+    }
+
+    /// The file on disk is not the one this document last read or wrote.
+    pub fn changed_on_disk(&self) -> bool {
+        modified(&self.path) != self.read().on_disk
+    }
+
+    /// When the file on disk was last changed, by anyone.
+    pub fn modified_on_disk(&self) -> Option<SystemTime> {
+        modified(&self.path)
     }
 
     pub fn progress(&self) -> Progress {
@@ -229,13 +244,27 @@ impl PagedDocument {
     /// Writes the document to its file. The text is written beside the file
     /// and put in its place in one step, so the file is never half written.
     /// Edits made while it is written are kept, and are not in what it wrote.
+    /// A file another program changed since it was read is left as it is.
     pub fn save(&self) -> Result<Saved, SaveError> {
+        self.write_file(false)
+    }
+
+    /// Writes the document to its file, over a file another program put in
+    /// its place since it was read.
+    pub fn save_over_changes(&self) -> Result<Saved, SaveError> {
+        self.write_file(true)
+    }
+
+    fn write_file(&self, over_changes: bool) -> Result<Saved, SaveError> {
         let (pieces, file, version, on_disk) = {
             let state = self.read();
             (state.pieces.clone(), Arc::clone(&state.file), state.version, state.on_disk)
         };
-        if modified(&self.path) != on_disk {
+        if !over_changes && modified(&self.path) != on_disk {
             return Err(SaveError::ChangedOnDisk);
+        }
+        if file.metadata().and_then(|metadata| metadata.modified()).ok() != on_disk {
+            return Err(SaveError::TextLost);
         }
         let beside = beside(&self.path);
         let written = write_beside(&pieces, &file, &self.path, &beside);

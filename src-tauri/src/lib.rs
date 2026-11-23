@@ -353,6 +353,9 @@ pub fn run() {
             paged::paged_window_from,
             paged::paged_window_before,
             paged::paged_progress,
+            paged::paged_edit,
+            paged::paged_save,
+            paged::paged_changed_on_disk,
             paged::paged_close,
             files::workspace_rename_file,
             files::workspace_restore_version,
@@ -447,6 +450,9 @@ pub fn run() {
             app_handle
                 .state::<harness::runner::RunnerState>()
                 .cancel_all();
+            // The window saves its large files as it closes; this is for a
+            // quit that never asked the window.
+            app_handle.state::<paged::PagedDocuments>().save_all();
         }
         // Closing the window while the quick note keeps Compose running leaves
         // an agent's edits with nothing to show or stop them: the same.

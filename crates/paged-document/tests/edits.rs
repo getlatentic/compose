@@ -97,16 +97,44 @@ fn a_save_puts_the_text_in_the_file_and_edits_go_on() {
     assert!(left.is_empty(), "{left:?}");
 }
 
+/// Puts a file with `text` in the place of the one at `path`, as an editor
+/// that saves by renaming does.
+fn replace(path: &std::path::Path, text: &str) {
+    let beside = path.with_extension("theirs");
+    std::fs::write(&beside, text).expect("write");
+    std::fs::rename(&beside, path).expect("rename");
+}
+
 #[test]
-fn a_save_does_not_write_over_a_file_changed_by_another() {
+fn a_save_does_not_write_over_a_file_another_put_in_its_place() {
+    let file = on_disk(&sections(100));
+    let document = PagedDocument::open(file.path()).expect("open");
+    document.edit(0, 0, "mine\n\n").expect("edit");
+    std::thread::sleep(Duration::from_millis(20));
+    assert!(!document.changed_on_disk());
+    replace(file.path(), "theirs\n");
+    assert!(document.changed_on_disk());
+    assert!(matches!(document.save(), Err(SaveError::ChangedOnDisk)));
+    assert_eq!(std::fs::read_to_string(file.path()).expect("read"), "theirs\n");
+    assert!(document.is_edited());
+    document.save_over_changes().expect("save");
+    assert!(std::fs::read_to_string(file.path()).expect("read").starts_with("mine\n\n## Section 0"));
+    assert!(!document.is_edited());
+    assert!(!document.changed_on_disk());
+    document.edit(0, 0, "more\n\n").expect("edit");
+    document.save().expect("save");
+}
+
+#[test]
+fn a_file_written_into_by_another_is_not_saved_over() {
     let file = on_disk(&sections(100));
     let document = PagedDocument::open(file.path()).expect("open");
     document.edit(0, 0, "mine\n\n").expect("edit");
     std::thread::sleep(Duration::from_millis(20));
     std::fs::write(file.path(), "theirs\n").expect("write");
     assert!(matches!(document.save(), Err(SaveError::ChangedOnDisk)));
+    assert!(matches!(document.save_over_changes(), Err(SaveError::TextLost)));
     assert_eq!(std::fs::read_to_string(file.path()).expect("read"), "theirs\n");
-    assert!(document.is_edited());
 }
 
 /// Set `PAGED_BIG_GB` to run, as for the windows of a huge file: an edit,

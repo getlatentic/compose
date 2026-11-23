@@ -1,54 +1,104 @@
-import { createPagedMarkdownView, type PagedSource } from "@latentic/live-markdown";
-import { useEffect, useRef } from "react";
+import type { PagedViewOptions } from "@latentic/live-markdown";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { selectFocusedWorkspace } from "../../app/store/activeWorkspace";
-import { largeFileKey } from "../../app/store/internals";
+import { useWorkspaceLinkTargets } from "../../app/useWorkspaceLinkTargets";
 import { useWorkspaceStore } from "../../app/workspaceStore";
-import { formatFileSize } from "./formatFileSize";
-import { usePagedFile } from "./usePagedFile";
+import { openExternalUrl } from "../../lib/links/openExternal";
+import { markdownToClipboardHtml } from "../../lib/markdown/markdownToClipboardHtml";
+import { resolveDisplaySrc } from "../editor/imagePaths";
+import { openLargeDocument, type LargeDocumentSession, type LargeDocumentState } from "./largeDocumentSession";
+import type { SaveState } from "./pagedSaver";
 
-/** The open file when it is too large to read whole: shown a window at a
- *  time, and not edited. */
+const OPENING: LargeDocumentState = { status: "opening" };
+
+/** The open file when it is too large to read whole: shown and edited a
+ *  window at a time. */
 export function LargeDocument() {
   const workspaceId = useWorkspaceStore((state) => selectFocusedWorkspace(state)?.id ?? "");
+  const workspacePath = useWorkspaceStore((state) => selectFocusedWorkspace(state)?.path);
   const path = useWorkspaceStore((state) => selectFocusedWorkspace(state)?.activeFilePath ?? "");
-  const sizeBytes = useWorkspaceStore((state) => state.largeFiles[largeFileKey(workspaceId, path)] ?? 0);
-  const file = usePagedFile(workspaceId, path);
+  // The file's time on disk as the folder watch last saw it: a change may be
+  // another program's.
+  const seenOnDisk = useWorkspaceStore((state) => selectFocusedWorkspace(state)?.files.find((entry) => entry.relativePath === path)?.lastModifiedMs);
+  const selectFile = useWorkspaceStore((state) => state.selectFile);
+  const linkTargets = useWorkspaceLinkTargets();
+  const [state, setState] = useState<LargeDocumentState>(OPENING);
+  const pages = useRef<HTMLDivElement>(null);
+  const session = useRef<LargeDocumentSession | null>(null);
+  // What the view is given when the file opens. The link targets are those
+  // of that moment: a note made later is linked to once the file is opened again.
+  const viewOptions = useRef<PagedViewOptions>({});
+  viewOptions.current = {
+    filePath: path,
+    workspaceRoot: workspacePath ?? undefined,
+    linkTargets,
+    onNavigateToLink: (target) => void selectFile(target),
+    resolveImageSrc: resolveDisplaySrc,
+    onOpenExternalUrl: openExternalUrl,
+    renderClipboardHtml: markdownToClipboardHtml,
+  };
+
+  useEffect(() => {
+    if (!pages.current || !workspaceId || !path) return;
+    const opened = openLargeDocument(pages.current, workspaceId, path, viewOptions.current, setState);
+    session.current = opened;
+    return () => {
+      session.current = null;
+      opened.dispose();
+    };
+  }, [workspaceId, path]);
+
+  useEffect(() => session.current?.diskMayHaveChanged(), [seenOnDisk]);
+
+  const keepMine = useCallback(() => session.current?.keepMine(), []);
+  const reload = useCallback(() => session.current?.reload(), []);
 
   return (
     <section className="editor-body large-document" aria-label={path}>
-      <p className="large-document__note" role="note">
-        This file is {formatFileSize(sizeBytes)}. It is shown a part at a time and cannot be edited here yet.
-      </p>
-      <LargeDocumentBody file={file} />
+      <LargeDocumentStatus state={state} onKeepMine={keepMine} onReload={reload} />
+      <div ref={pages} className="large-document__pages" />
     </section>
   );
 }
 
-function LargeDocumentBody({ file }: { file: ReturnType<typeof usePagedFile> }) {
-  switch (file.status) {
+function LargeDocumentStatus({ state, onKeepMine, onReload }: { state: LargeDocumentState; onKeepMine: () => void; onReload: () => void }) {
+  switch (state.status) {
     case "opening":
       return <p className="large-document__status">Opening…</p>;
     case "failed":
       return (
         <p className="large-document__status" role="alert">
-          {file.message}
+          {state.message}
         </p>
       );
     case "open":
-      return <Pages source={file.source} />;
+      return <SaveStatus save={state.save} onKeepMine={onKeepMine} onReload={onReload} />;
   }
 }
 
-/** The file's text, a few windows of it at a time. */
-function Pages({ source }: { source: PagedSource }) {
-  const pages = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!pages.current) return;
-    const view = createPagedMarkdownView(pages.current, source);
-    return () => view.destroy();
-  }, [source]);
-
-  return <div ref={pages} className="large-document__pages" />;
+/** Nothing while the file is saved or being saved; a line when the user has
+ *  something to decide or to know. */
+function SaveStatus({ save, onKeepMine, onReload }: { save: SaveState; onKeepMine: () => void; onReload: () => void }) {
+  if (save.status === "conflict") {
+    return (
+      <p className="large-document__status large-document__status--alert" role="alert">
+        Another program changed this file. Your edits are not saved.
+        <button type="button" className="large-document__action" onClick={onKeepMine}>
+          Keep my version
+        </button>
+        <button type="button" className="large-document__action" onClick={onReload}>
+          Use the version on disk
+        </button>
+      </p>
+    );
+  }
+  if (save.status === "failed") {
+    return (
+      <p className="large-document__status large-document__status--alert" role="alert">
+        Not saved: {save.message}
+      </p>
+    );
+  }
+  return null;
 }

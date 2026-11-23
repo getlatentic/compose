@@ -36,6 +36,7 @@ import {
 import {
   flushActiveEditor,
 } from "../../lib/editor/editorFlush";
+import { saveLargeDocuments } from "../../lib/editor/largeDocumentSaves";
 import {
   largeFileKey,
   nextUntitledPath,
@@ -454,6 +455,9 @@ export const createFilesSlice = (
 
     // The editor's last edits belong to the old path's buffer, which moves.
     flushActiveEditor();
+    // A large file's edits are in the backend, against the old path: they
+    // are written there before the file moves.
+    await saveLargeDocuments();
     try {
       await renameFileIpc(workspace.id, from, trimmed);
       set((state) => ({
