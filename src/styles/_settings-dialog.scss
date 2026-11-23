@@ -1,0 +1,296 @@
+// The Settings dialog and the forms inside it.
+
+.modal-backdrop {
+  position: fixed;
+  z-index: var(--z-modal);
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(0 0 0 / 38%);
+}
+
+.settings-dialog {
+  // Track the viewport but cap at 960px (60rem): a settings pane wider than that
+  // just stretches line lengths, and below the cap the 92vw keeps a margin on a
+  // small window instead of going edge-to-edge.
+  inline-size: min(92vw, 60rem);
+  // A flex column at a FIXED height (capped to the viewport): the header stays
+  // pinned and the body (nav + content) fills the rest, with only the content
+  // pane scrolling — so switching agents or tabs never resizes the dialog.
+  display: flex;
+  flex-direction: column;
+  block-size: min(41.25rem, calc(100vh - 4rem));
+  overflow: hidden;
+  background: var(--cds-layer-02);
+  box-shadow: 0 1rem 4rem rgb(0 0 0 / 22%);
+}
+
+.settings-header {
+  // Fixed top row of the flex-column dialog; the body scrolls beneath it.
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--cds-layer-02);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+}
+
+.settings-header h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.375rem;
+}
+
+.settings-form {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.settings-runtime .cds--inline-notification__subtitle {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-section {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+}
+
+.settings-section:last-child {
+  border-block-end: 0;
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  color: var(--cds-text-primary);
+}
+
+// A quiet text action beside a control — Carbon's ghost Button is a 32px
+// target, which outweighs the row it sits in.
+.settings-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cds-link-primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.settings-link-button:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.settings-link-button:disabled {
+  color: var(--cds-text-disabled, rgba(22, 22, 22, 0.25));
+  cursor: not-allowed;
+}
+
+.settings-helper {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: var(--cds-text-secondary);
+
+  // Status variants (default Markdown app).
+  &--ok {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+
+    svg {
+      flex: none;
+      color: var(--cds-text-success);
+    }
+  }
+
+  &--error {
+    color: var(--cds-text-error);
+  }
+}
+
+// The About pane's informational links — a small wrapped row.
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block-start: 0.5rem;
+}
+
+// A setting that only applies when its parent toggle is on — indented under it.
+.settings-subsetting {
+  margin-inline-start: 0.5rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--cds-border-subtle-01);
+}
+
+/* Where to get an agent Compose doesn't install: the command to run, plus a
+   copy button. Sits in the agent detail screen under "Not installed". */
+/* Grouping in the agent picker: the built-in agent's providers sit under one
+   heading, so the list stops asking "which agent" and "which endpoint" as if
+   they were the same question. */
+.agent-group + .agent-group {
+  margin-block-start: 1.25rem;
+}
+
+.agent-group__label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-block-end: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--cds-text-secondary);
+}
+
+.agent-group__note {
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--cds-text-helper);
+}
+
+/* "Use openai/gpt-oss-120b" — a link, because it performs the fix rather than
+   asking the reader to retype it. */
+.model-picker__suggest {
+  padding: 0;
+  font: inherit;
+  font-family: var(--font-jetbrains-mono);
+  color: var(--cds-link-primary);
+  background: none;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.agent-list--append {
+  margin-block-start: 0.75rem;
+}
+
+/* Where a provider's models come from — the one provider fact worth showing
+   in the row itself. */
+.agent-row__where,
+.harness-card__where {
+  margin-inline-start: 0.375rem;
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper);
+}
+
+/* "on this Mac" / "hosted" beside a provider row in the footer popup — the
+   same fact the settings list shows, so the two read alike. */
+.assistant-picker__where-label {
+  margin-inline-start: auto;
+  padding-inline-end: 0.375rem;
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper);
+}
+
+/* The local glyph on the footer chip. */
+.assistant-picker__where {
+  flex: none;
+  margin-inline-end: 0.25rem;
+  color: var(--cds-text-secondary);
+}
+
+// Local AI panel: one row per detectable dependency.
+.system-deps {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.system-deps__row {
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.system-deps__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-end: 0.25rem;
+}
+
+.settings-install-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-end: 0.75rem;
+}
+
+.settings-install-hint__command {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow-x: auto;
+  padding: 0.375rem 0.5rem;
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  background: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 3px;
+}
+
+/* Compact variant for an agent row in the picker. */
+.agent-install-hint {
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary);
+}
+
+.agent-install-hint__command {
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.6875rem;
+  padding: 0.0625rem 0.25rem;
+  background: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 3px;
+}
+
+.settings-install-log {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  max-block-size: 14rem;
+  overflow-y: auto;
+  background: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 3px;
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.6875rem;
+  line-height: 1.2rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-install-log__line {
+  color: var(--cds-text-secondary);
+}
+
+.settings-install-log__line--step {
+  color: var(--cds-text-primary);
+  font-weight: 600;
+}
+
+.settings-install-log__line--stderr {
+  color: var(--cds-text-warning);
+}

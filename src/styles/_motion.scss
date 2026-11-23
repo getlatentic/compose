@@ -38,7 +38,7 @@
     .review-card__button,
     .message-actions__btn,
     .new-menu__trigger,
-    .segmented-control button
+    .segmented__option
   ):active:not(:disabled) {
   scale: 0.96;
 }

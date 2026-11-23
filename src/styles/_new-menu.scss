@@ -4,7 +4,7 @@
 
 .new-menu__panel {
   position: fixed;
-  z-index: 9000;
+  z-index: var(--z-popover);
   padding: 6px;
   border-radius: 12px;
   // It grows upward from the + at its bottom right.

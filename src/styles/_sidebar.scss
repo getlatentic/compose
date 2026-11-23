@@ -85,20 +85,20 @@
   block-size: var(--titlebar-btn-size);
   border: 0;
   background: transparent;
-  color: var(--cds-icon-secondary, #525252);
+  color: var(--cds-icon-secondary);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .sidebar-titlebar__btn:hover:not(:disabled),
 .sidebar-titlebar__btn:focus-visible {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-  color: var(--cds-text-primary, #161616);
+  background: var(--cds-layer-hover-01);
+  color: var(--cds-text-primary);
   outline: none;
 }
 
 .sidebar-titlebar__btn:disabled {
-  color: var(--cds-icon-disabled, #c6c6c6);
+  color: var(--cds-icon-disabled);
   cursor: not-allowed;
 }
 
@@ -114,7 +114,7 @@
   gap: 0.25rem;
   padding-inline: 0.5rem;
   block-size: 2.75rem;
-  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
 }
 
 // Underline tabs (interaction spec §03) — no fill; the active tab is marked by a
@@ -135,19 +135,19 @@
   padding-inline: 0.25rem;
   // Inactive tab: a light gray-50 at regular weight, well below the active tab's
   // dark semibold.
-  color: var(--cds-text-placeholder, #8d8d8d);
+  color: var(--cds-text-placeholder);
   font-size: 0.875rem;
   font-weight: 400;
   border-radius: 0;
 }
 
 .sidebar-tab:hover {
-  color: var(--cds-text-primary, #161616);
+  color: var(--cds-text-primary);
 }
 
 .sidebar-tab--active {
-  color: var(--cds-text-primary, #161616);
-  border-block-end-color: var(--cds-border-interactive, #0f62fe);
+  color: var(--cds-text-primary);
+  border-block-end-color: var(--cds-border-interactive);
   font-weight: 600;
 }
 
@@ -204,12 +204,12 @@
   gap: 0.5rem;
   block-size: var(--pane-footer-height);
   padding-inline: 0.5rem 0.25rem;
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
-  background: var(--cds-layer-02, #ffffff);
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+  background: var(--cds-layer-02);
 }
 
 .sidebar-footer__count {
-  color: var(--cds-text-helper, #6f6f6f);
+  color: var(--cds-text-helper);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
@@ -230,20 +230,20 @@
   block-size: 1.75rem;
   border: 0;
   background: transparent;
-  color: var(--cds-icon-secondary, #525252);
+  color: var(--cds-icon-secondary);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .sidebar-footer__btn:hover:not(:disabled),
 .sidebar-footer__btn:focus-visible {
-  background: var(--cds-layer-hover-01, #e8e8e8);
-  color: var(--cds-text-primary, #161616);
+  background: var(--cds-layer-hover-01);
+  color: var(--cds-text-primary);
   outline: none;
 }
 
 .sidebar-footer__btn:disabled {
-  color: var(--cds-icon-disabled, #c6c6c6);
+  color: var(--cds-icon-disabled);
   cursor: not-allowed;
 }
 

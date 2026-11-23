@@ -40,7 +40,7 @@
 
 .popup-picker__popover {
   position: fixed;
-  z-index: 9100;
+  z-index: var(--z-popover-raised);
   display: flex;
   max-inline-size: 22rem;
   max-block-size: min(22rem, 60vh);

@@ -17,12 +17,12 @@
   border-radius: var(--radius-sm);
   background: transparent;
   text-align: start;
-  color: var(--cds-text-primary, #161616);
+  color: var(--cds-text-primary);
   cursor: pointer;
 }
 
 .workspace-switcher__trigger:hover {
-  background: var(--cds-layer-hover-01, #e8e8e8);
+  background: var(--cds-layer-hover-01);
 }
 
 .workspace-switcher__trigger-icon {
@@ -44,19 +44,19 @@
 
 .workspace-switcher__chevron {
   flex: 0 0 auto;
-  fill: var(--cds-icon-secondary, #525252);
+  fill: var(--cds-icon-secondary);
 }
 
 // The dropdown is portaled to <body> and fixed-positioned in JS (the sidebar
 // clips overflow and is short), so these rules can't assume any parent.
 .workspace-switcher__popover {
   position: fixed;
-  z-index: 9000;
+  z-index: var(--z-popover);
   max-block-size: min(28rem, 70vh);
   overflow-y: auto;
   padding-block: 0.25rem;
-  background: var(--cds-layer-02, #ffffff);
-  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-02);
+  border: 1px solid var(--cds-border-subtle-01);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-popover);
 }
@@ -81,19 +81,19 @@
   border: 0;
   background: transparent;
   text-align: start;
-  color: var(--cds-text-primary, #161616);
+  color: var(--cds-text-primary);
   cursor: pointer;
 
   &:hover,
   &:focus-visible {
-    background: var(--cds-layer-hover-01, #e8e8e8);
+    background: var(--cds-layer-hover-01);
     outline: none;
   }
 }
 
 .ws-item__icon {
   flex: 0 0 auto;
-  fill: var(--cds-icon-secondary, #525252);
+  fill: var(--cds-icon-secondary);
 }
 
 .ws-item__name {
@@ -107,7 +107,7 @@
 .ws-item__path {
   flex: 1 1 auto;
   min-inline-size: 0;
-  color: var(--cds-text-helper, #6f6f6f);
+  color: var(--cds-text-helper);
   font-family: var(--font-jetbrains-mono);
   font-size: 0.6875rem;
 }
@@ -117,7 +117,7 @@
   inset-block-start: 50%;
   inset-inline-end: 0.625rem;
   transform: translateY(-50%);
-  fill: var(--cds-icon-primary, #161616);
+  fill: var(--cds-icon-primary);
   pointer-events: none;
 }
 
@@ -137,14 +137,14 @@
   opacity: 0;
 
   svg {
-    fill: var(--cds-icon-secondary, #525252);
+    fill: var(--cds-icon-secondary);
   }
 
   &:hover {
-    background: var(--cds-layer-selected-01, #e0e0e0);
+    background: var(--cds-layer-selected-01);
 
     svg {
-      fill: var(--cds-icon-primary, #161616);
+      fill: var(--cds-icon-primary);
     }
   }
 }
@@ -158,11 +158,11 @@
   // Accent bar + tint live on the button: an inset shadow on the <li> would be
   // painted over by the button's own background.
   .ws-item__open {
-    background: var(--cds-layer-selected-01, #e0e0e0);
-    box-shadow: inset 3px 0 0 var(--cds-border-interactive, #0f62fe);
+    background: var(--cds-layer-selected-01);
+    box-shadow: inset 3px 0 0 var(--cds-border-interactive);
 
     &:hover {
-      background: var(--cds-layer-selected-hover-01, #d1d1d1);
+      background: var(--cds-layer-selected-hover-01);
     }
   }
 
@@ -174,6 +174,6 @@
 .workspace-switcher__footer {
   margin-block-start: 0.25rem;
   padding-block-start: 0.25rem;
-  border-block-start: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-block-start: 1px solid var(--cds-border-subtle-01);
 }
 

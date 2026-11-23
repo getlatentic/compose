@@ -106,7 +106,7 @@
 
 .properties-popover {
   position: fixed;
-  z-index: 9000;
+  z-index: var(--z-popover);
   padding: 0.75rem;
   border: 0.5px solid var(--color-edge);
   border-radius: 12px;

@@ -1,0 +1,225 @@
+// Rendered Markdown in chat replies and previews.
+
+// Rendered markdown inside an assistant bubble. The bubble owns the
+// padding; the markdown's outer blocks collapse their edge margins so
+// the text hugs that padding rather than doubling it. Font + line-height
+// are inherited from the bubble so every block reads as one consistent
+// type system; `overflow-wrap` keeps long words/URLs inside the panel.
+.markdown {
+  display: flow-root;
+  overflow-wrap: anywhere;
+  // One uniform type ramp for the whole reply: a single line-height,
+  // letter-spacing and kerning that every child inherits. The ONLY visual
+  // variation is bold (strong), italic (em) and link colour — font size,
+  // line spacing, kerning and colour stay identical across paragraphs,
+  // list items and headings.
+  line-height: 1.5;
+  letter-spacing: normal;
+  font-kerning: normal;
+}
+
+// Cross-file links. An internal link (a markdown link or a resolved wikilink)
+// gets the accent colour and a pointer; an editor `[[…]]` decoration reads as a
+// link token; a chat wikilink that resolves to no file is shown muted.
+.internal-link {
+  color: var(--cds-link-primary);
+  cursor: pointer;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// One uniform link look across the editor — markdown links (`<a>`) AND
+// wikilinks (`.wikilink`): accent colour, no underline at rest, underline
+// on hover, pointer cursor. A plain click follows them (see handleLinkClick).
+.tiptap-editor a,
+.wikilink {
+  color: var(--cds-link-primary);
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.wikilink--broken {
+  color: var(--cds-text-helper);
+  text-decoration: underline dotted;
+  cursor: default;
+}
+
+// Carbon styles bare h1–h6 / p / a / lists globally with its own type
+// tokens — token letter-spacing and per-element sizes AND line-heights. That
+// per-element drift is what makes raw markdown render "uneven". Force the
+// bubble's own typography back onto every text element so
+// size / line spacing / kerning / colour are uniform; only weight, style and
+// link colour vary. Code keeps its monospace stack (set on `.markdown code`).
+.markdown p,
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6,
+.markdown ul,
+.markdown ol,
+.markdown li,
+.markdown a,
+.markdown strong,
+.markdown em,
+.markdown blockquote,
+.markdown th,
+.markdown td {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+.markdown > :first-child {
+  margin-block-start: 0;
+}
+
+.markdown > :last-child {
+  margin-block-end: 0;
+}
+
+// Same gap above/below every block, so paragraphs, lists and headings share
+// one rhythm — no heading "section break" larger than a paragraph break.
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6,
+.markdown blockquote,
+.markdown pre,
+.markdown table {
+  margin-block: 0.5rem;
+}
+
+// Headings carry no type scale of their own — same size + line-height as
+// body (inherited above); only the weight marks them, matching inline bold.
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  font-weight: 600;
+}
+
+// Bold and italic are the only inline variations.
+.markdown strong {
+  font-weight: 600;
+}
+
+.markdown em {
+  font-style: italic;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-inline-start: 1.25rem;
+}
+
+// Tailwind's preflight strips `list-style` from ul/ol globally (same reset the
+// editor works around at `.editor`). Restore it so chat lists actually
+// show bullets / numbers instead of bare hanging indents.
+.markdown ul {
+  list-style: disc outside;
+}
+.markdown ol {
+  list-style: decimal outside;
+}
+.markdown li {
+  display: list-item;
+}
+
+.markdown li {
+  margin-block: 0.25rem;
+}
+
+.markdown a {
+  color: var(--cds-link-primary);
+  text-decoration: underline;
+}
+
+.markdown code {
+  padding: 0.0625rem 0.25rem;
+  border-radius: 4px;
+  background: var(--cds-layer-accent-01);
+  font-family: var(--font-jetbrains-mono);
+  // Slightly smaller than body so monospace doesn't look oversized, but
+  // breakable so a long token can't widen the bubble.
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.markdown pre {
+  // Long code lines scroll within the block rather than stretch the
+  // bubble; `max-inline-size: 100%` keeps the block itself contained.
+  max-inline-size: 100%;
+  overflow-x: auto;
+  padding: 0.625rem 0.75rem;
+  border-radius: 6px;
+  background: var(--cds-layer-accent-01);
+}
+
+.markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.85em;
+  // Don't break inside a code block — preserve lines and scroll instead.
+  overflow-wrap: normal;
+  line-height: 1.45;
+}
+
+.markdown blockquote {
+  // Structural indent only — the text colour stays the body colour (colour is
+  // uniform everywhere except links).
+  margin-inline: 0;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 3px solid var(--cds-border-subtle-02);
+}
+
+.markdown table {
+  // `display: block` + overflow lets a wide table scroll inside the
+  // bubble instead of forcing the panel wider.
+  display: block;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--cds-border-subtle-01);
+  text-align: start;
+  // Cells opt out of the bubble's `anywhere` wrapping: under table
+  // auto-layout it makes a cell's minimum width ONE CHARACTER, so a narrow
+  // panel crushes a short column into a letters-down-the-page strip. With
+  // word wrapping, columns keep readable minimums and a genuinely wide
+  // table scrolls inside the block instead.
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.markdown hr {
+  margin-block: 0.75rem;
+  border: 0;
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+}
+
+.markdown img {
+  max-inline-size: 100%;
+  height: auto;
+}

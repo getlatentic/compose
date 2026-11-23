@@ -1,0 +1,296 @@
+// An agent's run in the chat: the working indicator, file operations, stats, actions and the trace.
+
+// The "working" loader shown in the message slot (and during the brief gap
+// right after send) while a turn runs and the answer is still pending.
+// Deliberately NOT styled like the answer bubble — it must not read as a real
+// response. Replaced by the answer when it lands.
+.working-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-inline-size: min(32rem, 85%);
+  padding-block: 0.25rem;
+  color: var(--cds-text-helper);
+  font-size: 0.8125rem;
+}
+
+.working-indicator__spinner {
+  display: inline-block;
+  inline-size: 0.9rem;
+  text-align: center;
+  color: var(--cds-link-primary);
+}
+
+.working-indicator__label {
+  font-style: italic;
+}
+
+.working-indicator__elapsed {
+  color: var(--cds-text-placeholder);
+  font-variant-numeric: tabular-nums;
+}
+
+// --- Per-turn assistant author row: mark + "Assistant" + read pills ---
+// Makes each assistant turn legible at a glance — who's talking and what
+// files the answer drew on — without opening the agent trace.
+// --- File-operation cards: a create / edit the assistant made to a file ---
+// Prominent (a bordered card in the flow, not buried in the trace) because
+// changing the user's workspace is a significant action.
+.message-fileops {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.fileop {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 8px;
+  background: var(--cds-layer-02);
+}
+
+.fileop__icon {
+  flex-shrink: 0;
+  margin-block-start: 0.0625rem;
+  color: var(--cds-icon-secondary);
+}
+
+// Running → the icon spins as a live "working" cue (replacing the status line).
+.fileop--running .fileop__icon {
+  animation: fileop-spin 1s linear infinite;
+}
+
+.fileop--done .fileop__icon {
+  color: var(--cds-support-success);
+}
+
+.fileop--error .fileop__icon {
+  color: var(--cds-support-error);
+}
+
+.fileop__body {
+  display: grid;
+  gap: 0.0625rem;
+  min-inline-size: 0;
+}
+
+.fileop__title {
+  color: var(--cds-text-primary);
+  font-size: 0.8125rem;
+}
+
+.fileop__file {
+  padding: 0.0625rem 0.25rem;
+  border-radius: 4px;
+  background: var(--cds-layer-accent-01);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.fileop__sub {
+  color: var(--cds-text-helper);
+  font-size: 0.75rem;
+}
+
+@keyframes fileop-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.message-stats {
+  color: var(--cds-text-helper);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+// The trace toggle reveals the reasoning + tool calls below.
+.message-trace__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 0;
+  padding: 0.125rem 0.25rem;
+  background: transparent;
+  color: var(--cds-text-helper);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.message-trace__toggle:hover,
+.message-trace__toggle:focus-visible {
+  color: var(--cds-text-primary);
+  outline: none;
+}
+
+// Hover-revealed action row under an assistant turn — Copy, Regenerate,
+// Show work, with usage stats on the trailing edge. Hidden at rest so the
+// transcript reads as one quiet column; revealed on row hover or whenever a
+// child receives keyboard focus (so the actions are reachable without a
+// mouse). The "Show work" trace toggle keeps the row open if it's been
+// expanded.
+.message-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-self: stretch;
+  max-inline-size: min(32rem, 85%);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+
+.message-actions__left {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.message-row--assistant:hover .message-actions,
+.message-row--assistant:focus-within .message-actions,
+.message-actions:has(.message-trace__toggle[aria-expanded="true"]) {
+  opacity: 1;
+}
+
+.message-actions__btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.message-actions__btn:hover,
+.message-actions__btn:focus-visible {
+  background: var(--cds-layer-hover-01);
+  color: var(--cds-text-primary);
+  outline: none;
+}
+
+.agent-trace {
+  display: grid;
+  gap: 0.5rem;
+  margin-block-start: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 6px;
+  background: var(--cds-layer-01);
+}
+
+// The ordered timeline: reasoning, narration, and tool calls in arrival
+// order, connected by a left rail so it reads as a sequence.
+.trace-timeline {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trace-step {
+  position: relative;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--cds-border-subtle-02);
+}
+
+// Narration step — the agent's own words, plain text.
+.trace-notice {
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: var(--cds-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+// Reasoning — a collapsed accordion so a long chain doesn't bury the rest.
+.trace-thinking__summary {
+  cursor: pointer;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cds-text-helper);
+}
+
+.trace-thinking__body {
+  margin-block-start: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: var(--cds-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+// Tool call — a status head, then input → output when captured.
+.trace-tool {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary);
+}
+
+.trace-tool__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+// When the tool has input/output it's an accordion; the summary carries
+// the head and a pointer affordance.
+.trace-tool__summary {
+  cursor: pointer;
+}
+
+.trace-tool__summary:focus-visible {
+  outline: none;
+  text-decoration: underline;
+}
+
+.trace-tool__icon {
+  flex-shrink: 0;
+}
+
+.trace-tool--running .trace-tool__icon {
+  color: var(--cds-icon-secondary);
+}
+
+.trace-tool--done .trace-tool__icon {
+  color: var(--cds-support-success);
+}
+
+.trace-tool--error {
+  color: var(--cds-text-error);
+}
+
+.trace-tool--error .trace-tool__icon {
+  color: var(--cds-support-error);
+}
+
+.trace-tool__name {
+  font-family: var(--font-jetbrains-mono);
+  font-weight: 600;
+}
+
+.trace-tool__io {
+  max-block-size: 8rem;
+  margin: 0;
+  padding: 0.25rem 0.375rem;
+  overflow-y: auto;
+  border-radius: 4px;
+  background: var(--cds-layer-02);
+  font-size: 0.6875rem;
+  line-height: 1.125rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.trace-tool__io--out {
+  color: var(--cds-text-secondary);
+}
