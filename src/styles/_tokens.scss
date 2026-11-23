@@ -1,9 +1,10 @@
 // Colour tokens: Carbon's `--cds-*` names, each pointed at a palette colour.
 //
-// The palette (`--color-*`, from `lib/theme/palettes.json`) is the only place
-// a colour is chosen. Compose keeps Carbon's token names because Carbon's
-// components and the editor package both read them; pointing them at the
-// palette re-themes the chrome and the document together.
+// The palette (`--color-*`, from `lib/theme/palettes.json`) chooses the
+// colours of the chrome and the document; only the code-syntax colours and
+// the brand mark are fixed here. Compose keeps Carbon's token names because
+// Carbon's components and the editor package both read them; pointing them
+// at the palette re-themes the chrome and the document together.
 //
 // Light and dark need no separate block here: each `--color-*` already
 // switches with the appearance (see `lib/theme/paletteCss.ts`). What remains
@@ -21,104 +22,13 @@
 // choice win over the media query.
 
 @use "reading";
+@use "appearance-mixins" as appearance;
 
 :root {
   // Tells the engine which way the page leans, so scrollbars, form controls
   // and spellcheck underlines follow the appearance.
   color-scheme: light;
-
-  // Backgrounds and layers
-  --cds-background: var(--color-bg-app);
-  --cds-background-hover: var(--state-hover);
-  --cds-background-active: var(--state-pressed);
-  --cds-background-selected: var(--state-pressed);
-  --cds-background-selected-hover: var(--state-pressed);
-  --cds-background-inverse: var(--color-accent-default);
-  --cds-background-inverse-hover: var(--color-accent-hover);
-  --cds-layer-01: var(--color-surface-sunken);
-  --cds-layer-02: var(--color-surface-default);
-  --cds-layer-03: var(--color-surface-sunken);
-  --cds-layer-hover-01: var(--state-hover);
-  --cds-layer-hover-02: var(--state-hover);
-  --cds-layer-accent-01: var(--color-surface-pressed);
-  --cds-layer-accent-02: var(--color-surface-pressed);
-  --cds-layer-accent-hover-01: var(--color-border-default);
-  --cds-layer-active-01: var(--color-border-default);
-  --cds-layer-selected-01: var(--state-pressed);
-  --cds-layer-selected-02: var(--state-pressed);
-  --cds-layer-selected-hover-01: var(--color-border-default);
-  --cds-field: var(--color-surface-sunken);
-  --cds-field-01: var(--color-surface-sunken);
-  --cds-field-02: var(--color-surface-default);
-  --cds-field-hover-01: var(--state-hover);
-  --cds-field-hover-02: var(--state-hover);
-
-  // Borders
-  --cds-border-subtle-00: var(--color-border-subtle);
-  --cds-border-subtle-01: var(--color-border-default);
-  --cds-border-subtle-02: var(--color-border-default);
-  --cds-border-strong: var(--color-border-strong);
-  --cds-border-strong-01: var(--color-border-strong);
-  --cds-border-strong-02: var(--color-border-strong);
-  --cds-border-tile-01: var(--color-border-default);
-  --cds-border-inverse: var(--color-text-primary);
-  --cds-border-interactive: var(--color-border-focus);
-
-  // Text and icons
-  --cds-text-primary: var(--color-text-primary);
-  --cds-text-secondary: var(--color-text-secondary);
-  --cds-text-helper: var(--color-text-tertiary);
-  --cds-text-placeholder: var(--color-text-tertiary);
-  --cds-text-disabled: color-mix(in srgb, var(--color-text-primary) 35%, transparent);
-  --cds-text-on-color: var(--color-text-on-accent);
-  --cds-text-on-color-disabled: color-mix(in srgb, var(--color-text-on-accent) 45%, transparent);
-  --cds-text-inverse: var(--color-text-on-accent);
-  --cds-text-error: var(--color-danger-text);
-  --cds-text-success: var(--color-success-text);
-  --cds-text-warning: var(--color-warning-text);
-  --cds-icon-primary: var(--color-text-primary);
-  --cds-icon-secondary: var(--color-text-secondary);
-  --cds-icon-disabled: color-mix(in srgb, var(--color-text-primary) 35%, transparent);
-  --cds-icon-interactive: var(--color-accent-text);
-  --cds-icon-on-color: var(--color-text-on-accent);
-  --cds-icon-on-color-disabled: color-mix(in srgb, var(--color-text-on-accent) 45%, transparent);
-  --cds-icon-inverse: var(--color-text-on-accent);
-
-  // Focus, links, accent
-  --cds-focus: var(--color-border-focus);
-  --cds-focus-inset: var(--color-bg-app);
-  --cds-link-primary: var(--color-accent-text);
-  --cds-link-primary-hover: color-mix(in srgb, var(--color-accent-text) 75%, var(--color-text-primary));
-  --cds-link-secondary: var(--color-accent-text);
-  --cds-link-visited: var(--color-accent-text);
-  --cds-link-inverse: var(--color-accent-surface);
-  --cds-highlight: var(--color-accent-selection);
-  --cds-interactive: var(--color-accent-text);
-
-  // Buttons: the primary is the palette's ink, not a blue.
-  --cds-button-primary: var(--color-accent-default);
-  --cds-button-primary-hover: var(--color-accent-hover);
-  --cds-button-disabled: var(--color-surface-pressed);
-  --cds-button-danger-secondary-hover: var(--color-danger-surface);
-
-  // Status
-  --cds-support-error: var(--color-danger-text);
-  --cds-support-success: var(--color-success-text);
-  --cds-support-warning: var(--color-warning-text);
-  --cds-notification-background-error: var(--color-danger-surface);
-  --cds-notification-background-warning: var(--color-warning-surface);
-  --cds-notification-background-success: var(--color-success-surface);
-  --cds-notification-background-info: var(--color-accent-surface);
-
-  // Status pills: dark text on a pale tint, in both appearances.
-  --pill-green-fg: var(--color-success-text);
-  --pill-green-bg: var(--color-success-surface);
-  --pill-blue-fg: var(--color-accent-text);
-  --pill-blue-bg: var(--color-accent-surface);
-  --pill-red-fg: var(--color-danger-text);
-  --pill-red-bg: var(--color-danger-surface);
-  --pill-gray-bg: var(--color-surface-pressed);
-  --pill-yellow-bg: var(--color-warning-surface);
+  @include appearance.palette-aliases;
 
   // Type, for the Carbon components and editor widgets that read these.
   --cds-body-01-font-family: var(--font-ui);
@@ -128,15 +38,12 @@
   // the way an app icon is.
   --brand-mark-bg: #0f1419;
 
-  // Elevation: a hairline edge, then a few soft layers that widen with
-  // height. Few layers, because stacked wide blurs band into visible rings.
-  --shadow-raised: 0 0 0 1px var(--color-edge), 0 1px 2px -1px rgb(0 0 0 / 6%), 0 2px 4px rgb(0 0 0 / 3%);
-  --shadow-popover: 0 0 0 1px var(--color-edge), 0 2px 4px rgb(0 0 0 / 4%), 0 8px 16px -4px rgb(0 0 0 / 8%),
-    0 16px 32px -8px rgb(0 0 0 / 6%);
-  --shadow-dialog: 0 0 0 1px var(--color-edge), 0 2px 6px rgb(0 0 0 / 4%), 0 12px 24px -6px rgb(0 0 0 / 8%),
-    0 32px 64px -12px rgb(0 0 0 / 12%);
-  // The panels set into the window: an edge and the faintest lift.
-  --shadow-panel: 0 0 0 1px var(--color-edge), 0 1px 2px rgb(0 0 0 / 4%);
+  // Stacking for what floats over the window: a dialog, then anything
+  // portalled to the body (menus, pickers, the update banner), then a
+  // picker that opens from inside one of those.
+  --z-modal: 1000;
+  --z-popover: 9000;
+  --z-popover-raised: 9100;
 
   // Radius and motion (Figma "Radius" and "Motion" collections).
   --radius-xs: 4px;
@@ -155,22 +62,7 @@
 @mixin dark {
   color-scheme: dark;
 
-  // Fenced-code syntax (@latentic/live-markdown). The editor paints
-  // `var(--md-code-…, <One Light value>)`, so dark sets One Dark and light
-  // keeps the editor's own palette. The clipboard ignores these on purpose:
-  // pasted HTML lands in a white document whatever the editor's appearance.
-  --md-code-keyword: #c678dd;
-  --md-code-string: #98c379;
-  --md-code-comment: #7f848e;
-  --md-code-literal: #d19a66;
-  --md-code-function: #61afef;
-  --md-code-type: #e5c07b;
-  --md-code-variable: #e06c75;
-  --md-code-property: #61afef;
-  --md-code-tag: #e06c75;
-  --md-code-attribute: #d19a66;
-  --md-code-regexp: #56b6c2;
-  --md-code-invalid: #be5046;
+  @include appearance.dark-code-colors;
 
   // Dark: the edge is drawn inside, so a dark ring outside it does not read
   // as a second border.
@@ -184,45 +76,24 @@
   --shadow-panel: 0 0 0 1px var(--color-edge);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    @include dark;
-  }
-}
-
-:root[data-theme="dark"] {
+@include appearance.when-dark {
   @include dark;
 }
 
-// The note panel's own light or dark (`data-editor-scheme`): its code colours
-// and shadows follow it, not the window. `initial` hands the light theme's
-// code colours back to the editor's own defaults.
-:root:where([data-editor-scheme="dark"]) :is(.editor-region, .editor-preview) {
+// The note panel's own light or dark (`data-editor-scheme`): its Carbon
+// colours, code colours and shadows follow it, not the window. `initial`
+// hands the light theme's code colours back to the editor's own defaults.
+:root:where([data-editor-scheme]) :is(#{appearance.$editor-panels}) {
+  @include appearance.palette-aliases;
+}
+
+:root:where([data-editor-scheme="dark"]) :is(#{appearance.$editor-panels}) {
   @include dark;
 }
 
-:root:where([data-editor-scheme="light"]) :is(.editor-region, .editor-preview) {
+:root:where([data-editor-scheme="light"]) :is(#{appearance.$editor-panels}) {
   color-scheme: light;
-  --md-code-keyword: initial;
-  --md-code-string: initial;
-  --md-code-comment: initial;
-  --md-code-literal: initial;
-  --md-code-function: initial;
-  --md-code-type: initial;
-  --md-code-variable: initial;
-  --md-code-property: initial;
-  --md-code-tag: initial;
-  --md-code-attribute: initial;
-  --md-code-regexp: initial;
-  --md-code-invalid: initial;
-}
-
-// State colours for a page that never sets `data-palette` (the palette
-// stylesheet defines them per palette; see `stateDeclarations`).
-:root:not([data-palette]) {
-  --state-hover: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
-  --state-pressed: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
-  --color-edge: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  @include appearance.editor-code-colors;
 }
 
 @media (prefers-reduced-motion: reduce) {

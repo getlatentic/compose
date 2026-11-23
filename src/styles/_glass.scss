@@ -6,6 +6,8 @@
 // Outside Compose on a Mac (the browser dev build) there is no material, and
 // the frame paints a Mac window's own grey instead.
 
+@use "appearance-mixins" as appearance;
+
 :root {
   --frame-bg: #ececec;
   --glass-label: rgb(0 0 0 / 85%);
@@ -29,13 +31,7 @@
   --system-accent: #0a84ff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    @include glass-dark;
-  }
-}
-
-:root[data-theme="dark"] {
+@include appearance.when-dark {
   @include glass-dark;
 }
 

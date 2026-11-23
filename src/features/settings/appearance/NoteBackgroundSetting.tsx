@@ -1,8 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useState, type ChangeEvent } from "react";
 
 import { useUiStore } from "../../../app/store/uiStore";
+import { storeBackgroundImage } from "../../../lib/ipc/backgroundClient";
 import { isTauriRuntime } from "../../../lib/runtime/desktopRuntime";
 import { DEFAULT_DIM, type ImageFit, type NoteBackground } from "../../../lib/theme/noteBackground";
 import { ColorField } from "../../shared/ColorField";
@@ -26,8 +26,7 @@ const STARTING_COLOR = "#f4efe6";
 
 /**
  * Settings → Appearance → Background: the theme's page, a colour, or an
- * image behind the note. An image is copied into Compose's data folder first
- * (`background_image_store`).
+ * image behind the note. An image is copied into Compose's data folder first.
  */
 export function NoteBackgroundSetting() {
   const background = useUiStore((state) => state.noteBackground);
@@ -39,7 +38,7 @@ export function NoteBackgroundSetting() {
     const picked = await open({ multiple: false, directory: false, filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }] });
     if (typeof picked !== "string") return;
     try {
-      const file = await invoke<string>("background_image_store", { source: picked });
+      const file = await storeBackgroundImage(picked);
       setBackground({ kind: "image", file, fit: "fill", dim: DEFAULT_DIM });
     } catch (failure) {
       setError(String(failure));

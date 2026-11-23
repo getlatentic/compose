@@ -1,0 +1,161 @@
+// Mixins and lists the appearance stylesheets share. Emits no CSS itself.
+
+// The note panels: the editor and the Settings preview of it. Kept equal to
+// `EDITOR_PANELS` in `lib/theme/paletteCss.ts` (a test checks).
+$editor-panels: ".editor-region, .editor-preview";
+
+// The page is dark: by the system unless the writer chose Light, or by an
+// explicit choice of Dark. Mirrors `themedRules` in `paletteCss.ts`.
+@mixin when-dark {
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      @content;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    @content;
+  }
+}
+
+// Fenced-code syntax (@latentic/live-markdown) in dark: One Dark. The editor
+// paints `var(--md-code-…, <One Light value>)`, so light needs none. The
+// clipboard ignores these on purpose: pasted HTML lands in a white document
+// whatever the editor's appearance.
+$code-dark: (
+  keyword: #c678dd,
+  string: #98c379,
+  comment: #7f848e,
+  literal: #d19a66,
+  function: #61afef,
+  type: #e5c07b,
+  variable: #e06c75,
+  property: #61afef,
+  tag: #e06c75,
+  attribute: #d19a66,
+  regexp: #56b6c2,
+  invalid: #be5046,
+);
+
+@mixin dark-code-colors {
+  @each $name, $value in $code-dark {
+    --md-code-#{$name}: #{$value};
+  }
+}
+
+// A light note panel in a dark window: `initial` hands the code colours back
+// to the editor's own light defaults.
+@mixin editor-code-colors {
+  @each $name, $value in $code-dark {
+    --md-code-#{$name}: initial;
+  }
+}
+
+// Carbon's names and the elevation shadows, pointed at the palette. A
+// custom property's `var()` is resolved where it is declared, so a panel
+// with its own light or dark (`data-editor-scheme`) declares these again,
+// or it would keep the window's hovers, borders and shadows.
+@mixin palette-aliases {
+  // Backgrounds and layers
+  --cds-background: var(--color-bg-app);
+  --cds-background-hover: var(--state-hover);
+  --cds-background-active: var(--state-pressed);
+  --cds-background-selected: var(--state-pressed);
+  --cds-background-selected-hover: var(--state-pressed);
+  --cds-background-inverse: var(--color-accent-default);
+  --cds-background-inverse-hover: var(--color-accent-hover);
+  --cds-layer-01: var(--color-surface-sunken);
+  --cds-layer-02: var(--color-surface-default);
+  --cds-layer-03: var(--color-surface-sunken);
+  --cds-layer-hover-01: var(--state-hover);
+  --cds-layer-hover-02: var(--state-hover);
+  --cds-layer-accent-01: var(--color-surface-pressed);
+  --cds-layer-accent-02: var(--color-surface-pressed);
+  --cds-layer-accent-hover-01: var(--color-border-default);
+  --cds-layer-active-01: var(--color-border-default);
+  --cds-layer-selected-01: var(--state-pressed);
+  --cds-layer-selected-02: var(--state-pressed);
+  --cds-layer-selected-hover-01: var(--color-border-default);
+  --cds-field: var(--color-surface-sunken);
+  --cds-field-01: var(--color-surface-sunken);
+  --cds-field-02: var(--color-surface-default);
+  --cds-field-hover-01: var(--state-hover);
+  --cds-field-hover-02: var(--state-hover);
+
+  // Borders
+  --cds-border-subtle-00: var(--color-border-subtle);
+  --cds-border-subtle-01: var(--color-border-default);
+  --cds-border-subtle-02: var(--color-border-default);
+  --cds-border-strong: var(--color-border-strong);
+  --cds-border-strong-01: var(--color-border-strong);
+  --cds-border-strong-02: var(--color-border-strong);
+  --cds-border-tile-01: var(--color-border-default);
+  --cds-border-inverse: var(--color-text-primary);
+  --cds-border-interactive: var(--color-border-focus);
+
+  // Text and icons
+  --cds-text-primary: var(--color-text-primary);
+  --cds-text-secondary: var(--color-text-secondary);
+  --cds-text-helper: var(--color-text-tertiary);
+  --cds-text-placeholder: var(--color-text-tertiary);
+  --cds-text-disabled: color-mix(in srgb, var(--color-text-primary) 35%, transparent);
+  --cds-text-on-color: var(--color-text-on-accent);
+  --cds-text-on-color-disabled: color-mix(in srgb, var(--color-text-on-accent) 45%, transparent);
+  --cds-text-inverse: var(--color-text-on-accent);
+  --cds-text-error: var(--color-danger-text);
+  --cds-text-success: var(--color-success-text);
+  --cds-text-warning: var(--color-warning-text);
+  --cds-icon-primary: var(--color-text-primary);
+  --cds-icon-secondary: var(--color-text-secondary);
+  --cds-icon-disabled: color-mix(in srgb, var(--color-text-primary) 35%, transparent);
+  --cds-icon-interactive: var(--color-accent-text);
+  --cds-icon-on-color: var(--color-text-on-accent);
+  --cds-icon-on-color-disabled: color-mix(in srgb, var(--color-text-on-accent) 45%, transparent);
+  --cds-icon-inverse: var(--color-text-on-accent);
+
+  // Focus, links, accent
+  --cds-focus: var(--color-border-focus);
+  --cds-focus-inset: var(--color-bg-app);
+  --cds-link-primary: var(--color-accent-text);
+  --cds-link-primary-hover: color-mix(in srgb, var(--color-accent-text) 75%, var(--color-text-primary));
+  --cds-link-secondary: var(--color-accent-text);
+  --cds-link-visited: var(--color-accent-text);
+  --cds-link-inverse: var(--color-accent-surface);
+  --cds-highlight: var(--color-accent-selection);
+  --cds-interactive: var(--color-accent-text);
+
+  // Buttons: the primary is the palette's ink, not a blue.
+  --cds-button-primary: var(--color-accent-default);
+  --cds-button-primary-hover: var(--color-accent-hover);
+  --cds-button-disabled: var(--color-surface-pressed);
+  --cds-button-danger-secondary-hover: var(--color-danger-surface);
+
+  // Status
+  --cds-support-error: var(--color-danger-text);
+  --cds-support-success: var(--color-success-text);
+  --cds-support-warning: var(--color-warning-text);
+  --cds-notification-background-error: var(--color-danger-surface);
+  --cds-notification-background-warning: var(--color-warning-surface);
+  --cds-notification-background-success: var(--color-success-surface);
+  --cds-notification-background-info: var(--color-accent-surface);
+
+  // Status pills: dark text on a pale tint, in both appearances.
+  --pill-green-fg: var(--color-success-text);
+  --pill-green-bg: var(--color-success-surface);
+  --pill-blue-fg: var(--color-accent-text);
+  --pill-blue-bg: var(--color-accent-surface);
+  --pill-red-fg: var(--color-danger-text);
+  --pill-red-bg: var(--color-danger-surface);
+  --pill-gray-bg: var(--color-surface-pressed);
+  --pill-yellow-bg: var(--color-warning-surface);
+
+  // Elevation: a hairline edge, then a few soft layers that widen with
+  // height. Few layers, because stacked wide blurs band into visible rings.
+  --shadow-raised: 0 0 0 1px var(--color-edge), 0 1px 2px -1px rgb(0 0 0 / 6%), 0 2px 4px rgb(0 0 0 / 3%);
+  --shadow-popover: 0 0 0 1px var(--color-edge), 0 2px 4px rgb(0 0 0 / 4%), 0 8px 16px -4px rgb(0 0 0 / 8%),
+    0 16px 32px -8px rgb(0 0 0 / 6%);
+  --shadow-dialog: 0 0 0 1px var(--color-edge), 0 2px 6px rgb(0 0 0 / 4%), 0 12px 24px -6px rgb(0 0 0 / 8%),
+    0 32px 64px -12px rgb(0 0 0 / 12%);
+  // The panels set into the window: an edge and the faintest lift.
+  --shadow-panel: 0 0 0 1px var(--color-edge), 0 1px 2px rgb(0 0 0 / 4%);
+}

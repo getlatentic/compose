@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
-import { colorProperty, fontStack, paletteCss, splashCss, stateDeclarations } from "./paletteCss";
+import { EDITOR_PANELS, colorProperty, fontStack, paletteCss, splashCss, stateDeclarations } from "./paletteCss";
 import { DEFAULT_PALETTE, PALETTES, normalizePalette, type PaletteColors } from "./palettes";
 
 function luminance(hex: string): number {
@@ -116,6 +118,17 @@ describe("paletteCss", () => {
     expect(darkRule.slice(0, darkRule.indexOf("}"))).toContain(`--color-doc-text: ${paper.dark["doc/text"]};`);
     expect(lightRule.slice(0, lightRule.indexOf("}"))).toContain(`--color-doc-text: ${paper.light["doc/text"]};`);
     expect(lightRule.slice(0, lightRule.indexOf("}"))).toContain("color-scheme: light;");
+    // Its hover tint mixes the panel's own text colour, not the window's.
+    expect(darkRule.slice(0, darkRule.indexOf("}"))).toContain("--state-hover: color-mix(in srgb, var(--color-text-primary) 6%");
+  });
+
+  it("names the same note panels as the stylesheets do", () => {
+    const mixins = readFileSync(new URL("../../styles/_appearance-mixins.scss", import.meta.url), "utf8");
+    expect(mixins).toContain(`$editor-panels: "${EDITOR_PANELS.join(", ")}";`);
+  });
+
+  it("gives a page without a palette the default palette's hovers", () => {
+    expect(css.startsWith(":root {\n  --state-hover:")).toBe(true);
   });
 
   it("draws Classic, the default, in the system font throughout", () => {

@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 
 import { useUiStore } from "../../app/store/uiStore";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { applyAppearance } from "../../lib/theme/appearance";
+import { reportClientError } from "../../lib/diagnostics/errorReporter";
+import { allowBackgroundImage } from "../../lib/ipc/backgroundClient";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { applyNoteBackground } from "../../lib/theme/noteBackground";
 import { syncWindowAppearance } from "../../lib/theme/windowChrome";
@@ -12,10 +14,8 @@ import { syncWindowAppearance } from "../../lib/theme/windowChrome";
  * Keeps the appearance choices (light/dark, palette, reading font and size) on
  * the document.
  *
- * `main.tsx` applies the stored choices before the first paint, which is what
- * stops a launch flashing the wrong theme. This is the other half: without it
- * the store and the preferences update, the control moves, and the app keeps
- * what it booted with until the next launch.
+ * `main.tsx` applies the stored choices before the first paint; this keeps
+ * them applied as they change.
  *
  * Following the system needs no listener: the `prefers-color-scheme` rules do
  * that in CSS, which is why "system" removes `data-theme` instead of resolving it.
@@ -47,9 +47,9 @@ export function useAppTheme(): void {
     // After a launch the kept image's folder has to be allowed again before
     // the web view may load it.
     let live = true;
-    void invoke("background_image_allow")
-      .catch(() => undefined)
-      .then(() => {
+    allowBackgroundImage()
+      .catch((error: unknown) => reportClientError("note-background", "Could not show the note's background image", String(error)))
+      .finally(() => {
         if (live) applyNoteBackground(noteBackground, root, convertFileSrc);
       });
     return () => {

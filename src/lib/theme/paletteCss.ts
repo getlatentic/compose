@@ -5,8 +5,7 @@ import { DEFAULT_PALETTE, PALETTES, type Palette, type PaletteColors, type Palet
  * puts it in the document before the first paint.
  *
  * Built from `palettes.json` at start-up rather than written out as SCSS, so
- * the JSON stays the only copy of the values. It is a few kilobytes of string
- * work, done once.
+ * the JSON stays the only copy of the values.
  *
  * The selectors match any element, not only the root. A Settings swatch sets
  * `data-palette` on its own preview and so draws in that palette while the
@@ -112,8 +111,8 @@ function paletteRules(palette: Palette): string {
   ].join("\n");
 }
 
-/** The note panels: the editor and the Settings preview of it. */
-const EDITOR_PANELS = [".editor-region", ".editor-preview"];
+/** The note panels: the editor and the Settings preview of it. Kept equal to `$editor-panels` in `_appearance-mixins.scss`. */
+export const EDITOR_PANELS = [".editor-region", ".editor-preview"];
 
 /**
  * The editor's own light or dark (`data-editor-scheme`), whatever the app's:
@@ -121,19 +120,26 @@ const EDITOR_PANELS = [".editor-region", ".editor-preview"];
  * attribute and the panel follows the window. The scheme sits in `:where` so
  * these rules outrank the base dark tokens (`_tokens.scss`) by the palette
  * attribute alone, and the writer's own background colour
- * (`_note-background.scss`) still outranks them.
+ * (`_note-background.scss`) still outranks them. The hover and edge tints
+ * are declared again here because they mix the panel's own text colour.
  */
 function editorSchemeRules(palette: Palette): string {
   const under = (scheme: "light" | "dark") =>
     EDITOR_PANELS.map((panel) => `:root:where([data-editor-scheme="${scheme}"])[data-palette="${palette.id}"] ${panel}`);
+  const states = stateDeclarations(palette);
   return [
-    rule(under("light"), [...colorDeclarations(palette.light), "color-scheme: light;"]),
-    rule(under("dark"), [...colorDeclarations(palette.dark), "color-scheme: dark;"]),
+    rule(under("light"), [...colorDeclarations(palette.light), ...states, "color-scheme: light;"]),
+    rule(under("dark"), [...colorDeclarations(palette.dark), ...states, "color-scheme: dark;"]),
   ].join("\n");
 }
 
-export function paletteCss(palettes: readonly Palette[] = PALETTES): string {
-  return palettes.map(paletteRules).join("\n");
+/**
+ * Every palette's rules, after the default palette's state colours on bare
+ * `:root`, so a page that never sets `data-palette` still has hovers.
+ */
+export function paletteCss(palettes: readonly Palette[] = PALETTES, defaultId: string = DEFAULT_PALETTE): string {
+  const fallback = palettes.find((palette) => palette.id === defaultId) ?? palettes[0];
+  return [rule([":root"], stateDeclarations(fallback)), ...palettes.map(paletteRules)].join("\n");
 }
 
 function splashDeclarations(colors: PaletteColors): string[] {
