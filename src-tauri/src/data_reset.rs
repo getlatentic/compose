@@ -11,7 +11,8 @@ mod macos {
     use std::ffi::OsStr;
     use std::path::{Path, PathBuf};
 
-    use crate::profile_migration::{is_shipped_identity, running_bundle_id, LEGACY_BUNDLE_IDS, PROFILE_SUBDIRS};
+    use crate::app_identity::{is_shipped_identity, running_bundle_id};
+    use crate::profile_migration::{LEGACY_BUNDLE_IDS, PROFILE_SUBDIRS};
 
     /// Left in Application Support to carry a pending reset across the restart.
     const MARKER: &str = ".reset-pending";

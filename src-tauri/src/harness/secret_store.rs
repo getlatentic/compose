@@ -311,8 +311,8 @@ fn new_master_key() -> [u8; KEY_LEN] {
 #[cfg(not(test))]
 fn keyring_service() -> String {
     #[cfg(target_os = "macos")]
-    if !crate::profile_migration::is_shipped_identity() {
-        return crate::profile_migration::running_bundle_id();
+    if !crate::app_identity::is_shipped_identity() {
+        return crate::app_identity::running_bundle_id().to_owned();
     }
     KEYRING_SERVICE.to_owned()
 }

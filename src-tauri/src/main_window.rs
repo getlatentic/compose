@@ -6,7 +6,7 @@
 
 use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
 
-use crate::{boot_payload, launch_window, profile_migration};
+use crate::{app_identity, boot_payload, launch_window};
 
 pub const LABEL: &str = "main";
 
@@ -33,7 +33,7 @@ pub fn ensure(app: &AppHandle) {
     // Its boot data is read afresh — the one read at launch is hours old by now —
     // and off the main thread, as the vault may be a cold iCloud folder.
     std::thread::spawn(move || {
-        let boot_script = boot_payload::init_script(profile_migration::profile_dir());
+        let boot_script = boot_payload::init_script(app_identity::profile_dir());
         if let Err(error) = build(&app, boot_script) {
             eprintln!("main window: {error}");
         }

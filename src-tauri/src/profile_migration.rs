@@ -6,27 +6,8 @@
 //! in place. It copies (never moves): the legacy profile stays intact as a
 //! fallback, and a `dest exists` guard makes it a one-time, non-clobbering step.
 
-/// The current bundle identifier (must match `tauri.conf.json`).
 #[cfg(target_os = "macos")]
-pub(crate) const CURRENT_BUNDLE_ID: &str = "ai.latentic.compose";
-
-/// The identifier of the copy that is running, which is what macOS keys its
-/// profile by. A test build under its own id must read and reset its own
-/// profile, never the installed app's. An unbundled dev binary has none and
-/// uses the shipped id, as Tauri does.
-#[cfg(target_os = "macos")]
-pub(crate) fn running_bundle_id() -> String {
-    objc2_foundation::NSBundle::mainBundle()
-        .bundleIdentifier()
-        .map(|id| id.to_string())
-        .unwrap_or_else(|| CURRENT_BUNDLE_ID.to_owned())
-}
-
-/// True for the shipped app, whose profile older bundle ids are carried into.
-#[cfg(target_os = "macos")]
-pub(crate) fn is_shipped_identity() -> bool {
-    running_bundle_id() == CURRENT_BUNDLE_ID
-}
+use crate::app_identity::{is_shipped_identity, CURRENT_BUNDLE_ID};
 
 /// Bundle ids this app shipped under earlier, newest first. The first one whose
 /// profile still exists is carried forward.
@@ -39,26 +20,6 @@ pub(crate) const LEGACY_BUNDLE_IDS: &[&str] = &["com.compose.app"];
 /// intentionally skipped: it only holds the models.dev catalog, which re-fetches.
 #[cfg(target_os = "macos")]
 pub(crate) const PROFILE_SUBDIRS: &[&str] = &["Application Support", "WebKit"];
-
-/// Where this app's state lives, resolved without an `AppHandle` so code that
-/// runs before Tauri starts can read it. Matches what `app.path()` resolves
-/// `app_config_dir` and `app_data_dir` to on macOS — the same directory.
-#[cfg(target_os = "macos")]
-pub fn profile_dir() -> Option<std::path::PathBuf> {
-    std::env::var_os("HOME").map(|home| {
-        std::path::PathBuf::from(home)
-            .join("Library")
-            .join("Application Support")
-            .join(running_bundle_id())
-    })
-}
-
-/// Only macOS keys its per-app directories by bundle identifier, and only macOS
-/// ships today. Elsewhere the callers fall back to asking Tauri once it is up.
-#[cfg(not(target_os = "macos"))]
-pub fn profile_dir() -> Option<std::path::PathBuf> {
-    None
-}
 
 #[cfg(target_os = "macos")]
 pub fn migrate_legacy_profile() {
