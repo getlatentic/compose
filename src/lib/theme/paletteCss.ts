@@ -102,11 +102,34 @@ function themedRules(selectors: string[], light: string[], dark: string[]): stri
 }
 
 function paletteRules(palette: Palette): string {
-  return themedRules(
-    [`[data-palette="${palette.id}"]`],
-    [...colorDeclarations(palette.light), ...fontDeclarations(palette.fonts), ...stateDeclarations(palette)],
-    colorDeclarations(palette.dark),
-  );
+  return [
+    themedRules(
+      [`[data-palette="${palette.id}"]`],
+      [...colorDeclarations(palette.light), ...fontDeclarations(palette.fonts), ...stateDeclarations(palette)],
+      colorDeclarations(palette.dark),
+    ),
+    editorSchemeRules(palette),
+  ].join("\n");
+}
+
+/** The note panels: the editor and the Settings preview of it. */
+const EDITOR_PANELS = [".editor-region", ".editor-preview"];
+
+/**
+ * The editor's own light or dark (`data-editor-scheme`), whatever the app's:
+ * the note panel takes the palette's light or dark half; "app" sets no
+ * attribute and the panel follows the window. The scheme sits in `:where` so
+ * these rules outrank the base dark tokens (`_tokens.scss`) by the palette
+ * attribute alone, and the writer's own background colour
+ * (`_note-background.scss`) still outranks them.
+ */
+function editorSchemeRules(palette: Palette): string {
+  const under = (scheme: "light" | "dark") =>
+    EDITOR_PANELS.map((panel) => `:root:where([data-editor-scheme="${scheme}"])[data-palette="${palette.id}"] ${panel}`);
+  return [
+    rule(under("light"), [...colorDeclarations(palette.light), "color-scheme: light;"]),
+    rule(under("dark"), [...colorDeclarations(palette.dark), "color-scheme: dark;"]),
+  ].join("\n");
 }
 
 export function paletteCss(palettes: readonly Palette[] = PALETTES): string {

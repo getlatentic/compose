@@ -9,12 +9,15 @@ import { DEFAULT_PALETTE, normalizePalette } from "../theme/palettes";
 import {
   DEFAULT_READING_FONT,
   DEFAULT_READING_SIZE,
+  normalizeCustomFont,
   normalizeReadingFont,
   normalizeReadingSize,
   type ReadingFont,
   type ReadingSize,
 } from "../theme/reading";
-import { DEFAULT_THEME, normalizeTheme, type ThemeChoice } from "../theme/theme";
+import { DEFAULT_EXPORT_FONT, normalizeExportFont, type ExportFont } from "../theme/exportFont";
+import { normalizeNoteBackground, THEME_BACKGROUND, type NoteBackground } from "../theme/noteBackground";
+import { DEFAULT_EDITOR_SCHEME, DEFAULT_THEME, normalizeEditorScheme, normalizeTheme, type EditorScheme, type ThemeChoice } from "../theme/theme";
 import { DEFAULT_ZOOM, clampZoom } from "../zoom/zoom";
 
 const UI_PREFS_KEY = "compose.uiPrefs.v1";
@@ -44,6 +47,14 @@ export interface UiPrefs {
   readingFont: ReadingFont;
   /** The note text size. */
   readingSize: ReadingSize;
+  /** The installed font the "custom" reading font uses. */
+  customFont: string | null;
+  /** The font exports use: the note's, or Latin Modern. */
+  exportFont: ExportFont;
+  /** What sits behind the note: the theme's page, a colour, or an image. */
+  noteBackground: NoteBackground;
+  /** The note panel's light or dark: the app's, or its own. */
+  editorScheme: EditorScheme;
 }
 
 const FALLBACK: UiPrefs = {
@@ -58,6 +69,10 @@ const FALLBACK: UiPrefs = {
   palette: DEFAULT_PALETTE,
   readingFont: DEFAULT_READING_FONT,
   readingSize: DEFAULT_READING_SIZE,
+  customFont: null,
+  exportFont: DEFAULT_EXPORT_FONT,
+  noteBackground: THEME_BACKGROUND,
+  editorScheme: DEFAULT_EDITOR_SCHEME,
 };
 
 function widthOrNull(value: unknown): number | null {
@@ -93,6 +108,10 @@ export function loadUiPrefs(): UiPrefs {
       palette: normalizePalette(parsed.palette),
       readingFont: normalizeReadingFont(parsed.readingFont),
       readingSize: normalizeReadingSize(parsed.readingSize),
+      customFont: normalizeCustomFont(parsed.customFont),
+      exportFont: normalizeExportFont(parsed.exportFont),
+      noteBackground: normalizeNoteBackground(parsed.noteBackground),
+      editorScheme: normalizeEditorScheme(parsed.editorScheme),
     };
   } catch {
     return FALLBACK;

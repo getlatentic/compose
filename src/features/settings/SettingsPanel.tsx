@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { AgentsSettings } from "./AgentsSettings";
 import { AppearanceSettings } from "./appearance/AppearanceSettings";
+import { EditorSettings } from "./editor/EditorSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { AboutSettings } from "./AboutSettings";
 import { SystemSetupPanel } from "./SystemSetupPanel";
@@ -9,6 +10,7 @@ import { SystemSetupPanel } from "./SystemSetupPanel";
 const CATEGORIES = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
+  { id: "editor", label: "Editor" },
   { id: "agents", label: "AI agents" },
   { id: "localai", label: "Local AI" },
   { id: "about", label: "About" },
@@ -54,6 +56,8 @@ export function SettingsPanel() {
           <GeneralSettings />
         ) : category === "appearance" ? (
           <AppearanceSettings />
+        ) : category === "editor" ? (
+          <EditorSettings />
         ) : (
           <AboutSettings />
         )}

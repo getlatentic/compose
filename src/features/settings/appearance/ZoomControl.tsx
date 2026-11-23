@@ -9,13 +9,14 @@ import {
   zoomLabel,
   zoomOut,
 } from "../../../lib/zoom/zoom";
+import { Stepper } from "../../shared/Stepper";
 
 const SMALLEST = ZOOM_STEPS[0];
 const LARGEST = ZOOM_STEPS[ZOOM_STEPS.length - 1];
 
 /**
- * App zoom: the whole window, chrome and notes alike, where Text size above
- * changes only the notes. The View menu carries the shortcuts, but someone who
+ * App zoom: the whole window, chrome and notes alike, where Editor → Text
+ * size changes only the notes. The View menu carries the shortcuts, but someone who
  * needs everything larger is the least likely to go looking in a menu bar, so
  * it is visible here and shows the current value.
  */
@@ -33,30 +34,17 @@ export function ZoomControl() {
         <span id="zoom-label" className="appearance-settings__row-label">
           Zoom
         </span>
-        <div className="zoom-control" role="group" aria-labelledby="zoom-label">
-          <span className="zoom-control__group">
-            <button
-              type="button"
-              className="zoom-control__step"
-              aria-label="Zoom out"
-              disabled={zoom <= SMALLEST}
-              onClick={handleSmaller}
-            >
-              −
-            </button>
-            <output className="zoom-control__value" aria-live="polite">
-              {zoomLabel(zoom)}
-            </output>
-            <button
-              type="button"
-              className="zoom-control__step"
-              aria-label="Zoom in"
-              disabled={zoom >= LARGEST}
-              onClick={handleLarger}
-            >
-              +
-            </button>
-          </span>
+        <div className="zoom-control">
+          <Stepper
+            labelledBy="zoom-label"
+            valueLabel={zoomLabel(zoom)}
+            decreaseLabel="Zoom out"
+            increaseLabel="Zoom in"
+            canDecrease={zoom > SMALLEST}
+            canIncrease={zoom < LARGEST}
+            onDecrease={handleSmaller}
+            onIncrease={handleLarger}
+          />
           <button
             type="button"
             className="settings-link-button"

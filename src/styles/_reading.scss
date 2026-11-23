@@ -1,4 +1,4 @@
-@use "sass:list";
+@use "sass:math";
 
 // Font stacks, and the `--reading-*` properties the note editor reads.
 //
@@ -20,6 +20,8 @@
   // The Mac's own faces (SF Pro, SF Mono), for the Classic palette.
   --font-system: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-system-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  // Apple's own serif, which WebKit names `ui-serif`.
+  --font-new-york: ui-serif, "New York", Georgia, serif;
 }
 
 // The default palette's fonts, for a page that never sets `data-palette`.
@@ -60,36 +62,47 @@
   @include reading-fonts(var(--font-jetbrains-mono), var(--font-jetbrains-mono), 700, var(--font-jetbrains-mono));
 }
 
+[data-reading-font="newYork"],
+[data-reading-font="newYork"] [data-palette] {
+  @include reading-fonts(var(--font-new-york), var(--font-system), 600, var(--font-system-mono));
+}
+
+[data-reading-font="sfPro"],
+[data-reading-font="sfPro"] [data-palette] {
+  @include reading-fonts(var(--font-system), var(--font-system), 600, var(--font-system-mono));
+}
+
+// Any font installed on the Mac; `--font-custom` is its quoted family name,
+// set on the root by `applyReadingStyle`.
+// A removed font falls back to Plex rather than the browser's default.
+[data-reading-font="custom"],
+[data-reading-font="custom"] [data-palette] {
+  --reading-family-body: var(--font-custom, var(--font-plex-serif)), var(--font-plex-serif);
+  --reading-family-heading: var(--font-custom, var(--font-plex-sans)), var(--font-plex-sans);
+  --reading-weight-heading: 600;
+  --reading-family-code: var(--font-jetbrains-mono);
+}
+
 [data-reading-font="chalkboard"],
 [data-reading-font="chalkboard"] [data-palette] {
   @include reading-fonts(var(--font-chalkboard), var(--font-chalkboard), 700, var(--font-jetbrains-mono));
 }
 
-// Sizes and line heights from the Figma "Reading size" collection, in px / 16.
-@mixin reading-sizes($body, $h1, $h2, $h3, $h4, $code) {
-  --reading-size-body: #{list.nth($body, 1) * 0.0625rem};
-  --reading-line-body: #{list.nth($body, 2) * 0.0625rem};
-  --reading-size-h1: #{list.nth($h1, 1) * 0.0625rem};
-  --reading-line-h1: #{list.nth($h1, 2) * 0.0625rem};
-  --reading-size-h2: #{list.nth($h2, 1) * 0.0625rem};
-  --reading-line-h2: #{list.nth($h2, 2) * 0.0625rem};
-  --reading-size-h3: #{list.nth($h3, 1) * 0.0625rem};
-  --reading-line-h3: #{list.nth($h3, 2) * 0.0625rem};
-  --reading-size-h4: #{list.nth($h4, 1) * 0.0625rem};
-  --reading-line-h4: #{list.nth($h4, 2) * 0.0625rem};
-  --reading-size-code: #{list.nth($code, 1) * 0.0625rem};
-  --reading-line-code: #{list.nth($code, 2) * 0.0625rem};
+// Sizes and line heights scale from the body size (`--reading-base`, set by
+// `lib/theme/reading.ts`), in the proportions of the Figma "Reading size"
+// collection at its 18px default: body 18/30, h1 32/40, h2 26/34, h3 21/28,
+// h4 18/26, code 15/24.
+@mixin reading-scale($name, $size, $line) {
+  --reading-size-#{$name}: calc(var(--reading-base) * #{math.div($size, 18)});
+  --reading-line-#{$name}: calc(var(--reading-base) * #{math.div($line, 18)});
 }
 
-:root,
-[data-reading-size="default"] {
-  @include reading-sizes(18 30, 32 40, 26 34, 21 28, 18 26, 15 24);
-}
-
-[data-reading-size="small"] {
-  @include reading-sizes(16 26, 28 36, 23 30, 19 26, 16 24, 13 20);
-}
-
-[data-reading-size="large"] {
-  @include reading-sizes(20 32, 36 44, 29 38, 24 32, 20 28, 17 28);
+:root {
+  --reading-base: 1.125rem;
+  @include reading-scale(body, 18, 30);
+  @include reading-scale(h1, 32, 40);
+  @include reading-scale(h2, 26, 34);
+  @include reading-scale(h3, 21, 28);
+  @include reading-scale(h4, 18, 26);
+  @include reading-scale(code, 15, 24);
 }

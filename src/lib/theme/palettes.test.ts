@@ -103,7 +103,19 @@ describe("paletteCss", () => {
     const media = css.indexOf("@media (prefers-color-scheme: dark)", css.indexOf('[data-palette="paper"] {'));
     expect(css.indexOf(followSystem)).toBeGreaterThan(media);
     expect(css).toContain(forced);
-    expect(css.split(darkValue)).toHaveLength(3);
+    // Twice for the window (system and forced), once for an editor set to Dark.
+    expect(css.split(darkValue)).toHaveLength(4);
+  });
+
+  it("gives the note panel its palette's own half when the editor's scheme is set apart from the app's", () => {
+    const paper = PALETTES.find((p) => p.id === "paper")!;
+    const editorDark = ':root:where([data-editor-scheme="dark"])[data-palette="paper"] .editor-region';
+    const editorLight = ':root:where([data-editor-scheme="light"])[data-palette="paper"] .editor-preview';
+    const darkRule = css.slice(css.indexOf(editorDark));
+    const lightRule = css.slice(css.indexOf(editorLight));
+    expect(darkRule.slice(0, darkRule.indexOf("}"))).toContain(`--color-doc-text: ${paper.dark["doc/text"]};`);
+    expect(lightRule.slice(0, lightRule.indexOf("}"))).toContain(`--color-doc-text: ${paper.light["doc/text"]};`);
+    expect(lightRule.slice(0, lightRule.indexOf("}"))).toContain("color-scheme: light;");
   });
 
   it("draws Classic, the default, in the system font throughout", () => {

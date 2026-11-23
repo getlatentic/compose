@@ -57,3 +57,19 @@ export function systemPrefersDark(): boolean {
   }
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
+
+/** The editor's light or dark: the app's, or its own. */
+export const EDITOR_SCHEMES = ["app", "light", "dark"] as const;
+export type EditorScheme = (typeof EDITOR_SCHEMES)[number];
+export const DEFAULT_EDITOR_SCHEME: EditorScheme = "app";
+
+export function normalizeEditorScheme(value: unknown): EditorScheme {
+  return EDITOR_SCHEMES.includes(value as EditorScheme) ? (value as EditorScheme) : DEFAULT_EDITOR_SCHEME;
+}
+
+/** "app" leaves the attribute off, so the note panel follows the window. */
+export function applyEditorScheme(scheme: EditorScheme, root: HTMLElement): void {
+  const normalized = normalizeEditorScheme(scheme);
+  if (normalized === "app") root.removeAttribute("data-editor-scheme");
+  else root.setAttribute("data-editor-scheme", normalized);
+}

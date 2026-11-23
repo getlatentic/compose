@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_THEME,
+  applyEditorScheme,
   applyTheme,
+  normalizeEditorScheme,
   normalizeTheme,
   resolveTheme,
   type ThemeChoice,
@@ -65,5 +67,23 @@ describe("applyTheme", () => {
     applyTheme("dark", root);
     applyTheme("nonsense" as ThemeChoice, root);
     expect(root.hasAttribute("data-theme")).toBe(false);
+  });
+});
+
+describe("applyEditorScheme", () => {
+  it("sets the editor's own light or dark, and leaves the attribute off to follow the app", () => {
+    const root = document.createElement("div");
+    applyEditorScheme("dark", root);
+    expect(root.getAttribute("data-editor-scheme")).toBe("dark");
+    applyEditorScheme("light", root);
+    expect(root.getAttribute("data-editor-scheme")).toBe("light");
+    applyEditorScheme("app", root);
+    expect(root.hasAttribute("data-editor-scheme")).toBe(false);
+  });
+
+  it("reads an unknown stored value as following the app", () => {
+    expect(normalizeEditorScheme("sepia")).toBe("app");
+    expect(normalizeEditorScheme(undefined)).toBe("app");
+    expect(normalizeEditorScheme("dark")).toBe("dark");
   });
 });

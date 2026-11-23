@@ -29,7 +29,11 @@ describe("uiPrefs", () => {
       theme: "dark",
       palette: "paper",
       readingFont: "chalkboard",
-      readingSize: "large",
+      readingSize: 20,
+      customFont: "Avenir Next",
+      exportFont: "latex",
+      noteBackground: { kind: "image", file: "/data/backgrounds/a.jpg", fit: "tile", dim: 0.5 },
+      editorScheme: "dark",
     });
     expect(loadUiPrefs()).toEqual({
       soundOnComplete: false,
@@ -42,7 +46,11 @@ describe("uiPrefs", () => {
       theme: "dark",
       palette: "paper",
       readingFont: "chalkboard",
-      readingSize: "large",
+      readingSize: 20,
+      customFont: "Avenir Next",
+      exportFont: "latex",
+      noteBackground: { kind: "image", file: "/data/backgrounds/a.jpg", fit: "tile", dim: 0.5 },
+      editorScheme: "dark",
     });
   });
 
@@ -59,7 +67,11 @@ describe("uiPrefs", () => {
       theme: "system",
       palette: "classic",
       readingFont: "theme",
-      readingSize: "default",
+      readingSize: 18,
+      customFont: null,
+      exportFont: "note",
+      noteBackground: { kind: "theme" },
+      editorScheme: "app",
     });
   });
 
@@ -68,7 +80,12 @@ describe("uiPrefs", () => {
       "compose.uiPrefs.v1",
       JSON.stringify({ palette: "neon", readingFont: "papyrus", readingSize: "huge" }),
     );
-    expect(loadUiPrefs()).toMatchObject({ palette: "classic", readingFont: "theme", readingSize: "default" });
+    expect(loadUiPrefs()).toMatchObject({ palette: "classic", readingFont: "theme", readingSize: 18 });
+  });
+
+  it("reads a size stored by name as its pixel size", () => {
+    localStorage.setItem("compose.uiPrefs.v1", JSON.stringify({ readingSize: "large" }));
+    expect(loadUiPrefs().readingSize).toBe(20);
   });
 
   it("falls back wholesale on a corrupt payload", () => {
@@ -84,7 +101,11 @@ describe("uiPrefs", () => {
       theme: "system",
       palette: "classic",
       readingFont: "theme",
-      readingSize: "default",
+      readingSize: 18,
+      customFont: null,
+      exportFont: "note",
+      noteBackground: { kind: "theme" },
+      editorScheme: "app",
     });
   });
 

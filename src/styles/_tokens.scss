@@ -107,6 +107,8 @@
   --cds-support-warning: var(--color-warning-text);
   --cds-notification-background-error: var(--color-danger-surface);
   --cds-notification-background-warning: var(--color-warning-surface);
+  --cds-notification-background-success: var(--color-success-surface);
+  --cds-notification-background-info: var(--color-accent-surface);
 
   // Status pills: dark text on a pale tint, in both appearances.
   --pill-green-fg: var(--color-success-text);
@@ -190,6 +192,29 @@
 
 :root[data-theme="dark"] {
   @include dark;
+}
+
+// The note panel's own light or dark (`data-editor-scheme`): its code colours
+// and shadows follow it, not the window. `initial` hands the light theme's
+// code colours back to the editor's own defaults.
+:root:where([data-editor-scheme="dark"]) :is(.editor-region, .editor-preview) {
+  @include dark;
+}
+
+:root:where([data-editor-scheme="light"]) :is(.editor-region, .editor-preview) {
+  color-scheme: light;
+  --md-code-keyword: initial;
+  --md-code-string: initial;
+  --md-code-comment: initial;
+  --md-code-literal: initial;
+  --md-code-function: initial;
+  --md-code-type: initial;
+  --md-code-variable: initial;
+  --md-code-property: initial;
+  --md-code-tag: initial;
+  --md-code-attribute: initial;
+  --md-code-regexp: initial;
+  --md-code-invalid: initial;
 }
 
 // State colours for a page that never sets `data-palette` (the palette

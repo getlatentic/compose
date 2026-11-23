@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { useUiStore } from "../../../app/store/uiStore";
-import { PALETTES } from "../../../lib/theme/palettes";
 import { AppearanceSettings } from "./AppearanceSettings";
 
 function group(name: RegExp) {
@@ -20,30 +19,9 @@ describe("AppearanceSettings", () => {
     const store = useUiStore.getState();
     store.setZoom(1);
     store.setTheme("system");
-    store.setPalette("walnut");
-    store.setReadingFont("theme");
-    store.setReadingSize("default");
     localStorage.clear();
   });
   afterEach(cleanup);
-
-  describe("theme", () => {
-    it("offers every palette, with the current one chosen", () => {
-      render(<AppearanceSettings />);
-      const radios = within(group(/^theme$/i)).getAllByRole("radio");
-      expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(PALETTES.map((p) => p.id));
-      expect(checked(within(group(/^theme$/i)).getByRole("radio", { name: "Walnut" }))).toBe(true);
-    });
-
-    it("records a palette, and draws each swatch in its own palette", async () => {
-      const user = userEvent.setup();
-      const { container } = render(<AppearanceSettings />);
-      await user.click(screen.getByRole("radio", { name: "Paper" }));
-      expect(useUiStore.getState().palette).toBe("paper");
-      const swatches = [...container.querySelectorAll(".palette-swatch")];
-      expect(swatches.map((swatch) => swatch.getAttribute("data-palette"))).toEqual(PALETTES.map((p) => p.id));
-    });
-  });
 
   describe("appearance", () => {
     it("offers Match Mac as a choice of its own, not a light/dark toggle", () => {
@@ -62,35 +40,11 @@ describe("AppearanceSettings", () => {
       await user.click(within(group(/^appearance$/i)).getByRole("radio", { name: "Dark" }));
       expect(useUiStore.getState().theme).toBe("dark");
     });
-  });
 
-  describe("reading", () => {
-    it("starts on the theme's own font and records another", async () => {
-      const user = userEvent.setup();
+    it("leaves the note's look to Editor", () => {
       render(<AppearanceSettings />);
-      const fonts = group(/^reading$/i);
-      expect(checked(within(fonts).getByRole("radio", { name: /^theme/i }))).toBe(true);
-      await user.click(within(fonts).getByRole("radio", { name: /^chalkboard/i }));
-      expect(useUiStore.getState().readingFont).toBe("chalkboard");
-    });
-
-    it("gives each font card its own font, through the same attribute the editor reads", () => {
-      const { container } = render(<AppearanceSettings />);
-      const cards = [...container.querySelectorAll(".font-card")];
-      expect(cards.map((card) => card.getAttribute("data-reading-font"))).toEqual([
-        "theme",
-        "serif",
-        "sans",
-        "mono",
-        "chalkboard",
-      ]);
-    });
-
-    it("records a text size", async () => {
-      const user = userEvent.setup();
-      render(<AppearanceSettings />);
-      await user.click(within(group(/^text size$/i)).getByRole("radio", { name: "Large" }));
-      expect(useUiStore.getState().readingSize).toBe("large");
+      expect(screen.queryByRole("button", { name: /^theme:/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^font:/i })).toBeNull();
     });
   });
 
@@ -109,9 +63,9 @@ describe("AppearanceSettings", () => {
       const user = userEvent.setup();
       useUiStore.getState().setZoom(1.75);
       render(<AppearanceSettings />);
-      await user.click(screen.getByRole("button", { name: /reset/i }));
+      await user.click(screen.getByRole("button", { name: /^reset$/i }));
       expect(screen.getByText("100%")).toBeTruthy();
-      expect(screen.getByRole("button", { name: /reset/i }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByRole("button", { name: /^reset$/i }).hasAttribute("disabled")).toBe(true);
     });
 
     it("stops offering to grow past the largest zoom", async () => {

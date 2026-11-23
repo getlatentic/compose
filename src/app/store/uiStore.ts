@@ -2,12 +2,15 @@ import { create } from "zustand";
 import { persistUiPrefs } from "../../lib/prefs/uiPrefs";
 import { normalizePalette } from "../../lib/theme/palettes";
 import {
+  normalizeCustomFont,
   normalizeReadingFont,
   normalizeReadingSize,
   type ReadingFont,
   type ReadingSize,
 } from "../../lib/theme/reading";
-import { normalizeTheme, type ThemeChoice } from "../../lib/theme/theme";
+import { normalizeExportFont, type ExportFont } from "../../lib/theme/exportFont";
+import { normalizeNoteBackground, type NoteBackground } from "../../lib/theme/noteBackground";
+import { normalizeEditorScheme, normalizeTheme, type EditorScheme, type ThemeChoice } from "../../lib/theme/theme";
 import { clampZoom } from "../../lib/zoom/zoom";
 import { INITIAL_UI_PREFS } from "./initialPrefs";
 import { useWorkspaceStore } from "../workspaceStore";
@@ -89,6 +92,17 @@ export interface UiState {
   setReadingFont: (font: ReadingFont) => void;
   readingSize: ReadingSize;
   setReadingSize: (size: ReadingSize) => void;
+  /** An installed font; choosing one also selects the "custom" reading font. */
+  customFont: string | null;
+  setCustomFont: (family: string) => void;
+  exportFont: ExportFont;
+  setExportFont: (font: ExportFont) => void;
+  noteBackground: NoteBackground;
+  setNoteBackground: (background: NoteBackground) => void;
+  /** Hands the note's font and background back to the theme. */
+  resetToTheme: () => void;
+  editorScheme: EditorScheme;
+  setEditorScheme: (scheme: EditorScheme) => void;
 }
 
 function persistAll(get: () => UiState): void {
@@ -105,6 +119,10 @@ function persistAll(get: () => UiState): void {
     palette: state.palette,
     readingFont: state.readingFont,
     readingSize: state.readingSize,
+    customFont: state.customFont,
+    exportFont: state.exportFont,
+    noteBackground: state.noteBackground,
+    editorScheme: state.editorScheme,
   });
 }
 
@@ -247,6 +265,34 @@ export const useUiStore = create<UiState>((set, get) => ({
       return;
     }
     set({ readingSize: next });
+    persistAll(get);
+  },
+  customFont: INITIAL_UI_PREFS.customFont,
+  setCustomFont: (family) => {
+    const next = normalizeCustomFont(family);
+    if (!next) {
+      return;
+    }
+    set({ customFont: next, readingFont: "custom" });
+    persistAll(get);
+  },
+  exportFont: INITIAL_UI_PREFS.exportFont,
+  setExportFont: (font) => {
+    set({ exportFont: normalizeExportFont(font) });
+    persistAll(get);
+  },
+  noteBackground: INITIAL_UI_PREFS.noteBackground,
+  setNoteBackground: (background) => {
+    set({ noteBackground: normalizeNoteBackground(background) });
+    persistAll(get);
+  },
+  resetToTheme: () => {
+    set({ readingFont: "theme", noteBackground: { kind: "theme" }, editorScheme: "app" });
+    persistAll(get);
+  },
+  editorScheme: INITIAL_UI_PREFS.editorScheme,
+  setEditorScheme: (scheme) => {
+    set({ editorScheme: normalizeEditorScheme(scheme) });
     persistAll(get);
   },
   zoom: INITIAL_UI_PREFS.zoom,

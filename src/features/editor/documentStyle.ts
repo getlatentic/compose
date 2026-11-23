@@ -2,6 +2,8 @@ import { Prec } from "@codemirror/state";
 import { EditorView, ViewPlugin } from "@codemirror/view";
 import type { MarkdownExtension } from "@latentic/live-markdown";
 
+import { headingGap } from "./headingGap";
+
 /**
  * The note's typography and colours, per part: body text, headings and code
  * each take their own `--reading-*` font and size (`_reading.scss`) and their
@@ -33,7 +35,9 @@ const documentTheme = EditorView.theme({
     letterSpacing: "-0.02em",
     // The one red rule: under the note's title. Padding, not margin, keeps
     // CodeMirror's click metrics exact.
-    borderBottom: "0.125rem solid var(--color-rule)",
+    // A hairline in the palette's rule colour, softened: a mark of the theme,
+    // not a bar across the page.
+    borderBottom: "1px solid color-mix(in srgb, var(--color-rule) 55%, transparent)",
     // A note's title opens it: no space above it beyond the editor's own
     // inset, or the page starts with a gap.
     paddingTop: "0",
@@ -83,7 +87,7 @@ const documentTheme = EditorView.theme({
 });
 
 /** Root attributes whose change alters the note's fonts or sizes. */
-const STYLE_ATTRIBUTES = ["data-palette", "data-reading-font", "data-reading-size", "data-theme", "style"];
+const STYLE_ATTRIBUTES = ["data-palette", "data-reading-font", "data-theme", "style"];
 
 /**
  * CodeMirror measures line heights when content changes, not when a font
@@ -117,5 +121,5 @@ export const documentStyle: MarkdownExtension = {
   name: "compose-document-style",
   version: "1.0.0",
   description: "Per-part note fonts, sizes and colours from the palette and reading settings.",
-  extensions: [Prec.highest(documentTheme), remeasureOnStyleChange],
+  extensions: [Prec.highest(documentTheme), remeasureOnStyleChange, headingGap],
 };
