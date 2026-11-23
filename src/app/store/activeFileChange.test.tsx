@@ -2,7 +2,7 @@
 import { EditorView } from "@codemirror/view";
 import { CodeMirrorMarkdownEditor } from "@latentic/live-markdown";
 import { act, render } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const files = vi.hoisted(() => ({
   createFile: vi.fn(async () => ({ lastModifiedMs: 50 })),
@@ -24,6 +24,13 @@ import { registerActiveEditorFlush } from "../../lib/editor/editorFlush";
 import { useShownFileUpdate } from "../../features/editor/useShownFileUpdate";
 import { applyFileBuffer, createWorkspaceFromPath, openWorkspaceFile, type Workspace } from "../workspaceModel";
 import { useWorkspaceStore } from "../workspaceStore";
+
+beforeAll(() => {
+  // jsdom lays nothing out: CodeMirror's measure of the caret's text finds
+  // no boxes.
+  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+});
 
 function Host() {
   const workspace = useWorkspaceStore((state) => state.workspaces.find((w) => w.id === "ws"));
