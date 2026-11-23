@@ -1,7 +1,9 @@
 import { useCallback } from "react";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { reportExportResult } from "../../lib/export/documentExport";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
+import { showToast } from "../toast/toastStore";
 import { conversationToMarkdown } from "../../lib/export/conversationMarkdown";
 import { loadConversation } from "../../lib/ipc/conversationsClient";
 import type { ConversationSummary } from "../../lib/ipc/conversationsClient";
@@ -66,10 +68,13 @@ export function useConversationRowActions(): (
           if (!snapshot) {
             return;
           }
-          exportMarkdownFile({
+          reportExportResult(
+            await exportMarkdownFile({
             filePath: conversation.title || "conversation",
             markdown: conversationToMarkdown(conversation.title, snapshot.messages),
-          });
+          }),
+            showToast,
+          );
         })();
       },
       onArchive: () =>

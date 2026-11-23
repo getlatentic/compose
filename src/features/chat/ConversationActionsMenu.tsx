@@ -9,6 +9,7 @@ import {
 } from "@carbon/react/icons";
 
 import { useDismissableLayer } from "./useDismissableLayer";
+import { canShowNativeMenu, showNativeMenu, type NativeMenuEntry } from "../../lib/runtime/nativeMenu";
 
 /** The actions the ⋮ menu can fire against a single conversation. */
 export interface ConversationActions {
@@ -62,6 +63,22 @@ export function ConversationActionsMenu({
     { key: "delete", label: "Delete", icon: TrashCan, run: (a) => a.onDelete(), danger: true },
   ];
 
+  // In Compose the system draws the menu under the button, with Delete set
+  // apart below a separator; elsewhere the HTML list below opens.
+  const toggle = () => {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!canShowNativeMenu() || !rect) {
+      setOpen((value) => !value);
+      return;
+    }
+    const entries: NativeMenuEntry[] = items.flatMap((item) => [
+      ...(item.danger ? (["separator"] as const) : []),
+      { id: item.key, label: item.label },
+    ]);
+    const choose = (id: string) => items.find((item) => item.key === id)?.run(actions);
+    void showNativeMenu(entries, choose, { x: rect.left, y: rect.bottom + 4 });
+  };
+
   return (
     <div className="conv-menu" ref={rootRef}>
       <button
@@ -71,7 +88,7 @@ export function ConversationActionsMenu({
         aria-expanded={open}
         aria-label="Conversation actions"
         title="Conversation actions"
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggle}
       >
         <OverflowMenuVertical size={16} />
       </button>

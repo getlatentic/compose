@@ -57,7 +57,7 @@ keyring = { version = "3", features = ["linux-native", "sync-secret-service"] }
 [dev-dependencies]
 # The accelerator parser Tauri hands menu shortcut strings to. Pinned to the
 # version Tauri already pulls in, so the test checks the real parser.
-muda = "0.19"
+muda = "0.20"
 tauri = { version = "2", features = ["test"] }
 
 # `orphan_runs::kill` signals a stranded agent process, and is `cfg(unix)` —
@@ -105,6 +105,7 @@ objc2-web-kit = { version = "0.3", features = [
   "WKWebView",
   "WKWebViewConfiguration",
   "WKPDFConfiguration",
+  "WKSnapshotConfiguration",
   "WKNavigation",
   "objc2-app-kit",
   "block2",
@@ -123,8 +124,12 @@ objc2-app-kit = { version = "0.3", features = [
   "NSView",
   "NSGraphics",
   "NSButton",
+  "NSFontManager",
+  "NSImage",
+  "NSGraphicsContext",
   "NSControl",
   "NSRunningApplication",
   "NSWorkspace",
   "NSPanel",
+  "NSSharingService",
 ] }

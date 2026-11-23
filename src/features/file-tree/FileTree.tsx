@@ -12,6 +12,7 @@ import {
 import { Menu, MenuItem, MenuItemDivider } from "@carbon/react";
 import { ChevronRight, File, Folder } from "lucide-react";
 import { createDragGhost } from "./dragGhost";
+import { canShowNativeMenu, showNativeMenu, type NativeMenuEntry } from "../../lib/runtime/nativeMenu";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useUiStore } from "../../app/store/uiStore";
@@ -75,6 +76,24 @@ type OpenRowMenu = (
   kind: RowMenuState["kind"],
   path: string,
 ) => void;
+
+type RowMenuAction = "rename" | "copyPath" | "reveal" | "delete" | "newNoteHere" | "newFolderHere" | "deleteFolder";
+
+const FILE_MENU: readonly NativeMenuEntry[] = [
+  { id: "rename", label: "Rename…" },
+  { id: "copyPath", label: "Copy Path" },
+  { id: "reveal", label: "Reveal in Finder" },
+  "separator",
+  { id: "delete", label: "Delete" },
+];
+
+const FOLDER_MENU: readonly NativeMenuEntry[] = [
+  { id: "newNoteHere", label: "New Note Here" },
+  { id: "newFolderHere", label: "New Folder Here" },
+  { id: "reveal", label: "Reveal in Finder" },
+  "separator",
+  { id: "deleteFolder", label: "Delete Folder" },
+];
 
 /** The parent directory of a path ("" for a root item). */
 function parentDirOf(path: string): string {
@@ -568,12 +587,32 @@ function FileTreeInner({
   // was the tree's dominant mount cost on large vaults, and its trailing slot
   // left a dead, wrong-cursor zone on every row).
   const [rowMenu, setRowMenu] = useState<RowMenuState | null>(null);
+  // The native menu's choice arrives after this render's handlers may have
+  // changed; reading them through a ref keeps `openRowMenu` stable, so the
+  // memoised rows are not re-rendered by it.
+  const rowMenuActions = useRef<Record<RowMenuAction, (path: string) => void> | null>(null);
+  useEffect(() => {
+    rowMenuActions.current = {
+      rename: onRename,
+      copyPath,
+      reveal: revealInFinder,
+      delete: onDelete,
+      newNoteHere,
+      newFolderHere,
+      deleteFolder: handleDeleteFolder,
+    };
+  });
   const openRowMenu = useCallback<OpenRowMenu>((event, kind, path) => {
-    // Suppress the webview's native context menu, and defer the open past this
-    // right-click's own mouseup — a menu opened synchronously registers that
-    // mouseup as an outside-click and instantly closes.
+    // Suppress the webview's own context menu.
     event.preventDefault();
     const { clientX, clientY } = event;
+    if (canShowNativeMenu()) {
+      const choose = (id: string) => rowMenuActions.current?.[id as RowMenuAction]?.(path);
+      void showNativeMenu(kind === "file" ? FILE_MENU : FOLDER_MENU, choose, { x: clientX, y: clientY });
+      return;
+    }
+    // The HTML menu opens past this right-click's own mouseup: opened
+    // synchronously, it registers that mouseup as an outside click and closes.
     window.setTimeout(() => setRowMenu({ kind, path, x: clientX, y: clientY }), 0);
   }, []);
   const closeRowMenu = useCallback(() => setRowMenu(null), []);
