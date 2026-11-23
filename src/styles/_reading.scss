@@ -12,7 +12,23 @@
 // `data-reading-font`, so a Settings preview resolves its fonts in its own
 // context instead of inheriting the window's already-resolved values.
 
+// Sizes and line heights scale from the body size (`--reading-base`, set by
+// `lib/theme/reading.ts`), in the proportions of the Figma "Reading size"
+// collection at its 18px default: body 18/30, h1 32/40, h2 26/34, h3 21/28,
+// h4 18/26, code 15/24.
+@mixin reading-scale($name, $size, $line) {
+  --reading-size-#{$name}: calc(var(--reading-base) * #{math.div($size, 18)});
+  --reading-line-#{$name}: calc(var(--reading-base) * #{math.div($line, 18)});
+}
+
 :root {
+  --reading-base: 1.125rem;
+  @include reading-scale(body, 18, 30);
+  @include reading-scale(h1, 32, 40);
+  @include reading-scale(h2, 26, 34);
+  @include reading-scale(h3, 21, 28);
+  @include reading-scale(h4, 18, 26);
+  @include reading-scale(code, 15, 24);
   --font-plex-sans: "IBM Plex Sans Variable", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-plex-serif: "IBM Plex Serif", "New York", Georgia, serif;
   --font-jetbrains-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -86,23 +102,4 @@
 [data-reading-font="chalkboard"],
 [data-reading-font="chalkboard"] [data-palette] {
   @include reading-fonts(var(--font-chalkboard), var(--font-chalkboard), 700, var(--font-jetbrains-mono));
-}
-
-// Sizes and line heights scale from the body size (`--reading-base`, set by
-// `lib/theme/reading.ts`), in the proportions of the Figma "Reading size"
-// collection at its 18px default: body 18/30, h1 32/40, h2 26/34, h3 21/28,
-// h4 18/26, code 15/24.
-@mixin reading-scale($name, $size, $line) {
-  --reading-size-#{$name}: calc(var(--reading-base) * #{math.div($size, 18)});
-  --reading-line-#{$name}: calc(var(--reading-base) * #{math.div($line, 18)});
-}
-
-:root {
-  --reading-base: 1.125rem;
-  @include reading-scale(body, 18, 30);
-  @include reading-scale(h1, 32, 40);
-  @include reading-scale(h2, 26, 34);
-  @include reading-scale(h3, 21, 28);
-  @include reading-scale(h4, 18, 26);
-  @include reading-scale(code, 15, 24);
 }

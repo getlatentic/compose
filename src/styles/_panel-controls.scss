@@ -147,23 +147,19 @@
 }
 
 .icon-button {
+  display: grid;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  place-items: center;
   border: 0;
-  color: inherit;
+  border-radius: 2px;
+  color: var(--cds-icon-secondary);
   background: transparent;
   cursor: pointer;
 }
 
 .icon-button:hover {
   background: var(--cds-layer-hover-01);
-}
-
-.icon-button {
-  display: grid;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  place-items: center;
-  color: var(--cds-icon-secondary);
-  border-radius: 2px;
 }
 
 .icon-button:disabled {

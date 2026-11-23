@@ -79,6 +79,8 @@
   color: var(--cds-text-on-color);
   font-size: 0.8125rem;
   font-weight: 600;
+  justify-content: space-between;
+  padding-inline: 0.75rem;
 }
 
 .comment-list {
@@ -111,11 +113,6 @@
   color: var(--cds-text-secondary);
   font-size: 0.8125rem;
   line-height: 1.25rem;
-}
-
-.comment-send {
-  justify-content: space-between;
-  padding-inline: 0.75rem;
 }
 
 .comments-empty {
