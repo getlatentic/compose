@@ -4,7 +4,7 @@ import { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FileReview } from "./liveEdits";
-import { reviewBridge } from "./reviewBridge";
+import { setReviewInputs } from "./reviewBridge";
 import { currentEdits, reviewMargin, setReviewMode } from "./reviewExtension";
 
 const ORIGINAL = "Intro.\n\nWe recruited nurses through convenience.\n\nEnd.";
@@ -25,14 +25,14 @@ beforeEach(() => {
 
 afterEach(() => {
   view.destroy();
-  reviewBridge.setInputs([], []);
+  setReviewInputs([], []);
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 /** Hand the editor the review, and turn review mode on unless told not to. */
 function show(review: FileReview, reviewing = true): void {
-  reviewBridge.setInputs([review], []);
+  setReviewInputs([review], []);
   vi.advanceTimersByTime(0);
   if (reviewing) setReviewMode(view, true);
 }
@@ -70,10 +70,10 @@ describe("reviewMargin", () => {
     setReviewMode(view, false);
     expect(view.dom.classList.contains("cm-review-wide")).toBe(false);
     setReviewMode(view, true);
-    reviewBridge.setInputs([], []);
+    setReviewInputs([], []);
     vi.advanceTimersByTime(0);
     expect(view.dom.classList.contains("cm-review-wide")).toBe(false);
-    reviewBridge.setInputs([applied], []);
+    setReviewInputs([applied], []);
     vi.advanceTimersByTime(0);
     expect(view.dom.classList.contains("cm-review-wide")).toBe(false);
   });
@@ -82,7 +82,7 @@ describe("reviewMargin", () => {
     show(applied);
     const [first] = currentEdits(view);
     view.dispatch({ changes: { from: first.from, to: first.to, insert: first.replacement } });
-    reviewBridge.setInputs([{ ...applied, dropped: [first.key] }], []);
+    setReviewInputs([{ ...applied, dropped: [first.key] }], []);
     vi.advanceTimersByTime(300);
     expect(currentEdits(view)).toHaveLength(1);
     expect(marks(".cm-review-in")).toEqual(["purposive sampling"]);
@@ -104,14 +104,14 @@ describe("reviewMargin", () => {
 
     const deletion: FileReview = { ...applied, id: "r2", original: "Intro.\n\nWe recruited many nurses.\n\nEnd.", proposed: "Intro.\n\nWe recruited nurses.\n\nEnd." };
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: deletion.proposed } });
-    reviewBridge.setInputs([deletion], []);
+    setReviewInputs([deletion], []);
     vi.advanceTimersByTime(300);
     expect(marks(".cm-review-out")).toEqual(["many"]);
   });
 
   it("clears the marks when the review goes away", () => {
     show(applied);
-    reviewBridge.setInputs([], []);
+    setReviewInputs([], []);
     vi.advanceTimersByTime(0);
     expect(view.contentDOM.querySelector(".cm-review-in")).toBeNull();
   });

@@ -1,7 +1,7 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback } from "react";
 import { EditorView } from "@codemirror/view";
 
-import { reviewBridge } from "./reviewBridge";
+import { reviewSnapshot } from "./reviewBridge";
 import { setReviewMode } from "./reviewExtension";
 
 /**
@@ -11,7 +11,7 @@ import { setReviewMode } from "./reviewExtension";
  * gives the note its width back; the changes stay marked in the text.
  */
 export function ReviewChangesButton() {
-  const snapshot = useSyncExternalStore(reviewBridge.subscribe, reviewBridge.getSnapshot);
+  const snapshot = reviewSnapshot.use();
   const { view, edits, reviewing } = snapshot;
 
   const handleClick = useCallback(() => {

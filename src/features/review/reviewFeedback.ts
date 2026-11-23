@@ -1,15 +1,13 @@
 import type {
-  ReviewDecisions,
-  WorkspaceAppliedChange,
   WorkspaceChatMessage,
   WorkspaceChatThread,
   WorkspaceCreateSuggestion,
   WorkspaceDeleteSuggestion,
   WorkspaceDocumentSuggestion,
-  WorkspaceRewriteSuggestion,
 } from "../../app/workspaceModel";
 import { agentBlocks, type AgentEdit } from "./agentEdits";
-import { reviewBody, type ReviewEditRef } from "./fileReviews";
+import type { ReviewEditRef } from "./fileReviews";
+import { appliedRecord, reviewBody, rewriteRecord, type ReviewRecord } from "./reviewRecord";
 
 /**
  * What the writer took back out of the agent's edits since the agent last
@@ -43,44 +41,6 @@ interface DroppedEdit {
   readonly edit: AgentEdit;
 }
 
-interface ReviewRecord {
-  readonly id: string;
-  readonly filePath: string;
-  readonly verb: Verb;
-  readonly originalText: string | null;
-  readonly newText: string | null;
-  readonly previewOmitted: boolean;
-  readonly review: ReviewDecisions | undefined;
-  /** Rejected as a whole from the chat card: every edit not kept is dropped. */
-  readonly wholeRejected: boolean;
-}
-
-function fromSuggestion(suggestion: WorkspaceRewriteSuggestion): ReviewRecord {
-  return {
-    id: suggestion.id,
-    filePath: suggestion.filePath,
-    verb: "rejected",
-    originalText: suggestion.originalText,
-    newText: suggestion.newText,
-    previewOmitted: suggestion.previewOmitted,
-    review: suggestion.review,
-    wholeRejected: suggestion.status === "rejected",
-  };
-}
-
-function fromAppliedChange(change: WorkspaceAppliedChange): ReviewRecord {
-  return {
-    id: change.id,
-    filePath: change.filePath,
-    verb: "undid",
-    originalText: change.originalText,
-    newText: change.newText,
-    previewOmitted: change.previewOmitted,
-    review: change.review,
-    wholeRejected: false,
-  };
-}
-
 /** A new file or a deletion the writer turned down from the chat card. */
 function fileRejection(suggestion: WorkspaceCreateSuggestion | WorkspaceDeleteSuggestion): FeedbackItem[] {
   if (suggestion.status !== "rejected" || suggestion.rejectionReported) return [];
@@ -97,7 +57,7 @@ function editItems(record: ReviewRecord): FeedbackItem[] {
 }
 
 function suggestionItems(suggestion: WorkspaceDocumentSuggestion): FeedbackItem[] {
-  if (suggestion.kind === "rewrite") return editItems(fromSuggestion(suggestion));
+  if (suggestion.kind === "rewrite") return editItems(rewriteRecord(suggestion));
   if (suggestion.kind === "create" || suggestion.kind === "delete") return fileRejection(suggestion);
   return [];
 }
@@ -107,7 +67,7 @@ function messageItems(message: WorkspaceChatMessage): FeedbackItem[] {
     ...(message.suggestions ?? []).flatMap(suggestionItems),
     ...(message.appliedChanges ?? [])
       .filter((change) => change.kind === "rewrite")
-      .flatMap((change) => editItems(fromAppliedChange(change))),
+      .flatMap((change) => editItems(appliedRecord(change))),
   ];
 }
 
@@ -120,7 +80,8 @@ function unreportedDrops(record: ReviewRecord): DroppedEdit[] {
   return edits.flatMap((edit) => {
     const isDropped = dropped.has(edit.key) || (record.wholeRejected && !kept.has(edit.key));
     if (!isDropped || reported.has(edit.key)) return [];
-    return [{ ref: { reviewId: record.id, key: edit.key }, filePath: record.filePath, verb: record.verb, edit }];
+    const verb: Verb = record.mode === "applied" ? "undid" : "rejected";
+    return [{ ref: { reviewId: record.id, key: edit.key }, filePath: record.filePath, verb, edit }];
   });
 }
 

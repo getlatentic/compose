@@ -66,10 +66,15 @@ function splitLines(text: string): string[] {
   return (text.endsWith("\n") ? text.slice(0, -1) : text).split("\n");
 }
 
-/** For each line of `base` that the note still has unchanged, its line in the note. */
-function unchangedLines(base: string, note: string): Map<number, number> {
+/**
+ * For each line of `base` that the note still has unchanged, its line in the
+ * note; `null` when the two are too far apart for the diff to line them up.
+ */
+function unchangedLines(base: string, note: string): Map<number, number> | null {
+  const diff = diffLines(base, note);
+  if (diff.truncated) return null;
   const map = new Map<number, number>();
-  for (const line of diffLines(base, note).lines) {
+  for (const line of diff.lines) {
     if (line.kind === "context" && line.beforeLine !== null && line.afterLine !== null) {
       map.set(line.beforeLine - 1, line.afterLine - 1);
     }
@@ -206,6 +211,9 @@ export function liveEdits(review: FileReview, note: string): LiveEdit[] {
   if (agents.length === 0) return [];
   const base = review.mode === "applied" ? review.original : review.proposed;
   const unchanged = unchangedLines(base, note);
+  // Past the diff's size cap the edits cannot be placed in the note; they
+  // stay reviewable on the change's card in the chat.
+  if (!unchanged) return [];
   const baseLineCount = splitLines(base).length;
   const noteLines = splitLines(note);
   const starts = lineStarts(note);

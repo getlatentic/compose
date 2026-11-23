@@ -1,5 +1,3 @@
-import { parseFrontmatter } from "@latentic/live-markdown";
-
 import type {
   ReviewDecisions,
   Workspace,
@@ -7,57 +5,24 @@ import type {
   WorkspaceChatMessage,
   WorkspaceChatThread,
   WorkspaceDocumentSuggestion,
-  WorkspaceRewriteSuggestion,
 } from "../../app/workspaceModel";
 import { agentEditKeys } from "./agentEdits";
 import type { FileReview } from "./liveEdits";
+import { appliedRecord, fileReviewOf, reviewBody, rewriteRecord } from "./reviewRecord";
 
 const NO_DECISIONS: ReviewDecisions = { kept: [], dropped: [], reported: [] };
-
-/** The editor shows the body only, so the review compares bodies. */
-export function reviewBody(markdown: string): string {
-  return parseFrontmatter(markdown).body;
-}
-
-function fromSuggestion(suggestion: WorkspaceRewriteSuggestion, agentName: string): FileReview | null {
-  if (suggestion.status !== "pending" || suggestion.previewOmitted) return null;
-  if (suggestion.originalText === null || suggestion.newText === null) return null;
-  return {
-    id: suggestion.id,
-    mode: "pending",
-    agentName,
-    original: reviewBody(suggestion.originalText),
-    proposed: reviewBody(suggestion.newText),
-    kept: suggestion.review?.kept ?? [],
-    dropped: suggestion.review?.dropped ?? [],
-  };
-}
-
-function fromAppliedChange(change: WorkspaceAppliedChange, agentName: string): FileReview | null {
-  if (change.kind !== "rewrite" || change.previewOmitted) return null;
-  if (change.originalText === null || change.newText === null) return null;
-  return {
-    id: change.id,
-    mode: "applied",
-    agentName,
-    original: reviewBody(change.originalText),
-    proposed: reviewBody(change.newText),
-    kept: change.review?.kept ?? [],
-    dropped: change.review?.dropped ?? [],
-  };
-}
 
 function messageReviews(message: WorkspaceChatMessage, filePath: string, fallbackAgentName: string): FileReview[] {
   const agentName = message.agentName ?? fallbackAgentName;
   const reviews: (FileReview | null)[] = [];
   for (const suggestion of message.suggestions ?? []) {
-    if (suggestion.kind === "rewrite" && suggestion.filePath === filePath) {
-      reviews.push(fromSuggestion(suggestion, agentName));
+    if (suggestion.kind === "rewrite" && suggestion.status === "pending" && suggestion.filePath === filePath) {
+      reviews.push(fileReviewOf(rewriteRecord(suggestion), agentName));
     }
   }
   for (const change of message.appliedChanges ?? []) {
-    if (change.filePath === filePath) {
-      reviews.push(fromAppliedChange(change, agentName));
+    if (change.kind === "rewrite" && change.filePath === filePath) {
+      reviews.push(fileReviewOf(appliedRecord(change), agentName));
     }
   }
   return reviews.filter((review): review is FileReview => review !== null);

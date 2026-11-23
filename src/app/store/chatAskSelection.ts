@@ -24,8 +24,7 @@ import {
 } from "../../features/text/positionMapper";
 import { formatExcerptPreamble } from "../../features/chat/excerptPreamble";
 import { reviewFeedbackFor, withReviewFeedback } from "../../features/review/reviewFeedback";
-import { NO_WAITING_PROPOSALS, waitingProposals } from "../../features/review/waitingProposals";
-import { markReviewFeedbackSent } from "./reviewMarginSlice";
+import { startReviewRun } from "./reviewRun";
 import {
   editGuardFor,
   harnessCapabilitiesOf,
@@ -36,12 +35,6 @@ import {
   prefixWorkspaceContext,
   updateWorkspace,
 } from "./internals";
-import {
-  finishReviewRun,
-  retireCarriedProposals,
-} from "./reviewFlow";
-import {
-} from "../../lib/ipc/conversationsClient";
 import {
   persistConversation,
 } from "./persistence";
@@ -218,8 +211,14 @@ export async function runAskAboutSelection(
       useHarnessStore.getState().allowEdits,
       useHarnessStore.getState().reviewEdits,
     );
-    // A sandboxed run starts from the proposals still waiting for the writer.
-    const waiting = editGuard === "clone" ? waitingProposals(get().activeWorkspace() ?? workspace) : NO_WAITING_PROPOSALS;
+    const review = await startReviewRun({
+      set,
+      get,
+      workspace: get().workspaces.find((item) => item.id === workspaceId) ?? workspace,
+      runId,
+      editGuard,
+      feedback: reviewFeedback,
+    });
     const chatMode = capabilities.previewsEdits ? "plan" : useHarnessStore.getState().allowEdits ? "code" : "plan";
 
     // Snapshot mode edits real files mid-run — attribute the watcher's events
@@ -235,9 +234,7 @@ export async function runAskAboutSelection(
         if (!cancelled && useUiStore.getState().soundOnComplete) {
           void playCompletionChime();
         }
-        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled).then((landed) => {
-          if (landed) retireCarriedProposals(set, get, workspaceId, waiting.suggestionIds);
-        });
+        review.finished(cancelled);
       });
     });
     activeRunSubscriptions.set(runId, releaseSubscription);
@@ -249,7 +246,7 @@ export async function runAskAboutSelection(
         withReviewFeedback(sentUserMessage, reviewFeedback),
         workspace.path,
         workspace.activeFilePath,
-        editGuard === "clone",
+        editGuard,
       ),
       runId,
       workspaceId,
@@ -258,12 +255,12 @@ export async function runAskAboutSelection(
       effort: tuning.effort,
       maxTurns: tuning.maxTurns,
       editGuard,
-      sandboxFiles: waiting.files,
+      sandboxFiles: review.sandboxFiles,
       extraArgs: harnessExtraArgs(harnessId, tuning),
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
       binaryPath: tuning.binaryPath,
     });
-    markReviewFeedbackSent(set, workspaceId, reviewFeedback);
+    review.sent();
   } catch (error) {
     const message = formatHarnessError(error);
     const currentThread =

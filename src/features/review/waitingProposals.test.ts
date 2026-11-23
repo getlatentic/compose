@@ -8,7 +8,7 @@ import {
 } from "../../app/workspaceModel";
 import { recordReviewDecision } from "./fileReviews";
 import { liveEdits } from "./liveEdits";
-import { waitingProposals } from "./waitingProposals";
+import { notesToRead, waitingProposals } from "./waitingProposals";
 
 const BEFORE = "---\ntags: [a]\n---\nTranscripts were analysed following Braun and Clarke, moving to named themes.\n";
 const AFTER = "---\ntags: [a]\n---\nTranscripts were coded following Braun and Clarke (2006), moving to labelled themes.\n";
@@ -61,5 +61,23 @@ describe("waitingProposals", () => {
   it("carries only the newest proposal per file, and leaves an older one waiting", () => {
     const waiting = waitingProposals(workspaceWith([rewrite("s1"), rewrite("s2"), rewrite("s3", "pending", "b.md")]));
     expect(waiting.suggestionIds).toEqual(["s2", "s3"]);
+  });
+
+  it("reads a decided note whose tab is closed from disk, and never sends back what the writer rejected", () => {
+    let workspace = workspaceWith([rewrite("s1")], { "a.md": BEFORE });
+    const body = BEFORE.slice(BEFORE.indexOf("Transcripts"));
+    const review = { id: "s1", mode: "pending" as const, agentName: "", original: body, proposed: AFTER.slice(AFTER.indexOf("Transcripts")), kept: [], dropped: [] };
+    const year = liveEdits(review, body).find((edit) => edit.added.includes("2006"));
+    workspace = recordReviewDecision(workspace, "s1", year!.key, false).workspace;
+    const closed = { ...workspace, fileContents: {} };
+
+    expect(notesToRead(closed)).toEqual(["a.md"]);
+    expect(waitingProposals(closed)).toEqual({ files: [], suggestionIds: [] });
+    const [file] = waitingProposals(closed, new Map([["a.md", BEFORE]])).files;
+    expect(file.content).not.toContain("2006");
+  });
+
+  it("needs nothing read for an undecided proposal", () => {
+    expect(notesToRead(workspaceWith([rewrite("s1")]))).toEqual([]);
   });
 });

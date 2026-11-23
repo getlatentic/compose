@@ -69,8 +69,10 @@ function pendingReviewSuggestionCount(workspace: Workspace, runId: string): numb
 
 /**
  * A newer run started from these proposals and its own proposal now holds
- * them: retire them, so the writer reviews each change once, against the
- * newest version, and free their sandboxes once nothing else waits on them.
+ * them: retire the ones still waiting, so the writer reviews each change
+ * once, against the newest version, and free their sandboxes once nothing
+ * else waits on them. One the writer accepted or rejected during the run
+ * keeps that decision.
  */
 export function retireCarriedProposals(
   set: WorkspaceStoreSet,
@@ -80,20 +82,20 @@ export function retireCarriedProposals(
 ) {
   if (suggestionIds.length === 0) return;
   const workspace = get().workspaces.find((item) => item.id === workspaceId);
-  const runIds = new Set<string>();
-  for (const message of workspace?.chatThread.messages ?? []) {
-    for (const suggestion of message.suggestions ?? []) {
-      if (suggestionIds.includes(suggestion.id) && suggestion.status === "pending") runIds.add(suggestion.runId);
-    }
-  }
+  const stillWaiting = (workspace?.chatThread.messages ?? [])
+    .flatMap((message) => message.suggestions ?? [])
+    .filter((suggestion) => suggestionIds.includes(suggestion.id) && suggestion.status === "pending");
+  if (stillWaiting.length === 0) return;
   set((state) => ({
     workspaces: updateWorkspace(state.workspaces, workspaceId, (item) =>
-      suggestionIds.reduce(
-        (current, id) => markWorkspaceSuggestion(current, id, "replaced", "Carried into the newer proposal below.", Date.now()),
+      stillWaiting.reduce(
+        (current, suggestion) =>
+          markWorkspaceSuggestion(current, suggestion.id, "replaced", "Carried into the newer proposal below.", Date.now()),
         item,
       ),
     ),
   }));
+  const runIds = new Set(stillWaiting.map((suggestion) => suggestion.runId));
   for (const runId of runIds) maybeCleanupReview(get, workspaceId, runId);
 }
 

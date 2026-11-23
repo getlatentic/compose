@@ -66,8 +66,6 @@ export const ChangeCard = forwardRef<HTMLElement, ChangeCardProps>(function Chan
   const id = editId(edit);
   const primaryLabel = applied ? "Keep" : "Accept";
   const secondaryLabel = applied ? "Undo" : "Reject";
-  // Applied: Keep leaves the note alone; Undo swaps the old words back.
-  // Pending: Accept swaps the new words in; Reject leaves the note alone.
   const { leaving, leave } = useLeaveAnimation();
   const handlePrimary = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => leave(event.currentTarget, () => onDecide(edit, !applied, true)),

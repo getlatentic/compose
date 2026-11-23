@@ -67,18 +67,18 @@ describe("errorMessage", () => {
 
 describe("prefixWorkspaceContext", () => {
   it("names the open note by its absolute path", () => {
-    expect(prefixWorkspaceContext("Fix it.", "/notes/", "Method draft.md")).toBe(
+    expect(prefixWorkspaceContext("Fix it.", "/notes/", "Method draft.md", "snapshot")).toBe(
       "The user is currently viewing the file `/notes/Method draft.md`.\n\nFix it.",
     );
   });
 
   it("names it relative to the sandbox in a reviewed run, never by the real note's path", () => {
-    const prompt = prefixWorkspaceContext("Fix it.", "/notes", "Method draft.md", true);
+    const prompt = prefixWorkspaceContext("Fix it.", "/notes", "Method draft.md", "clone");
     expect(prompt).toBe("The user is currently viewing the file `Method draft.md` (relative to your working directory).\n\nFix it.");
     expect(prompt).not.toContain("/notes");
   });
 
   it("keeps a loose file's own path, which is outside any sandbox", () => {
-    expect(prefixWorkspaceContext("Fix it.", undefined, "/elsewhere/a.md", true)).toContain("`/elsewhere/a.md`");
+    expect(prefixWorkspaceContext("Fix it.", undefined, "/elsewhere/a.md", "clone")).toContain("`/elsewhere/a.md`");
   });
 });

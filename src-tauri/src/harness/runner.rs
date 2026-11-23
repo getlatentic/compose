@@ -22,7 +22,7 @@ use crate::db::MetadataStore;
 use crate::harness::chat_event::{run_event_to_chat, ChatEvent};
 use crate::harness::registry::compose_harness_by_id;
 use crate::harness::{ApprovalMode, ChatMode};
-use crate::review::{apply_sandbox_overlay, prepare_edit_guard, EditGuard, ReviewSessionStore, SandboxFile};
+use crate::review::{prepare_edit_guard, EditGuard, ReviewSessionStore, SandboxFile};
 use crate::workspace::WorkspaceRegistry;
 use crate::harness::orphan_runs;
 use harness::{
@@ -381,6 +381,7 @@ fn run_via_harness(
         request.edit_guard,
         &run_id,
         &request.workspace_id,
+        &request.sandbox_files,
         registry,
         metadata,
         review,
@@ -392,14 +393,6 @@ fn run_via_harness(
             return Err(error);
         }
     };
-    if request.edit_guard == EditGuard::Clone && !request.sandbox_files.is_empty() {
-        if let Err(error) = apply_sandbox_overlay(&cwd, &request.sandbox_files) {
-            review.close(&run_id);
-            emit_error_and_exit(&app, &run_id, &error);
-            runner.unregister(&run_id);
-            return Err(error);
-        }
-    }
 
     // bob's chat modes collapse to the harness-neutral Ask/Edit: the
     // edit-capable modes map to Edit (so CLI harnesses get their

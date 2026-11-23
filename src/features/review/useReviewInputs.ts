@@ -6,10 +6,11 @@ import { useHarnessStore } from "../../app/store/harnessStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { fileReviewsFor } from "./fileReviews";
 import type { FileReview } from "./liveEdits";
-import { reviewBridge, type MarginComment } from "./reviewBridge";
+import { setReviewInputs, type MarginComment } from "./reviewBridge";
 
+/** A decision always builds new `kept` and `dropped` lists, so the same lists mean no decision since. */
 function sameReview(a: FileReview, b: FileReview): boolean {
-  return a.id === b.id && a.agentName === b.agentName && a.kept.length === b.kept.length && a.dropped.length === b.dropped.length;
+  return a.id === b.id && a.mode === b.mode && a.agentName === b.agentName && a.kept === b.kept && a.dropped === b.dropped;
 }
 
 /** The selected agent's name: who a comment is sent to, and who wrote a reply that names no agent. */
@@ -57,8 +58,8 @@ export function useReviewInputs(filePath: string, agentName: string): void {
   );
 
   useEffect(() => {
-    reviewBridge.setInputs(reviews, marginComments);
+    setReviewInputs(reviews, marginComments);
   }, [reviews, marginComments]);
 
-  useEffect(() => () => reviewBridge.setInputs([], []), []);
+  useEffect(() => () => setReviewInputs([], []), []);
 }

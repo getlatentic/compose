@@ -39,13 +39,8 @@ import {
   prefixWorkspaceContext,
   updateWorkspace,
 } from "./internals";
-import {
-  finishReviewRun,
-  retireCarriedProposals,
-} from "./reviewFlow";
-import { markReviewFeedbackSent } from "./reviewMarginSlice";
 import { reviewFeedbackFor, withReviewFeedback } from "../../features/review/reviewFeedback";
-import { NO_WAITING_PROPOSALS, waitingProposals } from "../../features/review/waitingProposals";
+import { startReviewRun } from "./reviewRun";
 import {
 } from "../../lib/ipc/conversationsClient";
 import {
@@ -316,9 +311,14 @@ export async function runSendChatPrompt(
     // so a read-only ask can't write, whatever the global Auto-apply toggle is.
     const allowEdits = options?.readOnly ? false : useHarnessStore.getState().allowEdits;
     const editGuard = editGuardFor(capabilities, allowEdits, useHarnessStore.getState().reviewEdits);
-    // A sandboxed run starts from the proposals still waiting for the writer,
-    // so the agent finds what its conversation says it did.
-    const waiting = editGuard === "clone" ? waitingProposals(get().activeWorkspace() ?? workspace) : NO_WAITING_PROPOSALS;
+    const review = await startReviewRun({
+      set,
+      get,
+      workspace: get().workspaces.find((item) => item.id === workspaceId) ?? workspace,
+      runId,
+      editGuard,
+      feedback: reviewFeedback,
+    });
 
     // Snapshot mode edits the user's real files mid-run; open the agent-edit
     // window so the file watcher attributes those changes to this run (and
@@ -336,9 +336,7 @@ export async function runSendChatPrompt(
         if (!cancelled && useUiStore.getState().soundOnComplete) {
           void playCompletionChime();
         }
-        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled).then((landed) => {
-          if (landed) retireCarriedProposals(set, get, workspaceId, waiting.suggestionIds);
-        });
+        review.finished(cancelled);
       });
     });
     activeRunSubscriptions.set(runId, releaseSubscription);
@@ -364,7 +362,7 @@ export async function runSendChatPrompt(
         promptWithContext,
         viewingLoose ? undefined : workspace.path,
         focused?.activeFilePath ?? workspace.activeFilePath,
-        editGuard === "clone",
+        editGuard,
       ),
       runId,
       workspaceId,
@@ -373,12 +371,12 @@ export async function runSendChatPrompt(
       effort: tuning.effort,
       maxTurns: tuning.maxTurns,
       editGuard,
-      sandboxFiles: waiting.files,
+      sandboxFiles: review.sandboxFiles,
       extraArgs: harnessExtraArgs(harnessId, tuning),
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
       binaryPath: tuning.binaryPath,
     });
-    markReviewFeedbackSent(set, workspaceId, reviewFeedback);
+    review.sent();
   } catch (error) {
     const message = formatHarnessError(error);
     const currentThread =

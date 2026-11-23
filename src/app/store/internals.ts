@@ -1,3 +1,4 @@
+import type { EditGuard } from "../../lib/ipc/harnessClient";
 import type { Workspace } from "../workspaceModel";
 
 /** Replace one workspace in the array via a transform, leaving the rest by
@@ -56,22 +57,21 @@ export function nextUntitledPath(
  * environment — so it isn't repeated here. Added to the *sent* prompt only;
  * the user-visible chat message stays clean.
  *
- * Normally an absolute path. A `sandboxed` run works on a copy of the notes,
- * so it gets the path relative to its working directory: given the real
- * file's absolute path, an agent edits the real file and the review is
- * bypassed.
+ * Normally an absolute path. A `clone` run works on a copy of the notes, so
+ * it gets the path relative to its working directory: given the real file's
+ * absolute path, an agent edits the real file and the review is bypassed.
  */
 export function prefixWorkspaceContext(
   prompt: string,
   workspaceRoot: string | undefined,
   activeFilePath: string | null | undefined,
-  sandboxed = false,
+  editGuard: EditGuard,
 ): string {
   if (!activeFilePath) {
     return prompt;
   }
   const root = workspaceRoot?.trim().replace(/\/+$/, "");
-  if (sandboxed && root) {
+  if (editGuard === "clone" && root) {
     return `The user is currently viewing the file \`${activeFilePath}\` (relative to your working directory).\n\n${prompt}`;
   }
   const absolutePath = root ? `${root}/${activeFilePath}` : activeFilePath;

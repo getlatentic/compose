@@ -153,3 +153,17 @@ describe("changeBlocks and wordDiff", () => {
     ]);
   });
 });
+
+describe("a note rewritten past the diff's size cap", () => {
+  const lines = (prefix: string) => Array.from({ length: 2100 }, (_, index) => `${prefix} ${index}`);
+  const original = lines("line").join("\n");
+  const proposed = lines("line").map((line, index) => (index === 5 ? "line five, reworded" : line)).join("\n");
+
+  it("places the edit while the note still lines up with the proposal", () => {
+    expect(liveEdits(review("pending", [], [], original, proposed), original)).toHaveLength(1);
+  });
+
+  it("places no edits once nothing lines up, so the change is reviewed on its chat card", () => {
+    expect(liveEdits(review("pending", [], [], original, proposed), lines("unrelated").join("\n"))).toEqual([]);
+  });
+});

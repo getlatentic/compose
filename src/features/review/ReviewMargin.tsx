@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { EditorView } from "@codemirror/view";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { placeCards } from "./cardLayout";
 import { editId, type LiveEdit } from "./liveEdits";
-import { reviewBridge, type LiveComment, type ReviewSnapshot } from "./reviewBridge";
+import { reviewSnapshot, type LiveComment, type ReviewSnapshot } from "./reviewBridge";
 import { ChangeCard, CommentCard } from "./ReviewCard";
 import { EDIT_ATTRIBUTE, editDomId } from "./reviewDecorations";
 import { currentEdits } from "./reviewExtension";
@@ -96,24 +96,37 @@ function useCardLayout(items: readonly MarginItem[], activeId: string | null, co
   const [leaders, setLeaders] = useState<string[]>([]);
   const left = contentRight + GAP_PX;
   useLayoutEffect(() => {
-    const placed = items.filter((item) => cards.current.has(item.id));
-    const elements = placed.map((item) => cards.current.get(item.id) as HTMLElement);
-    const slots = placed.map((item, index) => ({ anchor: item.top, height: elements[index].offsetHeight }));
-    const tops = placeCards(slots, placed.findIndex((item) => item.id === activeId), CARD_GAP_PX);
-    const paths = placed.map((item, index) => {
-      elements[index].style.top = `${tops[index]}px`;
-      elements[index].style.left = `${left}px`;
+    const placed = items.flatMap((item) => {
+      const element = cards.current.get(item.id);
+      return element ? [{ item, element }] : [];
+    });
+    const slots = placed.map(({ item, element }) => ({ anchor: item.top, height: element.offsetHeight }));
+    const tops = placeCards(slots, placed.findIndex(({ item }) => item.id === activeId), CARD_GAP_PX);
+    const paths = placed.map(({ item, element }, index) => {
+      element.style.top = `${tops[index]}px`;
+      element.style.left = `${left}px`;
       return `M${contentRight + 6} ${item.top + LEADER_Y_PX} H${left - 10} L${left} ${tops[index] + LEADER_Y_PX}`;
     });
     setLeaders((previous) => (previous.join() === paths.join() ? previous : paths));
   }, [items, activeId, left, contentRight]);
-  const register = useCallback(
-    (id: string) => (element: HTMLElement | null) => {
-      if (element) cards.current.set(id, element);
-      else cards.current.delete(id);
-    },
-    [],
-  );
+  // One ref callback per card, kept, so a re-render does not detach and
+  // re-attach every card.
+  const refs = useRef(new Map<string, (element: HTMLElement | null) => void>());
+  const register = useCallback((id: string) => {
+    let ref = refs.current.get(id);
+    if (!ref) {
+      ref = (element: HTMLElement | null) => {
+        if (element) {
+          cards.current.set(id, element);
+          return;
+        }
+        cards.current.delete(id);
+        refs.current.delete(id);
+      };
+      refs.current.set(id, ref);
+    }
+    return ref;
+  }, []);
   return { leaders, register };
 }
 
@@ -177,7 +190,7 @@ function Margin({ snapshot, agentName }: { snapshot: ReviewSnapshot; agentName: 
 
 /** The review margin of the open note. Renders nothing while the note has nothing to review. */
 export function ReviewMargin({ agentName }: { agentName: string }) {
-  const snapshot = useSyncExternalStore(reviewBridge.subscribe, reviewBridge.getSnapshot);
+  const snapshot = reviewSnapshot.use();
   if (!snapshot.view || !snapshot.marginHost || (snapshot.edits.length === 0 && snapshot.comments.length === 0)) {
     return null;
   }

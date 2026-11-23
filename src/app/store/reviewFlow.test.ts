@@ -140,4 +140,13 @@ describe("retiring proposals a newer run carried forward", () => {
     expect(reviewCleanup).toHaveBeenCalledWith("r1");
     expect(reviewCleanup).not.toHaveBeenCalledWith("r2");
   });
+
+  it("keeps the decision on one the writer accepted or rejected while the run was going", () => {
+    const { get, set } = liveStore([suggestion({ status: "accepted" }), suggestion({ id: "s2", runId: "r2", status: "rejected" })]);
+    retireCarriedProposals(set as never, get as never, "ws", ["s1", "s2"]);
+    const [first, second] = (get() as { workspaces: { chatThread: { messages: { suggestions: Suggestion[] }[] } }[] }).workspaces[0].chatThread
+      .messages[0].suggestions;
+    expect(first).toMatchObject({ status: "accepted" });
+    expect(second).toMatchObject({ status: "rejected" });
+  });
 });

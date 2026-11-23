@@ -4,7 +4,7 @@ import type { MarkdownExtension } from "@latentic/live-markdown";
 
 import { allLiveEdits, editId, type LiveEdit } from "./liveEdits";
 import { locateComment } from "./locateComment";
-import { reviewBridge, type LiveComment } from "./reviewBridge";
+import { publishReview, resetReview, reviewInputs, type LiveComment } from "./reviewBridge";
 import { buildReviewDecorations } from "./reviewDecorations";
 
 /** Width the note gives up for the margin while reviewing: the gap the
@@ -76,8 +76,9 @@ function caretEdit(state: ReviewState, head: number): string | null {
 
 function computeReview(view: EditorView): { edits: LiveEdit[]; comments: LiveComment[] } {
   const note = view.state.doc.toString();
-  const edits = allLiveEdits(reviewBridge.reviews, note);
-  const comments = reviewBridge.comments
+  const { reviews, comments: openComments } = reviewInputs.get();
+  const edits = allLiveEdits(reviews, note);
+  const comments = openComments
     .map((comment) => locateComment(note, comment))
     .filter((comment): comment is LiveComment => comment !== null);
   return { edits, comments };
@@ -91,6 +92,7 @@ const reviewPlugin = ViewPlugin.fromClass(
   class {
     private timer: ReturnType<typeof setTimeout> | null = null;
     private readonly host: HTMLElement;
+    private readonly stopListening: () => void;
 
     constructor(private readonly view: EditorView) {
       this.host = document.createElement("div");
@@ -99,8 +101,8 @@ const reviewPlugin = ViewPlugin.fromClass(
       // move the caret or start a selection.
       this.host.addEventListener("mousedown", (event) => event.stopPropagation());
       view.scrollDOM.appendChild(this.host);
-      reviewBridge.publish({ view, marginHost: this.host });
-      reviewBridge.onInputs(() => this.recomputeSoon(0));
+      publishReview({ view, marginHost: this.host });
+      this.stopListening = reviewInputs.subscribe(() => this.recomputeSoon(0));
       this.recomputeSoon(0);
     }
 
@@ -111,7 +113,7 @@ const reviewPlugin = ViewPlugin.fromClass(
       if (update.docChanged || update.geometryChanged || update.viewportChanged || before !== after) {
         this.measure();
       } else if (update.selectionSet) {
-        reviewBridge.publish({ caretEditId: caretEdit(after, update.state.selection.main.head) });
+        publishReview({ caretEditId: caretEdit(after, update.state.selection.main.head) });
       }
     }
 
@@ -148,7 +150,7 @@ const reviewPlugin = ViewPlugin.fromClass(
           };
         },
         write: ({ state, tops, contentRight, room }, view) => {
-          reviewBridge.publish({
+          publishReview({
             edits: state.edits,
             comments: state.comments,
             reviewing: state.reviewing,
@@ -162,9 +164,9 @@ const reviewPlugin = ViewPlugin.fromClass(
 
     destroy() {
       if (this.timer) clearTimeout(this.timer);
-      reviewBridge.onInputs(null);
+      this.stopListening();
       this.host.remove();
-      reviewBridge.reset();
+      resetReview();
     }
   },
 );
