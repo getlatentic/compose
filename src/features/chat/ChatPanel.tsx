@@ -12,7 +12,9 @@ import { startOllama } from "../../lib/ipc/harnessClient";
 import { agentStatus } from "../settings/agentStatus";
 import { missingFileContextPaths, sumChatThreadStats } from "../../app/workspaceModel";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
+import { reportExportResult } from "../../lib/export/documentExport";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
+import { showToast } from "../toast/toastStore";
 import { conversationToMarkdown } from "../../lib/export/conversationMarkdown";
 import { loadConversation } from "../../lib/ipc/conversationsClient";
 import { useConfirm } from "../dialogs/ConfirmProvider";
@@ -246,10 +248,13 @@ function ChatPanelInner() {
       }
       messages = snapshot.messages;
     }
-    exportMarkdownFile({
+    reportExportResult(
+            await exportMarkdownFile({
       filePath: title || "conversation",
       markdown: conversationToMarkdown(title, messages),
-    });
+    }),
+            showToast,
+          );
   };
 
   return (

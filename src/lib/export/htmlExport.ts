@@ -5,6 +5,7 @@ import {
   type FileExportResult,
 } from "./documentExport";
 import { documentRefPath, type DocumentRef } from "../../app/workspaceModel";
+import type { ExportTypefaces } from "../theme/exportTypefaces";
 
 /**
  * "Export to HTML": prompt for a location, render a standalone HTML document in
@@ -15,6 +16,7 @@ import { documentRefPath, type DocumentRef } from "../../app/workspaceModel";
 export async function exportDocumentToHtml(args: {
   document: DocumentRef;
   content: string;
+  typefaces?: ExportTypefaces;
 }): Promise<FileExportResult> {
   return saveDocumentExport({
     defaultFileName: defaultExportFileName(documentRefPath(args.document), "html"),

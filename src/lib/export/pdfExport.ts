@@ -5,6 +5,7 @@ import {
   type FileExportResult,
 } from "./documentExport";
 import { documentRefPath, type DocumentRef } from "../../app/workspaceModel";
+import type { ExportTypefaces } from "../theme/exportTypefaces";
 
 /**
  * "Export to PDF": prompt for a location, render the PDF in the backend (macOS
@@ -14,6 +15,7 @@ import { documentRefPath, type DocumentRef } from "../../app/workspaceModel";
 export async function exportDocumentToPdf(args: {
   document: DocumentRef;
   content: string;
+  typefaces?: ExportTypefaces;
 }): Promise<FileExportResult> {
   return saveDocumentExport({
     defaultFileName: defaultExportFileName(documentRefPath(args.document), "pdf"),

@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use super::mermaid::{MermaidRenderer, MERMAID_LANG};
+use super::typeface::ExportTypefaces;
 
 /// Like [`render_markdown_to_html`], but inlines front-end-rendered mermaid
 /// diagrams: `mermaid_svgs` maps a fence's (trimmed) source to its SVG. A fence
@@ -31,16 +32,23 @@ pub fn render_markdown_to_html_with_mermaid(
     title: &str,
     doc_dir: &Path,
     mermaid_svgs: HashMap<String, String>,
+    typefaces: &ExportTypefaces,
 ) -> String {
     let body = markdown_to_body(markdown, mermaid_svgs);
     let body = inline_local_images(&body, doc_dir);
-    wrap_document(title, &body)
+    wrap_document(title, &body, typefaces)
+}
+
+/// A note's markdown as HTML body content only (no document, no images
+/// inlined), for a card that lays it out itself.
+pub fn markdown_fragment(markdown: &str) -> String {
+    markdown_to_body(markdown, HashMap::new())
 }
 
 /// A plain-text document as a standalone page: its text exactly as written,
 /// spacing and line breaks kept, nothing read as Markdown.
-pub fn render_plain_text_to_html(text: &str, title: &str) -> String {
-    wrap_document(title, &format!("<div class=\"plain-text\">{}</div>", escape_html(text)))
+pub fn render_plain_text_to_html(text: &str, title: &str, typefaces: &ExportTypefaces) -> String {
+    wrap_document(title, &format!("<div class=\"plain-text\">{}</div>", escape_html(text)), typefaces)
 }
 
 /// comrak GFM render of the body: syntax-highlighted code fences, mermaid fences
@@ -71,6 +79,9 @@ fn comrak_options() -> comrak::Options<'static> {
     options.extension.table = true;
     options.extension.strikethrough = true;
     options.extension.tasklist = true;
+    // `contains-task-list` / `task-list-item`, which the export and card
+    // stylesheets draw checkboxes from instead of bullets.
+    options.render.tasklist_classes = true;
     options.extension.autolink = true;
     options.extension.footnotes = true;
     options.extension.superscript = true;
@@ -423,7 +434,7 @@ fn wikilink_href(target: &str) -> String {
 /// `data:` URI. http(s)/data/protocol-relative sources are left untouched; a
 /// path that can't be read is left untouched (renders as a broken image rather
 /// than failing the whole export).
-fn inline_local_images(html: &str, doc_dir: &Path) -> String {
+pub(super) fn inline_local_images(html: &str, doc_dir: &Path) -> String {
     let needle = "src=\"";
     let mut out = String::with_capacity(html.len());
     let mut rest = html;
@@ -510,40 +521,31 @@ fn percent_decode(input: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Wrap rendered body HTML in a full document with a print stylesheet.
-fn wrap_document(title: &str, body: &str) -> String {
+/// Wrap rendered body HTML in a full document with a print stylesheet, and
+/// the fonts the note is set in after it so they win.
+fn wrap_document(title: &str, body: &str, typefaces: &ExportTypefaces) -> String {
     format!(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
-         <title>{title}</title>\n<style>{fonts}{body_css}{css}</style>\n</head>\n\
+         <title>{title}</title>\n<style>{fonts}{body_css}{css}{families}</style>\n</head>\n\
          <body class=\"compose-export\">\n{body}\n</body>\n</html>",
         title = escape_html(title),
-        fonts = super::fonts::font_face_css(),
-        body_css = body_css(),
+        fonts = typefaces.font_face_css(),
+        body_css = BODY_CSS,
         css = PRINT_CSS,
+        families = typefaces.family_css(),
         body = body,
     )
 }
 
-/// The body rule, built once. Split from the static `PRINT_CSS` only because the
-/// serif `font-family` is owned by `super::fonts` (the bundled face's name).
-fn body_css() -> &'static str {
-    use std::sync::OnceLock;
-    static CSS: OnceLock<String> = OnceLock::new();
-    CSS.get_or_init(|| {
-        format!(
-            "body.compose-export {{\n\
-            \x20 margin: 0;\n\
-            \x20 padding: 0;\n\
-            \x20 color: #1a1a1a;\n\
-            \x20 font-family: \"{family}\", Georgia, \"Times New Roman\", serif;\n\
-            \x20 font-size: 12pt;\n\
-            \x20 line-height: 1.5;\n\
-            \x20 text-rendering: optimizeLegibility;\n\
-            }}\n",
-            family = super::fonts::FAMILY,
-        )
-    })
-}
+/// The body rule; its font comes from [`ExportTypefaces::family_css`].
+const BODY_CSS: &str = "body.compose-export {\n\
+  margin: 0;\n\
+  padding: 0;\n\
+  color: #1a1a1a;\n\
+  font-size: 12pt;\n\
+  line-height: 1.5;\n\
+  text-rendering: optimizeLegibility;\n\
+}\n";
 
 /// HTML-escape plain text: a title, or a plain-text document's body. Markdown
 /// body HTML is comrak output and must not be re-escaped.
@@ -630,7 +632,7 @@ mod tests {
     /// (possibly empty) SVG map to pass. Keeps one public entry point rather
     /// than two that must be kept in step.
     fn render_markdown_to_html(markdown: &str, title: &str, doc_dir: &Path) -> String {
-        render_markdown_to_html_with_mermaid(markdown, title, doc_dir, HashMap::new())
+        render_markdown_to_html_with_mermaid(markdown, title, doc_dir, HashMap::new(), &ExportTypefaces::default())
     }
 
     use super::*;
@@ -673,7 +675,7 @@ mod tests {
 
     #[test]
     fn plain_text_keeps_every_character_and_line_break() {
-        let html = render_plain_text_to_html("# not a heading\n  *not emphasis*\n<b>tag</b> & more", "todo");
+        let html = render_plain_text_to_html("# not a heading\n  *not emphasis*\n<b>tag</b> & more", "todo", &ExportTypefaces::default());
 
         assert!(html.contains("<div class=\"plain-text\"># not a heading\n  *not emphasis*\n&lt;b&gt;tag&lt;/b&gt; &amp; more</div>"), "{html}");
         assert!(!html.contains("<h1") && !html.contains("<em>"), "{html}");
@@ -761,7 +763,7 @@ mod tests {
             "``` Mermaid\ngraph TD; A-->B\n```",
             "doc",
             &doc_dir(),
-            svgs,
+            svgs, &ExportTypefaces::default(),
         );
         assert!(
             html.contains("<figure class=\"mermaid-diagram\"><svg id=\"s\">"),
@@ -779,7 +781,7 @@ mod tests {
             "```mermaid title=x\ngraph TD; A-->B\n```",
             "doc",
             &doc_dir(),
-            svgs,
+            svgs, &ExportTypefaces::default(),
         );
         assert!(!html.contains("<figure"), "meta fence must stay source: {html:.400}");
         assert!(html.contains("language-mermaid"), "{html:.400}");
@@ -795,7 +797,7 @@ mod tests {
             "- item\n\n  ```Mermaid\n  graph LR; A-->B\n  ```",
             "doc",
             &doc_dir(),
-            svgs,
+            svgs, &ExportTypefaces::default(),
         );
         assert!(html.contains("<svg id=\"n\">"), "{html:.400}");
     }
@@ -810,7 +812,7 @@ mod tests {
             "```Mermaid\ngraph TD; A-->B\n```",
             "doc",
             &doc_dir(),
-            svgs,
+            svgs, &ExportTypefaces::default(),
         );
         assert!(
             html.contains("<figure class=\"mermaid-diagram\"><svg id=\"c\">"),
@@ -912,7 +914,7 @@ mod tests {
             "```mermaid\ngraph TD; A-->B\n```",
             "doc",
             &doc_dir(),
-            svgs,
+            svgs, &ExportTypefaces::default(),
         );
         assert!(
             html.contains("<figure class=\"mermaid-diagram\"><svg id=\"d\">"),

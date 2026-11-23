@@ -2,6 +2,12 @@ import { create } from "zustand";
 
 export type ToastKind = "error" | "success" | "info";
 
+/** A button on the toast, e.g. "Show in Finder" after a file is saved. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 export interface Toast {
   id: string;
   kind: ToastKind;
@@ -13,6 +19,7 @@ export interface Toast {
    *  re-firing error (a watcher event, a retried save) reads as one toast, not
    *  a stack of duplicates. */
   count: number;
+  action?: ToastAction;
 }
 
 interface ToastState {
@@ -56,6 +63,7 @@ export function showToast(opts: {
   title?: string;
   message: string;
   timeoutMs?: number;
+  action?: ToastAction;
 }): string {
   const id = `toast-${Date.now()}-${(seq += 1)}`;
   useToastStore.getState().push({
@@ -65,6 +73,7 @@ export function showToast(opts: {
     message: opts.message,
     timeoutMs: opts.timeoutMs ?? (opts.kind === "error" ? 8000 : 6000),
     count: 1,
+    action: opts.action,
   });
   return id;
 }

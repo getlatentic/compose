@@ -12,14 +12,19 @@
 //! outside any workspace, through the external-files registry; the destination
 //! is a user-chosen save location outside the vault.
 
+mod card;
 mod fonts;
 mod html;
 mod mermaid;
 mod paged;
 mod pdf;
 mod print;
+mod share;
+mod snapshot;
+mod typeface;
 
 use crate::document_kind::DocumentKind;
+use typeface::ExportTypefaces;
 use crate::external::ExternalFilesRegistry;
 use crate::workspace::WorkspaceRegistry;
 use serde::{Deserialize, Serialize};
@@ -41,6 +46,8 @@ pub struct ExportArtifact {
 pub enum ExportFormat {
     Pdf,
     Html,
+    Image,
+    Markdown,
 }
 
 /// Which document to render: one inside a registered workspace, or a file the
@@ -69,13 +76,13 @@ pub fn document_export_pdf(
     content: String,
     destination_path: String,
     mermaid_svgs: HashMap<String, String>,
+    typefaces: Option<ExportTypefaces>,
     app: AppHandle,
-    registry: State<'_, WorkspaceRegistry>,
-    externals: State<'_, ExternalFilesRegistry>,
 ) -> Result<ExportArtifact, String> {
+    use tauri::Manager;
     let destination = check_destination(&destination_path, "PDF")?;
-    let source = resolve_document(&document, &registry, &externals)?;
-    let document_html = document_html(&source, &content, mermaid_svgs);
+    let source = resolve_document(&document, &app.state::<WorkspaceRegistry>(), &app.state::<ExternalFilesRegistry>())?;
+    let document_html = document_html(&source, &content, mermaid_svgs, &ExportTypefaces::or_default(typefaces));
     let pdf_bytes = pdf::html_to_pdf(&app, &document_html)?;
     crate::files::write_file_atomic(destination, &pdf_bytes)
         .map_err(|error| format!("Could not save the PDF: {error}"))?;
@@ -94,17 +101,35 @@ pub fn document_export_html(
     content: String,
     destination_path: String,
     mermaid_svgs: HashMap<String, String>,
+    typefaces: Option<ExportTypefaces>,
     registry: State<'_, WorkspaceRegistry>,
     externals: State<'_, ExternalFilesRegistry>,
 ) -> Result<ExportArtifact, String> {
     let destination = check_destination(&destination_path, "HTML file")?;
     let source = resolve_document(&document, &registry, &externals)?;
-    let document_html = document_html(&source, &content, mermaid_svgs);
+    let document_html = document_html(&source, &content, mermaid_svgs, &ExportTypefaces::or_default(typefaces));
     crate::files::write_file_atomic(destination, document_html.as_bytes())
         .map_err(|error| format!("Could not save the HTML file: {error}"))?;
     Ok(ExportArtifact {
         format: ExportFormat::Html,
         path: destination_path,
+    })
+}
+
+/// Save markdown the user chose a location for: a note's current text or a
+/// conversation turned into markdown. Written as-is, atomically.
+#[tauri::command(async)]
+pub fn document_export_markdown(content: String, destination_path: String) -> Result<ExportArtifact, String> {
+    write_markdown(&content, &destination_path)
+}
+
+fn write_markdown(content: &str, destination_path: &str) -> Result<ExportArtifact, String> {
+    let destination = check_destination(destination_path, "Markdown file")?;
+    crate::files::write_file_atomic(destination, content.as_bytes())
+        .map_err(|error| format!("Could not save the Markdown file: {error}"))?;
+    Ok(ExportArtifact {
+        format: ExportFormat::Markdown,
+        path: destination_path.to_string(),
     })
 }
 
@@ -119,13 +144,91 @@ pub fn document_print(
     document: DocumentRef,
     content: String,
     mermaid_svgs: HashMap<String, String>,
+    typefaces: Option<ExportTypefaces>,
     app: AppHandle,
     registry: State<'_, WorkspaceRegistry>,
     externals: State<'_, ExternalFilesRegistry>,
 ) -> Result<bool, String> {
     let source = resolve_document(&document, &registry, &externals)?;
-    let document_html = document_html(&source, &content, mermaid_svgs);
+    let document_html = document_html(&source, &content, mermaid_svgs, &ExportTypefaces::or_default(typefaces));
     print::print_html(&app, &document_html)
+}
+
+/// The card's HTML, for the export dialog's live preview: the same document
+/// [`document_export_image`] draws.
+#[tauri::command(async)]
+pub fn card_preview_html(spec: card::CardSpec, app: AppHandle) -> String {
+    card_document(&spec, &app)
+}
+
+/// The card's HTML with the note's own images inlined beside it, when the
+/// card says which note it is and Compose may read it.
+fn card_document(spec: &card::CardSpec, app: &AppHandle) -> String {
+    use tauri::Manager;
+    let html = card::card_html(spec, backgrounds_dir(app).as_deref());
+    let source = spec.document.as_ref().and_then(|document| {
+        resolve_document(document, &app.state::<WorkspaceRegistry>(), &app.state::<ExternalFilesRegistry>()).ok()
+    });
+    match source.as_deref().and_then(Path::parent) {
+        Some(dir) => html::inline_local_images(&html, dir),
+        None => html,
+    }
+}
+
+/// Draw a note as an image (a cover, quote or page card at a post's size)
+/// and save it at `destination_path` as JPEG or PNG.
+#[tauri::command(async)]
+pub fn document_export_image(
+    spec: card::CardSpec,
+    format: snapshot::ImageFormat,
+    destination_path: String,
+    app: AppHandle,
+) -> Result<ExportArtifact, String> {
+    let destination = check_destination(&destination_path, "image")?;
+    let html = card_document(&spec, &app);
+    let bytes = snapshot::render(&app, &html, spec.size.pixels(), format)?;
+    crate::files::write_file_atomic(destination, &bytes).map_err(|error| format!("Could not save the image: {error}"))?;
+    Ok(ExportArtifact {
+        format: ExportFormat::Image,
+        path: destination_path,
+    })
+}
+
+/// Draw a card as PNG and put it on the clipboard, to paste into a post.
+#[tauri::command(async)]
+pub fn card_copy_image(spec: card::CardSpec, app: AppHandle) -> Result<(), String> {
+    let html = card_document(&spec, &app);
+    let png = snapshot::render(&app, &html, spec.size.pixels(), snapshot::ImageFormat::Png)?;
+    share::copy_png(&app, png)
+}
+
+/// Draw a card as PNG and open the Mac's share sheet for it, against the
+/// Share button. The file is kept in Compose's cache folder, replacing the
+/// last one shared.
+#[tauri::command(async)]
+pub fn card_share(
+    spec: card::CardSpec,
+    file_name: String,
+    anchor: share::ShareAnchor,
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+) -> Result<(), String> {
+    use tauri::Manager;
+    let html = card_document(&spec, &app);
+    let png = snapshot::render(&app, &html, spec.size.pixels(), snapshot::ImageFormat::Png)?;
+    let dir = app.path().app_cache_dir().map_err(|error| format!("no cache folder: {error}"))?.join("shared-cards");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).map_err(|error| format!("Could not prepare the image to share: {error}"))?;
+    let file = dir.join(share::share_file_name(&file_name));
+    crate::files::write_file_atomic(&file, &png).map_err(|error| format!("Could not prepare the image to share: {error}"))?;
+    share::show_share_sheet(&window, file, anchor)
+}
+
+/// Where the note background is kept; a card may only embed an image from
+/// there.
+fn backgrounds_dir(app: &AppHandle) -> Option<PathBuf> {
+    use tauri::Manager;
+    app.path().app_data_dir().ok().map(|dir| dir.join("backgrounds"))
 }
 
 fn check_destination<'a>(destination_path: &'a str, what: &str) -> Result<&'a Path, String> {
@@ -171,22 +274,38 @@ fn document_html(
     source: &Path,
     content: &str,
     mermaid_svgs: HashMap<String, String>,
+    typefaces: &ExportTypefaces,
 ) -> String {
     let title = source
         .file_stem()
         .and_then(|stem| stem.to_str())
         .unwrap_or("document");
     if DocumentKind::of(source) == Some(DocumentKind::PlainText) {
-        return html::render_plain_text_to_html(content, title);
+        return html::render_plain_text_to_html(content, title, typefaces);
     }
     let doc_dir = source.parent().unwrap_or_else(|| Path::new("."));
-    html::render_markdown_to_html_with_mermaid(content, title, doc_dir, mermaid_svgs)
+    html::render_markdown_to_html_with_mermaid(content, title, doc_dir, mermaid_svgs, typefaces)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn saves_markdown_exactly_as_given() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("note.md");
+        let text = "# Title\n\n**bold** and `code`\n";
+        let artifact = write_markdown(text, &path.to_string_lossy()).expect("export");
+        assert_eq!(artifact.format, ExportFormat::Markdown);
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), text);
+    }
+
+    #[test]
+    fn refuses_markdown_without_a_destination() {
+        assert!(write_markdown("x", "  ").is_err());
+    }
 
     fn registry_with_workspace() -> (WorkspaceRegistry, String, tempfile::TempDir) {
         let dir = tempdir().expect("tempdir");
@@ -217,6 +336,7 @@ mod tests {
             Path::new("/vault/notes/x.md"),
             "# Hi\n\n**bold**",
             HashMap::new(),
+            &ExportTypefaces::default(),
         );
         assert!(html.contains("<h1"));
         assert!(html.contains("<strong>bold</strong>"));
@@ -226,7 +346,7 @@ mod tests {
 
     #[test]
     fn a_text_file_renders_as_written() {
-        let html = document_html(Path::new("/notes/todo.txt"), "# milk\n**eggs**", HashMap::new());
+        let html = document_html(Path::new("/notes/todo.txt"), "# milk\n**eggs**", HashMap::new(), &ExportTypefaces::default());
         assert!(html.contains("# milk\n**eggs**"), "{html}");
         assert!(!html.contains("<h1") && !html.contains("<strong>"), "{html}");
         assert!(html.contains("<title>todo</title>"));

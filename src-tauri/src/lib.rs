@@ -1,5 +1,6 @@
 mod app_group;
 mod autocorrect;
+mod backgrounds;
 mod boot_payload;
 mod capture;
 mod clipboard;
@@ -31,6 +32,7 @@ mod open_with;
 mod profile_migration;
 pub mod review;
 mod system;
+mod system_fonts;
 mod workspace;
 
 use tauri::{Emitter, Manager, RunEvent};
@@ -293,6 +295,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            system_fonts::system_font_families,
+            backgrounds::background_image_store,
+            backgrounds::background_image_allow,
+            export::card_preview_html,
+            export::document_export_image,
+            export::card_copy_image,
+            export::card_share,
             harness::runner::run_harness_stream,
             harness::runner::cancel_harness_run,
             harness::commands::harness_list,
@@ -368,6 +377,7 @@ pub fn run() {
             index::workspace_search_index,
             export::document_export_pdf,
             export::document_export_html,
+            export::document_export_markdown,
             export::document_print,
             logging::report_client_error,
             logging::open_error_log,
