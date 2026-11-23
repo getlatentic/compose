@@ -86,14 +86,37 @@ impl PagedDocument {
     pub fn window(&self, around: u64, target: usize) -> io::Result<Window> {
         let around = around.min(self.size);
         let (from, first_line, exact) = self.window_start(around, target)?;
-        self.window_from(from, first_line, exact, around, target)
+        let wanted = (from + target as u64).max(around + 1).min(self.size);
+        self.read_window(from, self.window_end(wanted)?, first_line, exact)
+    }
+
+    /// About `target` bytes of text that start at the byte `from`, which is
+    /// where an earlier window ended.
+    pub fn window_from(&self, from: u64, target: usize) -> io::Result<Window> {
+        let from = from.min(self.size);
+        let start = self.read_index().start_at_or_before(from);
+        // Where the earlier window ended at a start the index names, this
+        // one is as exact as that start; where it ended at the end of a
+        // line the index had not reached, nothing is known of this place.
+        let (first_line, exact) = if start.offset == from { (Some(start.line), start.exact) } else { (None, false) };
+        let wanted = (from + target as u64).min(self.size);
+        self.read_window(from, self.window_end(wanted)?, first_line, exact)
+    }
+
+    /// About `target` bytes of text that end at the byte `end`, which is
+    /// where an earlier window started.
+    pub fn window_before(&self, end: u64, target: usize) -> io::Result<Window> {
+        let end = end.min(self.size);
+        let (from, first_line, exact) = self.window_start(end.saturating_sub(target as u64), 0)?;
+        self.read_window(from, end, first_line, exact)
     }
 
     /// About `target` bytes of text with line `line` (from 0) in it, as far
     /// as the index has reached; the last indexed text otherwise.
     pub fn window_at_line(&self, line: u64, target: usize) -> io::Result<Window> {
         let start = self.read_index().start_at_or_before_line(line);
-        self.window_from(start.offset, Some(start.line), start.exact, start.offset, target)
+        let wanted = (start.offset + target as u64).min(self.size);
+        self.read_window(start.offset, self.window_end(wanted)?, Some(start.line), start.exact)
     }
 
     fn read_index(&self) -> std::sync::RwLockReadGuard<'_, Index> {
@@ -119,9 +142,7 @@ impl PagedDocument {
         Ok((line_start, None, false))
     }
 
-    fn window_from(&self, from: u64, first_line: Option<u64>, exact: bool, around: u64, target: usize) -> io::Result<Window> {
-        let wanted = (from + target as u64).max(around + 1).min(self.size);
-        let to = self.window_end(wanted)?;
+    fn read_window(&self, from: u64, to: u64, first_line: Option<u64>, exact: bool) -> io::Result<Window> {
         let mut bytes = self.read_bytes(from, to)?;
         // A window cut inside a very long line may end inside a character.
         while std::str::from_utf8(&bytes).is_err_and(|error| error.error_len().is_none()) {

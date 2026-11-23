@@ -54,6 +54,38 @@ fn a_window_holds_the_place_asked_for_and_starts_a_block() {
 }
 
 #[test]
+fn the_windows_below_and_above_a_place_meet_at_it() {
+    let text = sections(40_000);
+    let file = on_disk(&text);
+    let document = PagedDocument::open(file.path()).expect("open");
+    document.wait_until_indexed();
+    let middle = document.window(text.len() as u64 / 2, WINDOW).expect("window");
+
+    let mut below = middle.text.clone();
+    let mut at = middle.to;
+    while at < document.size() {
+        let window = document.window_from(at, WINDOW).expect("below");
+        assert_eq!(window.from, at);
+        assert!(window.exact && window.first_line.is_some());
+        below.push_str(&window.text);
+        at = window.to;
+    }
+    assert_eq!(below, &text[middle.from as usize..]);
+
+    let mut above = String::new();
+    let mut at = middle.from;
+    while at > 0 {
+        let window = document.window_before(at, WINDOW).expect("above");
+        assert_eq!(window.to, at);
+        assert!(window.exact, "window before {at}");
+        assert!(window.text.len() <= WINDOW + 128 * 1024, "window of {} bytes", window.text.len());
+        above.insert_str(0, &window.text);
+        at = window.from;
+    }
+    assert_eq!(above, &text[..middle.from as usize]);
+}
+
+#[test]
 fn a_window_is_found_by_line() {
     let text = sections(40_000);
     let file = on_disk(&text);
