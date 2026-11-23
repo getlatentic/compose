@@ -8,7 +8,7 @@ import {
 } from "../../app/store/activeWorkspace";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import { startOllama } from "../../lib/ipc/harnessClient";
+import { startOllama } from "../../lib/ipc/harnessModelsClient";
 import { agentStatus } from "../settings/agentStatus";
 import { missingFileContextPaths } from "../../app/workspace/chatContext";
 import { sumChatThreadStats } from "../../app/workspace/chatRun";

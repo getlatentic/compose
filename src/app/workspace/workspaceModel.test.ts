@@ -11,7 +11,7 @@ import { closeWorkspaceFileTab, isActiveFilePresent, openWorkspaceFile, reorderO
 import { documentRef, documentRefPath } from "./documents";
 import { hydrateChatThread, serializeChatMessages } from "./chatPersistence";
 import type { Workspace, WorkspaceChatThread, WorkspaceContextItem, WorkspaceFileContextItem, WorkspaceFileEntry } from "./types";
-import type { HarnessReadiness } from "../../lib/ipc/harnessClient";
+import type { HarnessReadiness } from "../../lib/ipc/harnessCatalogClient";
 
 function makeEntry(relativePath: string, lastModifiedMs = 1_000): WorkspaceFileEntry {
   return { relativePath, lastModifiedMs, sizeBytes: 16 };

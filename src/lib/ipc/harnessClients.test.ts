@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  cancelHarnessRun,
-  runHarnessStream,
-  runtimeDetailsOf,
-  subscribeHarnessRun,
-  type HarnessReadiness,
-} from "./harnessClient";
+import { cancelHarnessRun, runHarnessStream, subscribeHarnessRun } from "./harnessRunClient";
+import { runtimeDetailsOf, type HarnessReadiness } from "./harnessCatalogClient";
 
 /** A minimal readiness with a given free-form `details`, for the parser tests. */
 function readinessWith(details: unknown): HarnessReadiness {
@@ -96,10 +91,16 @@ describe("every command is guarded at the runtime boundary", () => {
     });
     vi.doMock("@tauri-apps/api/core", () => ({ invoke }));
 
-    const client: Record<string, unknown> = await import("./harnessClient");
+    const clients: Record<string, unknown>[] = await Promise.all([
+      import("./harnessRunClient"),
+      import("./harnessCatalogClient"),
+      import("./harnessModelsClient"),
+      import("./harnessSetupClient"),
+      import("./customAgentsClient"),
+    ]);
     const called: string[] = [];
 
-    for (const [name, value] of Object.entries(client)) {
+    for (const [name, value] of clients.flatMap((client) => Object.entries(client))) {
       if (typeof value !== "function") continue;
       const before = invoke.mock.calls.length;
       // Arguments are deliberately generous: every guard returns before it

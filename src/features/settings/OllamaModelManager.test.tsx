@@ -8,14 +8,14 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { InstalledModel, PullEvent } from "../../lib/ipc/harnessClient";
+import type { InstalledModel, PullEvent } from "../../lib/ipc/harnessModelsClient";
 
 const installedModels = vi.fn<() => Promise<InstalledModel[]>>();
 const pullModel = vi.fn<(h: string, m: string, on: (event: PullEvent) => void) => Promise<void>>();
 const cancelPull = vi.fn<(h: string, m: string) => Promise<void>>(() => Promise.resolve());
 const deleteModel = vi.fn<(h: string, m: string) => Promise<void>>(() => Promise.resolve());
 
-vi.mock("../../lib/ipc/harnessClient", () => ({
+vi.mock("../../lib/ipc/harnessModelsClient", () => ({
   harnessInstalledModels: () => installedModels(),
   harnessPullModel: (harnessId: string, model: string, onEvent: (e: PullEvent) => void) =>
     pullModel(harnessId, model, onEvent),

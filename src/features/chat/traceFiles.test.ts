@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TraceEntry } from "../../app/workspace/types";
-import type { ToolKind } from "../../lib/ipc/harnessClient";
+import type { ToolKind } from "../../lib/ipc/harnessRunClient";
 import { appliedChangeBasenames, fileOpsFromTrace, readFilesFromTrace } from "./traceFiles";
 
 /** A tool trace entry carrying a neutral `kind` (as the harness now supplies)

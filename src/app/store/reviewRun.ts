@@ -1,4 +1,4 @@
-import type { EditGuard, SandboxFile } from "../../lib/ipc/harnessClient";
+import type { EditGuard, SandboxFile } from "../../lib/ipc/harnessRunClient";
 import { readFile } from "../../lib/ipc/filesClient";
 import type { ReviewFeedback } from "../../features/review/reviewFeedback";
 import { NO_WAITING_PROPOSALS, notesToRead, waitingProposals, type NoteTexts } from "../../features/review/waitingProposals";

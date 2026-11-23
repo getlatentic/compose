@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { runHarnessStream } from "../../lib/ipc/harnessClient";
+import { runHarnessStream } from "../../lib/ipc/harnessRunClient";
 import { recordLlmThread } from "../../lib/ipc/llmContextClient";
 import { _resetFallbackConversationsForTests } from "../../lib/ipc/conversationsClient";
 import { agentEditKeys } from "../../features/review/agentEdits";
@@ -19,10 +19,12 @@ vi.mock("../../lib/ipc/workspaceClient", () => ({
   saveWorkspaceTabs: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock("../../lib/ipc/harnessClient", () => ({
+vi.mock("../../lib/ipc/harnessRunClient", () => ({
   cancelHarnessRun: vi.fn(),
   runHarnessStream: vi.fn(),
   subscribeHarnessRun: vi.fn(async () => () => undefined),
+}));
+vi.mock("../../lib/ipc/harnessSetupClient", () => ({
   harnessCredentialStatus: vi.fn(async () => ({ configured: true })),
 }));
 

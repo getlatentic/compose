@@ -13,7 +13,8 @@ import {
   pastedTextChipLabel,
   shouldSpillChatInput,
 } from "../../app/store/chatInputSpill";
-import { spillChatInput, type InstallHint } from "../../lib/ipc/harnessClient";
+import { spillChatInput } from "../../lib/ipc/harnessRunClient";
+import type { InstallHint } from "../../lib/ipc/harnessCatalogClient";
 import { basename } from "../../lib/workspace/displayPath";
 import { ChatComposerFooter } from "./ChatComposerFooter";
 import { ChatErrorNotice } from "./ChatErrorNotice";

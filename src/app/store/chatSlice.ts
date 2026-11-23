@@ -8,9 +8,7 @@ import {
   findWorkspaceSuggestion,
   maybeCleanupReview,
 } from "./reviewFlow";
-import {
-  cancelHarnessRun as cancelHarnessRunIpc,
-} from "../../lib/ipc/harnessClient";
+import { cancelHarnessRun as cancelHarnessRunIpc } from "../../lib/ipc/harnessRunClient";
 import {
   updateWorkspace,
 } from "./internals";

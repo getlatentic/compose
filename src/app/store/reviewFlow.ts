@@ -5,7 +5,7 @@ import {
   snapshotDiff,
   type ReviewFileChange,
 } from "../../lib/ipc/reviewClient";
-import type { EditGuard } from "../../lib/ipc/harnessClient";
+import type { EditGuard } from "../../lib/ipc/harnessRunClient";
 import { appendAppliedChanges, appendReviewChangeSuggestions, markWorkspaceSuggestion } from "../workspace/suggestions";
 import { applyScanResult } from "../workspace/files";
 import type { Workspace, WorkspaceDocumentSuggestion, WorkspaceReviewSuggestionDraft } from "../workspace/types";

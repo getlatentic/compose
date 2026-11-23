@@ -1,6 +1,6 @@
 import type { StoreApi } from "zustand";
 import type { ConversationSummary } from "../../lib/ipc/conversationsClient";
-import type { ReasoningEffort } from "../../lib/ipc/harnessClient";
+import type { ReasoningEffort } from "../../lib/ipc/harnessRunClient";
 import type { Workspace, DocumentTextChange, OnboardingState, SourceRange, WorkspaceCommentThread, WorkspaceFileBuffer, WorkspaceFileEntry, WorkspaceFsEvent, WorkspaceListResult } from "../workspace/types";
 
 /**

@@ -12,9 +12,13 @@ const ipc = vi.hoisted(() => ({
   harnessDiscover: vi.fn(),
   harnessLogin: vi.fn(),
 }));
-vi.mock("../../lib/ipc/harnessClient", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../../lib/ipc/harnessClient")>();
-  return { ...original, ...ipc };
+vi.mock("../../lib/ipc/harnessCatalogClient", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../lib/ipc/harnessCatalogClient")>();
+  return { ...original, harnessList: ipc.harnessList, harnessDiscover: ipc.harnessDiscover };
+});
+vi.mock("../../lib/ipc/harnessSetupClient", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../lib/ipc/harnessSetupClient")>();
+  return { ...original, harnessLogin: ipc.harnessLogin };
 });
 
 const { HarnessPicker } = await import("./HarnessPicker");

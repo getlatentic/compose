@@ -1,5 +1,5 @@
 import { reportClientError } from "../../lib/diagnostics/errorReporter";
-import type { HarnessRunEvent } from "../../lib/ipc/harnessClient";
+import type { HarnessRunEvent } from "../../lib/ipc/harnessRunClient";
 import { appendAssistantNotice, appendAssistantText, assistantMessageContentForRun, markRunStreaming, setAssistantActivity, setAssistantSession, setAssistantStats, type FinalizeRunOptions } from "../workspace/chatRun";
 import { appendAssistantSuggestions, prepareWorkspaceSuggestionDrafts } from "../workspace/suggestions";
 import { appendAssistantThinking, endAssistantToolCall, startAssistantToolCall } from "../workspace/chatTrace";

@@ -1,4 +1,4 @@
-import type { EditGuard } from "../../lib/ipc/harnessClient";
+import type { EditGuard } from "../../lib/ipc/harnessRunClient";
 import type { Workspace } from "../workspace/types";
 
 /** Replace one workspace in the array via a transform, leaving the rest by

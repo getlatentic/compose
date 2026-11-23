@@ -1,4 +1,4 @@
-import type { ToolKind } from "../../lib/ipc/harnessClient";
+import type { ToolKind } from "../../lib/ipc/harnessRunClient";
 import { ensureAssistantMessage } from "./chatRun";
 import type { TraceEntry, WorkspaceChatThread, WorkspaceToolCall } from "./types";
 

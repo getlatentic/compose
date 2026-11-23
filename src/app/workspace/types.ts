@@ -1,5 +1,5 @@
 import type { CommentAnchor, DocumentTextChange, SourceRange, WorkspaceCommentThread } from "../../features/comments/commentModel";
-import type { ToolKind } from "../../lib/ipc/harnessClient";
+import type { ToolKind } from "../../lib/ipc/harnessRunClient";
 
 /**
  * The workspace model's types: a workspace, its files and buffers, its chat thread and the agent changes in it.

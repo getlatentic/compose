@@ -1,7 +1,8 @@
 import { useCallback, useEffect } from "react";
 import { harnessCapabilitiesOf, type HarnessRunOptions } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import type { HarnessInfo, HarnessModel } from "../../lib/ipc/harnessClient";
+import type { HarnessInfo } from "../../lib/ipc/harnessCatalogClient";
+import type { HarnessModel } from "../../lib/ipc/harnessModelsClient";
 import { AssistantPickerView, type ModelOption } from "./AssistantPicker";
 import { selectionLabel } from "../settings/agentGroups";
 

@@ -1,4 +1,4 @@
-import type { HarnessReadiness } from "../../lib/ipc/harnessClient";
+import type { HarnessReadiness } from "../../lib/ipc/harnessCatalogClient";
 import { setCurrentTabContext } from "./chatContext";
 import type { Workspace, WorkspaceRecord } from "./types";
 

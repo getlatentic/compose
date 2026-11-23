@@ -4,12 +4,8 @@ import { CheckmarkFilled } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import {
-  harnessCredentialStatus,
-  harnessSetCredential,
-  type HarnessInstallEvent,
-  type HarnessRuntimeVerification,
-} from "../../lib/ipc/harnessClient";
+import { harnessCredentialStatus, harnessSetCredential, type HarnessInstallEvent } from "../../lib/ipc/harnessSetupClient";
+import type { HarnessRuntimeVerification } from "../../lib/ipc/harnessCatalogClient";
 import { ModelPicker } from "./ModelPicker";
 import { errorMessage } from "../../app/store/internals";
 

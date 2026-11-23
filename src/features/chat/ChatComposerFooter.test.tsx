@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { HarnessInfo } from "../../lib/ipc/harnessClient";
+import type { HarnessInfo } from "../../lib/ipc/harnessCatalogClient";
 import { ChatComposerFooterView } from "./ChatComposerFooter";
 
 function harness(

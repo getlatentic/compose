@@ -1,8 +1,5 @@
-import {
-  type EditGuard,
-  type HarnessCapabilities,
-  type HarnessInfo,
-} from "../../lib/ipc/harnessClient";
+import type { EditGuard } from "../../lib/ipc/harnessRunClient";
+import type { HarnessCapabilities, HarnessInfo } from "../../lib/ipc/harnessCatalogClient";
 import type { HarnessRunOptions } from "./types";
 
 /** Where the prefs live. Exported so a test can seed a malformed entry — and

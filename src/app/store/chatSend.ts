@@ -46,11 +46,8 @@ import {
 import {
   playCompletionChime,
 } from "../../lib/audio/completionChime";
-import {
-  harnessCredentialStatus,
-  runHarnessStream,
-  subscribeHarnessRun,
-} from "../../lib/ipc/harnessClient";
+import { harnessCredentialStatus } from "../../lib/ipc/harnessSetupClient";
+import { runHarnessStream, subscribeHarnessRun } from "../../lib/ipc/harnessRunClient";
 import {
   spillChatInputForPrompt,
 } from "./chatInputSpill";
