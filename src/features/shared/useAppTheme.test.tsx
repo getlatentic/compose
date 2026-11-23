@@ -52,16 +52,16 @@ describe("useAppTheme", () => {
     act(() => {
       useUiStore.getState().setPalette("paper");
       useUiStore.getState().setReadingFont("mono");
-      useUiStore.getState().setReadingSize("large");
+      useUiStore.getState().setReadingSize(22);
     });
     const root = document.documentElement;
     expect(root.getAttribute("data-palette")).toBe("paper");
     expect(root.getAttribute("data-reading-font")).toBe("mono");
-    expect(root.getAttribute("data-reading-size")).toBe("large");
+    expect(root.style.getPropertyValue("--reading-base")).toBe("1.375rem");
     act(() => {
       useUiStore.getState().setPalette("walnut");
       useUiStore.getState().setReadingFont("theme");
-      useUiStore.getState().setReadingSize("default");
+      useUiStore.getState().setReadingSize(18);
     });
   });
 

@@ -9,7 +9,7 @@ import { startBootTrace } from "./lib/perf/bootTrace";
 import { applyAppearance } from "./lib/theme/appearance";
 import { enableMotionAfterLaunch } from "./lib/theme/motion";
 import { installPaletteStyles } from "./lib/theme/paletteCss";
-import { trackWindowFocus } from "./lib/theme/windowChrome";
+import { syncWindowAppearance, trackWindowFocus } from "./lib/theme/windowChrome";
 import { applyZoom } from "./lib/zoom/zoom";
 import "./styles/fonts.css";
 import "./styles/global.scss";
@@ -27,6 +27,7 @@ installGlobalErrorReporter();
 applyZoom(INITIAL_UI_PREFS.zoom, document.documentElement);
 installPaletteStyles(document);
 applyAppearance(INITIAL_UI_PREFS, document.documentElement);
+void syncWindowAppearance(INITIAL_UI_PREFS.theme);
 enableMotionAfterLaunch(document.documentElement);
 trackWindowFocus(document.documentElement);
 
