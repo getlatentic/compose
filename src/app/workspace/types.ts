@@ -206,8 +206,8 @@ export interface WorkspaceCreateSuggestion extends WorkspaceSuggestionBase {
   newText: string | null;
   newSize: number;
   previewOmitted: boolean;
-  /** The agent has been told the writer rejected this file. */
-  rejectionReported?: boolean;
+  /** Whether the agent has been told the writer rejected the file (`WHOLE_FILE`). */
+  review?: ReviewDecisions;
 }
 
 /** A whole-file rewrite the assistant made in the sandbox. */
@@ -229,13 +229,17 @@ export interface WorkspaceRewriteSuggestion extends WorkspaceSuggestionBase {
  * (`features/review/agentEdits.ts`). `kept`: the change is in the note
  * (kept, or accepted); `dropped`: it is not (undone, or rejected).
  * `reported`: dropped edits the agent has been told about
- * (`features/review/reviewFeedback.ts`), so each is told once.
+ * (`features/review/reviewFeedback.ts`), so each is told once. A new file
+ * or a deletion is one edit, keyed {@link WHOLE_FILE}.
  */
 export interface ReviewDecisions {
   kept: readonly string[];
   dropped: readonly string[];
   reported: readonly string[];
 }
+
+/** The one edit key of a new file or a deletion, which is decided whole. */
+export const WHOLE_FILE = "file";
 
 /** A file the assistant deleted in the sandbox. */
 export interface WorkspaceDeleteSuggestion extends WorkspaceSuggestionBase {
@@ -244,8 +248,8 @@ export interface WorkspaceDeleteSuggestion extends WorkspaceSuggestionBase {
   originalSize: number;
   previewOmitted: boolean;
   stale: boolean;
-  /** The agent has been told the writer rejected this deletion. */
-  rejectionReported?: boolean;
+  /** Whether the agent has been told the writer rejected the deletion (`WHOLE_FILE`). */
+  review?: ReviewDecisions;
 }
 
 /** bob's byte-range edit draft, before it becomes a pending suggestion. */

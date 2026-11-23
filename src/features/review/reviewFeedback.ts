@@ -1,4 +1,4 @@
-import type { WorkspaceChatMessage, WorkspaceChatThread, WorkspaceCreateSuggestion, WorkspaceDeleteSuggestion, WorkspaceDocumentSuggestion } from "../../app/workspace/types";
+import { WHOLE_FILE, type WorkspaceChatMessage, type WorkspaceChatThread, type WorkspaceCreateSuggestion, type WorkspaceDeleteSuggestion, type WorkspaceDocumentSuggestion } from "../../app/workspace/types";
 import { agentBlocks, type AgentEdit } from "./agentEdits";
 import type { ReviewEditRef } from "./fileReviews";
 import { appliedRecord, reviewBody, rewriteRecord, type ReviewRecord } from "./reviewRecord";
@@ -37,13 +37,13 @@ interface DroppedEdit {
 
 /** A new file or a deletion the writer turned down from the chat card. */
 function fileRejection(suggestion: WorkspaceCreateSuggestion | WorkspaceDeleteSuggestion): FeedbackItem[] {
-  if (suggestion.status !== "rejected" || suggestion.rejectionReported) return [];
+  if (suggestion.status !== "rejected" || suggestion.review?.reported.includes(WHOLE_FILE)) return [];
   const path = `\`${suggestion.filePath}\``;
   const line =
     suggestion.kind === "create"
       ? `- The writer rejected the new file you made, ${path}. It does not exist.`
       : `- The writer rejected your deletion of ${path}. The file is still there.`;
-  return [{ ref: { reviewId: suggestion.id, key: null }, describe: () => line }];
+  return [{ ref: { reviewId: suggestion.id, key: WHOLE_FILE }, describe: () => line }];
 }
 
 function editItems(record: ReviewRecord): FeedbackItem[] {

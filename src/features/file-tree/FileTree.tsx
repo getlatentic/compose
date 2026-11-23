@@ -15,6 +15,7 @@ import { RowMenuList, useRowMenu, type OpenRowMenu, type RowMenuHandlers } from 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useUiStore } from "../../app/store/uiStore";
+import { remInPx } from "../../lib/zoom/zoom";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { useConfirm } from "../dialogs/ConfirmProvider";
@@ -24,10 +25,6 @@ import { persistTreeScroll, readTreeScroll } from "./treeScroll";
  * (`_file-tree.scss`). The virtualizer places rows by it without measuring each. */
 const ROW_HEIGHT_REM = 2.125;
 
-/** The root font size is the webview's 16px default times app zoom. */
-function rowHeightPx(zoom: number): number {
-  return ROW_HEIGHT_REM * 16 * zoom;
-}
 
 /** Indent for a tree depth, read by `_file-tree.scss`. */
 function depthStyle(depth: number): CSSProperties {
@@ -565,7 +562,8 @@ function FileTreeInner({
   // height means no per-row measurement.
   const scrollRef = useRef<HTMLElement>(null);
   const zoom = useUiStore((state) => state.zoom);
-  const rowHeight = rowHeightPx(zoom);
+  // Read again when the zoom changes the root size.
+  const rowHeight = useMemo(() => ROW_HEIGHT_REM * remInPx(zoom), [zoom]);
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,

@@ -33,7 +33,7 @@ use crate::workspace::WorkspaceRegistry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, State};
+use tauri::AppHandle;
 
 /// A generated export artifact, returned to the front end.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -82,9 +82,8 @@ pub fn document_export_pdf(
     typefaces: Option<ExportTypefaces>,
     app: AppHandle,
 ) -> Result<ExportArtifact, String> {
-    use tauri::Manager;
     let destination = check_destination(&destination_path, "PDF")?;
-    let source = resolve_document(&document, &app.state::<WorkspaceRegistry>(), &app.state::<ExternalFilesRegistry>())?;
+    let source = resolve_for(&app, &document)?;
     let document_html = document_html(&source, &content, mermaid_svgs, &typefaces.unwrap_or_default());
     let pdf_bytes = pdf::html_to_pdf(&app, &document_html)?;
     crate::files::write_file_atomic(destination, &pdf_bytes)
@@ -105,11 +104,10 @@ pub fn document_export_html(
     destination_path: String,
     mermaid_svgs: HashMap<String, String>,
     typefaces: Option<ExportTypefaces>,
-    registry: State<'_, WorkspaceRegistry>,
-    externals: State<'_, ExternalFilesRegistry>,
+    app: AppHandle,
 ) -> Result<ExportArtifact, String> {
     let destination = check_destination(&destination_path, "HTML file")?;
-    let source = resolve_document(&document, &registry, &externals)?;
+    let source = resolve_for(&app, &document)?;
     let document_html = document_html(&source, &content, mermaid_svgs, &typefaces.unwrap_or_default());
     crate::files::write_file_atomic(destination, document_html.as_bytes())
         .map_err(|error| format!("Could not save the HTML file: {error}"))?;
@@ -149,12 +147,16 @@ pub fn document_print(
     mermaid_svgs: HashMap<String, String>,
     typefaces: Option<ExportTypefaces>,
     app: AppHandle,
-    registry: State<'_, WorkspaceRegistry>,
-    externals: State<'_, ExternalFilesRegistry>,
 ) -> Result<bool, String> {
-    let source = resolve_document(&document, &registry, &externals)?;
+    let source = resolve_for(&app, &document)?;
     let document_html = document_html(&source, &content, mermaid_svgs, &typefaces.unwrap_or_default());
     print::print_html(&app, &document_html)
+}
+
+/// [`resolve_document`] against the app's own registries.
+fn resolve_for(app: &AppHandle, document: &DocumentRef) -> Result<PathBuf, String> {
+    use tauri::Manager;
+    resolve_document(document, &app.state::<WorkspaceRegistry>(), &app.state::<ExternalFilesRegistry>())
 }
 
 fn check_destination<'a>(destination_path: &'a str, what: &str) -> Result<&'a Path, String> {

@@ -6,9 +6,7 @@ use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager};
 
-use super::{card, check_destination, html, resolve_document, share, snapshot, ExportArtifact, ExportFormat};
-use crate::external::ExternalFilesRegistry;
-use crate::workspace::WorkspaceRegistry;
+use super::{card, check_destination, html, resolve_for, share, snapshot, ExportArtifact, ExportFormat};
 
 /// The card's HTML, for the export dialog's live preview: the same document
 /// [`document_export_image`] draws.
@@ -62,9 +60,7 @@ fn render_card(spec: &card::CardSpec, app: &AppHandle, format: snapshot::ImageFo
 /// card says which note it is and Compose may read it.
 fn card_document(spec: &card::CardSpec, app: &AppHandle) -> String {
     let html = card::card_html(spec, backgrounds_dir(app).as_deref());
-    let source = spec.document.as_ref().and_then(|document| {
-        resolve_document(document, &app.state::<WorkspaceRegistry>(), &app.state::<ExternalFilesRegistry>()).ok()
-    });
+    let source = spec.document.as_ref().and_then(|document| resolve_for(app, document).ok());
     match source.as_deref().and_then(Path::parent) {
         Some(dir) => html::inline_local_images(&html, dir),
         None => html,

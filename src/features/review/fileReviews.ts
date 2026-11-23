@@ -88,11 +88,10 @@ export function recordReviewDecision(workspace: Workspace, reviewId: string, key
   return { workspace: { ...workspace, chatThread: { ...workspace.chatThread, messages } }, settled };
 }
 
-/** One dropped edit, named by the review it belongs to and its edit key;
- *  `key` is null for a whole new file or deletion the writer rejected. */
+/** One dropped edit, named by the review it belongs to and its edit key. */
 export interface ReviewEditRef {
   readonly reviewId: string;
-  readonly key: string | null;
+  readonly key: string;
 }
 
 function withReported(review: ReviewDecisions | undefined, keys: readonly string[]): ReviewDecisions {
@@ -101,31 +100,21 @@ function withReported(review: ReviewDecisions | undefined, keys: readonly string
   return fresh.length === 0 ? current : { ...current, reported: [...current.reported, ...fresh] };
 }
 
-interface SentIndex {
-  readonly keysByReview: ReadonlyMap<string, readonly string[]>;
-  readonly wholeFiles: ReadonlySet<string>;
-}
+type SentIndex = ReadonlyMap<string, readonly string[]>;
 
 function indexSent(sent: readonly ReviewEditRef[]): SentIndex {
   const keysByReview = new Map<string, string[]>();
-  const wholeFiles = new Set<string>();
-  for (const { reviewId, key } of sent) {
-    if (key === null) wholeFiles.add(reviewId);
-    else keysByReview.set(reviewId, [...(keysByReview.get(reviewId) ?? []), key]);
-  }
-  return { keysByReview, wholeFiles };
+  for (const { reviewId, key } of sent) keysByReview.set(reviewId, [...(keysByReview.get(reviewId) ?? []), key]);
+  return keysByReview;
 }
 
 function markSuggestion(suggestion: WorkspaceDocumentSuggestion, index: SentIndex): WorkspaceDocumentSuggestion {
-  if (suggestion.kind === "create" || suggestion.kind === "delete") {
-    return index.wholeFiles.has(suggestion.id) ? { ...suggestion, rejectionReported: true } : suggestion;
-  }
-  const keys = index.keysByReview.get(suggestion.id);
-  return keys && suggestion.kind === "rewrite" ? { ...suggestion, review: withReported(suggestion.review, keys) } : suggestion;
+  const keys = index.get(suggestion.id);
+  return keys && suggestion.kind !== "replace" ? { ...suggestion, review: withReported(suggestion.review, keys) } : suggestion;
 }
 
 function markAppliedChange(change: WorkspaceAppliedChange, index: SentIndex): WorkspaceAppliedChange {
-  const keys = index.keysByReview.get(change.id);
+  const keys = index.get(change.id);
   return keys ? { ...change, review: withReported(change.review, keys) } : change;
 }
 

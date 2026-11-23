@@ -6,15 +6,16 @@
  */
 
 import { normalizePalette } from "../theme/palettes";
-import { normalizeCustomFont, normalizeReadingFont, normalizeReadingSize, type ReadingFont, type ReadingSize } from "../theme/reading";
+import type { Appearance } from "../theme/appearance";
+import { normalizeCustomFont, normalizeReadingFont, normalizeReadingSize } from "../theme/reading";
 import { normalizeExportFont, type ExportFont } from "../theme/exportFont";
 import { normalizeNoteBackground, type NoteBackground } from "../theme/noteBackground";
-import { normalizeEditorScheme, normalizeTheme, type EditorScheme, type ThemeChoice } from "../theme/theme";
+import { normalizeEditorScheme, normalizeTheme } from "../theme/theme";
 import { clampZoom } from "../zoom/zoom";
 
 const UI_PREFS_KEY = "compose.uiPrefs.v1";
 
-export interface UiPrefs {
+export interface UiPrefs extends Appearance {
   /** Play a subtle chime when an assistant run finishes. */
   soundOnComplete: boolean;
   /** Send an anonymous app-open signal so active users can be counted. Opt-out
@@ -31,21 +32,10 @@ export interface UiPrefs {
   chatWidthPx: number | null;
   /** Interface scale (⌘+ / ⌘− / ⌘0). 1 = the system text size, untouched. */
   zoom: number;
-  /** Light, dark, or follow the system. */
-  theme: ThemeChoice;
-  /** The colour theme's id (`palettes.json`). */
-  palette: string;
-  /** The note font: the palette's own, or one chosen in Settings. */
-  readingFont: ReadingFont;
-  readingSize: ReadingSize;
-  /** The installed font the "custom" reading font uses. */
-  customFont: string | null;
   /** The font exports use: the note's, or Latin Modern. */
   exportFont: ExportFont;
   /** What sits behind the note: the theme's page, a colour, or an image. */
   noteBackground: NoteBackground;
-  /** The note panel's light or dark: the app's, or its own. */
-  editorScheme: EditorScheme;
 }
 
 function booleanOr(fallback: boolean): (value: unknown) => boolean {

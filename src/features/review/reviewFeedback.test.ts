@@ -170,8 +170,8 @@ describe("reviewFeedbackFor, whole files", () => {
     expect(feedback?.note).toContain("- The writer rejected the new file you made, `Ideas/New idea.md`. It does not exist.");
     expect(feedback?.note).toContain("- The writer rejected your deletion of `Old draft.md`. The file is still there.");
     expect(feedback?.sent).toEqual([
-      { reviewId: "f1", key: null },
-      { reviewId: "f2", key: null },
+      { reviewId: "f1", key: "file" },
+      { reviewId: "f2", key: "file" },
     ]);
   });
 
