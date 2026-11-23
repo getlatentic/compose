@@ -24,15 +24,11 @@ const FIT_OPTIONS: readonly SegmentOption<ImageFit>[] = [
 /** A soft paper colour to start from, for a writer who picks Colour first. */
 const STARTING_COLOR = "#f4efe6";
 
-/**
- * Settings → Appearance → Background: the theme's page, a colour, or an
- * image behind the note. An image is copied into Compose's data folder first.
- */
-export function NoteBackgroundSetting() {
-  const background = useUiStore((state) => state.noteBackground);
-  const setBackground = useUiStore((state) => state.setNoteBackground);
-  const [error, setError] = useState<string | null>(null);
+type ImageBackground = Extract<NoteBackground, { kind: "image" }>;
 
+/** The image picker: copies the chosen image in and makes it the background. */
+function useChooseBackgroundImage(setBackground: (background: NoteBackground) => void) {
+  const [error, setError] = useState<string | null>(null);
   const chooseImage = useCallback(async () => {
     setError(null);
     const picked = await open({ multiple: false, directory: false, filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }] });
@@ -44,31 +40,29 @@ export function NoteBackgroundSetting() {
       setError(String(failure));
     }
   }, [setBackground]);
+  const clearError = useCallback(() => setError(null), []);
+  return { chooseImage, error, clearError };
+}
+
+/**
+ * Settings → Appearance → Background: the theme's page, a colour, or an
+ * image behind the note. An image is copied into Compose's data folder first.
+ */
+export function NoteBackgroundSetting() {
+  const background = useUiStore((state) => state.noteBackground);
+  const setBackground = useUiStore((state) => state.setNoteBackground);
+  const { chooseImage, error, clearError } = useChooseBackgroundImage(setBackground);
 
   const changeKind = useCallback(
     (kind: Kind) => {
-      setError(null);
+      clearError();
       if (kind === "theme") setBackground({ kind: "theme" });
       else if (kind === "color") setBackground({ kind: "color", color: STARTING_COLOR });
       else if (background.kind !== "image") void chooseImage();
     },
-    [background.kind, chooseImage, setBackground],
+    [background.kind, chooseImage, clearError, setBackground],
   );
-
   const changeColor = useCallback((color: string) => setBackground({ kind: "color", color }), [setBackground]);
-  const changeFit = useCallback(
-    (fit: ImageFit) => {
-      if (background.kind === "image") setBackground({ ...background, fit });
-    },
-    [background, setBackground],
-  );
-  const changeDim = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      if (background.kind === "image") setBackground({ ...background, dim: Number(event.target.value) / 100 });
-    },
-    [background, setBackground],
-  );
-  const handleChoose = useCallback(() => void chooseImage(), [chooseImage]);
 
   return (
     <>
@@ -84,37 +78,54 @@ export function NoteBackgroundSetting() {
           <ColorField value={background.color} onChange={changeColor} label="Background colour" />
         </div>
       ) : null}
-      {background.kind === "image" ? (
-        <>
-          <div className="appearance-settings__row">
-            <span className="appearance-settings__row-label" />
-            <button type="button" className="note-bg__choose" onClick={handleChoose} disabled={!isTauriRuntime()}>
-              Choose image…
-            </button>
-            <SegmentedControl name="note-bg-fit" labelledBy="note-bg-label" options={FIT_OPTIONS} value={background.fit} onChange={changeFit} />
-          </div>
-          <div className="appearance-settings__row">
-            <span id="note-bg-dim-label" className="appearance-settings__row-label">
-              Soften
-            </span>
-            <input
-              className="note-bg__dim"
-              type="range"
-              min={0}
-              max={95}
-              step={5}
-              value={Math.round(background.dim * 100)}
-              onChange={changeDim}
-              aria-labelledby="note-bg-dim-label"
-            />
-          </div>
-        </>
-      ) : null}
+      {background.kind === "image" ? <ImageBackgroundRows background={background} onChange={setBackground} onChoose={chooseImage} /> : null}
       {error ? (
         <p className="settings-helper note-bg__error" role="alert">
           {error}
         </p>
       ) : null}
+    </>
+  );
+}
+
+interface ImageBackgroundRowsProps {
+  readonly background: ImageBackground;
+  readonly onChange: (background: NoteBackground) => void;
+  readonly onChoose: () => Promise<void>;
+}
+
+/** An image's own choices: another image, fill or tile, and how much the page softens it. */
+function ImageBackgroundRows({ background, onChange, onChoose }: ImageBackgroundRowsProps) {
+  const changeFit = useCallback((fit: ImageFit) => onChange({ ...background, fit }), [background, onChange]);
+  const changeDim = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => onChange({ ...background, dim: Number(event.target.value) / 100 }),
+    [background, onChange],
+  );
+  const handleChoose = useCallback(() => void onChoose(), [onChoose]);
+  return (
+    <>
+      <div className="appearance-settings__row">
+        <span className="appearance-settings__row-label" />
+        <button type="button" className="note-bg__choose" onClick={handleChoose} disabled={!isTauriRuntime()}>
+          Choose image…
+        </button>
+        <SegmentedControl name="note-bg-fit" labelledBy="note-bg-label" options={FIT_OPTIONS} value={background.fit} onChange={changeFit} />
+      </div>
+      <div className="appearance-settings__row">
+        <span id="note-bg-dim-label" className="appearance-settings__row-label">
+          Soften
+        </span>
+        <input
+          className="note-bg__dim"
+          type="range"
+          min={0}
+          max={95}
+          step={5}
+          value={Math.round(background.dim * 100)}
+          onChange={changeDim}
+          aria-labelledby="note-bg-dim-label"
+        />
+      </div>
     </>
   );
 }

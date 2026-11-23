@@ -41,64 +41,44 @@ interface PopupPickerProps {
 
 /** Rows drawn at once while searching a long list. */
 const MAX_ROWS = 120;
+/** Room needed under the button to open the list downward. */
+const ROOM_BELOW_PX = 320;
 
-/**
- * A Mac pop-up button: the current choice, and a short list under it to
- * change it. Stays compact however many choices there are, with sections
- * and, for long lists, a search field. Arrow keys move, Return chooses,
- * Escape closes.
- */
-export function PopupPicker({ label, selectedId, sections, onSelect, searchPlaceholder, loadingNote }: PopupPickerProps) {
+/** The sections with only the items whose label holds `query`, at most {@link MAX_ROWS} in all. */
+function filterSections(sections: readonly PickerSection[], query: string): PickerSection[] {
+  const needle = query.trim().toLowerCase();
+  let budget = MAX_ROWS;
+  return sections
+    .map((section) => {
+      const matching = needle ? section.items.filter((item) => item.label.toLowerCase().includes(needle)) : section.items;
+      const items = matching.slice(0, budget);
+      budget -= items.length;
+      return { ...section, items };
+    })
+    .filter((section) => section.items.length > 0);
+}
+
+/** Under the button, or above it when the window has too little room below. */
+function popoverPosition(rect: DOMRect): CSSProperties {
+  const below = window.innerHeight - rect.bottom;
+  return below > ROOM_BELOW_PX
+    ? { top: rect.bottom + 4, left: rect.left, minInlineSize: rect.width }
+    : { bottom: window.innerHeight - rect.top + 4, left: rect.left, minInlineSize: rect.width };
+}
+
+/** Where the list is open (null while closed), and a press outside it closing it. */
+function usePickerPopover() {
   const [position, setPosition] = useState<CSSProperties | null>(null);
-  const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const listId = useId();
-
-  const selected = useMemo(() => sections.flatMap((section) => section.items).find((item) => item.id === selectedId), [sections, selectedId]);
-
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    let budget = MAX_ROWS;
-    return sections
-      .map((section) => {
-        const items = (needle ? section.items.filter((item) => item.label.toLowerCase().includes(needle)) : section.items).slice(0, budget);
-        budget -= items.length;
-        return { ...section, items };
-      })
-      .filter((section) => section.items.length > 0);
-  }, [sections, query]);
-  const flat = useMemo(() => visible.flatMap((section) => section.items), [visible]);
-
   const close = useCallback(() => {
     setPosition(null);
-    setQuery("");
     buttonRef.current?.focus();
   }, []);
-
   const open = useCallback(() => {
     const rect = buttonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const below = window.innerHeight - rect.bottom;
-    setPosition(
-      below > 320
-        ? { top: rect.bottom + 4, left: rect.left, minInlineSize: rect.width }
-        : { bottom: window.innerHeight - rect.top + 4, left: rect.left, minInlineSize: rect.width },
-    );
-    setActive(Math.max(0, flat.findIndex((item) => item.id === selectedId)));
-  }, [flat, selectedId]);
-
-  const toggle = useCallback(() => (position ? close() : open()), [position, close, open]);
-
-  const choose = useCallback(
-    (id: string) => {
-      onSelect(id);
-      close();
-    },
-    [onSelect, close],
-  );
-
+    if (rect) setPosition(popoverPosition(rect));
+  }, []);
   useEffect(() => {
     if (!position) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -108,41 +88,71 @@ export function PopupPicker({ label, selectedId, sections, onSelect, searchPlace
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [position, close]);
+  return { position, open, close, buttonRef, listRef };
+}
 
-  useEffect(() => {
-    if (!position) return;
-    listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [active, position]);
-
-  const handleKeyDown = useCallback(
+/** Arrow keys move the highlight, Return chooses it, Escape closes. */
+function usePickerKeys(flat: readonly PickerItem[], active: number, setActive: (update: (index: number) => number) => void, choose: (id: string) => void, close: () => void) {
+  return useCallback(
     (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setActive((index) => Math.min(flat.length - 1, index + 1));
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setActive((index) => Math.max(0, index - 1));
-      } else if (event.key === "Enter" && flat[active]) {
-        event.preventDefault();
-        choose(flat[active].id);
-      }
+      const moves: Record<string, () => void> = {
+        Escape: close,
+        ArrowDown: () => setActive((index) => Math.min(flat.length - 1, index + 1)),
+        ArrowUp: () => setActive((index) => Math.max(0, index - 1)),
+        Enter: () => flat[active] && choose(flat[active].id),
+      };
+      const move = moves[event.key];
+      if (!move) return;
+      event.preventDefault();
+      move();
     },
-    [close, flat, active, choose],
+    [close, flat, active, setActive, choose],
   );
+}
 
+/**
+ * A Mac pop-up button: the current choice, and a short list under it to
+ * change it. Stays compact however many choices there are, with sections
+ * and, for long lists, a search field. Arrow keys move, Return chooses,
+ * Escape closes.
+ */
+export function PopupPicker({ label, selectedId, sections, onSelect, searchPlaceholder, loadingNote }: PopupPickerProps) {
+  const popover = usePickerPopover();
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const listId = useId();
+
+  const selected = useMemo(() => sections.flatMap((section) => section.items).find((item) => item.id === selectedId), [sections, selectedId]);
+  const visible = useMemo(() => filterSections(sections, query), [sections, query]);
+  const flat = useMemo(() => visible.flatMap((section) => section.items), [visible]);
+
+  const { open: openPopover, close: closePopover, position } = popover;
+  const close = useCallback(() => {
+    setQuery("");
+    closePopover();
+  }, [closePopover]);
+  const toggle = useCallback(() => {
+    if (position) return close();
+    setActive(Math.max(0, flat.findIndex((item) => item.id === selectedId)));
+    openPopover();
+  }, [position, close, openPopover, flat, selectedId]);
+  const choose = useCallback(
+    (id: string) => {
+      onSelect(id);
+      close();
+    },
+    [onSelect, close],
+  );
+  const handleKeyDown = usePickerKeys(flat, active, setActive, choose, close);
   const handleQuery = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setQuery(event.target.value);
     setActive(0);
   }, []);
 
-  let index = -1;
   return (
     <>
       <button
-        ref={buttonRef}
+        ref={popover.buttonRef}
         type="button"
         className="popup-picker__button"
         aria-label={`${label}: ${selected?.label ?? ""}`}
@@ -160,7 +170,7 @@ export function PopupPicker({ label, selectedId, sections, onSelect, searchPlace
       </button>
       {position
         ? createPortal(
-            <div ref={listRef} className="popup-picker__popover" style={position} onKeyDown={handleKeyDown}>
+            <div ref={popover.listRef} className="popup-picker__popover" style={position} onKeyDown={handleKeyDown}>
               {searchPlaceholder ? (
                 <input
                   className="popup-picker__search"
@@ -172,33 +182,74 @@ export function PopupPicker({ label, selectedId, sections, onSelect, searchPlace
                   autoFocus
                 />
               ) : null}
-              <div id={listId} className="popup-picker__list" role="listbox" aria-label={label} tabIndex={searchPlaceholder ? -1 : 0}>
-                {visible.map((section) => (
-                  <div key={section.title ?? "items"} role="group" aria-label={section.title}>
-                    {section.title ? <p className="popup-picker__section">{section.title}</p> : null}
-                    {section.items.map((item) => {
-                      index += 1;
-                      return (
-                        <PickerOption
-                          key={item.id}
-                          item={item}
-                          index={index}
-                          active={index === active}
-                          selected={item.id === selectedId}
-                          onChoose={choose}
-                          onHover={setActive}
-                        />
-                      );
-                    })}
-                  </div>
-                ))}
-                {flat.length === 0 ? <p className="popup-picker__note">{loadingNote ?? "Nothing matches."}</p> : null}
-              </div>
+              <PickerList
+                id={listId}
+                label={label}
+                sections={visible}
+                active={active}
+                selectedId={selectedId}
+                focusable={!searchPlaceholder}
+                emptyNote={loadingNote ?? "Nothing matches."}
+                onChoose={choose}
+                onHover={setActive}
+              />
             </div>,
             document.body,
           )
         : null}
     </>
+  );
+}
+
+interface PickerListProps {
+  readonly id: string;
+  readonly label: string;
+  readonly sections: readonly PickerSection[];
+  readonly active: number;
+  readonly selectedId: string;
+  /** The list takes focus itself when there is no search field to hold it. */
+  readonly focusable: boolean;
+  readonly emptyNote: string;
+  readonly onChoose: (id: string) => void;
+  readonly onHover: (index: number) => void;
+}
+
+/** The sections and their options; the highlighted one scrolls into view. */
+function PickerList({ id, label, sections, active, selectedId, focusable, emptyNote, onChoose, onHover }: PickerListProps) {
+  const listRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+  // Each section's first option's index in the whole list.
+  const starts: number[] = [];
+  let next = 0;
+  for (const section of sections) {
+    starts.push(next);
+    next += section.items.length;
+  }
+  return (
+    <div ref={listRef} id={id} className="popup-picker__list" role="listbox" aria-label={label} tabIndex={focusable ? 0 : -1}>
+      {sections.map((section, sectionIndex) => (
+        <div key={section.title ?? "items"} role="group" aria-label={section.title}>
+          {section.title ? <p className="popup-picker__section">{section.title}</p> : null}
+          {section.items.map((item, itemIndex) => {
+            const index = starts[sectionIndex] + itemIndex;
+            return (
+              <PickerOption
+                key={item.id}
+                item={item}
+                index={index}
+                active={index === active}
+                selected={item.id === selectedId}
+                onChoose={onChoose}
+                onHover={onHover}
+              />
+            );
+          })}
+        </div>
+      ))}
+      {sections.length === 0 ? <p className="popup-picker__note">{emptyNote}</p> : null}
+    </div>
   );
 }
 

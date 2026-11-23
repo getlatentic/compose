@@ -1,5 +1,5 @@
 import { FilePlus, FolderPlus, MessageSquarePlus, Plus, type LucideIcon } from "lucide-react";
-import { useCallback, type KeyboardEvent } from "react";
+import { useCallback, useMemo, type KeyboardEvent, type Ref } from "react";
 import { createPortal } from "react-dom";
 
 import { useAnchoredPopover } from "../shared/useAnchoredPopover";
@@ -23,6 +23,16 @@ interface NewMenuProps {
 
 const MENU_WIDTH = 232;
 
+type NewMenuHandlers = Pick<NewMenuProps, "onNewNote" | "onNewFolder" | "onNewChat">;
+
+/** The rows, in groups, leading with the current tab's subject. */
+function newMenuGroups(tab: NewMenuProps["tab"], { onNewNote, onNewFolder, onNewChat }: NewMenuHandlers): NewMenuItem[][] {
+  const note: NewMenuItem = { key: "note", label: "New note", shortcut: "⌘N", Icon: FilePlus, run: onNewNote };
+  const folder: NewMenuItem = { key: "folder", label: "New folder", shortcut: "⇧⌘N", Icon: FolderPlus, run: onNewFolder };
+  const chat: NewMenuItem = { key: "chat", label: "New chat", Icon: MessageSquarePlus, run: onNewChat };
+  return tab === "files" ? [[note, folder], [chat]] : [[chat], [note, folder]];
+}
+
 /**
  * The sidebar footer's +: a menu of what can be made, opening upward and
  * ending at the button's right edge so it stays over the sidebar. Each row
@@ -39,10 +49,7 @@ export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: Ne
     getInitialFocus: (pop) => pop.querySelector<HTMLButtonElement>(".new-menu__item"),
   });
 
-  const note: NewMenuItem = { key: "note", label: "New note", shortcut: "⌘N", Icon: FilePlus, run: onNewNote };
-  const folder: NewMenuItem = { key: "folder", label: "New folder", shortcut: "⇧⌘N", Icon: FolderPlus, run: onNewFolder };
-  const chat: NewMenuItem = { key: "chat", label: "New chat", Icon: MessageSquarePlus, run: onNewChat };
-  const groups: NewMenuItem[][] = tab === "files" ? [[note, folder], [chat]] : [[chat], [note, folder]];
+  const groups = useMemo(() => newMenuGroups(tab, { onNewNote, onNewFolder, onNewChat }), [tab, onNewNote, onNewFolder, onNewChat]);
 
   const toggle = useCallback(() => setOpen((value) => !value), [setOpen]);
   const pick = useCallback(
@@ -69,27 +76,37 @@ export function NewMenu({ tab, disabled, onNewNote, onNewFolder, onNewChat }: Ne
         <Plus size={16} strokeWidth={1.75} aria-hidden />
       </button>
       {open && coords
-        ? createPortal(
-            <div
-              ref={popoverRef}
-              className="new-menu__panel"
-              role="menu"
-              aria-label="New"
-              onKeyDown={moveFocus}
-              style={{ bottom: coords.bottom, left: coords.left, inlineSize: coords.width }}
-            >
-              {groups.map((group) => (
-                <div className="new-menu__group" key={group[0].key} role="none">
-                  {group.map((item) => (
-                    <NewMenuRow key={item.key} item={item} onPick={pick} />
-                  ))}
-                </div>
-              ))}
-            </div>,
-            document.body,
-          )
+        ? createPortal(<NewMenuPanel panelRef={popoverRef} coords={coords} groups={groups} onPick={pick} />, document.body)
         : null}
     </>
+  );
+}
+
+interface NewMenuPanelProps {
+  readonly panelRef: Ref<HTMLDivElement>;
+  readonly coords: { bottom?: number; left: number; width: number };
+  readonly groups: readonly NewMenuItem[][];
+  readonly onPick: (run: () => void) => void;
+}
+
+function NewMenuPanel({ panelRef, coords, groups, onPick }: NewMenuPanelProps) {
+  return (
+    <div
+      ref={panelRef}
+      className="new-menu__panel"
+      role="menu"
+      aria-label="New"
+      onKeyDown={moveFocus}
+      style={{ bottom: coords.bottom, left: coords.left, inlineSize: coords.width }}
+    >
+      {groups.map((group) => (
+        <div className="new-menu__group" key={group[0].key} role="none">
+          {group.map((item) => (
+            <NewMenuRow key={item.key} item={item} onPick={onPick} />
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
