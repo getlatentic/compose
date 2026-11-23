@@ -1,4 +1,5 @@
 mod app_group;
+mod app_identity;
 mod autocorrect;
 mod backgrounds;
 mod boot_payload;
@@ -18,6 +19,7 @@ mod user_tool_dirs;
 mod data_reset;
 pub mod db;
 mod default_handler;
+mod image_file;
 mod document_kind;
 pub mod events;
 pub mod export;
@@ -90,7 +92,7 @@ pub fn run() {
     // finished app rather than an empty shell that fills in. Empty when there is
     // nothing to say, which injects nothing and leaves the front end's own IPC
     // fan-out — still the source of truth — to do exactly what it did before.
-    let boot_script = boot_payload::init_script(profile_migration::profile_dir());
+    let boot_script = boot_payload::init_script(app_identity::profile_dir());
     boot_native_mark("boot-payload");
 
     let mut builder = tauri::Builder::default()
@@ -298,10 +300,10 @@ pub fn run() {
             system_fonts::system_font_families,
             backgrounds::background_image_store,
             backgrounds::background_image_allow,
-            export::card_preview_html,
-            export::document_export_image,
-            export::card_copy_image,
-            export::card_share,
+            export::card_commands::card_preview_html,
+            export::card_commands::document_export_image,
+            export::card_commands::card_copy_image,
+            export::card_commands::card_share,
             harness::runner::run_harness_stream,
             harness::runner::cancel_harness_run,
             harness::commands::harness_list,

@@ -90,8 +90,17 @@ impl BundledFace {
 
     /// The face's `@font-face` rules, base64-encoded once and kept.
     pub fn font_face_css(self) -> &'static str {
-        static CACHE: [OnceLock<String>; 4] = [OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new()];
-        CACHE[self as usize].get_or_init(|| {
+        static LATIN_MODERN: OnceLock<String> = OnceLock::new();
+        static PLEX_SERIF: OnceLock<String> = OnceLock::new();
+        static PLEX_SANS: OnceLock<String> = OnceLock::new();
+        static JETBRAINS_MONO: OnceLock<String> = OnceLock::new();
+        let cache = match self {
+            Self::LatinModern => &LATIN_MODERN,
+            Self::PlexSerif => &PLEX_SERIF,
+            Self::PlexSans => &PLEX_SANS,
+            Self::JetbrainsMono => &JETBRAINS_MONO,
+        };
+        cache.get_or_init(|| {
             let mut css = String::new();
             for file in self.files() {
                 push_face(&mut css, self.family(), file);

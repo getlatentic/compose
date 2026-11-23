@@ -16,8 +16,6 @@
 //! stylesheet, ready to hand to the native paged-output paths (`export::pdf` and
 //! `export::print`, both of which paginate it via `export::paged`).
 
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -458,8 +456,8 @@ pub(super) fn inline_local_images(html: &str, doc_dir: &Path) -> String {
     out
 }
 
-/// Build a `data:` URI for a single local image source, or `None` to leave it
-/// as-is (external, already-inlined, or unreadable).
+/// A `data:` URI for one local image source, or `None` to leave it as-is:
+/// external, already inlined, or not an image Compose will read.
 fn inline_one(url: &str, doc_dir: &Path) -> Option<String> {
     let lower = url.to_ascii_lowercase();
     if lower.starts_with("http://")
@@ -476,27 +474,7 @@ fn inline_one(url: &str, doc_dir: &Path) -> Option<String> {
     } else {
         doc_dir.join(candidate)
     };
-    let bytes = std::fs::read(&path).ok()?;
-    let mime = mime_for(&path);
-    let encoded = STANDARD.encode(&bytes);
-    Some(format!("data:{mime};base64,{encoded}"))
-}
-
-fn mime_for(path: &Path) -> &'static str {
-    match path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("png") => "image/png",
-        Some("jpg") | Some("jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("svg") => "image/svg+xml",
-        Some("webp") => "image/webp",
-        Some("bmp") => "image/bmp",
-        _ => "application/octet-stream",
-    }
+    crate::image_file::data_uri(&path)
 }
 
 /// Minimal percent-decoding for image paths (handles `%20` etc.). Invalid
@@ -549,10 +527,11 @@ const BODY_CSS: &str = "body.compose-export {\n\
 
 /// HTML-escape plain text: a title, or a plain-text document's body. Markdown
 /// body HTML is comrak output and must not be re-escaped.
-fn escape_html(text: &str) -> String {
+pub(super) fn escape_html(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// Print stylesheet for the exported PDF. Optimized for A4/Letter pages: roomy
@@ -937,7 +916,7 @@ mod tests {
     #[test]
     fn inlines_local_images_and_leaves_remote_alone() {
         let dir = doc_dir();
-        fs::write(dir.join("pic.png"), [0x89, b'P', b'N', b'G', 1, 2, 3]).unwrap();
+        fs::write(dir.join("pic.png"), crate::image_file::fixtures::PNG).unwrap();
         let md = "![local](pic.png)\n\n![remote](https://example.com/x.png)\n";
         let html = render_markdown_to_html(md, "doc", &dir);
         assert!(
@@ -961,33 +940,9 @@ mod tests {
     fn percent_decoded_image_path_resolves() {
         let dir = doc_dir();
         fs::create_dir_all(dir.join("my images")).unwrap();
-        fs::write(dir.join("my images/p.png"), [1, 2, 3]).unwrap();
+        fs::write(dir.join("my images/p.png"), crate::image_file::fixtures::PNG).unwrap();
         let html = render_markdown_to_html("![x](my%20images/p.png)", "doc", &dir);
         assert!(html.contains("data:image/png;base64,"), "{html}");
-    }
-
-    #[test]
-    fn an_inlined_image_declares_the_type_the_bytes_actually_are() {
-        // The image goes into the document as a data URI, and the MIME is the
-        // only thing telling the renderer how to decode it. Wrong, and the
-        // picture silently does not appear in the exported PDF.
-        for (name, expected) in [
-            ("a.png", "image/png"),
-            ("a.jpg", "image/jpeg"),
-            ("a.jpeg", "image/jpeg"),
-            ("a.gif", "image/gif"),
-            ("a.svg", "image/svg+xml"),
-            ("a.webp", "image/webp"),
-            ("a.bmp", "image/bmp"),
-        ] {
-            assert_eq!(mime_for(Path::new(name)), expected, "for {name}");
-            let shouted = name.to_ascii_uppercase();
-            assert_eq!(mime_for(Path::new(&shouted)), expected, "for {shouted}");
-        }
-
-        // Anything else is declared as opaque bytes rather than guessed at.
-        assert_eq!(mime_for(Path::new("notes.txt")), "application/octet-stream");
-        assert_eq!(mime_for(Path::new("no-extension")), "application/octet-stream");
     }
 
     #[test]

@@ -70,7 +70,6 @@ mod imp {
         static PICKER: RefCell<Option<Retained<NSSharingServicePicker>>> = const { RefCell::new(None) };
     }
 
-    /// Put `png` on the general pasteboard as a PNG image.
     pub fn copy_png(app: &AppHandle, png: Vec<u8>) -> Result<(), String> {
         let (tx, rx) = channel();
         app.run_on_main_thread(move || {
@@ -90,20 +89,22 @@ mod imp {
 
     /// Open the share sheet for `file`, against `anchor` in `window`.
     pub fn show_share_sheet(window: &WebviewWindow, file: PathBuf, anchor: ShareAnchor) -> Result<(), String> {
-        let view = window.ns_view().map_err(|error| format!("no window to share from: {error}"))? as usize;
         let (tx, rx) = channel();
+        let on_main = window.clone();
         window
             .run_on_main_thread(move || {
-                let Some(_mtm) = MainThreadMarker::new() else {
+                if MainThreadMarker::new().is_none() {
+                    let _ = tx.send(false);
+                    return;
+                }
+                // Read and retained here, on the main thread, while the
+                // window is known to be open; a closed window yields no view.
+                let view = on_main.ns_view().ok().and_then(|ptr| unsafe { Retained::retain(ptr.cast::<NSView>()) });
+                let Some(view) = view else {
                     let _ = tx.send(false);
                     return;
                 };
-                // SAFETY: Tauri hands back the live webview view of this
-                // window, which outlives this main-thread call.
-                let Some(view) = (unsafe { (view as *mut NSView).as_ref() }) else {
-                    let _ = tx.send(false);
-                    return;
-                };
+                let view: &NSView = &view;
                 let url = NSURL::fileURLWithPath(&NSString::from_str(&file.to_string_lossy()));
                 let items = NSArray::from_retained_slice(&[Retained::into_super(Retained::into_super(url)) as Retained<AnyObject>]);
                 let picker = unsafe { NSSharingServicePicker::initWithItems(NSSharingServicePicker::alloc(), &items) };

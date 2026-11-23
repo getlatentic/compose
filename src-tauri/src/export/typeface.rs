@@ -17,7 +17,25 @@ pub enum Typeface {
     System { font: SystemFont },
     /// Installed on the Mac (Chalkboard, a font the writer added); referred
     /// to by its family name.
-    Installed { family: String },
+    Installed { family: FamilyName },
+}
+
+/// An installed font's family name: not blank, and no longer than any real
+/// one. Anything else is refused when the request is read.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "String")]
+pub struct FamilyName(String);
+
+impl TryFrom<String> for FamilyName {
+    type Error = String;
+
+    fn try_from(family: String) -> Result<Self, Self::Error> {
+        let family = family.trim();
+        if family.is_empty() || family.chars().count() > MAX_FAMILY_LENGTH {
+            return Err(format!("not a font family name: {family:?}"));
+        }
+        Ok(Self(family.to_owned()))
+    }
 }
 
 /// One of the Mac's own faces.
@@ -48,7 +66,7 @@ impl Typeface {
         match self {
             Self::Bundled { face } => format!("\"{}\", {}", face.family(), face.generic()),
             Self::System { font } => font.css().to_owned(),
-            Self::Installed { family } => format!("{}, {generic}", css_string(family)),
+            Self::Installed { family } => format!("{}, {generic}", css_string(&family.0)),
         }
     }
 
@@ -56,16 +74,6 @@ impl Typeface {
         match self {
             Self::Bundled { face } => Some(*face),
             Self::System { .. } | Self::Installed { .. } => None,
-        }
-    }
-
-    fn is_valid(&self) -> bool {
-        match self {
-            Self::Bundled { .. } | Self::System { .. } => true,
-            Self::Installed { family } => {
-                let family = family.trim();
-                !family.is_empty() && family.chars().count() <= MAX_FAMILY_LENGTH
-            }
         }
     }
 }
@@ -107,14 +115,6 @@ impl Default for ExportTypefaces {
 }
 
 impl ExportTypefaces {
-    /// What a command was sent, or the LaTeX look if it was sent nothing
-    /// usable.
-    pub fn or_default(requested: Option<Self>) -> Self {
-        requested
-            .filter(|faces| faces.body.is_valid() && faces.heading.is_valid() && faces.code.is_valid())
-            .unwrap_or_default()
-    }
-
     /// The `@font-face` rules for the bundled faces in use, each once.
     pub fn font_face_css(&self) -> String {
         let mut faces: Vec<BundledFace> = Vec::with_capacity(3);
@@ -148,7 +148,7 @@ mod tests {
     use super::*;
 
     fn installed(family: &str) -> Typeface {
-        Typeface::Installed { family: family.to_owned() }
+        Typeface::Installed { family: FamilyName(family.to_owned()) }
     }
 
     #[test]
@@ -190,9 +190,12 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_the_latex_look_when_sent_nothing_usable() {
-        assert_eq!(ExportTypefaces::or_default(None), ExportTypefaces::default());
-        let blank = ExportTypefaces { body: installed("  "), heading: installed("X"), code: installed("Y") };
-        assert_eq!(ExportTypefaces::or_default(Some(blank)), ExportTypefaces::default());
+    fn refuses_a_family_name_that_is_not_one() {
+        let blank = serde_json::from_str::<Typeface>(r#"{"kind":"installed","family":"  "}"#);
+        assert!(blank.is_err());
+        let long = format!(r#"{{"kind":"installed","family":"{}"}}"#, "x".repeat(MAX_FAMILY_LENGTH + 1));
+        assert!(serde_json::from_str::<Typeface>(&long).is_err());
+        let trimmed: Typeface = serde_json::from_str(r#"{"kind":"installed","family":" Menlo "}"#).expect("parses");
+        assert_eq!(trimmed, installed("Menlo"));
     }
 }

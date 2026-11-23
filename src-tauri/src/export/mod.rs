@@ -13,9 +13,12 @@
 //! is a user-chosen save location outside the vault.
 
 mod card;
+pub mod card_commands;
 mod fonts;
 mod html;
 mod mermaid;
+#[cfg(target_os = "macos")]
+mod offscreen;
 mod paged;
 mod pdf;
 mod print;
@@ -82,7 +85,7 @@ pub fn document_export_pdf(
     use tauri::Manager;
     let destination = check_destination(&destination_path, "PDF")?;
     let source = resolve_document(&document, &app.state::<WorkspaceRegistry>(), &app.state::<ExternalFilesRegistry>())?;
-    let document_html = document_html(&source, &content, mermaid_svgs, &ExportTypefaces::or_default(typefaces));
+    let document_html = document_html(&source, &content, mermaid_svgs, &typefaces.unwrap_or_default());
     let pdf_bytes = pdf::html_to_pdf(&app, &document_html)?;
     crate::files::write_file_atomic(destination, &pdf_bytes)
         .map_err(|error| format!("Could not save the PDF: {error}"))?;
@@ -107,7 +110,7 @@ pub fn document_export_html(
 ) -> Result<ExportArtifact, String> {
     let destination = check_destination(&destination_path, "HTML file")?;
     let source = resolve_document(&document, &registry, &externals)?;
-    let document_html = document_html(&source, &content, mermaid_svgs, &ExportTypefaces::or_default(typefaces));
+    let document_html = document_html(&source, &content, mermaid_svgs, &typefaces.unwrap_or_default());
     crate::files::write_file_atomic(destination, document_html.as_bytes())
         .map_err(|error| format!("Could not save the HTML file: {error}"))?;
     Ok(ExportArtifact {
@@ -150,85 +153,8 @@ pub fn document_print(
     externals: State<'_, ExternalFilesRegistry>,
 ) -> Result<bool, String> {
     let source = resolve_document(&document, &registry, &externals)?;
-    let document_html = document_html(&source, &content, mermaid_svgs, &ExportTypefaces::or_default(typefaces));
+    let document_html = document_html(&source, &content, mermaid_svgs, &typefaces.unwrap_or_default());
     print::print_html(&app, &document_html)
-}
-
-/// The card's HTML, for the export dialog's live preview: the same document
-/// [`document_export_image`] draws.
-#[tauri::command(async)]
-pub fn card_preview_html(spec: card::CardSpec, app: AppHandle) -> String {
-    card_document(&spec, &app)
-}
-
-/// The card's HTML with the note's own images inlined beside it, when the
-/// card says which note it is and Compose may read it.
-fn card_document(spec: &card::CardSpec, app: &AppHandle) -> String {
-    use tauri::Manager;
-    let html = card::card_html(spec, backgrounds_dir(app).as_deref());
-    let source = spec.document.as_ref().and_then(|document| {
-        resolve_document(document, &app.state::<WorkspaceRegistry>(), &app.state::<ExternalFilesRegistry>()).ok()
-    });
-    match source.as_deref().and_then(Path::parent) {
-        Some(dir) => html::inline_local_images(&html, dir),
-        None => html,
-    }
-}
-
-/// Draw a note as an image (a cover, quote or page card at a post's size)
-/// and save it at `destination_path` as JPEG or PNG.
-#[tauri::command(async)]
-pub fn document_export_image(
-    spec: card::CardSpec,
-    format: snapshot::ImageFormat,
-    destination_path: String,
-    app: AppHandle,
-) -> Result<ExportArtifact, String> {
-    let destination = check_destination(&destination_path, "image")?;
-    let html = card_document(&spec, &app);
-    let bytes = snapshot::render(&app, &html, spec.size.pixels(), format)?;
-    crate::files::write_file_atomic(destination, &bytes).map_err(|error| format!("Could not save the image: {error}"))?;
-    Ok(ExportArtifact {
-        format: ExportFormat::Image,
-        path: destination_path,
-    })
-}
-
-/// Draw a card as PNG and put it on the clipboard, to paste into a post.
-#[tauri::command(async)]
-pub fn card_copy_image(spec: card::CardSpec, app: AppHandle) -> Result<(), String> {
-    let html = card_document(&spec, &app);
-    let png = snapshot::render(&app, &html, spec.size.pixels(), snapshot::ImageFormat::Png)?;
-    share::copy_png(&app, png)
-}
-
-/// Draw a card as PNG and open the Mac's share sheet for it, against the
-/// Share button. The file is kept in Compose's cache folder, replacing the
-/// last one shared.
-#[tauri::command(async)]
-pub fn card_share(
-    spec: card::CardSpec,
-    file_name: String,
-    anchor: share::ShareAnchor,
-    window: tauri::WebviewWindow,
-    app: AppHandle,
-) -> Result<(), String> {
-    use tauri::Manager;
-    let html = card_document(&spec, &app);
-    let png = snapshot::render(&app, &html, spec.size.pixels(), snapshot::ImageFormat::Png)?;
-    let dir = app.path().app_cache_dir().map_err(|error| format!("no cache folder: {error}"))?.join("shared-cards");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|error| format!("Could not prepare the image to share: {error}"))?;
-    let file = dir.join(share::share_file_name(&file_name));
-    crate::files::write_file_atomic(&file, &png).map_err(|error| format!("Could not prepare the image to share: {error}"))?;
-    share::show_share_sheet(&window, file, anchor)
-}
-
-/// Where the note background is kept; a card may only embed an image from
-/// there.
-fn backgrounds_dir(app: &AppHandle) -> Option<PathBuf> {
-    use tauri::Manager;
-    app.path().app_data_dir().ok().map(|dir| dir.join("backgrounds"))
 }
 
 fn check_destination<'a>(destination_path: &'a str, what: &str) -> Result<&'a Path, String> {
