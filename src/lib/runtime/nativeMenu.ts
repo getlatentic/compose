@@ -1,3 +1,4 @@
+import { reportClientError } from "../diagnostics/errorReporter";
 import { isTauriRuntime } from "./desktopRuntime";
 
 /**
@@ -7,15 +8,21 @@ import { isTauriRuntime } from "./desktopRuntime";
  * native menu, and callers show their HTML menu instead.
  */
 
-export interface NativeMenuItem {
-  readonly id: string;
+/**
+ * One row of a menu and what choosing it does. The same list draws the
+ * native menu and the HTML one, so the two cannot drift apart.
+ */
+export interface MenuAction {
   readonly label: string;
+  readonly run: () => void;
   readonly enabled?: boolean;
+  /** Destructive: drawn in red in the HTML menu. */
+  readonly danger?: boolean;
+  /** Starts a new group, below a separator. */
+  readonly startsGroup?: boolean;
   /** Shown at the row's end, e.g. "CmdOrCtrl+N". Display only while the menu is open. */
   readonly accelerator?: string;
 }
-
-export type NativeMenuEntry = NativeMenuItem | "separator";
 
 export interface MenuPoint {
   readonly x: number;
@@ -35,9 +42,9 @@ interface MenuResource {
 let shown: MenuResource[] = [];
 
 /**
- * Shows the menu at `at` (CSS pixels from the window's top-left; the pointer
- * when omitted) and calls `onSelect` with the chosen item's id. Resolves when
- * the menu has closed.
+ * Shows `actions` as a menu at `at` (CSS pixels from the window's top-left;
+ * the pointer when omitted) and runs the one chosen. Resolves when the menu
+ * has closed; a menu that cannot be shown is reported, never thrown.
  *
  * Each item is created as its own resource rather than inline in `Menu.new`:
  * Tauri builds inline items as temporaries and their drop unregisters the
@@ -45,23 +52,34 @@ let shown: MenuResource[] = [];
  * They stay alive after the menu closes, since the choice arrives after
  * `popup` resolves, and are released when the next menu is shown.
  */
-export async function showNativeMenu(
-  entries: readonly NativeMenuEntry[],
-  onSelect: (id: string) => void,
-  at?: MenuPoint,
-): Promise<void> {
+export async function showNativeMenu(actions: readonly MenuAction[], at?: MenuPoint): Promise<void> {
+  try {
+    await popUp(actions, at);
+  } catch (error) {
+    await reportClientError("native-menu", "Could not show a menu", String(error));
+  }
+}
+
+const ROW_ID = "context-menu-row-";
+
+async function popUp(actions: readonly MenuAction[], at?: MenuPoint): Promise<void> {
   const [{ Menu, MenuItem, PredefinedMenuItem }, { LogicalPosition }] = await Promise.all([
     import("@tauri-apps/api/menu"),
     import("@tauri-apps/api/dpi"),
   ]);
   await releaseShown();
-  const items = await Promise.all(
-    entries.map((entry) =>
-      entry === "separator"
-        ? PredefinedMenuItem.new({ item: "Separator" })
-        : MenuItem.new({ id: entry.id, text: entry.label, enabled: entry.enabled ?? true, accelerator: entry.accelerator, action: onSelect }),
-    ),
-  );
+  const choose = (id: string) => actions[Number(id.slice(ROW_ID.length))]?.run();
+  const rows = actions.flatMap((action, index) => [
+    ...(index > 0 && action.startsGroup ? [PredefinedMenuItem.new({ item: "Separator" })] : []),
+    MenuItem.new({
+      id: `${ROW_ID}${index}`,
+      text: action.label,
+      enabled: action.enabled ?? true,
+      accelerator: action.accelerator,
+      action: choose,
+    }),
+  ]);
+  const items = await Promise.all(rows);
   const menu = await Menu.new({ items });
   shown = [menu, ...items];
   await menu.popup(at ? new LogicalPosition(at.x, at.y) : undefined);

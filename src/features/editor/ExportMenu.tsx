@@ -1,8 +1,8 @@
 import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
 import { ChevronDown } from "lucide-react";
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
-import { canShowNativeMenu, showNativeMenu, type NativeMenuEntry } from "../../lib/runtime/nativeMenu";
+import { canShowNativeMenu, showNativeMenu, type MenuAction } from "../../lib/runtime/nativeMenu";
 
 export type DocumentExportFormat = "markdown" | "html" | "pdf" | "image";
 
@@ -24,18 +24,22 @@ interface ExportMenuProps {
  * native macOS menu; elsewhere (the browser dev build) Carbon's menu opens.
  */
 export function ExportMenu({ onExport, markdownExport }: ExportMenuProps) {
-  const formats = markdownExport ? FORMATS : FORMATS.filter((format) => format.id !== "markdown");
+  const actions = useMemo<MenuAction[]>(
+    () =>
+      FORMATS.filter((format) => markdownExport || format.id !== "markdown").map(({ id, label }) => ({
+        label,
+        run: () => onExport(id),
+        startsGroup: id === "image",
+      })),
+    [markdownExport, onExport],
+  );
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const openNative = useCallback(() => {
     const rect = buttonRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const entries: NativeMenuEntry[] = formats.flatMap(({ id, label }) => [
-      ...(id === "image" ? (["separator"] as const) : []),
-      { id, label },
-    ]);
-    void showNativeMenu(entries, (id) => onExport(id as DocumentExportFormat), { x: rect.left, y: rect.bottom + 4 });
-  }, [formats, onExport]);
+    void showNativeMenu(actions, { x: rect.left, y: rect.bottom + 4 });
+  }, [actions]);
 
   if (canShowNativeMenu()) {
     return (
@@ -63,8 +67,8 @@ export function ExportMenu({ onExport, markdownExport }: ExportMenuProps) {
       iconDescription="Export"
       renderIcon={ExportLabel}
     >
-      {formats.map(({ id, label }) => (
-        <ExportItem key={id} format={id} label={label} onExport={onExport} />
+      {actions.map((action) => (
+        <OverflowMenuItem key={action.label} itemText={action.label} hasDivider={action.startsGroup} onClick={action.run} />
       ))}
     </OverflowMenu>
   );
@@ -77,9 +81,4 @@ function ExportLabel() {
       <ChevronDown size={14} aria-hidden />
     </span>
   );
-}
-
-function ExportItem({ format, label, onExport }: { format: DocumentExportFormat; label: string; onExport: (format: DocumentExportFormat) => void }) {
-  const handleClick = useCallback(() => onExport(format), [onExport, format]);
-  return <OverflowMenuItem itemText={label} onClick={handleClick} />;
 }

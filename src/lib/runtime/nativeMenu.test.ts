@@ -44,30 +44,38 @@ describe("nativeMenu", () => {
     expect(canShowNativeMenu()).toBe(true);
   });
 
-  it("creates each item as its own resource, passes those to the menu, shows it at the point, and reports the choice", async () => {
-    const onSelect = vi.fn();
-    await showNativeMenu([{ id: "rename", label: "Rename…" }, "separator", { id: "delete", label: "Delete", enabled: false }], onSelect, { x: 10, y: 20 });
+  it("creates each item as its own resource, sets a new group apart, shows it at the point, and runs the choice", async () => {
+    const rename = vi.fn();
+    const remove = vi.fn();
+    await showNativeMenu(
+      [
+        { label: "Rename…", run: rename },
+        { label: "Delete", run: remove, danger: true, startsGroup: true, enabled: false },
+      ],
+      { x: 10, y: 20 },
+    );
 
-    const [rename, separator, remove] = created.filter((made) => made.kind !== "menu");
+    const [renameItem, separator, removeItem] = created.filter((made) => made.kind !== "menu");
     const menu = created.find((made) => made.kind === "menu")!;
     // Items handed to Menu.new as existing resources, never as inline options:
     // inline ones lose their click handler before the menu opens.
-    expect(menu.opts.items).toEqual([rename, separator, remove]);
-    expect(rename.opts).toMatchObject({ id: "rename", text: "Rename…", enabled: true });
+    expect(menu.opts.items).toEqual([renameItem, separator, removeItem]);
+    expect(renameItem.opts).toMatchObject({ text: "Rename…", enabled: true });
     expect(separator.opts).toEqual({ item: "Separator" });
-    expect(remove.opts.enabled).toBe(false);
+    expect(removeItem.opts.enabled).toBe(false);
     expect(menu.popup).toHaveBeenCalledWith(expect.objectContaining({ x: 10, y: 20 }));
 
-    (rename.opts.action as (id: string) => void)("rename");
-    expect(onSelect).toHaveBeenCalledWith("rename");
+    (renameItem.opts.action as (id: string) => void)(renameItem.opts.id as string);
+    expect(rename).toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
   });
 
   it("keeps a menu's items alive after it closes, and releases them when the next menu opens", async () => {
-    await showNativeMenu([{ id: "a", label: "A" }], vi.fn());
+    await showNativeMenu([{ label: "A", run: vi.fn() }]);
     const first = [...created];
     expect(first.every((made) => made.close.mock.calls.length === 0)).toBe(true);
 
-    await showNativeMenu([{ id: "b", label: "B" }], vi.fn());
+    await showNativeMenu([{ label: "B", run: vi.fn() }]);
     expect(first.every((made) => made.close.mock.calls.length === 1)).toBe(true);
     expect(created.slice(first.length).every((made) => made.close.mock.calls.length === 0)).toBe(true);
   });

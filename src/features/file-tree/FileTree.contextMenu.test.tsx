@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const showNativeMenu = vi.fn(async () => undefined);
@@ -50,16 +50,11 @@ describe("the tree's right-click menu", () => {
     fireEvent.contextMenu(screen.getByTitle("Plan.md").closest("div")!, { clientX: 40, clientY: 60 });
 
     expect(showNativeMenu).toHaveBeenCalledTimes(1);
-    const [entries, choose, at] = showNativeMenu.mock.calls[0] as unknown as [{ label?: string }[] | string[], (id: string) => void, { x: number; y: number }];
-    expect((entries as ({ label?: string } | string)[]).map((entry) => (typeof entry === "string" ? entry : entry.label))).toEqual([
-      "Rename…",
-      "Copy Path",
-      "Reveal in Finder",
-      "separator",
-      "Delete",
-    ]);
+    const [actions, at] = showNativeMenu.mock.calls[0] as unknown as [{ label: string; run: () => void; startsGroup?: boolean }[], { x: number; y: number }];
+    expect(actions.map((action) => action.label)).toEqual(["Rename…", "Copy path", "Reveal in Finder", "Delete"]);
+    expect(actions[3].startsGroup).toBe(true);
     expect(at).toEqual({ x: 40, y: 60 });
-    choose("rename");
+    actions[0].run();
     expect(onRename).toHaveBeenCalledWith("Plan.md");
     expect(screen.queryByRole("menu")).toBeNull();
   });
@@ -69,6 +64,13 @@ describe("the tree's right-click menu", () => {
     renderTree();
     fireEvent.contextMenu(screen.getByTitle("Plan.md").closest("div")!, { clientX: 40, clientY: 60 });
     expect(showNativeMenu).not.toHaveBeenCalled();
-    expect(await screen.findByRole("menu")).toBeTruthy();
+    const menu = await screen.findByRole("menu");
+    // The HTML menu lists the same rows as the native one.
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Rename…",
+      "Copy path",
+      "Reveal in Finder",
+      "Delete",
+    ]);
   });
 });

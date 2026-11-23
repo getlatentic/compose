@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   OverflowMenuVertical,
   Edit,
@@ -9,7 +9,7 @@ import {
 } from "@carbon/react/icons";
 
 import { useDismissableLayer } from "./useDismissableLayer";
-import { canShowNativeMenu, showNativeMenu, type NativeMenuEntry } from "../../lib/runtime/nativeMenu";
+import { canShowNativeMenu, showNativeMenu, type MenuAction } from "../../lib/runtime/nativeMenu";
 
 /** The actions the ⋮ menu can fire against a single conversation. */
 export interface ConversationActions {
@@ -20,20 +20,16 @@ export interface ConversationActions {
   onDelete: () => void;
 }
 
-interface MenuItem {
-  key: string;
-  label: string;
-  icon: typeof Edit;
-  run: (actions: ConversationActions) => void;
-  danger?: boolean;
+interface ConversationMenuAction extends MenuAction {
+  readonly icon: typeof Edit;
 }
 
 /**
  * The per-conversation overflow (⋮) menu: Rename, Duplicate, Export to
- * Markdown, Archive / Unarchive, Delete. A lightweight inline popover — no
- * Carbon `OverflowMenu` chrome — opening downward from the chat header. Delete
- * is styled as a destructive item; archive's label flips with the
- * conversation's current state.
+ * Markdown, Archive / Unarchive, Delete. In Compose the system draws it under
+ * the button, with Delete set apart below a separator; elsewhere a light
+ * inline popover opens downward from the chat header. Archive's label flips
+ * with the conversation's current state.
  */
 export function ConversationActionsMenu({
   archived,
@@ -48,36 +44,28 @@ export function ConversationActionsMenu({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  useDismissableLayer(open, () => setOpen(false), rootRef);
+  const close = useCallback(() => setOpen(false), []);
+  useDismissableLayer(open, close, rootRef);
 
-  const items: MenuItem[] = [
-    { key: "rename", label: "Rename", icon: Edit, run: (a) => a.onRename() },
-    { key: "duplicate", label: "Duplicate", icon: Copy, run: (a) => a.onDuplicate() },
-    { key: "export", label: "Export to Markdown", icon: DocumentExport, run: (a) => a.onExport() },
-    {
-      key: "archive",
-      label: archived ? "Unarchive" : "Archive",
-      icon: Archive,
-      run: (a) => a.onArchive(),
-    },
-    { key: "delete", label: "Delete", icon: TrashCan, run: (a) => a.onDelete(), danger: true },
-  ];
+  const items = useMemo<ConversationMenuAction[]>(
+    () => [
+      { label: "Rename", icon: Edit, run: actions.onRename },
+      { label: "Duplicate", icon: Copy, run: actions.onDuplicate },
+      { label: "Export to Markdown", icon: DocumentExport, run: actions.onExport },
+      { label: archived ? "Unarchive" : "Archive", icon: Archive, run: actions.onArchive },
+      { label: "Delete", icon: TrashCan, run: actions.onDelete, danger: true, startsGroup: true },
+    ],
+    [archived, actions],
+  );
 
-  // In Compose the system draws the menu under the button, with Delete set
-  // apart below a separator; elsewhere the HTML list below opens.
-  const toggle = () => {
+  const toggle = useCallback(() => {
     const rect = rootRef.current?.getBoundingClientRect();
     if (!canShowNativeMenu() || !rect) {
       setOpen((value) => !value);
       return;
     }
-    const entries: NativeMenuEntry[] = items.flatMap((item) => [
-      ...(item.danger ? (["separator"] as const) : []),
-      { id: item.key, label: item.label },
-    ]);
-    const choose = (id: string) => items.find((item) => item.key === id)?.run(actions);
-    void showNativeMenu(entries, choose, { x: rect.left, y: rect.bottom + 4 });
-  };
+    void showNativeMenu(items, { x: rect.left, y: rect.bottom + 4 });
+  }, [items]);
 
   return (
     <div className="conv-menu" ref={rootRef}>
@@ -93,37 +81,33 @@ export function ConversationActionsMenu({
         <OverflowMenuVertical size={16} />
       </button>
       {open ? (
-        <ul
-          className={`conv-menu__list conv-menu__list--${align}`}
-          role="menu"
-          aria-label="Conversation actions"
-        >
-          {items.map((item) => {
-            const Icon = item.icon;
-            return (
-              <li key={item.key} role="none">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={[
-                    "conv-menu__item",
-                    item.danger ? "conv-menu__item--danger" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onClick={() => {
-                    setOpen(false);
-                    item.run(actions);
-                  }}
-                >
-                  <Icon size={16} aria-hidden />
-                  <span>{item.label}</span>
-                </button>
-              </li>
-            );
-          })}
+        <ul className={`conv-menu__list conv-menu__list--${align}`} role="menu" aria-label="Conversation actions">
+          {items.map((item) => (
+            <ConversationMenuRow key={item.label} item={item} onChosen={close} />
+          ))}
         </ul>
       ) : null}
     </div>
+  );
+}
+
+function ConversationMenuRow({ item, onChosen }: { item: ConversationMenuAction; onChosen: () => void }) {
+  const { icon: Icon, label, danger, run } = item;
+  const choose = useCallback(() => {
+    onChosen();
+    run();
+  }, [onChosen, run]);
+  return (
+    <li role="none">
+      <button
+        type="button"
+        role="menuitem"
+        className={danger ? "conv-menu__item conv-menu__item--danger" : "conv-menu__item"}
+        onClick={choose}
+      >
+        <Icon size={16} aria-hidden />
+        <span>{label}</span>
+      </button>
+    </li>
   );
 }

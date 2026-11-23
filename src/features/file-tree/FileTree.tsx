@@ -9,10 +9,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { Menu, MenuItem, MenuItemDivider } from "@carbon/react";
 import { ChevronRight, File, Folder } from "lucide-react";
 import { createDragGhost } from "./dragGhost";
-import { canShowNativeMenu, showNativeMenu, type NativeMenuEntry } from "../../lib/runtime/nativeMenu";
+import { RowMenuList, useRowMenu, type OpenRowMenu, type RowMenuHandlers } from "./RowMenu";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 import { useUiStore } from "../../app/store/uiStore";
@@ -60,40 +59,6 @@ function FileRowDirtyDot({ path }: { path: string }) {
   });
   return dirty ? <span className="dirty-dot" aria-label="Unsaved" /> : null;
 }
-
-/** A row's pending context menu: which node it targets and where to open. The
- *  tree renders ONE Carbon `Menu` for all rows (no per-row menu instances). */
-interface RowMenuState {
-  kind: "file" | "folder";
-  path: string;
-  x: number;
-  y: number;
-}
-
-/** Opens the tree's context menu for one row. Rows pass their own kind/path. */
-type OpenRowMenu = (
-  event: MouseEvent<HTMLDivElement>,
-  kind: RowMenuState["kind"],
-  path: string,
-) => void;
-
-type RowMenuAction = "rename" | "copyPath" | "reveal" | "delete" | "newNoteHere" | "newFolderHere" | "deleteFolder";
-
-const FILE_MENU: readonly NativeMenuEntry[] = [
-  { id: "rename", label: "Rename…" },
-  { id: "copyPath", label: "Copy Path" },
-  { id: "reveal", label: "Reveal in Finder" },
-  "separator",
-  { id: "delete", label: "Delete" },
-];
-
-const FOLDER_MENU: readonly NativeMenuEntry[] = [
-  { id: "newNoteHere", label: "New Note Here" },
-  { id: "newFolderHere", label: "New Folder Here" },
-  { id: "reveal", label: "Reveal in Finder" },
-  "separator",
-  { id: "deleteFolder", label: "Delete Folder" },
-];
 
 /** The parent directory of a path ("" for a root item). */
 function parentDirOf(path: string): string {
@@ -178,11 +143,9 @@ const FileRow = memo(function FileRow({
       event.dataTransfer.setData(DRAG_FILE_MIME, path);
       event.dataTransfer.effectAllowed = "move";
       draggedFilePath = path;
-      // Explicit drag image: the rows sit inside a virtualizer that positions
-      // them with translateY, and WebKit's default drag snapshot captures the
-      // UNTRANSFORMED origin region — the ghost showed whichever row paints
-      // first in the tree, not the one being dragged. A small tile with the note's name is
-      // deterministic (and reads better than a full row snapshot).
+      // Explicit drag image: rows sit in a translateY virtualizer, and
+      // WebKit's default snapshot captures the untransformed origin, i.e. the
+      // wrong row. A tile with the note's name is deterministic.
       const ghost = createDragGhost(document, name);
       document.body.appendChild(ghost);
       event.dataTransfer.setDragImage(ghost, 12, 12);
@@ -582,51 +545,19 @@ function FileTreeInner({
     [onSelectFile, setNewNoteDir],
   );
 
-  // ONE context menu for the whole tree, opened at the pointer from any row's
-  // right-click. Replaces the old per-row kebab (a Carbon OverflowMenu per row
-  // was the tree's dominant mount cost on large vaults, and its trailing slot
-  // left a dead, wrong-cursor zone on every row).
-  const [rowMenu, setRowMenu] = useState<RowMenuState | null>(null);
-  // The native menu's choice arrives after this render's handlers may have
-  // changed; reading them through a ref keeps `openRowMenu` stable, so the
-  // memoised rows are not re-rendered by it.
-  const rowMenuActions = useRef<Record<RowMenuAction, (path: string) => void> | null>(null);
-  useEffect(() => {
-    rowMenuActions.current = {
+  const rowMenuHandlers = useMemo<RowMenuHandlers>(
+    () => ({
       rename: onRename,
       copyPath,
       reveal: revealInFinder,
-      delete: onDelete,
+      deleteFile: onDelete,
       newNoteHere,
       newFolderHere,
       deleteFolder: handleDeleteFolder,
-    };
-  });
-  const openRowMenu = useCallback<OpenRowMenu>((event, kind, path) => {
-    // Suppress the webview's own context menu.
-    event.preventDefault();
-    const { clientX, clientY } = event;
-    if (canShowNativeMenu()) {
-      const choose = (id: string) => rowMenuActions.current?.[id as RowMenuAction]?.(path);
-      void showNativeMenu(kind === "file" ? FILE_MENU : FOLDER_MENU, choose, { x: clientX, y: clientY });
-      return;
-    }
-    // The HTML menu opens past this right-click's own mouseup: opened
-    // synchronously, it registers that mouseup as an outside click and closes.
-    window.setTimeout(() => setRowMenu({ kind, path, x: clientX, y: clientY }), 0);
-  }, []);
-  const closeRowMenu = useCallback(() => setRowMenu(null), []);
-  const menuPath = rowMenu?.path ?? "";
-  const menuRename = useCallback(() => onRename(menuPath), [onRename, menuPath]);
-  const menuCopyPath = useCallback(() => copyPath(menuPath), [copyPath, menuPath]);
-  const menuReveal = useCallback(() => revealInFinder(menuPath), [revealInFinder, menuPath]);
-  const menuDelete = useCallback(() => onDelete(menuPath), [onDelete, menuPath]);
-  const menuNewNoteHere = useCallback(() => newNoteHere(menuPath), [newNoteHere, menuPath]);
-  const menuNewFolderHere = useCallback(() => newFolderHere(menuPath), [newFolderHere, menuPath]);
-  const menuDeleteFolder = useCallback(
-    () => handleDeleteFolder(menuPath),
-    [handleDeleteFolder, menuPath],
+    }),
+    [onRename, copyPath, revealInFinder, onDelete, newNoteHere, newFolderHere, handleDeleteFolder],
   );
+  const { openRowMenu, openMenu, closeRowMenu } = useRowMenu(rowMenuHandlers);
 
   // Window the (already collapse-flattened) rows: only ~a viewport-worth mount,
   // regardless of vault size. `rows` already excludes descendants of collapsed
@@ -796,34 +727,7 @@ function FileTreeInner({
           );
         })}
       </div>
-      {rowMenu ? (
-        <Menu
-          label={`Actions for ${rowMenu.path}`}
-          size="sm"
-          open
-          x={rowMenu.x}
-          y={rowMenu.y}
-          onClose={closeRowMenu}
-        >
-          {rowMenu.kind === "file" ? (
-            <>
-              <MenuItem label="Rename…" onClick={menuRename} />
-              <MenuItem label="Copy path" onClick={menuCopyPath} />
-              <MenuItem label="Reveal in Finder" onClick={menuReveal} />
-              <MenuItemDivider />
-              <MenuItem label="Delete" kind="danger" onClick={menuDelete} />
-            </>
-          ) : (
-            <>
-              <MenuItem label="New note here" onClick={menuNewNoteHere} />
-              <MenuItem label="New folder here" onClick={menuNewFolderHere} />
-              <MenuItem label="Reveal in Finder" onClick={menuReveal} />
-              <MenuItemDivider />
-              <MenuItem label="Delete folder" kind="danger" onClick={menuDeleteFolder} />
-            </>
-          )}
-        </Menu>
-      ) : null}
+      {openMenu ? <RowMenuList menu={openMenu} onClose={closeRowMenu} /> : null}
     </nav>
   );
 }
