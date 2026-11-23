@@ -23,7 +23,7 @@ const MAX_TOTAL_BYTES: usize = 64 * 1024 * 1024;
 
 /// A path inside the sandbox: relative, and with no `..`, root or prefix part.
 fn is_contained(relative: &Path) -> bool {
-    relative.as_os_str().len() > 0 && relative.components().all(|part| matches!(part, Component::Normal(_)))
+    !relative.as_os_str().is_empty() && relative.components().all(|part| matches!(part, Component::Normal(_)))
 }
 
 fn check(files: &[SandboxFile]) -> Result<(), String> {
