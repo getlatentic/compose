@@ -26,8 +26,6 @@ const TEXT_ON: Record<string, string[]> = {
   "doc/code": ["bg/app", "surface/sunken"],
   "accent/text": ["bg/app", "surface/default", "accent/surface"],
   "text/on-accent": ["accent/default", "accent/hover"],
-  "sidebar/text": ["sidebar/bg", "sidebar/hover", "sidebar/active"],
-  "sidebar/muted": ["sidebar/bg", "sidebar/active"],
   "ai/text": ["bg/app", "ai/surface"],
   "danger/text": ["bg/app", "danger/surface"],
   "warning/text": ["bg/app", "warning/surface"],

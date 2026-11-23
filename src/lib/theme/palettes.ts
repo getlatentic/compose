@@ -23,7 +23,7 @@ export interface PaletteFonts {
   readonly docCode: string;
 }
 
-/** Token name (`"bg/app"`, `"sidebar/text"`, …) to a `#RRGGBB` colour. */
+/** Token name (`"bg/app"`, `"text/primary"`, …) to a `#RRGGBB` colour. */
 export type PaletteColors = Readonly<Record<string, string>>;
 
 export interface Palette {

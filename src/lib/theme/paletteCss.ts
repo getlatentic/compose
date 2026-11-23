@@ -33,7 +33,7 @@ export function fontStack(family: string): string {
   return stack;
 }
 
-/** `"sidebar/text"` → `--color-sidebar-text`. */
+/** `"text/primary"` → `--color-text-primary`. */
 export function colorProperty(token: string): string {
   return `--color-${token.replace(/\//g, "-")}`;
 }

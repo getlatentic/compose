@@ -11,7 +11,8 @@
   background: var(--color-sidebar-bg);
 
   // On the window's material, in every palette: the Mac's own label greys
-  // and tinted fills (see `_glass.scss`), not the palette's sidebar colours.
+  // and tinted fills (see `_glass.scss`). A palette sets only `sidebar/bg`,
+  // for the launch screen and the Settings swatches.
   --color-sidebar-bg: transparent;
   --color-sidebar-text: var(--glass-label);
   --color-sidebar-muted: var(--glass-secondary);
