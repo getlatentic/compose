@@ -118,7 +118,12 @@ $indent: 1.375rem;
   user-select: none;
 }
 
+// Icons sized from the row's text, so they sit a touch above its capitals
+// and follow the zoom with it, as Finder's sidebar does.
 .file-row svg {
+  flex: none;
+  inline-size: 1.05em;
+  block-size: 1.05em;
   color: var(--color-sidebar-muted);
 }
 
