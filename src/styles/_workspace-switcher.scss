@@ -1,0 +1,178 @@
+// The workspace switcher at the top of the sidebar, and its portaled list.
+
+.workspace-switcher {
+  position: relative;
+  flex: 0 0 2.5rem;
+  padding-inline: 0.625rem;
+}
+
+.workspace-switcher__trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: start;
+  color: var(--cds-text-primary);
+  cursor: pointer;
+}
+
+.workspace-switcher__trigger:hover {
+  background: var(--cds-layer-hover-01);
+}
+
+.workspace-switcher__trigger-icon {
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  display: none;
+}
+
+.workspace-switcher__name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.workspace-switcher__chevron {
+  flex: 0 0 auto;
+  fill: var(--cds-icon-secondary);
+}
+
+// The dropdown is portaled to <body> and fixed-positioned in JS (the sidebar
+// clips overflow and is short), so these rules can't assume any parent.
+.workspace-switcher__popover {
+  position: fixed;
+  z-index: var(--z-popover);
+  max-block-size: min(28rem, 70vh);
+  overflow-y: auto;
+  padding-block: 0.25rem;
+  background: var(--cds-layer-02);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+}
+
+.workspace-switcher__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-item {
+  position: relative;
+}
+
+.ws-item__open {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  // Right padding reserves room for the trailing check / hover-✕.
+  padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  color: var(--cds-text-primary);
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--cds-layer-hover-01);
+    outline: none;
+  }
+}
+
+.ws-item__icon {
+  flex: 0 0 auto;
+  fill: var(--cds-icon-secondary);
+}
+
+.ws-item__name {
+  // Don't shrink: keep the name whole and let the path truncate instead.
+  flex: 0 0 auto;
+  max-inline-size: 12rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.ws-item__path {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  color: var(--cds-text-helper);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.6875rem;
+}
+
+.ws-item__check {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0.625rem;
+  transform: translateY(-50%);
+  fill: var(--cds-icon-primary);
+  pointer-events: none;
+}
+
+.ws-item__remove {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0.375rem;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+
+  svg {
+    fill: var(--cds-icon-secondary);
+  }
+
+  &:hover {
+    background: var(--cds-layer-selected-01);
+
+    svg {
+      fill: var(--cds-icon-primary);
+    }
+  }
+}
+
+.ws-item:hover .ws-item__remove,
+.ws-item__remove:focus-visible {
+  opacity: 1;
+}
+
+.ws-item--active {
+  // Accent bar + tint live on the button: an inset shadow on the <li> would be
+  // painted over by the button's own background.
+  .ws-item__open {
+    background: var(--cds-layer-selected-01);
+    box-shadow: inset 3px 0 0 var(--cds-border-interactive);
+
+    &:hover {
+      background: var(--cds-layer-selected-hover-01);
+    }
+  }
+
+  .ws-item__name {
+    font-weight: 600;
+  }
+}
+
+.workspace-switcher__footer {
+  margin-block-start: 0.25rem;
+  padding-block-start: 0.25rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+}
+

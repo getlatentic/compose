@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 type Status = { configured: boolean; hint?: string | null };
 const status = vi.fn(async (): Promise<Status> => ({ configured: false }));
 const setCredential = vi.fn(async () => {});
-vi.mock("../../lib/ipc/harnessClient", () => ({
+vi.mock("../../lib/ipc/harnessSetupClient", () => ({
   harnessCredentialStatus: (...args: unknown[]) => status(...(args as [])),
   harnessSetCredential: (...args: unknown[]) => setCredential(...(args as [])),
 }));

@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
 import { collectMermaidSvgs } from "../export/mermaidSvgs";
-import type { DocumentRef } from "../../app/workspaceModel";
+import type { DocumentRef } from "../../app/workspace/documents";
+import type { ExportTypefaces } from "../theme/exportTypefaces";
 
 /**
  * Document-export IPC leaf (see `compose::export`). Both formats render the
@@ -12,7 +13,7 @@ import type { DocumentRef } from "../../app/workspaceModel";
 
 /** A generated export artifact returned by the backend. */
 export interface ExportArtifact {
-  format: "pdf" | "html";
+  format: "pdf" | "html" | "image" | "markdown";
   /** Absolute path the artifact was written to. */
   path: string;
 }
@@ -23,6 +24,8 @@ interface ExportArgs {
   content: string;
   /** Absolute save location chosen by the user. */
   destinationPath: string;
+  /** The note's fonts; omitted for Latin Modern, the LaTeX look. */
+  typefaces?: ExportTypefaces;
 }
 
 /** Pre-render the document's mermaid diagrams to SVG so the backend can inline
@@ -33,6 +36,7 @@ async function exportInvokeArgs(args: ExportArgs) {
     content: args.content,
     destinationPath: args.destinationPath,
     mermaidSvgs: await collectMermaidSvgs(args.content),
+    typefaces: args.typefaces ?? null,
   };
 }
 
@@ -50,4 +54,11 @@ export async function exportHtml(args: ExportArgs): Promise<ExportArtifact> {
     throw new Error("HTML export is available in the desktop app.");
   }
   return invoke<ExportArtifact>("document_export_html", await exportInvokeArgs(args));
+}
+
+export async function exportMarkdown(args: { content: string; destinationPath: string }): Promise<ExportArtifact> {
+  if (!isTauriRuntime()) {
+    throw new Error("Markdown export is available in the desktop app.");
+  }
+  return invoke<ExportArtifact>("document_export_markdown", args);
 }

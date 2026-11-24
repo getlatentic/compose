@@ -1,0 +1,424 @@
+// The chat composer: context chips, the input, notices and the footer.
+
+.chat-composer {
+  // Pinned to the panel's bottom edge and out of flow, so a growing textarea
+  // expands the composer UPWARD (its top moves up) without resizing the panel
+  // or the transcript; the messages scroll beneath it.
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  // No bottom padding: the footer row below the field is the pane footer,
+  // the same height as the sidebar's and the note's.
+  padding: 0.5rem 1.25rem 0;
+  // Opaque, in the page colour, so the transcript scrolling under it stays
+  // hidden; the field below is the card that reads as the composer.
+  background: var(--color-bg-app);
+}
+
+.chat-setup-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.8125rem;
+  background: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 4px;
+}
+
+.chat-setup-notice__text {
+  min-inline-size: 0;
+  color: var(--cds-text-secondary);
+}
+
+.chat-setup-notice__action {
+  flex: none;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cds-text-on-color);
+  background: var(--cds-button-primary);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chat-setup-notice__action:disabled {
+  background: var(--cds-button-disabled);
+  cursor: default;
+}
+
+.chat-setup-notice__command {
+  margin-inline-start: 0.375rem;
+  padding: 0.0625rem 0.25rem;
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.75rem;
+  color: var(--cds-text-primary);
+  background: var(--cds-layer-02);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 3px;
+}
+
+.chat-context-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+// Context is supporting information, not the main event — so the chips stay
+// quiet: no fill at rest, just a muted icon + label. A subtle surface appears
+// only on hover, where it doubles as the affordance for the chip's tooltip.
+.chat-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  align-self: center;
+  max-inline-size: 100%;
+  padding: 0.125rem 0.375rem;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  color: var(--cds-text-secondary);
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.chat-context-chip:hover {
+  background: var(--cds-layer-hover-01);
+}
+
+.chat-context-chip svg {
+  flex-shrink: 0;
+  color: var(--cds-icon-secondary);
+}
+
+.chat-context-chip span {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The chip's ✕ — quiet until the chip is hovered, so a removable chip doesn't
+// read as busier than the others at rest.
+.chat-context-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--cds-icon-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+}
+
+.chat-context-chip:hover .chat-context-chip__remove,
+.chat-context-chip__remove:focus-visible {
+  opacity: 1;
+}
+
+.chat-context-chip__remove:hover {
+  background: var(--cds-layer-active-01);
+}
+
+// A context file that's gone from disk (external delete / sync eviction):
+// mark, don't remove — the user pinned it and it may return. Amber glyph +
+// helper-toned label; the tooltip explains it will send as a reference.
+.chat-context-chip--missing {
+  color: var(--cds-text-helper);
+}
+
+.chat-context-chip--missing svg {
+  color: var(--cds-support-warning);
+}
+
+.chat-context-chip--empty {
+  color: var(--cds-text-helper);
+}
+
+// Nothing to reveal for the placeholder — keep it flat even on hover.
+.chat-context-chip--empty:hover {
+  background: transparent;
+}
+
+// "Add this file" — the explicit way to put the current file in context now that
+// switching tabs doesn't. A dashed chip-button; it and the chip removes are
+// disabled while a response streams, so context only changes when the chat is idle.
+.chat-context-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  align-self: center;
+  padding: 0.125rem 0.375rem;
+  border: 1px dashed var(--cds-border-strong-01);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.6875rem;
+  color: var(--cds-text-secondary);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+
+.chat-context-add:hover:not(:disabled) {
+  background: var(--cds-layer-hover-01);
+  border-color: var(--cds-border-interactive);
+}
+
+.chat-context-add:disabled,
+.chat-context-chip__remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+// Cumulative conversation token count, parked at the right end of the row
+// directly above the input.
+.chat-tokens {
+  margin-inline-start: auto;
+  align-self: center;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  color: var(--cds-text-helper);
+}
+
+// The field is the one tinted element in the composer — a single surface
+// holding the textarea and the send control, sitting on the white footer. A
+// border defines it and lifts to the focus colour on `:focus-within`.
+.chat-input-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.25rem;
+  padding: 0.375rem;
+  background: var(--color-surface-default);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+.chat-input-field:focus-within {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 1px var(--color-border-focus);
+}
+
+.chat-input-field textarea {
+  // Auto-grown by `useAutoGrowTextarea`: it sets an inline `height` from
+  // `scrollHeight`, which `min`/`max-block-size` clamp. `border-box` so
+  // the scrollHeight math lines up exactly with the padding (the global
+  // reset doesn't set box-sizing, so set it here). Past the max it scrolls
+  // internally — that's the field's own ceiling, independent of the panel.
+  box-sizing: border-box;
+  min-block-size: 2.125rem;
+  max-block-size: 11rem;
+  resize: none;
+  border: 0;
+  outline: none;
+  padding: 0.375rem 0.5rem;
+  background: transparent;
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  // Keep the line box close to the glyph height — the textarea caret spans the
+  // full line box, so a loose line-height makes the cursor look much taller than
+  // the text.
+  line-height: 1.25rem;
+  overflow-y: auto;
+}
+
+.chat-input-field textarea:disabled {
+  color: var(--cds-text-disabled);
+}
+
+// The send control lives inside the field, bottom-aligned so it stays put as
+// the textarea grows. It keeps the one accent in the composer — the context
+// chips deliberately don't compete with it.
+.chat-send {
+  display: grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-accent-default);
+  color: var(--color-text-on-accent);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.chat-send:hover:not(:disabled) {
+  background: var(--cds-button-primary-hover);
+}
+
+// Not sendable yet (empty prompt) → recede into the field rather than sit there
+// as a filled grey box competing for attention.
+.chat-send:disabled {
+  background: transparent;
+  color: var(--cds-icon-disabled);
+  cursor: not-allowed;
+}
+
+// Composer notices (run error / needs-setup), stacked at the top of the
+// composer above the context. A compact banner: a single summary line, with the
+// raw detail revealed only on demand below it — so it stays small at rest.
+.chat-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+// The one-line summary row: dot · summary · actions, vertically centred.
+.chat-notice__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-notice__text {
+  min-inline-size: 0;
+  flex: 1 1 auto;
+}
+
+.chat-notice__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.chat-notice--error {
+  background: var(--cds-notification-background-error, rgba(218, 30, 40, 0.12));
+  color: var(--cds-text-error);
+}
+
+.chat-notice__dot {
+  flex-shrink: 0;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 2px;
+  background: var(--cds-support-error);
+}
+
+// The raw technical text, shown only when "Details" is expanded — small,
+// monospace, and scroll-capped so a long stderr dump can't grow the composer.
+.chat-notice__detail {
+  max-block-size: 7rem;
+  margin: 0;
+  padding: 0.375rem 0.5rem;
+  overflow: auto;
+  border-radius: 4px;
+  background: var(--cds-layer-01);
+  color: var(--cds-text-secondary);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-notice__action {
+  flex-shrink: 0;
+  padding: 0.125rem 0.375rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-link-primary);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.chat-notice__action:hover {
+  background: rgba(15, 98, 254, 0.12);
+  text-decoration: underline;
+}
+
+// The composer footer line — the combined assistant/model picker on the left,
+// the inline auto-apply toggle on the right, on one row. The picker label
+// truncates so it can't push the toggle off the line; its popup is portaled.
+.chat-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 0.25rem 0.5rem;
+  block-size: var(--pane-footer-height);
+  font-size: 0.75rem;
+  color: var(--cds-text-helper);
+}
+
+// Holds the combined picker; can shrink (min-inline-size: 0) so a long label
+// truncates to keep the Auto-apply toggle on the row.
+.chat-footer__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  min-inline-size: 0;
+  flex: 0 1 auto;
+  gap: 0.25rem 0.375rem;
+}
+
+.chat-footer__end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+// The inline review/auto-apply toggle — mirrors the Settings "Review changes
+// before applying" option. A compact pill, not a Carbon Toggle (its chrome
+// would dwarf the footer line). The dot reads green when edits apply directly
+// (auto), amber when they're held for review.
+.chat-footer__review {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-text-secondary);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-footer__review:hover {
+  background: var(--cds-layer-hover-01);
+}
+
+.chat-footer__review:disabled {
+  color: var(--cds-text-disabled);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.chat-footer__review-dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--cds-support-success);
+  flex-shrink: 0;
+}
+
+.chat-footer__review--on .chat-footer__review-dot {
+  background: var(--cds-support-warning);
+}
+
+.chat-footer__review:disabled .chat-footer__review-dot {
+  background: var(--cds-icon-disabled);
+}

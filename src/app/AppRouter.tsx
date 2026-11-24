@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { harnessReadiness } from "../lib/ipc/harnessClient";
+import { harnessReadiness } from "../lib/ipc/harnessCatalogClient";
 import { externalList } from "../lib/ipc/externalFilesClient";
 import { getOnboarding, listWorkspaces } from "../lib/ipc/workspaceClient";
 import { SetupScreen } from "../features/setup/SetupScreen";

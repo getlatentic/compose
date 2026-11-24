@@ -1,0 +1,278 @@
+// First run: onboarding and the setup screens.
+
+.onboard {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  block-size: 100vh;
+  background: var(--cds-background);
+  color: var(--cds-text-primary);
+}
+
+.onboard__topbar {
+  // An empty strip: it clears the window's overlaid native traffic lights and
+  // is this otherwise chrome-less screen's only window-drag handle.
+  block-size: 2.75rem;
+  -webkit-app-region: drag;
+}
+
+.onboard__stage {
+  // A flex column (not grid place-items: center) so a `--fill` screen can claim
+  // the full stage height with `flex: 1`; a normal short screen still centers.
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  overflow: auto;
+}
+
+.onboard__screen {
+  display: grid;
+  gap: 1rem;
+  inline-size: min(100%, 34rem);
+  text-align: start;
+  animation: onboard-in 220ms ease-out both;
+}
+
+// "Choose your AI" can outgrow the viewport (the agent grid + the permission
+// toggle), which would push the title and Continue button off-screen. `--fill`
+// claims the full stage height with a fixed head and footer and only the middle
+// scrolling, so the title and primary action stay put; it's also wider than the
+// default 34rem to give the agent grid room for ~3 columns.
+.onboard__screen--fill {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  inline-size: min(100%, 50rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.onboard__screen-head {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.onboard__screen-scroll {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding-inline: 2px;
+}
+
+// The agent picker — a responsive card grid (~3 columns where there's room,
+// fewer when narrow, e.g. Settings). While the readiness probe is in flight a
+// card reads "Checking…" and isn't selectable; the cards themselves render
+// immediately from the catalog so the picker never waits on the probe.
+.harness-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.5rem;
+}
+
+.harness-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.harness-card--selected {
+  border-color: var(--cds-interactive);
+  background: var(--cds-highlight);
+}
+
+.harness-card__pick {
+  display: grid;
+  gap: 0.375rem;
+  inline-size: 100%;
+  text-align: start;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.harness-card__pick:disabled {
+  cursor: default;
+}
+
+.harness-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.harness-card__radio {
+  font-size: 0.9rem;
+}
+
+.harness-card__name {
+  font-size: 0.8125rem;
+}
+
+.harness-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.harness-card__desc {
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary);
+}
+
+.harness-card__version {
+  font-size: 0.6875rem;
+  color: var(--cds-text-placeholder);
+}
+
+@keyframes onboard-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+.onboard__eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.0625rem;
+  text-transform: uppercase;
+  color: var(--cds-text-helper);
+}
+
+.onboard__title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.onboard__lead {
+  margin: 0;
+  max-inline-size: 32rem;
+  color: var(--cds-text-secondary);
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.onboard__small {
+  margin: 0;
+  color: var(--cds-text-helper);
+  font-size: 0.8125rem;
+}
+
+.onboard__cta-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-block-start: 1rem;
+}
+
+.onboard__value {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem 0.875rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--cds-border-subtle-01);
+  background: var(--cds-layer-02);
+}
+
+.onboard__value-icon {
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: 0.5rem;
+  background: var(--cds-layer-01);
+  color: var(--cds-text-primary);
+  grid-row: span 2;
+}
+
+.onboard__value h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.onboard__value p {
+  margin: 0;
+  color: var(--cds-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.onboard__form {
+  display: grid;
+  gap: 1rem;
+  margin-block-start: 0.5rem;
+}
+
+.onboard__folder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.setup {
+  display: grid;
+  inline-size: min(100%, 36rem);
+  min-block-size: 100%;
+  align-content: start;
+  gap: 1.75rem;
+  margin-inline: auto;
+  padding: 4rem 1.5rem 3rem;
+}
+
+.folder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (min-width: 48rem) {
+  .document-workspace {
+    // Default: editor takes the full width. The grid only expands
+    // to two columns when the user explicitly opens the comments
+    // panel via the header toggle (`commentsOpen` state).
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .document-workspace--comments-open {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 18rem);
+  }
+
+  .comments-panel {
+    border-block-start: 0;
+    border-inline-start: 1px solid var(--cds-border-subtle-01);
+  }
+}
+
+@media (max-width: 47.98rem) {
+  .setup {
+    padding: 2rem 1rem 2rem;
+  }
+
+  .pane-header {
+    padding-inline: 0.75rem;
+  }
+
+  .chat-send {
+    inline-size: 2.25rem;
+    block-size: 2.25rem;
+  }
+}

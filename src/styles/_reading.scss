@@ -1,0 +1,105 @@
+@use "sass:math";
+
+// Font stacks, and the `--reading-*` properties the note editor reads.
+//
+// A palette names a font for each part (`--font-ui`, `--font-doc-body`, …;
+// see `lib/theme/paletteCss.ts`). The reading font in Settings either keeps
+// those (`theme`) or replaces the three note fonts. The text size scales the
+// note only; app zoom (⌘+ / ⌘−) still scales everything, because all of
+// these are in `rem`.
+//
+// The selectors also match a child with its own `data-palette` or
+// `data-reading-font`, so a Settings preview resolves its fonts in its own
+// context instead of inheriting the window's already-resolved values.
+
+// Sizes and line heights scale from the body size (`--reading-base`, set by
+// `lib/theme/reading.ts`), in the proportions of the Figma "Reading size"
+// collection at its 18px default: body 18/30, h1 32/40, h2 26/34, h3 21/28,
+// h4 18/26, code 15/24.
+@mixin reading-scale($name, $size, $line) {
+  --reading-size-#{$name}: calc(var(--reading-base) * #{math.div($size, 18)});
+  --reading-line-#{$name}: calc(var(--reading-base) * #{math.div($line, 18)});
+}
+
+:root {
+  --reading-base: 1.125rem;
+  @include reading-scale(body, 18, 30);
+  @include reading-scale(h1, 32, 40);
+  @include reading-scale(h2, 26, 34);
+  @include reading-scale(h3, 21, 28);
+  @include reading-scale(h4, 18, 26);
+  @include reading-scale(code, 15, 24);
+  --font-plex-sans: "IBM Plex Sans Variable", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-plex-serif: "IBM Plex Serif", "New York", Georgia, serif;
+  --font-jetbrains-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-chalkboard: "Chalkboard SE", "Comic Neue", "Comic Sans MS", cursive;
+  // The Mac's own faces (SF Pro, SF Mono), for the Classic palette.
+  --font-system: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-system-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  // Apple's own serif, which WebKit names `ui-serif`.
+  --font-new-york: ui-serif, "New York", Georgia, serif;
+}
+
+// The default palette's fonts, for a page that never sets `data-palette`.
+// Guarded so it cannot outrank the palette stylesheet, which comes first.
+:root:not([data-palette]) {
+  --font-ui: var(--font-system);
+  --font-doc-body: var(--font-system);
+  --font-doc-heading: var(--font-system);
+  --font-doc-heading-weight: 700;
+  --font-doc-code: var(--font-system-mono);
+}
+
+@mixin reading-fonts($body, $heading, $weight, $code) {
+  --reading-family-body: #{$body};
+  --reading-family-heading: #{$heading};
+  --reading-weight-heading: #{$weight};
+  --reading-family-code: #{$code};
+}
+
+:root,
+[data-palette],
+[data-reading-font="theme"] {
+  @include reading-fonts(var(--font-doc-body), var(--font-doc-heading), var(--font-doc-heading-weight), var(--font-doc-code));
+}
+
+[data-reading-font="serif"],
+[data-reading-font="serif"] [data-palette] {
+  @include reading-fonts(var(--font-plex-serif), var(--font-plex-sans), 600, var(--font-jetbrains-mono));
+}
+
+[data-reading-font="sans"],
+[data-reading-font="sans"] [data-palette] {
+  @include reading-fonts(var(--font-plex-sans), var(--font-plex-sans), 600, var(--font-jetbrains-mono));
+}
+
+[data-reading-font="mono"],
+[data-reading-font="mono"] [data-palette] {
+  @include reading-fonts(var(--font-jetbrains-mono), var(--font-jetbrains-mono), 700, var(--font-jetbrains-mono));
+}
+
+[data-reading-font="newYork"],
+[data-reading-font="newYork"] [data-palette] {
+  @include reading-fonts(var(--font-new-york), var(--font-system), 600, var(--font-system-mono));
+}
+
+[data-reading-font="sfPro"],
+[data-reading-font="sfPro"] [data-palette] {
+  @include reading-fonts(var(--font-system), var(--font-system), 600, var(--font-system-mono));
+}
+
+// Any font installed on the Mac; `--font-custom` is its quoted family name,
+// set on the root by `applyReadingStyle`.
+// A removed font falls back to Plex rather than the browser's default.
+[data-reading-font="custom"],
+[data-reading-font="custom"] [data-palette] {
+  --reading-family-body: var(--font-custom, var(--font-plex-serif)), var(--font-plex-serif);
+  --reading-family-heading: var(--font-custom, var(--font-plex-sans)), var(--font-plex-sans);
+  --reading-weight-heading: 600;
+  --reading-family-code: var(--font-jetbrains-mono);
+}
+
+[data-reading-font="chalkboard"],
+[data-reading-font="chalkboard"] [data-palette] {
+  @include reading-fonts(var(--font-chalkboard), var(--font-chalkboard), 700, var(--font-jetbrains-mono));
+}

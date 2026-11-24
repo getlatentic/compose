@@ -1,6 +1,6 @@
 import { CheckmarkFilled, ErrorFilled, InProgress } from "@carbon/react/icons";
 
-import type { WorkspaceToolCall } from "../../app/workspaceModel";
+import type { WorkspaceToolCall } from "../../app/workspace/types";
 import { fileOpVerb, toolFile } from "./toolLabels";
 
 /** One status → one icon. A spinning `InProgress` while it runs, a green

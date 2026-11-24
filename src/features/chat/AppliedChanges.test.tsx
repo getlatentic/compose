@@ -1,12 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { WorkspaceAppliedChange } from "../../app/workspaceModel";
+import type { WorkspaceAppliedChange } from "../../app/workspace/types";
 import { AppliedChanges } from "./AppliedChanges";
 
 describe("AppliedChanges", () => {
   it("labels the edit card with the file name, keeping the full path on hover", () => {
     const change: WorkspaceAppliedChange = {
+      id: "m1-applied-1",
       kind: "rewrite",
       filePath: "Others/Writing/data-science-nigeria-video.md",
       originalText: "old\n",

@@ -10,14 +10,7 @@ import {
 import { Add, TrashCan } from "@carbon/react/icons";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import { openExternalUrl } from "../../lib/links/openExternal";
-import {
-  harnessCancelPull,
-  harnessDeleteModel,
-  harnessInstalledModels,
-  harnessPullModel,
-  type InstalledModel,
-  type PullEvent,
-} from "../../lib/ipc/harnessClient";
+import { harnessCancelPull, harnessDeleteModel, harnessInstalledModels, harnessPullModel, type InstalledModel, type PullEvent } from "../../lib/ipc/harnessModelsClient";
 
 /** How often to re-check for Ollama while it's down, so the section recovers on
  *  its own the moment the user starts it — no button to press. */

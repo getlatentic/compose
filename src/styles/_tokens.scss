@@ -1,246 +1,105 @@
-// Colour tokens — the whole app's palette, and the only place a theme lives.
+// Colour tokens: Carbon's `--cds-*` names, each pointed at a palette colour.
 //
-// Compose overrides Carbon's `--cds-*` tokens rather than inventing a parallel
-// set, because the editor package reads the SAME tokens: one definition themes
-// the chrome and the document together. Dark values are Carbon's own `g100`,
-// read out of `@carbon/themes` rather than transcribed by hand.
+// The palette (`--color-*`, from `lib/theme/palettes.json`) chooses the
+// colours of the chrome and the document; only the code-syntax colours and
+// the brand mark are fixed here. Compose keeps Carbon's token names because
+// Carbon's components and the editor package both read them; pointing them
+// at the palette re-themes the chrome and the document together.
 //
-// Three states, deliberately:
+// Light and dark need no separate block here: each `--color-*` already
+// switches with the appearance (see `lib/theme/paletteCss.ts`). What remains
+// below for dark is only what a palette does not set: the code-syntax colours
+// and `color-scheme`.
 //
-//   :root                                    light — also the no-JS default
+// Three appearance states, deliberately:
+//
+//   :root                                    light, and the no-JS default
 //   prefers-color-scheme: dark, not [light]  follow the system
 //   [data-theme="dark"] / ["light"]          an explicit choice, either way
 //
-// "System" is a real state, not light-with-a-listener: someone who picks Light
-// keeps Light when their Mac turns dark at sunset. The `:not([data-theme=...])`
-// guard is what lets an explicit choice win over the media query, and the
-// dark palette is a mixin, included twice, so the two selectors cannot drift.
-//
-// A translucent token is theme-agnostic on purpose — an rgba tint composites
-// against whatever canvas is beneath it, so it needs no dark counterpart.
+// "System" is a real state: someone who picks Light keeps Light when their Mac
+// turns dark at sunset. The `:not([data-theme=...])` guard lets an explicit
+// choice win over the media query.
+
+@use "reading";
+@use "appearance-mixins" as appearance;
 
 :root {
-  // Tells the engine which way the page leans, so the things WE do not paint —
-  // scrollbars, form controls, the caret, spellcheck underlines — follow the
-  // theme instead of staying stubbornly light on a dark page.
+  // Tells the engine which way the page leans, so scrollbars, form controls
+  // and spellcheck underlines follow the appearance.
   color-scheme: light;
+  @include appearance.palette-aliases;
 
-  // Backgrounds + layers (gray-10 / 20)
-  --cds-background: #ffffff;
-  --cds-background-hover: rgba(141, 141, 141, 0.12);
-  --cds-background-active: rgba(141, 141, 141, 0.5);
-  --cds-background-selected: rgba(141, 141, 141, 0.2);
-  --cds-background-selected-hover: rgba(141, 141, 141, 0.32);
-  --cds-background-inverse: #393939;            // gray-80
-  --cds-background-inverse-hover: #525252;      // gray-70
-  --cds-layer-01: #f4f4f4;                      // gray-10
-  --cds-layer-02: #ffffff;
-  --cds-layer-03: #f4f4f4;
-  --cds-layer-hover-01: #e8e8e8;
-  --cds-layer-hover-02: #e8e8e8;
-  --cds-layer-accent-01: #e0e0e0;               // gray-20
-  --cds-layer-accent-02: #e0e0e0;
-  --cds-layer-selected-01: #e0e0e0;
-  --cds-layer-selected-02: #e0e0e0;
-  --cds-layer-selected-hover-01: #c6c6c6;       // gray-30
-  --cds-field-01: #f4f4f4;
-  --cds-field-02: #ffffff;
-  --cds-field-hover-01: #e8e8e8;
-  --cds-field-hover-02: #e8e8e8;
-  // Borders (subtler — gray-20)
-  --cds-border-subtle-00: #e0e0e0;
-  --cds-border-subtle-01: #e0e0e0;
-  --cds-border-subtle-02: #e0e0e0;
-  --cds-border-strong-01: #8d8d8d;              // gray-50
-  --cds-border-strong-02: #8d8d8d;
-  --cds-border-tile-01: #c6c6c6;                // gray-30
-  --cds-border-inverse: #161616;                // gray-100
-  --cds-border-interactive: #0f62fe;            // interactive stays Carbon blue
-  // Text (gray-100 / 70 / 60)
-  --cds-text-primary: #161616;
-  --cds-text-secondary: #525252;
-  --cds-text-placeholder: rgba(22, 22, 22, 0.4);
-  --cds-text-on-color: #ffffff;
-  --cds-text-helper: #6f6f6f;
-  --cds-text-disabled: rgba(22, 22, 22, 0.25);
-  --cds-text-inverse: #ffffff;
-  // Icons follow text
-  --cds-icon-primary: #161616;
-  --cds-icon-secondary: #525252;
-  --cds-icon-disabled: rgba(22, 22, 22, 0.25);
-  --cds-icon-on-color: #ffffff;
-  --cds-icon-on-color-disabled: rgba(255, 255, 255, 0.25);
-  --cds-icon-interactive: #0f62fe;
-  --cds-icon-inverse: #ffffff;
-  // Focus + link stay Carbon-standard
-  --cds-focus: #0f62fe;
-  --cds-link-primary: #0f62fe;
-  --cds-link-primary-hover: #0043ce;
-  --cds-link-secondary: #0043ce;
-  --cds-link-visited: #8a3ffc;
-  // Pale-blue highlight used by selected rows + the assistant-suggestion tile
-  --cds-highlight: #edf5ff;                     // Carbon blue-10
+  // Type, for the Carbon components and editor widgets that read these.
+  --cds-body-01-font-family: var(--font-ui);
+  --cds-code-01-font-family: var(--font-jetbrains-mono);
 
-  // ── Tokens the app and the editor read but nothing defined ────────────────
-  // Every one of these resolved to a per-rule hex fallback, which is fine while
-  // there is one theme and silently wrong the moment there are two: a fallback
-  // is a LIGHT value, so in dark mode each would have stayed light. Values here
-  // are exactly what those fallbacks were, so light is unchanged.
-  --cds-border-strong: #8d8d8d;
-  --cds-field: #f4f4f4;
-  --cds-focus-inset: #ffffff;
-  --cds-interactive: #0f62fe;
-  --cds-layer-accent-hover-01: #d1d7dc;
-  --cds-layer-active-01: #c6c6c6;
-  --cds-link-inverse: #78a9ff;
-  --cds-button-primary: #0f62fe;
-  --cds-button-primary-hover: #0353e9;
-  --cds-button-disabled: #c6c6c6;
-  --cds-button-danger-secondary-hover: #ffd7d9;
-  --cds-notification-background-error: rgba(218, 30, 40, 0.12);
-  --cds-notification-background-warning: #fdf6dd;
-  --cds-support-error: #da1e28;
-  --cds-support-success: #24a148;
-  --cds-support-warning: #f1c21b;
-  --cds-text-error: #da1e28;
-  --cds-text-on-color-disabled: #8d8d8d;
-  // Success and warning as TEXT, which is not the same colour as the icon.
-  // #24a148 and #f1c21b are indicator colours; as text on white they fail
-  // contrast, which is why every `color:` site already reached for a darker
-  // shade. Naming that difference keeps a later edit from flattening them.
-  --cds-text-success: #198038;
-  --cds-text-warning: #b28600;
-
-  // ── Status pills ──────────────────────────────────────────────────────────
-  // Dark text on a pale tint. Carbon's tag tokens invert for dark — background
-  // and text swap places — so these follow that, keeping the light values the
-  // pills already had rather than adopting Carbon's slightly different tints.
-  --pill-green-fg: #0e6027;
-  --pill-green-bg: #defbe6;
-  --pill-blue-fg: #0043ce;
-  --pill-blue-bg: #d0e2ff;
-  --pill-red-fg: #a2191f;
-  --pill-red-bg: #ffd7d9;
-  --pill-gray-bg: #e0e0e0;
-  --pill-yellow-bg: #fcf4d6;
-
-  // The Compose mark's tile. Brand, not chrome: it stays near-black in both
-  // themes, the way an app icon does.
+  // The Compose mark's tile. Brand, not chrome: near-black in every palette,
+  // the way an app icon is.
   --brand-mark-bg: #0f1419;
+
+  // Stacking for what floats over the window: a dialog, then anything
+  // portalled to the body (menus, pickers, the update banner), then a
+  // picker that opens from inside one of those.
+  --z-modal: 1000;
+  --z-popover: 9000;
+  --z-popover-raised: 9100;
+
+  // Radius and motion (Figma "Radius" and "Motion" collections).
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --motion-slow: 280ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 1, 1);
 }
 
-// One definition, included by both dark selectors below.
 @mixin dark {
   color-scheme: dark;
 
-  // ── Fenced-code syntax (@latentic/live-markdown) ──────────────────────────
-  // The editor paints `var(--md-code-…, <One Light value>)`, so setting these
-  // restyles code for dark and leaving them alone keeps the light palette.
-  // One Dark, the counterpart to the light theme's One Light.
-  //
-  // The CLIPBOARD deliberately ignores these: pasted HTML carries no
-  // stylesheet, so it renders literal One Light colours — correct, because the
-  // document being pasted into is white whatever theme the editor was in.
-  --md-code-keyword: #c678dd;
-  --md-code-string: #98c379;
-  --md-code-comment: #7f848e;
-  --md-code-literal: #d19a66;
-  --md-code-function: #61afef;
-  --md-code-type: #e5c07b;
-  --md-code-variable: #e06c75;
-  --md-code-property: #61afef;
-  --md-code-tag: #e06c75;
-  --md-code-attribute: #d19a66;
-  --md-code-regexp: #56b6c2;
-  --md-code-invalid: #be5046;
+  @include appearance.dark-code-colors;
 
-  --cds-background: #161616;
-  --cds-background-active: rgba(141, 141, 141, 0.4);
-  --cds-background-hover: rgba(141, 141, 141, 0.16);
-  --cds-background-inverse: #f4f4f4;
-  --cds-background-inverse-hover: #e8e8e8;
-  --cds-background-selected: rgba(141, 141, 141, 0.24);
-  --cds-background-selected-hover: rgba(141, 141, 141, 0.32);
-  --cds-border-interactive: #4589ff;
-  --cds-border-inverse: #f4f4f4;
-  --cds-border-strong: #6f6f6f;
-  --cds-border-strong-01: #6f6f6f;
-  --cds-border-strong-02: #8d8d8d;
-  --cds-border-subtle-00: #393939;
-  --cds-border-subtle-01: #525252;
-  --cds-border-subtle-02: #6f6f6f;
-  --cds-border-tile-01: #525252;
-  --cds-button-danger-secondary-hover: rgba(250, 77, 86, 0.16);
-  --cds-button-disabled: rgb(141 141 141 / 30%);
-  --cds-button-primary: #0f62fe;
-  --cds-button-primary-hover: #0050e6;
-  --cds-field: #262626;
-  --cds-field-01: #262626;
-  --cds-field-02: #393939;
-  --cds-field-hover-01: #333333;
-  --cds-field-hover-02: #474747;
-  --cds-focus: #ffffff;
-  --cds-focus-inset: #161616;
-  --cds-highlight: #001d6c;
-  --cds-icon-disabled: rgba(244, 244, 244, 0.25);
-  --cds-icon-interactive: #ffffff;
-  --cds-icon-inverse: #161616;
-  --cds-icon-on-color: #ffffff;
-  --cds-icon-on-color-disabled: rgba(255, 255, 255, 0.25);
-  --cds-icon-primary: #f4f4f4;
-  --cds-icon-secondary: #c6c6c6;
-  --cds-interactive: #4589ff;
-  --cds-layer-01: #262626;
-  --cds-layer-02: #393939;
-  --cds-layer-03: #525252;
-  --cds-layer-accent-01: #393939;
-  --cds-layer-accent-02: #525252;
-  --cds-layer-accent-hover-01: #474747;
-  --cds-layer-active-01: #525252;
-  --cds-layer-hover-01: #333333;
-  --cds-layer-hover-02: #474747;
-  --cds-layer-selected-01: #393939;
-  --cds-layer-selected-02: #525252;
-  --cds-layer-selected-hover-01: #474747;
-  --cds-link-inverse: #0f62fe;
-  --cds-link-primary: #78a9ff;
-  --cds-link-primary-hover: #a6c8ff;
-  --cds-link-secondary: #a6c8ff;
-  --cds-link-visited: #be95ff;
-  --cds-notification-background-error: rgba(250, 77, 86, 0.12);
-  --cds-notification-background-warning: rgba(241, 194, 27, 0.12);
-  --cds-support-error: #fa4d56;
-  --cds-support-success: #42be65;
-  --cds-support-warning: #f1c21b;
-  --cds-text-disabled: rgba(244, 244, 244, 0.25);
-  --cds-text-error: #ff8389;
-  --cds-text-helper: #a8a8a8;
-  --cds-text-inverse: #161616;
-  --cds-text-on-color: #ffffff;
-  --cds-text-on-color-disabled: rgba(255, 255, 255, 0.25);
-  --cds-text-placeholder: rgba(244, 244, 244, 0.4);
-  --cds-text-primary: #f4f4f4;
-  --cds-text-secondary: #c6c6c6;
-  --cds-text-success: #42be65;
-  --cds-text-warning: #f1c21b;
-
-  --pill-green-fg: #a7f0ba;
-  --pill-green-bg: #0e6027;
-  --pill-blue-fg: #d0e2ff;
-  --pill-blue-bg: #0043ce;
-  --pill-red-fg: #ffd7d9;
-  --pill-red-bg: #a2191f;
-  --pill-gray-bg: #525252;
-  --pill-yellow-bg: #8e6a00;
-  --brand-mark-bg: #0f1419;
+  // Dark: the edge is drawn inside, so a dark ring outside it does not read
+  // as a second border.
+  --shadow-raised: inset 0 0 0 1px var(--color-edge), 0 0 0 1px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 20%),
+    0 2px 4px rgb(0 0 0 / 12%);
+  --shadow-popover: inset 0 0 0 1px var(--color-edge), 0 0 0 1px rgb(0 0 0 / 18%), 0 1px 3px rgb(0 0 0 / 16%),
+    0 6px 18px -4px rgb(0 0 0 / 26%);
+  --shadow-dialog: inset 0 0 0 1px var(--color-edge), 0 0 0 1px rgb(0 0 0 / 20%), 0 2px 6px rgb(0 0 0 / 18%),
+    0 16px 40px -10px rgb(0 0 0 / 34%);
+  // Panels keep an outside edge: an inset one would sit under their toolbars.
+  --shadow-panel: 0 0 0 1px var(--color-edge);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    @include dark;
-  }
-}
-
-:root[data-theme="dark"] {
+@include appearance.when-dark {
   @include dark;
+}
+
+// The note panel's own light or dark (`data-editor-scheme`): its Carbon
+// colours, code colours and shadows follow it, not the window. `initial`
+// hands the light theme's code colours back to the editor's own defaults.
+:root:where([data-editor-scheme]) :is(#{appearance.$editor-panels}) {
+  @include appearance.palette-aliases;
+}
+
+:root:where([data-editor-scheme="dark"]) :is(#{appearance.$editor-panels}) {
+  @include dark;
+}
+
+:root:where([data-editor-scheme="light"]) :is(#{appearance.$editor-panels}) {
+  color-scheme: light;
+  @include appearance.editor-code-colors;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
 }

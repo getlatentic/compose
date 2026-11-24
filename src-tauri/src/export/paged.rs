@@ -56,31 +56,27 @@ mod imp {
     use objc2::rc::Retained;
     use objc2::runtime::AnyObject;
     use objc2::{define_class, sel, DefinedClass, MainThreadMarker, MainThreadOnly};
-    use objc2_app_kit::{
-        NSBackingStoreType, NSPrintInfo, NSPrintJobSavingURL, NSPrintSaveJob,
-        NSPrintingPaginationMode, NSWindow, NSWindowStyleMask,
-    };
-    use objc2_core_foundation::{CGPoint, CGRect, CGSize};
+    use objc2_app_kit::{NSPrintInfo, NSPrintJobSavingURL, NSPrintSaveJob, NSPrintingPaginationMode, NSWindow};
+    use objc2_core_foundation::CGSize;
     use objc2_foundation::{NSObject, NSString, NSURL};
-    use objc2_web_kit::{WKWebView, WKWebViewConfiguration};
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::ffi::c_void;
     use std::ptr::null_mut;
-    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-    use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
-    use std::sync::Arc;
+    use std::sync::mpsc::{channel, Sender};
     use std::time::{Duration, Instant};
     use tauri::{AppHandle, Manager};
 
+    use super::super::offscreen::{self, rect, Page, Readiness};
     use super::{PAGE_HEIGHT, PAGE_MARGIN, PAGE_WIDTH};
 
-    /// Far enough offscreen that the host window never flickers into view.
-    const OFFSCREEN_ORIGIN: f64 = -100_000.0;
-    /// Bounds the page LOAD only — once the (Print) panel is up the user may
+    /// Bounds the page LOAD only: once the Print panel is up the writer may
     /// leave it open as long as they like.
     const LOAD_TIMEOUT: Duration = Duration::from_secs(25);
-    const POLL_INTERVAL: Duration = Duration::from_millis(80);
+    /// A save-to-PDF run shows no panel, so it gets a bound of its own.
+    const SAVE_TIMEOUT: Duration = Duration::from_secs(60);
+
+    const PAPER: CGSize = CGSize { width: PAGE_WIDTH, height: PAGE_HEIGHT };
 
     /// What a caller wants from the operation, and how its result is reported.
     pub enum PrintInfoConfig {
@@ -99,23 +95,16 @@ mod imp {
         Printed(bool),
     }
 
-    /// A live job: the web view, the offscreen window hosting it, the requested
-    /// configuration, and (once the run starts) the delegate. All held until the
-    /// callback fires (or the load times out) so none is released mid-run.
+    /// A running operation's configuration and delegate, kept (with its
+    /// offscreen page, same id) until the delegate reports the outcome.
     struct Job {
-        webview: Retained<WKWebView>,
-        window: Retained<NSWindow>,
-        /// The visible main app window the print sheet/modal attaches to, so the
-        /// panel appears centered on-screen rather than on the offscreen render
-        /// host. `None` only if it can't be resolved (then we fall back to `window`).
-        main_window: Option<Retained<NSWindow>>,
         config: PrintInfoConfig,
-        delegate: Option<Retained<RunDelegate>>,
+        /// Held only to keep it alive: the operation does not retain it.
+        _delegate: Retained<RunDelegate>,
     }
 
     thread_local! {
-        /// Live jobs, by id. Main-thread-only (`!Send`); every accessor runs
-        /// inside `run_on_main_thread`.
+        /// Running jobs, by page id; main-thread-only.
         static JOBS: RefCell<HashMap<u64, Job>> = RefCell::new(HashMap::new());
     }
 
@@ -179,193 +168,95 @@ mod imp {
         }
     }
 
-    /// Build the [`Output`] for a finished run and drop the job (releasing its
-    /// window + web view). For the save path, a successful run means the PDF is on
-    /// disk: read it back into bytes.
+    /// Build the [`Output`] for a finished run and release the job and its
+    /// page. For the save path, a successful run means the PDF is on disk:
+    /// read it back into bytes.
     fn finish_job(job_id: u64, success: bool) -> Result<Output, String> {
         let config = JOBS.with(|jobs| jobs.borrow_mut().remove(&job_id).map(|job| job.config));
+        offscreen::close_on_main_thread(job_id);
         match config {
             None => Err("paged job vanished before completion".into()),
             Some(PrintInfoConfig::ShowPanel) => Ok(Output::Printed(success)),
-            Some(PrintInfoConfig::SaveToPdf { path }) => {
-                if !success {
-                    eprintln!("paged export: NSPrintOperation reported failure for {}", path.display());
-                    return Err("the PDF print operation reported failure".into());
-                }
-                match std::fs::read(&path) {
-                    Ok(bytes) => {
-                        eprintln!("paged export: saved {} bytes to {}", bytes.len(), path.display());
-                        Ok(Output::Pdf(bytes))
-                    }
-                    Err(error) => {
-                        eprintln!("paged export: nothing written at {} ({error})", path.display());
-                        Err(format!("could not read the generated PDF: {error}"))
-                    }
-                }
-            }
+            Some(PrintInfoConfig::SaveToPdf { path }) => read_saved_pdf(&path, success),
         }
     }
 
-    fn next_job_id() -> u64 {
-        static COUNTER: AtomicU64 = AtomicU64::new(1);
-        COUNTER.fetch_add(1, Ordering::Relaxed)
-    }
-
-    /// Render `html` offscreen and run an `NSPrintOperation` over it per `config`,
-    /// blocking the calling (worker) thread until the run completes or the load
-    /// times out.
-    pub fn run(app: &AppHandle, html: &str, config: PrintInfoConfig) -> Result<Output, String> {
-        let (tx, rx) = channel::<Result<Output, String>>();
-        let job_id = next_job_id();
-
-        start_load(app, job_id, html, config, tx.clone())?;
-
-        // Poll readiness until the page settles, then kick off the operation.
-        // `started` flips once the async run has launched, so we stop scheduling
-        // readiness checks and just wait for the delegate's callback.
-        let started = Arc::new(AtomicBool::new(false));
-        let load_deadline = Instant::now() + LOAD_TIMEOUT;
-        loop {
-            match rx.recv_timeout(POLL_INTERVAL) {
-                Ok(result) => return result,
-                Err(RecvTimeoutError::Disconnected) => return Err("paged run channel closed".into()),
-                Err(RecvTimeoutError::Timeout) => {
-                    if started.load(Ordering::Acquire) {
-                        continue; // operation is running; just wait for the result.
-                    }
-                    if Instant::now() >= load_deadline {
-                        cleanup(app, job_id);
-                        return Err("paged render timed out".into());
-                    }
-                    run_when_ready(app, job_id, tx.clone(), started.clone());
-                }
-            }
+    fn read_saved_pdf(path: &std::path::Path, success: bool) -> Result<Output, String> {
+        if !success {
+            eprintln!("paged export: NSPrintOperation reported failure for {}", path.display());
+            return Err("the PDF print operation reported failure".into());
         }
-    }
-
-    /// On the main thread: create the offscreen web view, host it in an offscreen
-    /// window, and start the HTML load.
-    fn start_load(
-        app: &AppHandle,
-        job_id: u64,
-        html: &str,
-        config: PrintInfoConfig,
-        tx_err: Sender<Result<Output, String>>,
-    ) -> Result<(), String> {
-        let html_owned = html.to_string();
-        let config = RefCell::new(Some(config));
-        let app_for_window = app.clone();
-        app.run_on_main_thread(move || {
-            let Some(mtm) = MainThreadMarker::new() else {
-                let _ = tx_err.send(Err("paged render not on the main thread".into()));
-                return;
-            };
-            let frame = page_rect(0.0, 0.0);
-            let webview = unsafe {
-                let conf = WKWebViewConfiguration::new(mtm);
-                WKWebView::initWithFrame_configuration(WKWebView::alloc(mtm), frame, &conf)
-            };
-            let window = make_offscreen_window(mtm);
-            window.setContentView(Some(webview.as_ref()));
-            // Resolve the visible main app window for the print sheet/modal. The
-            // webview still renders through its own offscreen host (`window`); this
-            // is only where the panel attaches, so it appears centered on-screen.
-            let main_window = app_for_window
-                .get_webview_window("main")
-                .and_then(|w| w.ns_window().ok())
-                .and_then(|ptr| unsafe { Retained::retain(ptr.cast::<NSWindow>()) });
-            let html_ns = NSString::from_str(&html_owned);
-            unsafe { webview.loadHTMLString_baseURL(&html_ns, None) };
-            JOBS.with(|jobs| {
-                jobs.borrow_mut().insert(
-                    job_id,
-                    Job {
-                        webview,
-                        window,
-                        main_window,
-                        config: config.borrow_mut().take().expect("config taken once"),
-                        delegate: None,
-                    },
-                );
-            });
+        std::fs::read(path).map(Output::Pdf).map_err(|error| {
+            eprintln!("paged export: nothing written at {} ({error})", path.display());
+            format!("could not read the generated PDF: {error}")
         })
-        .map_err(|error| format!("failed to start paged render: {error}"))
     }
 
-    /// On the main thread: once the page has loaded, configure and launch the
-    /// operation asynchronously. The job stays in the map (window, web view, and
-    /// delegate must outlive the async run); the delegate retires it on completion.
-    fn run_when_ready(
-        app: &AppHandle,
-        job_id: u64,
+    /// Render `html` offscreen and run an `NSPrintOperation` over it per
+    /// `config`, blocking the calling (worker) thread until the run completes
+    /// or the load times out.
+    pub fn run(app: &AppHandle, html: &str, config: PrintInfoConfig) -> Result<Output, String> {
+        let page = offscreen::open(app, html.to_owned(), PAPER)?;
+        if let Err(error) = offscreen::wait_until_ready(app, page, Readiness::Loaded, Instant::now() + LOAD_TIMEOUT) {
+            offscreen::close(app, page);
+            return Err(error);
+        }
+        let wait = match config {
+            PrintInfoConfig::SaveToPdf { .. } => Some(SAVE_TIMEOUT),
+            PrintInfoConfig::ShowPanel => None,
+        };
+        let (tx, rx) = channel::<Result<Output, String>>();
+        let delegate_app = app.clone();
+        offscreen::with_page(app, page, move |mtm, found| match found {
+            Some(found) => launch(mtm, page, found, config, delegate_app, tx),
+            None => {
+                let _ = tx.send(Err("the page closed before printing".into()));
+            }
+        })?;
+        match wait {
+            Some(limit) => rx.recv_timeout(limit).unwrap_or_else(|_| {
+                offscreen::close(app, page);
+                Err("the PDF took too long to write".into())
+            }),
+            None => rx.recv().unwrap_or_else(|_| Err("paged run channel closed".into())),
+        }
+    }
+
+    /// The visible main window, which the print sheet attaches to so it
+    /// appears on screen rather than on the offscreen page. Main thread only.
+    fn main_window(app: &AppHandle) -> Option<Retained<NSWindow>> {
+        let ptr = app.get_webview_window("main")?.ns_window().ok()?;
+        unsafe { Retained::retain(ptr.cast::<NSWindow>()) }
+    }
+
+    /// On the main thread: configure the operation and launch it
+    /// asynchronously; the delegate reports the outcome and retires the job.
+    fn launch(
+        mtm: MainThreadMarker,
+        page_id: u64,
+        page: &Page,
+        config: PrintInfoConfig,
+        app: AppHandle,
         tx: Sender<Result<Output, String>>,
-        started: Arc<AtomicBool>,
     ) {
-        let app_for_delegate = app.clone();
-        let _ = app.run_on_main_thread(move || {
-            let Some(mtm) = MainThreadMarker::new() else {
-                return;
-            };
-            // Launch at most once. The worker loop schedules this every poll until
-            // `started` is observed, so several can queue before the first sets it;
-            // a second launch's delegate fires after the first retired the job,
-            // surfacing as "paged job vanished" and a failed export.
-            if started.load(Ordering::Acquire) {
-                return;
-            }
-            let ready = JOBS.with(|jobs| {
-                jobs.borrow()
-                    .get(&job_id)
-                    .map(|job| !unsafe { job.webview.isLoading() })
-                    .unwrap_or(false)
-            });
-            if !ready {
-                return;
-            }
-            started.store(true, Ordering::Release);
-            let delegate = RunDelegate::new(mtm, job_id, app_for_delegate, tx);
-            JOBS.with(|jobs| {
-                if let Some(job) = jobs.borrow_mut().get_mut(&job_id) {
-                    job.delegate = Some(delegate.clone());
-                }
-            });
-            launch_operation(&delegate, job_id);
-        });
-    }
+        let save_path = match &config {
+            PrintInfoConfig::SaveToPdf { path } => Some(path.clone()),
+            PrintInfoConfig::ShowPanel => None,
+        };
+        let main_window = main_window(&app);
+        let delegate = RunDelegate::new(mtm, page_id, app, tx);
+        JOBS.with(|jobs| jobs.borrow_mut().insert(page_id, Job { config, _delegate: delegate.clone() }));
+        let modal_window: &NSWindow = main_window.as_deref().unwrap_or(&page.window);
 
-    /// Configure a fresh print setup per the job's [`PrintInfoConfig`] and launch
-    /// the operation asynchronously via `runOperationModalForWindow:`; the
-    /// `delegate` reports the outcome and retires the job.
-    fn launch_operation(delegate: &RunDelegate, job_id: u64) {
-        let (webview, window, main_window, save_path) = JOBS
-            .with(|jobs| {
-                jobs.borrow().get(&job_id).map(|job| {
-                    let save_path = match &job.config {
-                        PrintInfoConfig::SaveToPdf { path } => Some(path.clone()),
-                        PrintInfoConfig::ShowPanel => None,
-                    };
-                    (
-                        Retained::clone(&job.webview),
-                        Retained::clone(&job.window),
-                        job.main_window.clone(),
-                        save_path,
-                    )
-                })
-            })
-            .expect("job present while launching its operation");
         let show_panel = save_path.is_none();
-        // Attach the modal/sheet to the visible main window (centered); fall back to
-        // the offscreen host only if the main window couldn't be resolved.
-        let modal_window: &NSWindow = main_window.as_deref().unwrap_or(&window);
-
         let print_info = configure_print_info(save_path.as_deref());
-        let operation = unsafe { webview.printOperationWithPrintInfo(&print_info) };
+        let operation = unsafe { page.webview.printOperationWithPrintInfo(&print_info) };
         operation.setShowsPrintPanel(show_panel);
         operation.setShowsProgressPanel(show_panel);
-        // Sizing the operation's view to the paper is required — the run crashes
+        // Sizing the operation's view to the paper is required: the run crashes
         // otherwise (an offscreen WKWebView has no window-derived print frame).
         if let Some(view) = operation.view() {
-            view.setFrame(page_rect(0.0, 0.0));
+            view.setFrame(rect(0.0, 0.0, PAPER));
         }
         let delegate_obj: &AnyObject = delegate.as_ref();
         unsafe {
@@ -415,39 +306,5 @@ mod imp {
         // The dictionary's value type is `AnyObject`; the key is an
         // `NSPrintInfoAttributeKey` (an `NSString`, which is `NSCopying`).
         dictionary.insert(unsafe { NSPrintJobSavingURL }, url.as_ref() as &AnyObject);
-    }
-
-    /// A borderless, never-ordered window placed far offscreen, used only to give
-    /// the print web view a live view hierarchy to render through.
-    fn make_offscreen_window(mtm: MainThreadMarker) -> Retained<NSWindow> {
-        let rect = page_rect(OFFSCREEN_ORIGIN, OFFSCREEN_ORIGIN);
-        unsafe {
-            NSWindow::initWithContentRect_styleMask_backing_defer(
-                NSWindow::alloc(mtm),
-                rect,
-                NSWindowStyleMask::Borderless,
-                NSBackingStoreType::Buffered,
-                false,
-            )
-        }
-    }
-
-    fn page_rect(x: f64, y: f64) -> CGRect {
-        CGRect {
-            origin: CGPoint { x, y },
-            size: CGSize {
-                width: PAGE_WIDTH,
-                height: PAGE_HEIGHT,
-            },
-        }
-    }
-
-    /// Drop a job (load timeout), on the main thread.
-    fn cleanup(app: &AppHandle, job_id: u64) {
-        let _ = app.run_on_main_thread(move || {
-            JOBS.with(|jobs| {
-                jobs.borrow_mut().remove(&job_id);
-            });
-        });
     }
 }

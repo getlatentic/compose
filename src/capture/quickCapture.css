@@ -2,7 +2,7 @@
    which the editor reads too, so the note looks as it does in the main window. */
 
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }

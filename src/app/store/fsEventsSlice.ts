@@ -1,13 +1,9 @@
 import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
 import { showErrorToast } from "../../features/toast/toastStore";
 import { flushActiveEditor } from "../../lib/editor/editorFlush";
-import {
-  applyFileBuffer,
-  applyFsEvent,
-  applyScanResult,
-  markBufferConflict,
-  type WorkspaceFsEvent,
-} from "../workspaceModel";
+import { applyFileBuffer, applyScanResult, markBufferConflict } from "../workspace/files";
+import { applyFsEvent } from "../workspace/fsEvents";
+import type { WorkspaceFsEvent } from "../workspace/types";
 import {
   isAgentEditActive,
 } from "../agentEditWindow";

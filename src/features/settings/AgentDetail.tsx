@@ -4,7 +4,7 @@ import { ArrowLeft, ChevronDown } from "@carbon/react/icons";
 
 import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import { harnessRemoveCustom } from "../../lib/ipc/harnessClient";
+import { harnessRemoveCustom } from "../../lib/ipc/customAgentsClient";
 import { agentStatus } from "./agentStatus";
 import { AdvancedRunOptions, hasAdvancedRunOptions } from "./AdvancedRunOptions";
 import { HarnessCredentialForm, ModelSection } from "./agentConfigControls";

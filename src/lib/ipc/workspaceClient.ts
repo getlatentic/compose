@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { createWorkspaceId, normalizeWorkspacePath } from "../../app/workspaceModel";
+import { createWorkspaceId, normalizeWorkspacePath } from "../../app/workspace/workspaces";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
 
 export interface WorkspaceTabs {

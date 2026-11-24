@@ -1,0 +1,169 @@
+// "Export as image" (`features/export/ImageExportDialog.tsx`): the card's
+// live preview beside its layout, size, words and format.
+
+.image-export {
+  display: flex;
+  inline-size: min(92vw, 56rem);
+  max-block-size: calc(100vh - 4rem);
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-dialog);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  overflow: hidden;
+}
+
+.image-export__header,
+.image-export__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.image-export__header h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.image-export__footer {
+  justify-content: flex-end;
+  border-block-start: 1px solid var(--color-edge);
+}
+
+.image-export__body {
+  display: grid;
+  grid-template-columns: auto minmax(14rem, 1fr);
+  gap: 1.25rem;
+  min-block-size: 0;
+  padding: 0 1rem 1rem;
+  overflow: auto;
+}
+
+// The card drawn at its full size and scaled down to fit (inline styles).
+.image-export__preview {
+  position: relative;
+  align-self: start;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--color-edge), 0 6px 20px rgb(0 0 0 / 12%);
+  overflow: hidden;
+
+  iframe {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    border: 0;
+    transform-origin: 0 0;
+    pointer-events: none;
+  }
+}
+
+.image-export__placeholder {
+  display: grid;
+  block-size: 100%;
+  margin: 0;
+  place-items: center;
+  color: var(--color-text-tertiary);
+  font-size: 0.8125rem;
+}
+
+.image-export__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.image-export__control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+
+  > span {
+    color: var(--color-text-secondary);
+    font-weight: 600;
+  }
+
+  input,
+  textarea,
+  select {
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-default);
+    color: var(--color-text-primary);
+    font: inherit;
+    font-size: 0.8125rem;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+}
+
+.image-export__primary,
+.image-export__secondary {
+  padding: 0.375rem 0.875rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.image-export__primary {
+  background: var(--system-accent);
+  color: var(--system-accent-text);
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+.image-export__secondary {
+  background: var(--state-hover);
+  color: var(--color-text-primary);
+}
+
+.image-export__share {
+  display: flex;
+  gap: 0.5rem;
+  margin-inline-end: auto;
+}
+
+.image-export__check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.image-export__colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin-block-start: 0.375rem;
+}
+
+.image-export__swatch {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 18%, transparent);
+  border-radius: 50%;
+  cursor: default;
+
+  &[aria-pressed="true"] {
+    box-shadow: 0 0 0 2px var(--color-surface-raised), 0 0 0 4px var(--system-accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+  }
+}

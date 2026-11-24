@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+
+import { isTauriRuntime, requireDesktop } from "../runtime/desktopRuntime";
 import { listen } from "@tauri-apps/api/event";
 
 /**
@@ -15,11 +17,13 @@ export interface ClipboardHistoryStatus {
 
 /** Whether Compose keeps what the user copies, and whether macOS lets it read. */
 export async function clipboardHistoryStatus(): Promise<ClipboardHistoryStatus> {
+  if (!isTauriRuntime()) return { enabled: false, access: "denied" };
   const { enabled, access } = await invoke<ClipboardHistoryStatus>("clipboard_history", { query: "" });
   return { enabled, access };
 }
 
 export async function setClipboardHistoryEnabled(enabled: boolean): Promise<boolean> {
+  requireDesktop("Clipboard history");
   return invoke<boolean>("clipboard_set_enabled", { enabled });
 }
 
@@ -30,10 +34,12 @@ export function onClipboardHistoryChanged(callback: () => void): Promise<() => v
 
 /** Forget every copy but the pinned ones. */
 export async function clearClipboardHistory(): Promise<void> {
+  requireDesktop("Clipboard history");
   await invoke("clipboard_clear");
 }
 
 /** Open the macOS setting that lets Compose read what other apps copy. */
 export async function openClipboardPrivacySettings(): Promise<void> {
+  requireDesktop("Clipboard history");
   await invoke("clipboard_privacy_settings");
 }

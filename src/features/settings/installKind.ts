@@ -1,4 +1,4 @@
-import type { InstallKind } from "../../lib/ipc/harnessClient";
+import type { InstallKind } from "../../lib/ipc/harnessCatalogClient";
 
 /** Presentation for an install-kind badge: a short label, a Carbon Tag tone, and
  *  a one-line plain-English note on what the kind means for staying current. */

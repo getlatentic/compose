@@ -10,7 +10,6 @@ import { useConfirm } from "../dialogs/ConfirmProvider";
 import { FileTree } from "../file-tree/FileTree";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { SidebarChatList } from "../chat/SidebarChatList";
-import { ActiveFileProperties } from "./ActiveFilePanels";
 import { ExternalFilesSection } from "./ExternalFilesSection";
 import { PaneSplitter } from "./PaneSplitter";
 import { NewMenu } from "./NewMenu";
@@ -33,13 +32,11 @@ export const MAC_TRAFFIC_LIGHTS_INSET = 78;
  * Layout, top → bottom:
  *   1. **Titlebar row** (40px, drag region): traffic-light spacer + sidebar
  *      collapse toggle (PanelLeft) + back/forward chevrons (browser-style).
- *   2. **Workspace switcher** (the existing {@link WorkspaceMenu} dropdown,
- *      now with "Open in new window").
- *   3. **Notes/Chat tabs** + a context-aware "New" button.
- *   4. **Tab body** — file tree + properties (Notes) or conversation list
- *      (Chat). Search moved OUT of the sidebar to a footer popover; the
- *      INDEX section is gone.
- *   5. **Footer** (pinned): "X notes" counter + Search + Settings icons.
+ *   2. **Workspace switcher** ({@link WorkspaceMenu}) and the "Search notes"
+ *      field, which opens the search popover.
+ *   3. **Notes/Chat tabs**.
+ *   4. **Tab body** — the file tree (Notes) or the conversation list (Chat).
+ *   5. **Footer** (pinned): "X notes" counter, Settings, and the + menu.
  *
  * When `sidebarCollapsed` is true, the whole sidebar is removed from the
  * layout (the editor's tab strip then owns the traffic-lights inset and shows
@@ -140,6 +137,7 @@ export function WorkspaceSidebar() {
   // Shared with the File menu's ⌘N / ⌘⇧N, so the two cannot drift apart.
   const { newNote: handleNewNote, newFolder: handleNewFolder } = useNewItemActions();
   const handleNewChat = useCallback(() => void newChat(), [newChat]);
+  const handleOpenSearch = useCallback(() => openSearch(), [openSearch]);
 
   if (sidebarCollapsed) {
     return null;
@@ -172,6 +170,19 @@ export function WorkspaceSidebar() {
       </div>
 
       <WorkspaceMenu />
+      <button
+        type="button"
+        className="sidebar-search"
+        onClick={handleOpenSearch}
+        disabled={!hasWorkspace}
+        aria-label="Search notes"
+      >
+        <Search size={16} strokeWidth={1.5} aria-hidden />
+        <span className="sidebar-search__label">Search notes</span>
+        <span className="sidebar-search__shortcut" aria-hidden>
+          ⌘⇧F
+        </span>
+      </button>
 
       <div className="sidebar-tabs" role="tablist" aria-label="Sidebar">
         <button
@@ -202,13 +213,6 @@ export function WorkspaceSidebar() {
         >
           Chat
         </button>
-        <NewMenu
-          tab={sidebarTab}
-          disabled={!hasWorkspace}
-          onNewNote={handleNewNote}
-          onNewFolder={handleNewFolder}
-          onNewChat={handleNewChat}
-        />
       </div>
 
       {/* Both panes stay mounted; visibility flips via the `hidden` attribute.
@@ -242,22 +246,19 @@ export function WorkspaceSidebar() {
           <button
             type="button"
             className="sidebar-footer__btn"
-            onClick={() => openSearch()}
-            disabled={!hasWorkspace}
-            aria-label="Search workspace"
-            title="Search"
-          >
-            <Search size={16} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="sidebar-footer__btn"
             onClick={() => openSettings()}
             aria-label="Open settings"
             title="Settings"
           >
             <Settings size={16} aria-hidden />
           </button>
+          <NewMenu
+            tab={sidebarTab}
+            disabled={!hasWorkspace}
+            onNewNote={handleNewNote}
+            onNewFolder={handleNewFolder}
+            onNewChat={handleNewChat}
+          />
         </div>
       </div>
     </aside>
@@ -265,18 +266,11 @@ export function WorkspaceSidebar() {
 }
 
 /**
- * The Files tab body: the file tree and the active file's Properties
- * (frontmatter) editor. Search moved to the footer popover — the INDEX section
- * is gone from here.
- */
-/**
  * Memoised on FILE-ONLY props (`files`, `activeFilePath`, callbacks) — all
  * stable across content edits and the autosave index rebuild. So a keystroke no
  * longer re-renders the files pane. The unsaved-dot is NOT read here — each row
  * self-subscribes via `FileRowDirtyDot`, so a dirty flip re-renders only that
- * one dot, not this pane or the file tree. The active file's frontmatter
- * renders via its own self-subscribing component (ActiveFileProperties),
- * isolated from the file list.
+ * one dot, not this pane or the file tree.
  */
 const FilesTab = memo(function FilesTab({
   onSelectFile,
@@ -330,7 +324,6 @@ const FilesTab = memo(function FilesTab({
             />
           </div>
 
-          <ActiveFileProperties />
         </>
       )}
     </div>

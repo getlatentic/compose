@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ancestorFolders } from "./FileTree";
+import { ancestorFolders } from "./treeModel";
 
 describe("ancestorFolders", () => {
   it("lists the folders leading to a file, outermost first", () => {
