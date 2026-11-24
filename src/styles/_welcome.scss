@@ -1,0 +1,113 @@
+// The empty states and the welcome screen.
+
+.empty-state {
+  display: grid;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  place-items: center;
+  padding: var(--cds-spacing-06, 1.5rem);
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  text-align: center;
+}
+
+// "Loading file…" shown while a file's buffer is read from disk. It reveals only
+// after a beat — the zero-duration `empty-state-reveal` with a 150ms delay — so a
+// warm read swaps in the editor before it paints, and only a slow/cold-iCloud
+// read ever shows the text.
+.empty-state--loading {
+  opacity: 0;
+  animation: empty-state-reveal 0s linear 150ms forwards;
+}
+
+@keyframes empty-state-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Empty-folder welcome — the first-run landing in the editor area. */
+.welcome {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 0;
+  padding: 2rem;
+}
+
+.welcome__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.875rem;
+  max-inline-size: 22rem;
+  text-align: center;
+}
+
+.welcome__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: 0.75rem;
+  // The dark brand tile the cyan ComposeMark glyph is designed to sit on.
+  background: var(--brand-mark-bg, #0f1419);
+}
+
+.welcome__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--cds-text-primary);
+}
+
+.welcome__lead {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--cds-text-secondary);
+}
+
+.welcome__actions {
+  display: flex;
+  // Stacked full-width rows (Guided), not a horizontal row that wraps a label
+  // onto two lines on a narrow editor.
+  flex-direction: column;
+  gap: 0.5rem;
+  inline-size: 100%;
+  margin-block-start: 0.5rem;
+}
+
+.welcome__action {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  min-block-size: 2.5rem;
+  padding-inline: 0.875rem;
+  border: 1px solid var(--cds-border-strong-01);
+  border-radius: 4px;
+  background: var(--cds-layer-01);
+  color: var(--cds-text-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-align: start;
+  cursor: pointer;
+}
+
+.welcome__action:hover {
+  background: var(--cds-layer-hover-01);
+}
+
+.welcome__action--primary {
+  border-color: var(--cds-button-primary);
+  background: var(--cds-button-primary);
+  color: var(--cds-text-on-color);
+}
+
+.welcome__action--primary:hover {
+  background: var(--cds-button-primary-hover);
+}

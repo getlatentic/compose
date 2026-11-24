@@ -11,7 +11,7 @@ import {
   supportsPermissionMode,
   type HarnessPrefs,
 } from "./harnessConfig";
-import type { HarnessCapabilities, HarnessInfo } from "../../lib/ipc/harnessClient";
+import type { HarnessCapabilities, HarnessInfo } from "../../lib/ipc/harnessCatalogClient";
 
 function caps(over: Partial<HarnessCapabilities> = {}): HarnessCapabilities {
   return {

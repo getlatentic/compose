@@ -1,4 +1,4 @@
-import type { Workspace } from "../workspaceModel";
+import type { Workspace } from "../workspace/types";
 
 /**
  * Find the active workspace from store state.

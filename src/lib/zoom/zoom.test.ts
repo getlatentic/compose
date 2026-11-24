@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_ZOOM,
+  remInPx,
   ZOOM_STEPS,
   applyZoom,
   clampZoom,
@@ -94,5 +95,17 @@ describe("applyZoom", () => {
     expect(root.style.getPropertyValue("--ui-zoom")).toBe(
       String(ZOOM_STEPS[ZOOM_STEPS.length - 1]),
     );
+  });
+});
+
+describe("remInPx", () => {
+  it("scales the system text size by the zoom, whatever zoom is applied now", () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    root.style.fontSize = "20px";
+    root.style.setProperty("--ui-zoom", "1.25");
+    expect(remInPx(1.25, root)).toBeCloseTo(20);
+    expect(remInPx(1.5, root)).toBeCloseTo(24);
+    root.remove();
   });
 });

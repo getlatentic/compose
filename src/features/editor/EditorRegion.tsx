@@ -16,7 +16,7 @@ import {
   selectFocusedWorkspace,
   selectLooseWorkspace,
 } from "../../app/store/activeWorkspace";
-import { isActiveFilePresent, resolveOpenTabs } from "../../app/workspaceModel";
+import { isActiveFilePresent, resolveOpenTabs } from "../../app/workspace/tabs";
 import { flushActiveEditor } from "../../lib/editor/editorFlush";
 import { useWindowDrag } from "../../lib/runtime/useWindowDrag";
 import { ActiveDocument } from "./ActiveDocument";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTree } from "./FileTree";
+import { buildTree } from "./treeModel";
 import type { WorkspaceFileEntry } from "./fileTreeTypes";
 
 function file(relativePath: string): WorkspaceFileEntry {

@@ -1,6 +1,6 @@
 import { CheckmarkFilled, ErrorFilled, InProgress } from "@carbon/react/icons";
 
-import type { TraceEntry, WorkspaceToolCall } from "../../app/workspaceModel";
+import type { TraceEntry, WorkspaceToolCall } from "../../app/workspace/types";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { toolName } from "./toolLabels";
 

@@ -1,0 +1,239 @@
+// Settings → Appearance and → Editor (`features/settings/appearance/`,
+// `features/settings/editor/`).
+//
+// A theme swatch sets `data-palette` on itself, so it reads `--color-*`
+// directly; the `--cds-*` aliases would carry the window's palette, resolved
+// at the root, into a swatch that should show another.
+
+.appearance-settings {
+  display: grid;
+  gap: 2.5rem;
+  padding: 1.5rem 2rem 3rem;
+}
+
+.appearance-settings__group {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+
+  h3 {
+    margin: 0;
+    color: var(--color-text-primary);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    letter-spacing: -0.01em;
+  }
+
+  h3 + .settings-helper {
+    margin-block-start: -0.5rem;
+  }
+}
+
+.appearance-settings__row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-block-start: 0.25rem;
+}
+
+.appearance-settings__row-label {
+  min-inline-size: 5rem;
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+}
+
+// ── Theme swatch, in the theme picker ──────────────────────────────────────────
+// A tiny page in the theme's own colours: sidebar, page and accent rule. It
+// sets `data-palette` on itself, so it reads that theme's `--color-*`.
+
+.theme-swatch {
+  display: inline-flex;
+  flex: none;
+  inline-size: 1.75rem;
+  block-size: 1.125rem;
+  border-radius: 4px;
+  box-shadow: 0 0 0 0.5px var(--color-edge);
+  overflow: hidden;
+}
+
+.theme-swatch__side {
+  inline-size: 30%;
+  background: var(--color-sidebar-bg);
+}
+
+.theme-swatch__page {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  padding-inline: 3px;
+  background: var(--color-bg-app);
+}
+
+.theme-swatch__rule {
+  flex: 1;
+  block-size: 2px;
+  border-radius: 1px;
+  background: var(--color-rule);
+}
+
+// ── Preview ───────────────────────────────────────────────────────────────────
+
+.editor-preview {
+  inline-size: 100%;
+  margin: 0;
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-app);
+  box-shadow: var(--shadow-panel);
+}
+
+.editor-preview__heading {
+  margin: 0 0 0.5rem;
+  color: var(--color-doc-heading);
+  font-family: var(--reading-family-heading);
+  font-size: var(--reading-size-h3);
+  font-weight: var(--reading-weight-heading);
+  line-height: var(--reading-line-h3);
+}
+
+.editor-preview__body {
+  margin: 0;
+  max-inline-size: 68ch;
+  color: var(--color-doc-text);
+  font-family: var(--reading-family-body);
+  font-size: var(--reading-size-body);
+  line-height: var(--reading-line-body);
+}
+
+// ── Zoom ──────────────────────────────────────────────────────────────────────
+
+.zoom-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-default);
+}
+
+.stepper__step {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stepper__step:hover:not(:disabled) {
+  background: var(--state-hover);
+}
+
+.stepper__step:disabled {
+  color: var(--cds-icon-disabled);
+  cursor: not-allowed;
+}
+
+.stepper__step:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.stepper__value {
+  min-inline-size: 3rem;
+  padding-inline: 0.25rem;
+  border-inline: 1px solid var(--color-border-default);
+  color: var(--color-text-primary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.75rem;
+  text-align: center;
+}
+
+.appearance-settings__heading-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.appearance-settings__reset {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+
+  &:disabled {
+    color: var(--color-text-tertiary);
+    cursor: default;
+  }
+}
+
+// Background: the colour well and its hex, the image button, the soften slider.
+.color-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  input[type="color"] {
+    inline-size: 2rem;
+    block-size: 1.5rem;
+    padding: 0;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-sm);
+    background: none;
+  }
+}
+
+.color-field__hex {
+  inline-size: 5.5rem;
+  block-size: 1.5rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-default);
+  color: var(--color-text-primary);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: -1px;
+  }
+}
+
+.note-bg__choose {
+  margin-inline-end: 0.75rem;
+  padding: 4px 12px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-default);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.note-bg__dim {
+  inline-size: 12rem;
+  accent-color: var(--system-accent);
+}
+
+.note-bg__error {
+  color: var(--color-danger-text);
+}

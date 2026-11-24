@@ -1,7 +1,7 @@
 import { Button } from "@carbon/react";
 import { useCallback, useState } from "react";
 
-import type { InstallHint } from "../../lib/ipc/harnessClient";
+import type { InstallHint } from "../../lib/ipc/harnessCatalogClient";
 
 /**
  * What to show for an agent that isn't on this machine.

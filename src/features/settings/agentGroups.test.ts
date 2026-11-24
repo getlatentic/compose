@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { HarnessInfo } from "../../lib/ipc/harnessClient";
+import type { HarnessInfo } from "../../lib/ipc/harnessCatalogClient";
 import { groupAgents, isBuiltInProvider, isLocalProvider, selectionLabel } from "./agentGroups";
 
 /** A catalog entry as the backend emits it: the classification is a field, and

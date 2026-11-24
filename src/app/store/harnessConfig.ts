@@ -1,8 +1,5 @@
-import {
-  type EditGuard,
-  type HarnessCapabilities,
-  type HarnessInfo,
-} from "../../lib/ipc/harnessClient";
+import type { EditGuard } from "../../lib/ipc/harnessRunClient";
+import type { HarnessCapabilities, HarnessInfo } from "../../lib/ipc/harnessCatalogClient";
 import type { HarnessRunOptions } from "./types";
 
 /** Where the prefs live. Exported so a test can seed a malformed entry — and
@@ -121,6 +118,11 @@ export function persistHarnessPrefs(prefs: HarnessPrefs) {
  */
 export function inlinesFileContent(catalog: HarnessInfo[], harnessId: string): boolean {
   return catalog.find((entry) => entry.id === harnessId)?.provider != null;
+}
+
+/** The agent's name as the chat shows it, e.g. "Claude Code". */
+export function harnessDisplayName(catalog: HarnessInfo[], harnessId: string | null): string {
+  return catalog.find((entry) => entry.id === harnessId)?.displayName ?? "Assistant";
 }
 
 export function harnessCapabilitiesOf(

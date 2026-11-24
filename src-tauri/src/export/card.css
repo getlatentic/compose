@@ -1,0 +1,46 @@
+/* The card's rules. Sizes are multiples of --u, a hundredth of the card's
+   shorter side, so every size keeps the same look; the colours and fonts
+   come in as custom properties from card.rs. */
+
+* { box-sizing: border-box; margin: 0; }
+html, body { width: var(--card-width); height: var(--card-height); overflow: hidden; }
+body { background-color: var(--card-bg); color: var(--card-ink); -webkit-font-smoothing: antialiased; }
+
+.card { position: absolute; inset: 0; display: flex; flex-direction: column; padding: calc(var(--u) * 7); }
+.spacer { flex: 1; }
+
+.eyebrow { font-family: system-ui, -apple-system, sans-serif; font-weight: 700; font-size: calc(var(--u) * 2.4); letter-spacing: 0.08em; text-transform: uppercase; }
+.rule { height: var(--rule-width); background: var(--card-rule); margin: calc(var(--u) * 2.6) 0 calc(var(--u) * 7); }
+.title { font-family: var(--body); font-weight: 700; font-size: calc(var(--u) * 9); line-height: 1.12; letter-spacing: -0.01em; }
+.author { font-family: var(--body); font-size: calc(var(--u) * 3.4); color: var(--card-muted); margin-top: calc(var(--u) * 2.6); }
+.short-rule { width: 22%; height: var(--rule-width); background: var(--card-rule); margin-bottom: calc(var(--u) * 2.6); }
+.subtitle { font-family: var(--body); font-style: italic; font-size: calc(var(--u) * 3.4); color: var(--card-muted); }
+.date { font-family: system-ui, -apple-system, sans-serif; font-size: calc(var(--u) * 2.2); color: var(--card-muted); margin-top: calc(var(--u) * 2.6); }
+
+.quote-mark { font-family: var(--body); font-size: calc(var(--u) * 16); line-height: 0.8; color: var(--card-rule); }
+.quote { font-family: var(--body); font-size: calc(var(--u) * 5.6); line-height: 1.3; }
+.credit { font-family: system-ui, -apple-system, sans-serif; font-size: calc(var(--u) * 2.2); color: var(--card-muted); letter-spacing: 0.04em; margin-top: calc(var(--u) * 2.6); }
+
+/* A page card scales its text by --fit, which the fit script sets. */
+.page { --fit: 1; --gap: calc(var(--u) * 2.6 * var(--fit)); --body-size: calc(var(--u) * 2.9 * var(--fit)); flex: 1; min-height: 0; overflow: hidden; }
+.page.overflowing { -webkit-mask-image: linear-gradient(#000 85%, transparent); }
+.page h1, .page h2, .page h3, .page h4 { font-family: var(--heading); line-height: 1.2; margin: 0 0 var(--gap); }
+.page h1 { font-size: calc(var(--u) * 5.4 * var(--fit)); }
+.page h2 { font-size: calc(var(--u) * 4.2 * var(--fit)); }
+.page h3, .page h4 { font-size: calc(var(--u) * 3.4 * var(--fit)); }
+.page p, .page li, .page blockquote, .page td, .page th { font-family: var(--body); font-size: var(--body-size); line-height: 1.5; margin: 0 0 var(--gap); }
+.page ul, .page ol { margin: 0 0 var(--gap); padding-left: calc(var(--body-size) * 1.8); }
+.page li > p { margin: 0; }
+.page ul.contains-task-list { list-style: none; padding-left: 0; }
+.page .task-list-item { display: flex; align-items: baseline; gap: 0.55em; }
+/* A form control does not take the text's size unless told to. */
+.page .task-list-item input { -webkit-appearance: none; appearance: none; font-size: inherit; flex: none; width: 0.85em; height: 0.85em; margin: 0; position: relative; top: 0.1em; border: max(2px, 0.09em) solid var(--card-ink); border-radius: 0.2em; }
+.page .task-list-item input:checked { background: var(--card-ink); }
+.page .task-list-item input:checked::after { content: ""; position: absolute; left: 0.24em; top: 0.06em; width: 0.2em; height: 0.42em; border: solid var(--card-bg); border-width: 0 0.1em 0.1em 0; transform: rotate(45deg); }
+.page img { display: block; max-width: 100%; max-height: 60%; margin: 0 0 var(--gap); border-radius: 0.3em; }
+.page blockquote { padding-left: 0.8em; border-left: var(--rule-width) solid var(--card-rule); color: var(--card-muted); }
+.page code { font-family: var(--code); font-size: 0.88em; }
+.page pre { font-family: var(--code); font-size: calc(var(--u) * 2.4 * var(--fit)); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 var(--gap); padding: 0.8em 1em; border-radius: 0.4em; background: color-mix(in srgb, var(--card-ink) 6%, transparent); }
+.page pre code { font-size: 1em; }
+
+.mark { position: absolute; right: calc(var(--u) * 7); bottom: calc(var(--u) * 3.85); font-family: system-ui, -apple-system, sans-serif; font-weight: 600; font-size: calc(var(--u) * 1.9); letter-spacing: 0.02em; color: var(--card-muted); opacity: 0.75; }

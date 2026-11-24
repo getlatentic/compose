@@ -1,16 +1,6 @@
 import { create } from "zustand";
-import {
-  harnessList,
-  harnessListModels,
-  harnessModelManagement,
-  harnessReadiness,
-  ollamaInstalled,
-  startOllama,
-  type HarnessInfo,
-  type HarnessModel,
-  type HarnessModelManagement,
-  type HarnessReadiness,
-} from "../../lib/ipc/harnessClient";
+import { harnessList, harnessReadiness, type HarnessInfo, type HarnessReadiness } from "../../lib/ipc/harnessCatalogClient";
+import { harnessListModels, harnessModelManagement, ollamaInstalled, startOllama, type HarnessModel, type HarnessModelManagement } from "../../lib/ipc/harnessModelsClient";
 import { persistHarnessPrefs } from "./harnessConfig";
 import { INITIAL_HARNESS_PREFS } from "./initialPrefs";
 import type { HarnessRunOptions } from "./types";

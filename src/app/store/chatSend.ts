@@ -14,15 +14,9 @@ import {
   appendLlmMessage,
   recordLlmThread,
 } from "../../lib/ipc/llmContextClient";
-import {
-  appendUserChatMessage,
-  createLlmContextSnapshots,
-  createPromptWithContext,
-  finalizeRun,
-  missingFileContextPaths,
-  startRun,
-  type FinalizeRunOptions,
-} from "../workspaceModel";
+import { appendUserChatMessage, finalizeRun, startRun, type FinalizeRunOptions } from "../workspace/chatRun";
+import { createLlmContextSnapshots, missingFileContextPaths } from "../workspace/chatContext";
+import { createPromptWithContext } from "../workspace/prompt";
 import {
   beginAgentEditWindow,
   endAgentEditWindow,
@@ -30,6 +24,7 @@ import {
 import {
   editGuardFor,
   harnessCapabilitiesOf,
+  harnessDisplayName,
   inlinesFileContent,
   harnessExtraArgs,
 } from "./harnessConfig";
@@ -38,9 +33,8 @@ import {
   prefixWorkspaceContext,
   updateWorkspace,
 } from "./internals";
-import {
-  finishReviewRun,
-} from "./reviewFlow";
+import { reviewFeedbackFor, withReviewFeedback } from "../../features/review/reviewFeedback";
+import { startReviewRun } from "./reviewRun";
 import {
 } from "../../lib/ipc/conversationsClient";
 import {
@@ -52,11 +46,8 @@ import {
 import {
   playCompletionChime,
 } from "../../lib/audio/completionChime";
-import {
-  harnessCredentialStatus,
-  runHarnessStream,
-  subscribeHarnessRun,
-} from "../../lib/ipc/harnessClient";
+import { harnessCredentialStatus } from "../../lib/ipc/harnessSetupClient";
+import { runHarnessStream, subscribeHarnessRun } from "../../lib/ipc/harnessRunClient";
 import {
   spillChatInputForPrompt,
 } from "./chatInputSpill";
@@ -191,8 +182,11 @@ export async function runSendChatPrompt(
   // `thread` is the pre-append snapshot, so `thread.messages` are the
   // *prior* turns — replay them into the prompt for harness-neutral
   // continuity (the agent "remembers" the conversation). Trace excluded.
+  // What the writer undid or rejected since the agent's last turn, so it
+  // doesn't read its missing edit as its own mistake and make it again.
+  const reviewFeedback = reviewFeedbackFor(thread);
   const promptWithContext = createPromptWithContext(
-    sentUserMessage,
+    withReviewFeedback(sentUserMessage, reviewFeedback),
     thread.contextItems,
     thread.messages,
     fileContextContent,
@@ -296,7 +290,7 @@ export async function runSendChatPrompt(
           ? { ...message, llmThreadId: llmThreadId ?? undefined }
           : message,
       );
-      return startRun({ ...current, messages }, runId, llmThreadId);
+      return startRun({ ...current, messages }, runId, llmThreadId, harnessDisplayName(harnessCatalog, harnessId));
     });
 
     // Resolve the run's capabilities + tuning + edit-review mode up front so
@@ -308,6 +302,14 @@ export async function runSendChatPrompt(
     // so a read-only ask can't write, whatever the global Auto-apply toggle is.
     const allowEdits = options?.readOnly ? false : useHarnessStore.getState().allowEdits;
     const editGuard = editGuardFor(capabilities, allowEdits, useHarnessStore.getState().reviewEdits);
+    const review = await startReviewRun({
+      set,
+      get,
+      workspace: get().workspaces.find((item) => item.id === workspaceId) ?? workspace,
+      runId,
+      editGuard,
+      feedback: reviewFeedback,
+    });
 
     // Snapshot mode edits the user's real files mid-run; open the agent-edit
     // window so the file watcher attributes those changes to this run (and
@@ -325,7 +327,7 @@ export async function runSendChatPrompt(
         if (!cancelled && useUiStore.getState().soundOnComplete) {
           void playCompletionChime();
         }
-        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
+        review.finished(cancelled);
       });
     });
     activeRunSubscriptions.set(runId, releaseSubscription);
@@ -351,6 +353,7 @@ export async function runSendChatPrompt(
         promptWithContext,
         viewingLoose ? undefined : workspace.path,
         focused?.activeFilePath ?? workspace.activeFilePath,
+        editGuard,
       ),
       runId,
       workspaceId,
@@ -359,10 +362,12 @@ export async function runSendChatPrompt(
       effort: tuning.effort,
       maxTurns: tuning.maxTurns,
       editGuard,
+      sandboxFiles: review.sandboxFiles,
       extraArgs: harnessExtraArgs(harnessId, tuning),
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
       binaryPath: tuning.binaryPath,
     });
+    review.sent();
   } catch (error) {
     const message = formatHarnessError(error);
     const currentThread =

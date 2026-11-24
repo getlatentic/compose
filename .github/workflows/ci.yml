@@ -44,6 +44,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Stylesheet lint
+        run: pnpm lint:css
+
       - name: Frontend tests
         run: pnpm test
 

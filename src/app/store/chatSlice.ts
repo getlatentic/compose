@@ -1,21 +1,14 @@
 import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
 import { showErrorToast } from "../../features/toast/toastStore";
-import {
-  acceptWorkspaceSuggestion,
-  addFileContextItem,
-  appendUserChatMessage,
-  finalizeRun,
-  rejectWorkspaceSuggestion,
-  removeContextItem,
-} from "../workspaceModel";
+import { acceptWorkspaceSuggestion, rejectWorkspaceSuggestion } from "../workspace/suggestions";
+import { addFileContextItem, removeContextItem } from "../workspace/chatContext";
+import { appendUserChatMessage, finalizeRun } from "../workspace/chatRun";
 import {
   applyFileReviewChange,
   findWorkspaceSuggestion,
   maybeCleanupReview,
 } from "./reviewFlow";
-import {
-  cancelHarnessRun as cancelHarnessRunIpc,
-} from "../../lib/ipc/harnessClient";
+import { cancelHarnessRun as cancelHarnessRunIpc } from "../../lib/ipc/harnessRunClient";
 import {
   updateWorkspace,
 } from "./internals";

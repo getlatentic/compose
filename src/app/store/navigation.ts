@@ -1,5 +1,5 @@
 import type { NavEntry, WorkspaceStoreGet } from "./types";
-import { LOOSE_WORKSPACE_ID } from "../workspaceModel";
+import { LOOSE_WORKSPACE_ID } from "../workspace/workspaces";
 
 /**
  * When true, `pushNavEntry` short-circuits — used by `navigateBack` /

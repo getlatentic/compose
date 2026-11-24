@@ -100,7 +100,7 @@ add it to `PositionMapper`, not to a caller.
   call. See `createCommentThread` (which takes a shared `PositionMapper`)
   in [commentModel.ts](../src/features/comments/commentModel.ts) and
   `prepareWorkspaceSuggestionDrafts` in
-  [src/app/workspaceModel.ts](../src/app/workspaceModel.ts) for the
+  [src/app/workspace/suggestions.ts](../src/app/workspace/suggestions.ts) for the
   pattern (one mapper per file, threaded through).
 - `PositionMapper` construction is O(n) once; every lookup is then
   O(log n) chunk search + bounded intra-chunk walk. The chunk index is

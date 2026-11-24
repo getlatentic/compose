@@ -1,12 +1,12 @@
-import { OverflowMenu, OverflowMenuItem } from "@carbon/react";
 import {
-  ChevronDown,
   History,
   MessageSquareText,
   PanelRight,
   Save,
 } from "lucide-react";
 import type { ReactNode } from "react";
+
+import { ExportMenu, type DocumentExportFormat } from "./ExportMenu";
 
 /**
  * The current-file actions, right-aligned in the editor toolbar so they share
@@ -27,7 +27,7 @@ import type { ReactNode } from "react";
  * Fed stable callbacks (the editor is memoized — see TiptapMarkdownEditor), so
  * this never re-renders on a keystroke.
  */
-export type DocumentExportFormat = "markdown" | "html" | "pdf";
+export type { DocumentExportFormat };
 
 const ICON_SIZE = 16;
 
@@ -87,26 +87,7 @@ export function EditorFileActions({
           icon={<History size={ICON_SIZE} />}
         />
       ) : null}
-      <OverflowMenu
-        aria-label="Export"
-        size="sm"
-        flipped
-        align="bottom"
-        className="tiptap-toolbar__export"
-        iconDescription="Export"
-        renderIcon={() => (
-          <span className="tiptap-toolbar__export-label">
-            Export
-            <ChevronDown size={14} aria-hidden />
-          </span>
-        )}
-      >
-        {markdownExport ? (
-          <OverflowMenuItem itemText="Markdown (.md)" onClick={() => onExport("markdown")} />
-        ) : null}
-        <OverflowMenuItem itemText="HTML (.html)" onClick={() => onExport("html")} />
-        <OverflowMenuItem itemText="PDF (.pdf)" onClick={() => onExport("pdf")} />
-      </OverflowMenu>
+      <ExportMenu onExport={onExport} markdownExport={markdownExport} />
       {onToggleComments ? (
         <FileButton
           label={commentsLabel}

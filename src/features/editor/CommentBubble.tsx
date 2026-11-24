@@ -5,9 +5,12 @@ import { harnessCapabilitiesOf } from "../../app/workspaceStore";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
 import type { SourceRange } from "../comments/commentModel";
+import { activeEditorView } from "./editorChrome";
+import { SelectionFormatButtons } from "./SelectionFormatButtons";
 
 /**
- * Selection-anchored comment trigger — what you see when you highlight text.
+ * The bar over selected text: inline formats (when the editor is live) and
+ * the comment trigger.
  *
  * A comment is a note on the highlighted passage. You don't pre-pick "edit" vs
  * "ask": you write the note and the assistant decides (answer or edit) from it.
@@ -42,6 +45,9 @@ export interface CommentBubbleProps {
 }
 
 const BUBBLE_OFFSET = 6;
+const BAR_HEIGHT = 38;
+const BAR_HALF_WIDTH = 150;
+const BAR_MIN_TOP = 56;
 const COMPOSER_WIDTH = 360;
 const COMPOSER_HEIGHT_ESTIMATE = 220;
 
@@ -187,6 +193,7 @@ export function CommentBubble({
 }: CommentBubbleProps) {
   const [composing, setComposing] = useState(false);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const view = activeEditorView.use();
 
   // Recompute the anchor rect when the editor selection changes.
   useEffect(() => {
@@ -214,10 +221,12 @@ export function CommentBubble({
   if (!anchorRect || !selection) return null;
   if (typeof document === "undefined") return null;
 
-  // ---------- Pill: a single "Comment" trigger ----------
+  // ---------- Bar: inline formats and the "Comment" trigger ----------
+  // Centred above the selection, kept clear of the window's edges.
   if (!composing) {
-    const top = anchorRect.top - 36;
-    const left = anchorRect.right + BUBBLE_OFFSET;
+    const top = Math.max(BAR_MIN_TOP, anchorRect.top - BAR_HEIGHT - BUBBLE_OFFSET);
+    const centre = anchorRect.left + anchorRect.width / 2;
+    const left = Math.min(Math.max(centre, BAR_HALF_WIDTH), window.innerWidth - BAR_HALF_WIDTH);
     return createPortal(
       <div
         className="selection-actions"
@@ -225,6 +234,7 @@ export function CommentBubble({
         aria-label="Actions for selection"
         style={{ top, left }}
       >
+        {view ? <SelectionFormatButtons view={view} /> : null}
         <button
           type="button"
           className="selection-actions__button selection-actions__button--ask"

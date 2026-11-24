@@ -6,7 +6,7 @@ import {
   type HarnessRunOptions,
 } from "../../app/workspaceStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import type { HarnessInfo } from "../../lib/ipc/harnessClient";
+import type { HarnessInfo } from "../../lib/ipc/harnessCatalogClient";
 
 /** Reasoning-effort levels (Codex's `model_reasoning_effort`). Neutral presets —
  *  whether an agent honors them is decided by its `effort` capability. */

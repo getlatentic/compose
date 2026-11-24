@@ -1,0 +1,320 @@
+//! Starting Compose: the state and plugins the app is built with, the work
+//! its setup hook does once the app exists, and what it does on the events
+//! the run loop delivers.
+
+use tauri::{App, AppHandle, Emitter, Manager, RunEvent, Wry};
+
+use crate::open_with::PendingOpenUrls;
+use crate::{
+    app_group, autocorrect, boot_native_mark, capture, clipboard, data_reset, db, deep_link, external,
+    files, harness, index, logging, login_item, main_window, menu, open_with, paged, profile_migration, review, services,
+    share_inbox, spotlight, stale_state, user_tool_dirs, workspace,
+};
+#[cfg(target_os = "macos")]
+use crate::clipper;
+
+/// A Tokio runtime for the analytics plugin, when the build carries its key.
+pub(crate) fn analytics_runtime() -> Option<tokio::runtime::Runtime> {
+    // The aptabase analytics plugin starts its dispatcher with `tokio::spawn` at
+    // setup (and flushes via reqwest on exit) — both need an entered Tokio
+    // runtime, which Tauri v2 doesn't provide on the main thread. When analytics
+    // is built in, hold a multi-threaded runtime entered for the app's lifetime
+    // (its worker threads run the poller); unconfigured builds skip it entirely.
+    match option_env!("COMPOSE_APTABASE_KEY") {
+        Some(key) if !key.is_empty() => Some(
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build the analytics Tokio runtime"),
+        ),
+        _ => None,
+    }
+}
+
+/// What must happen before the web view exists: a pending reset, the move of
+/// an older identity's profile, and autocorrect off.
+pub(crate) fn prepare_profile() {
+    // A "Reset all data" requested last session is applied here — before the
+    // migration below or the webview can repopulate anything — so the app comes
+    // up as a clean first-run.
+    boot_native_mark("analytics-runtime");
+    data_reset::apply_pending_reset();
+    boot_native_mark("data-reset");
+    // Before Tauri creates the webview (which would make its own empty data
+    // dirs under the new bundle id), carry a previous identity's profile
+    // forward so a rename doesn't reset the user's workspaces or settings.
+    profile_migration::migrate_legacy_profile();
+    boot_native_mark("profile-migration");
+    autocorrect::turn_off();
+}
+
+/// The app's managed state and plugins.
+pub(crate) fn builder() -> tauri::Builder<Wry> {
+    let mut builder = tauri::Builder::default()
+        .manage(workspace::WorkspaceRegistry::default())
+        .manage(db::MetadataStore::default())
+        .manage(files::watcher::WatcherManager::default())
+        .manage(harness::runner::RunnerState::default())
+        .manage(harness::model_manager::ModelPullState::default())
+        .manage(review::ReviewSessionStore::default())
+        .manage(index::WorkspaceIndexStore::default())
+        .manage(external::ExternalFilesRegistry::default())
+        .manage(paged::PagedDocuments::default())
+        .manage(PendingOpenUrls::default())
+        .manage(services::PendingServiceText::default())
+        .manage(share_inbox::ShareInboxState::default())
+        .manage(clipboard::ClipboardHistory::default())
+        .manage(capture::RegisteredShortcuts::default())
+        .manage(app_group::AppGroupState::default())
+        .manage(spotlight::SpotlightState::default())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        // Self-update: check a signed manifest, download + swap the bundle, and
+        // relaunch (`tauri_plugin_process`). Inert until armed — see
+        // `plugins.updater` in tauri.conf.json (pubkey + endpoint).
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(capture::plugin());
+
+    // Anonymous active-user analytics — registered only when the build carries an
+    // Aptabase app key (COMPOSE_APTABASE_KEY, evaluated at compile time → no-op
+    // when unset). The frontend fires one `app_launched` event per launch, gated
+    // on the user's opt-out toggle; this plugin performs the (Rust-side) send.
+    if let Some(key) = option_env!("COMPOSE_APTABASE_KEY") {
+        if !key.is_empty() {
+            builder = builder.plugin(tauri_plugin_aptabase::Builder::new(key).build());
+        }
+    }
+    builder
+}
+
+/// The setup hook: open the window unless this launch has none, then bring
+/// up the stores, the extensions' feeds and the work that runs off the launch
+/// path.
+pub(crate) fn setup(app: &mut App, boot_script: String) -> Result<(), Box<dyn std::error::Error>> {
+    boot_native_mark("setup-entered");
+    boot_native_mark("setup-start");
+    let app_handle = app.handle().clone();
+    // Opened at login, or started by the shortcuts helper for the quick
+    // note, Compose starts with only the quick note: its window waits
+    // until the user comes to it. The login is asked now, while the
+    // launch's own Apple event is still the current one.
+    let quick_note = capture::requested_at_launch(std::env::args());
+    let windowless = quick_note.is_some() || login_item::launched_at_login();
+    if !windowless {
+        main_window::open_at_launch(&app_handle, boot_script);
+    }
+    install_panic_log(&app_handle);
+    route_menu_events(app);
+    init_stores(&app_handle);
+    start_extension_feeds(&app_handle);
+    start_capture(&app_handle, windowless, quick_note);
+    start_background_work(&app_handle);
+    boot_native_mark("setup-end");
+    Ok(())
+}
+
+fn install_panic_log(app_handle: &AppHandle) {
+    // Capture back-end panics into the local error log (best-effort),
+    // then chain to the default hook. Resolve the path once here so the
+    // hook needs no AppHandle.
+    if let Ok(log_path) = logging::error_log_path(app_handle) {
+        let default_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let _ = logging::append_error_line(
+                &log_path,
+                "panic",
+                &info.to_string(),
+                None,
+                logging::now_ms(),
+            );
+            default_hook(info);
+        }));
+    }
+}
+
+fn route_menu_events(app: &mut App) {
+    // File → Print (⌘P) lives on the builder menu (set at construction so
+    // there's no menu-bar flash). Here we only route its event: Print emits
+    // `menu://print`, which the editor turns into a system print-panel run.
+    // Every item the menu builds forwards as `menu://<id>`; the front
+    // end decides what each one means. Driven off the same list the
+    // menu is built from, so an item can't ship with nothing listening.
+    app.on_menu_event(|app, event| {
+        for id in menu::MENU_EVENT_IDS {
+            if event.id() == id {
+                let _ = app.emit(&format!("menu://{id}"), ());
+                return;
+            }
+        }
+    });
+}
+
+/// The registries and stores the rest of the app reads, and the agent
+/// environment (custom agents, the model cache, the tool PATH).
+fn init_stores(app_handle: &AppHandle) {
+    let registry = app_handle.state::<workspace::WorkspaceRegistry>();
+    if let Err(error) = registry.init_from_app(app_handle) {
+        eprintln!("workspace registry init failed: {error}");
+    }
+    let externals = app_handle.state::<external::ExternalFilesRegistry>();
+    if let Err(error) = externals.init_from_app(app_handle) {
+        eprintln!("external files registry init failed: {error}");
+    }
+    #[cfg(target_os = "macos")]
+    std::thread::spawn(clipper::register_for_this_app);
+    // Load user-registered custom agents before export_all (below) reads
+    // their keys. A plain JSON read, so safe inline (unlike the keychain).
+    match app_handle.path().app_config_dir() {
+        Ok(config_dir) => {
+            if let Err(error) =
+                harness::custom::custom_agent_store().init_from_dir(&config_dir)
+            {
+                eprintln!("custom-agent store init failed: {error}");
+            }
+            // The credential store only learns WHERE it lives here.
+            // Opening it reads the keychain, and this is inside `setup`,
+            // before `app.run()` — where a locked login keychain would
+            // raise a modal unlock prompt with no window behind it. It
+            // opens on first use instead, which for an agent with its
+            // own auth or none is never.
+            harness::credentials::set_config_dir(&config_dir);
+        }
+        Err(error) => eprintln!("app config dir unavailable for custom agents: {error}"),
+    }
+    // Point agent-harness's models.dev catalog cache at the app cache
+    // dir, so the model picker works offline after one online fetch.
+    if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
+        std::env::set_var("AGENT_HARNESS_CACHE_DIR", cache_dir);
+    }
+    // A Finder-launched .app inherits only the minimal launchd PATH, and
+    // the login-shell PATH query can come back without nvm (a heavy
+    // ~/.zshrc whose lazy nvm init no-ops under a stripped PATH). Add the
+    // user's toolchain dirs deterministically so an installed CLI agent
+    // resolves — a fast directory scan, so it stays on the launch path.
+    user_tool_dirs::append();
+    // Warm the harness PATH cache OFF the main thread: augmented_path
+    // runs a login-shell query (`$SHELL -lic env`) that can take ~1-2s
+    // against a heavy ~/.zshrc. Doing it here, not on the launch path, lets
+    // the window paint immediately and makes the first interaction with ANY
+    // harness fast — it's harness-neutral, not tied to whichever CLI is the
+    // default. The deterministic dirs added above already make an
+    // nvm-installed CLI resolvable, so detection is correct before this lands.
+    std::thread::spawn(|| {
+        let _ = ::harness::augmented_path();
+    });
+    let metadata = app_handle.state::<db::MetadataStore>();
+    if let Err(error) = metadata.init_from_app(app_handle) {
+        eprintln!("metadata store init failed: {error}");
+    }
+}
+
+/// Publish the workspaces and notes to the app-group extensions and
+/// Spotlight, and keep them current.
+fn start_extension_feeds(app_handle: &AppHandle) {
+    let metadata = app_handle.state::<db::MetadataStore>();
+    // After the registry and the metadata store, whose workspaces and
+    // notes it publishes for the extensions.
+    app_group::start(app_handle);
+    spotlight::start(app_handle);
+    let documents_observer = app_handle.clone();
+    metadata.observe_documents(move |workspace_id, change| {
+        app_group::notes_changed(&documents_observer);
+        spotlight::documents_changed(&documents_observer, workspace_id, change);
+    });
+    let workspaces_observer = app_handle.clone();
+    app_handle.state::<workspace::WorkspaceRegistry>().observe_list(move |list| {
+        app_group::workspaces_changed(&workspaces_observer, list);
+        spotlight::workspaces_changed(&workspaces_observer, list);
+    });
+    share_inbox::start(app_handle);
+}
+
+fn start_capture(app_handle: &AppHandle, windowless: bool, quick_note: Option<capture::View>) {
+    // After the metadata store, which holds the chosen shortcut and
+    // whether clipboard history is on.
+    capture::start(app_handle, !windowless);
+    if let Some(view) = quick_note {
+        capture::open(app_handle, view);
+    }
+    clipboard::start(app_handle);
+}
+
+/// Clean-up and watching that the launch does not wait for.
+fn start_background_work(app_handle: &AppHandle) {
+    // Reap any agent child a prior hard crash orphaned, and point the
+    // runner at the data dir so this session records its own live runs
+    // for the same safety net. set_data_dir is instant (before any run);
+    // the sweep shells `ps`/kill, so it goes off the launch path.
+    if let Ok(data_dir) = app_handle.path().app_data_dir() {
+        app_handle
+            .state::<harness::runner::RunnerState>()
+            .set_data_dir(data_dir.clone());
+        std::thread::spawn(move || {
+            harness::orphan_runs::sweep(&data_dir);
+            // Same trip off the launch path: clear what removed
+            // features left behind (the bundled runtime's npm prefix).
+            stale_state::sweep(&data_dir);
+        });
+    }
+    let watchers = app_handle.state::<files::watcher::WatcherManager>();
+    if let Err(error) = watchers.init(app_handle.clone()) {
+        eprintln!("watcher manager init failed: {error}");
+    }
+    // Purge soft-deleted files past the trash retention window. Off the
+    // launch path on its own thread (nothing in the app waits on it),
+    // and only after metadata init above so the store is ready.
+    let sweep_handle = app_handle.clone();
+    std::thread::spawn(move || {
+        let metadata = sweep_handle.state::<db::MetadataStore>();
+        files::trash_sweep::run_startup_trash_sweep(&metadata);
+    });
+    // The Services menu is offered once NSApp exists.
+    services::register(app_handle);
+}
+
+/// What the app does on the run loop's events: open files and links, reopen
+/// the window, and stop agents when the app or its window goes.
+pub(crate) fn handle_run_event(app_handle: &AppHandle, event: RunEvent) {
+    match event {
+        // Tauri defines this variant on macOS only — it is the
+        // `application:openURLs:` delegate callback, which no other platform
+        // has. The catch-all below covers its absence; how a file association
+        // would reach a non-macOS build is a question for whenever one ships.
+        #[cfg(target_os = "macos")]
+        RunEvent::Opened { urls } => {
+            for url in urls {
+                // A `file://` URL comes from the Finder or a file association,
+                // so the user picked it. A `compose://` link can come from a
+                // web page, so `deep_link` decides what it may do.
+                if url.scheme() == deep_link::SCHEME {
+                    deep_link::follow(app_handle, &url);
+                } else if let Some(path) = url.to_file_path().ok().and_then(|p| p.to_str().map(String::from)) {
+                    open_with::open_in_app(app_handle, path);
+                }
+            }
+        }
+        // The Dock icon of a Compose running without its window, as after a
+        // login launch or once the window was closed.
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => main_window::ensure(app_handle),
+        // Quitting — signal every in-flight agent child so it doesn't orphan
+        // and keep editing files after the app is gone.
+        RunEvent::ExitRequested { .. } => {
+            app_handle
+                .state::<harness::runner::RunnerState>()
+                .cancel_all();
+            // The window saves its large files as it closes; this is for a
+            // quit that never asked the window.
+            app_handle.state::<paged::PagedDocuments>().save_all();
+        }
+        // Closing the window while the quick note keeps Compose running leaves
+        // an agent's edits with nothing to show or stop them: the same.
+        RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == main_window::LABEL => {
+            app_handle
+                .state::<harness::runner::RunnerState>()
+                .cancel_all();
+        }
+        _ => {}
+    }
+}

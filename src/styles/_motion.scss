@@ -1,0 +1,151 @@
+// The app's motion, in one place. Three durations and three curves, defined
+// in `_tokens.scss` (`--motion-fast|base|slow`, `--ease-standard|enter|exit`)
+// and zeroed under Reduce Motion, so nothing here needs its own opt-out.
+//
+// Kept small on purpose: state changes fade, things that appear grow or rise
+// a few pixels, presses dip. Nothing bounces and nothing travels far.
+//
+// Enter animations run in `--enter-fast|base`, which stay at 0s until
+// `lib/theme/motion.ts` sets `data-motion="on"` after launch. So everything
+// on the first screen gets a zero-length animation that is already over,
+// and the later change of duration does not restart it (only a change of
+// animation name would); things that mount afterwards animate. They animate the
+// individual `scale` and `translate` properties rather than `transform`, which
+// Carbon and our own popovers use for positioning.
+
+// Hover and focus fills fade in rather than snapping. `:where` keeps this at
+// zero specificity, so any component's own transition wins.
+:where(button, a, [role="button"], [role="menuitem"], [role="option"], [role="tab"]) {
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    scale var(--motion-fast) var(--ease-standard);
+}
+
+// A press dips the control slightly: compact controls only, where the
+// change in size reads as a press and not as a jump.
+:where(
+    .icon-button,
+    .tiptap-toolbar button,
+    .sidebar-titlebar__btn,
+    .sidebar-footer__btn,
+    .chat-header__btn,
+    .chat-send,
+    .chat-empty__suggestion,
+    .review-card__button,
+    .message-actions__btn,
+    .new-menu__trigger,
+    .segmented__option
+  ):active:not(:disabled) {
+  scale: 0.96;
+}
+
+// Disclosure arrows turn rather than swap.
+.file-row__chevron,
+.message-trace__chevron {
+  flex-shrink: 0;
+  transition: rotate var(--motion-fast) var(--ease-standard);
+}
+
+.file-row[aria-expanded="true"] .file-row__chevron {
+  rotate: 90deg;
+}
+
+.message-trace__toggle[aria-expanded="true"] .message-trace__chevron {
+  rotate: 180deg;
+}
+
+:root {
+  --enter-fast: var(--motion-fast);
+  --enter-base: var(--motion-base);
+}
+
+:root:not([data-motion="on"]) {
+  --enter-fast: 0s;
+  --enter-base: 0s;
+}
+
+@keyframes motion-pop-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+
+@keyframes motion-rise-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+@keyframes motion-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-leave {
+  to {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+
+@keyframes motion-tab-open {
+  from {
+    opacity: 0;
+    max-inline-size: 0;
+    min-inline-size: 0;
+    padding-inline: 0;
+  }
+}
+
+// Menus and popovers grow from where they open.
+.cds--menu--open,
+.cds--overflow-menu-options--open,
+.assistant-picker__popover,
+.conv-menu__list,
+.workspace-switcher__popover {
+  transform-origin: top left;
+  animation: motion-pop-in var(--enter-fast) var(--ease-enter);
+}
+
+// Dialogs: the backdrop fades and the panel grows from the centre.
+.modal-backdrop,
+.search-popover-backdrop {
+  animation: motion-fade-in var(--enter-base) var(--ease-enter);
+}
+
+.settings-dialog,
+.search-popover,
+.modal-backdrop > [role="dialog"] {
+  animation: motion-pop-in var(--enter-base) var(--ease-enter);
+}
+
+// New content rises into place: the latest message (switching
+// conversations moves only that one), review cards, notices, toasts.
+.message-stack > .message-row:last-child,
+.review-card,
+.comment-card,
+.chat-notice,
+.conv-toast,
+.cds--toast-notification {
+  animation: motion-rise-in var(--enter-base) var(--ease-enter);
+}
+
+// A new tab opens to its width.
+.editor-tab {
+  animation: motion-tab-open var(--enter-base) var(--ease-standard);
+}
+
+// A card the writer has just decided on folds away before it goes. After the
+// enter rules and as specific as them, so it replaces a rise still running;
+// user-started, so not held back at launch.
+.review-card.review-card--leaving {
+  pointer-events: none;
+  animation: motion-leave var(--motion-fast) var(--ease-exit) forwards;
+}

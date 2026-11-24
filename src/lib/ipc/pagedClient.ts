@@ -1,5 +1,6 @@
 import type { PagedSource, PagedWindow } from "@latentic/live-markdown";
 
+import { isTauriRuntime } from "../runtime/desktopRuntime";
 import { invokeFile } from "./filesClient";
 
 /** A file open a window at a time: what the paged view reads and edits, and
@@ -22,8 +23,10 @@ interface Opened {
 }
 
 /** Opens a workspace file without reading it. The backend keeps it open
- *  until `close()`. */
+ *  until `close()`. The browser preview holds its files in memory and has
+ *  none that open this way. */
 export async function openPagedFile(workspaceId: string, relativePath: string): Promise<OpenedPagedFile> {
+  if (!isTauriRuntime()) throw new Error("A file this large opens only in the desktop app");
   const opened = await invokeFile<Opened>("paged_open", { workspaceId, relativePath });
   const { id } = opened;
   let size = opened.size;
