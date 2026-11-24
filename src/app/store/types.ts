@@ -203,6 +203,8 @@ export interface WorkspaceState {
   rebuildWorkspaceIndex: (workspaceId?: string) => Promise<void>;
   removeWorkspace: (workspaceId: string) => void;
   renameActiveFile: (toRelativePath: string) => Promise<void>;
+  /** Rename or move one file of the active workspace by its path. */
+  renameFile: (fromRelativePath: string, toRelativePath: string) => Promise<void>;
   saveActiveFile: (options?: { implicit?: boolean }) => Promise<void>;
   /** Flush the active editor and write every dirty buffer (all workspaces, incl.
    *  background tabs) — the flush-on-quit that keeps closing the app from

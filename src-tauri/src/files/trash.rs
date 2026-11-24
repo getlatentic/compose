@@ -102,7 +102,9 @@ pub fn purge_trashed_file(
     trashed_name: &str,
 ) -> Result<(), FileError> {
     let path = trashed_path(trash_root, vault_id, trashed_name);
-    match std::fs::remove_file(&path) {
+    // A deleted folder is trashed whole, under one entry.
+    let removed = if path.is_dir() { std::fs::remove_dir_all(&path) } else { std::fs::remove_file(&path) };
+    match removed {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.into()),

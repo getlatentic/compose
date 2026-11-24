@@ -352,12 +352,12 @@ pub fn workspace_delete_file(
     soft_delete(&registry, &metadata, &workspace_id, &relative_path)
 }
 
-/// Move a folder (and everything under it) to the trash. Free-function core of
-/// [`workspace_delete_folder`] — unit-testable without Tauri `State`, mirroring
-/// how [`soft_delete`] backs `workspace_delete_file`.
+/// Move a folder (and everything under it) to the trash, as [`soft_delete`]
+/// does a file: each note's last content goes to history first, and one trash
+/// entry for the folder lets the retention sweep purge it.
 fn delete_folder(
     registry: &WorkspaceRegistry,
-    trash_root: &Path,
+    metadata: &MetadataStore,
     workspace_id: &str,
     relative_path: &str,
 ) -> Result<(), FileError> {
@@ -367,8 +367,28 @@ fn delete_folder(
             message: format!("{relative_path} is not a folder"),
         });
     }
-    trash::move_to_trash(trash_root, workspace_id, &absolute)?;
+    let notes: Vec<String> = scan_markdown_files(&absolute)?
+        .into_iter()
+        .map(|note| format!("{relative_path}/{}", note.relative_path))
+        .collect();
+    for note in &notes {
+        snapshot_before_delete(registry, metadata, workspace_id, note)?;
+    }
+    trash_with_entry(metadata, workspace_id, relative_path, &absolute, tree_size(&absolute))?;
+    for note in &notes {
+        metadata.mark_document_deleted(workspace_id, note)?;
+    }
     Ok(())
+}
+
+fn tree_size(path: &Path) -> i64 {
+    WalkDir::new(path)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter_map(|entry| entry.metadata().ok())
+        .filter(|metadata| metadata.is_file())
+        .map(|metadata| metadata.len() as i64)
+        .sum()
 }
 
 /// Move a folder and its contents to the trash — recoverable, like file delete.
@@ -380,8 +400,9 @@ pub fn workspace_delete_folder(
     registry: State<'_, WorkspaceRegistry>,
     metadata: State<'_, MetadataStore>,
 ) -> Result<(), FileError> {
-    let trash_root = metadata.trash_root()?;
-    delete_folder(&registry, &trash_root, &workspace_id, &relative_path)
+    let root = registry.workspace_root(&workspace_id)?;
+    ensure_vault_metadata(&metadata, &workspace_id, &root)?;
+    delete_folder(&registry, &metadata, &workspace_id, &relative_path)
 }
 
 /// Recent restorable versions of a file (newest first). The live file's
@@ -586,7 +607,9 @@ pub(crate) fn rename_file(
             message: format!("{from_relative} does not exist"),
         });
     }
-    if to.exists() {
+    // On a case-insensitive disk `Note.md` exists when `note.md` does: it is
+    // the same file, and a rename only changes its letter case.
+    if to.exists() && !same_file(&from, &to) {
         return Err(FileError::AlreadyExists {
             message: format!("{to_relative} already exists"),
         });
@@ -596,6 +619,13 @@ pub(crate) fn rename_file(
     }
     std::fs::rename(&from, &to)?;
     Ok(())
+}
+
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
 }
 
 pub(crate) fn scan_markdown_files(root: &Path) -> Result<Vec<WorkspaceFileEntry>, FileError> {
@@ -850,8 +880,22 @@ pub(crate) fn soft_delete(
     workspace_id: &str,
     relative_path: &str,
 ) -> Result<(), FileError> {
-    // Snapshot first: this is the recovery path that outlives the physical
-    // trash copy once the retention sweep purges it.
+    snapshot_before_delete(registry, metadata, workspace_id, relative_path)?;
+    let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
+    let size_bytes = std::fs::metadata(&absolute).map(|m| m.len()).unwrap_or(0) as i64;
+    trash_with_entry(metadata, workspace_id, relative_path, &absolute, size_bytes)?;
+    metadata.mark_document_deleted(workspace_id, relative_path)?;
+    Ok(())
+}
+
+/// The note's last content, in history: the recovery path that outlives the
+/// physical trash copy once the retention sweep purges it.
+fn snapshot_before_delete(
+    registry: &WorkspaceRegistry,
+    metadata: &MetadataStore,
+    workspace_id: &str,
+    relative_path: &str,
+) -> Result<(), FileError> {
     if let Ok(existing) = read_file(registry, workspace_id, relative_path) {
         metadata.record_document_written(
             workspace_id,
@@ -861,26 +905,25 @@ pub(crate) fn soft_delete(
             existing.content.len() as u64,
         )?;
     }
+    Ok(())
+}
 
-    let absolute = registry.resolve_workspace_path(workspace_id, relative_path)?;
-    let size_bytes = std::fs::metadata(&absolute).map(|m| m.len()).unwrap_or(0) as i64;
+/// Move a file or folder to the trash, under an entry recorded first so the
+/// retention sweep can find it. The entry is dropped if the move fails.
+fn trash_with_entry(
+    metadata: &MetadataStore,
+    workspace_id: &str,
+    relative_path: &str,
+    absolute: &Path,
+    size_bytes: i64,
+) -> Result<(), FileError> {
     let trash_root = metadata.trash_root()?;
-    let trashed_name = trash::trashed_name_for(&absolute);
-
-    let entry_id = metadata.record_trash_entry(
-        workspace_id,
-        relative_path,
-        &trashed_name,
-        size_bytes,
-        db::now_ms(),
-    )?;
-    if let Err(error) = trash::move_to_trash_as(&trash_root, workspace_id, &absolute, &trashed_name)
-    {
+    let trashed_name = trash::trashed_name_for(absolute);
+    let entry_id = metadata.record_trash_entry(workspace_id, relative_path, &trashed_name, size_bytes, db::now_ms())?;
+    if let Err(error) = trash::move_to_trash_as(&trash_root, workspace_id, absolute, &trashed_name) {
         let _ = metadata.delete_trash_entry(&entry_id);
         return Err(error);
     }
-
-    metadata.mark_document_deleted(workspace_id, relative_path)?;
     Ok(())
 }
 
@@ -1160,12 +1203,13 @@ mod tests {
         let (registry, workspace_id) = registry_with_workspace(dir.path());
         let metadata = MetadataStore::default();
         metadata.init_from_dir(data.path()).expect("init metadata");
+        ensure_vault_metadata(&metadata, &workspace_id, dir.path()).expect("vault");
         let trash_root = metadata.trash_root().expect("trash root");
         fs::create_dir_all(dir.path().join("Talks/sub")).unwrap();
         fs::write(dir.path().join("Talks/a.md"), "one").unwrap();
         fs::write(dir.path().join("Talks/sub/b.md"), "two").unwrap();
 
-        delete_folder(&registry, &trash_root, &workspace_id, "Talks").expect("delete folder");
+        delete_folder(&registry, &metadata, &workspace_id, "Talks").expect("delete folder");
 
         // The whole subtree left the workspace...
         assert!(!dir.path().join("Talks").exists());
@@ -1182,16 +1226,71 @@ mod tests {
     }
 
     #[test]
+    fn delete_folder_keeps_each_note_in_history_and_one_entry_the_sweep_purges() {
+        let data = tempdir().expect("data");
+        let dir = tempdir().expect("workspace");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+        let metadata = MetadataStore::default();
+        metadata.init_from_dir(data.path()).expect("init metadata");
+        ensure_vault_metadata(&metadata, &workspace_id, dir.path()).expect("vault");
+        fs::create_dir_all(dir.path().join("Talks/sub")).unwrap();
+        fs::write(dir.path().join("Talks/a.md"), "one").unwrap();
+        fs::write(dir.path().join("Talks/sub/b.md"), "two").unwrap();
+
+        delete_folder(&registry, &metadata, &workspace_id, "Talks").expect("delete folder");
+
+        for note in ["Talks/a.md", "Talks/sub/b.md"] {
+            let versions = metadata.list_document_versions(&workspace_id, note, None, 10).expect("versions");
+            assert_eq!(versions.len(), 1, "{note} has its last content in history");
+        }
+        let entries = metadata.expired_trash_entries(i64::MAX).expect("entries");
+        assert_eq!(entries.len(), 1, "one entry for the folder");
+        assert_eq!(entries[0].original_path, "Talks");
+        assert_eq!(entries[0].size_bytes, 6);
+
+        let report = crate::files::trash_sweep::sweep_expired_trash(&metadata, i64::MAX, 0).expect("sweep");
+        assert_eq!(report.purged, 1);
+        assert!(report.failed.is_empty(), "{:?}", report.failed);
+        let trash_root = metadata.trash_root().expect("trash root");
+        assert!(!trash::trashed_path(&trash_root, &workspace_id, &entries[0].trashed_name).exists());
+    }
+
+    #[test]
+    fn rename_changes_only_the_letter_case() {
+        let dir = tempdir().expect("tempdir");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+        fs::write(dir.path().join("note.md"), "x").unwrap();
+
+        rename_file(&registry, &workspace_id, "note.md", "Note.md").expect("rename");
+        let names: Vec<String> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["Note.md"]);
+    }
+
+    #[test]
+    fn rename_still_refuses_another_file_differing_only_in_case() {
+        let dir = tempdir().expect("tempdir");
+        let (registry, workspace_id) = registry_with_workspace(dir.path());
+        fs::write(dir.path().join("a.md"), "a").unwrap();
+        fs::write(dir.path().join("B.md"), "b").unwrap();
+
+        let result = rename_file(&registry, &workspace_id, "a.md", "b.md");
+        assert!(matches!(result, Err(FileError::AlreadyExists { .. })));
+        assert_eq!(fs::read_to_string(dir.path().join("B.md")).unwrap(), "b");
+    }
+
+    #[test]
     fn delete_folder_rejects_a_file_path() {
         let data = tempdir().expect("data");
         let dir = tempdir().expect("workspace");
         let (registry, workspace_id) = registry_with_workspace(dir.path());
         let metadata = MetadataStore::default();
         metadata.init_from_dir(data.path()).expect("init metadata");
-        let trash_root = metadata.trash_root().expect("trash root");
         fs::write(dir.path().join("note.md"), "x").unwrap();
 
-        let result = delete_folder(&registry, &trash_root, &workspace_id, "note.md");
+        let result = delete_folder(&registry, &metadata, &workspace_id, "note.md");
         assert!(matches!(result, Err(FileError::NotFound { .. })));
         assert!(dir.path().join("note.md").exists()); // the file is untouched
     }
@@ -1203,7 +1302,6 @@ mod tests {
         let (registry, workspace_id) = registry_with_workspace(dir.path());
         let metadata = MetadataStore::default();
         metadata.init_from_dir(data.path()).expect("init metadata");
-        let trash_root = metadata.trash_root().expect("trash root");
 
         assert!(read_file(&registry, &workspace_id, "../escape.md").is_err());
         assert!(write_file(&registry, &workspace_id, "../escape.md", "x", None).is_err());
@@ -1211,7 +1309,7 @@ mod tests {
         assert!(create_file(&registry, &workspace_id, "../escape.md", "x").is_err());
         assert!(rename_file(&registry, &workspace_id, "a.md", "../escape.md").is_err());
         assert!(soft_delete(&registry, &metadata, &workspace_id, "../escape.md").is_err());
-        assert!(delete_folder(&registry, &trash_root, &workspace_id, "../escape").is_err());
+        assert!(delete_folder(&registry, &metadata, &workspace_id, "../escape").is_err());
     }
 }
 
