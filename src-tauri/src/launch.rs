@@ -304,6 +304,9 @@ pub(crate) fn handle_run_event(app_handle: &AppHandle, event: RunEvent) {
             app_handle
                 .state::<harness::runner::RunnerState>()
                 .cancel_all();
+            // The window saves its large files as it closes; this is for a
+            // quit that never asked the window.
+            app_handle.state::<paged::PagedDocuments>().save_all();
         }
         // Closing the window while the quick note keeps Compose running leaves
         // an agent's edits with nothing to show or stop them: the same.

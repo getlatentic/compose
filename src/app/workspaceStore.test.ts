@@ -34,6 +34,7 @@ vi.mock("../lib/ipc/filesClient", () => ({
   deleteFile: vi.fn(),
   FileConflictError: class FileConflictError extends Error {},
   FileNotFoundError: class FileNotFoundError extends Error {},
+  FileTooLargeError: class FileTooLargeError extends Error {},
   readFile: vi.fn(),
   renameFile: vi.fn(),
   scanWorkspace: vi.fn(),

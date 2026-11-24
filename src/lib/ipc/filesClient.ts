@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { DocumentTextChange } from "../../features/comments/commentModel";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
-import { FileConflictError, FileNotFoundError } from "../workspace/fileErrors";
+import { FileConflictError, FileNotFoundError, FileTooLargeError } from "../workspace/fileErrors";
 import {
   _resetVirtualWorkspaceForTests,
   vwCreate,
@@ -14,7 +14,7 @@ import {
 
 // Re-exported so existing importers (incl. filesClient.test.ts) keep
 // getting it from here; the classes live in ../workspace/fileErrors.
-export { FileConflictError, FileNotFoundError };
+export { FileConflictError, FileNotFoundError, FileTooLargeError };
 
 export interface WorkspaceFileEntry {
   lastModifiedMs: number;
@@ -32,9 +32,10 @@ export interface WorkspaceWriteResult {
 }
 
 interface RawFileError {
-  kind: "conflict" | "notFound" | "alreadyExists" | "message";
+  kind: "conflict" | "tooLarge" | "notFound" | "alreadyExists" | "message";
   message?: string;
   latestLastModifiedMs?: number;
+  sizeBytes?: number;
 }
 
 function normalizeFileError(raw: unknown): Error {
@@ -42,6 +43,9 @@ function normalizeFileError(raw: unknown): Error {
     const error = raw as RawFileError;
     if (error.kind === "conflict") {
       return new FileConflictError(error.latestLastModifiedMs ?? 0);
+    }
+    if (error.kind === "tooLarge") {
+      return new FileTooLargeError(error.sizeBytes ?? 0);
     }
     if (error.kind === "notFound") {
       return new FileNotFoundError(error.message ?? error.kind);

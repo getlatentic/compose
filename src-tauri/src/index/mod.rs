@@ -93,6 +93,12 @@ pub fn workspace_rebuild_index(
             skipped += 1;
             continue;
         }
+        // A file too large to read whole is not searched: indexing it would
+        // hold all of its text.
+        if crate::files::too_large_to_hold(&absolute).is_some() {
+            skipped += 1;
+            continue;
+        }
         // A single unreadable or non-UTF-8 file (a binary mis-named `.md`, a
         // permission glitch), or a doc with no metadata row yet, must not sink
         // the whole index — skip it and keep going. Aborting here left search
@@ -277,6 +283,7 @@ fn file_error_message(error: crate::files::FileError) -> String {
         crate::files::FileError::Conflict {
             latest_last_modified_ms,
         } => format!("file changed on disk at {latest_last_modified_ms}"),
+        too_large @ crate::files::FileError::TooLarge { .. } => too_large.to_string(),
     }
 }
 

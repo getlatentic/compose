@@ -26,6 +26,9 @@ export function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+/** The key of a file in the store's `largeFiles`. */
+export const largeFileKey = (workspaceId: string, path: string): string => `${workspaceId}\n${path}`;
+
 /** Next free `untitled-N.md` path — inside `dir` when given, else at the
  * workspace root, alongside any other notes — that collides with neither an
  * existing file, an open (possibly unsaved) tab, nor a note still being

@@ -151,6 +151,7 @@ select {
 @include meta.load-css("search-popover");
 @include meta.load-css("panel-controls");
 @include meta.load-css("editor-shell");
+@include meta.load-css("large-document");
 @include meta.load-css("selection-composer");
 @include meta.load-css("welcome");
 @include meta.load-css("chat-messages");

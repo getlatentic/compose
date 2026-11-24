@@ -3,6 +3,7 @@ import { showErrorToast } from "../../features/toast/toastStore";
 import {
   FileConflictError,
   FileNotFoundError,
+  FileTooLargeError,
   createFile as createFileIpc,
   createFolder as createFolderIpc,
   deleteFile as deleteFileIpc,
@@ -24,7 +25,9 @@ import type { DocumentTextChange, WorkspaceFileEntry } from "../workspace/types"
 import {
   flushActiveEditor,
 } from "../../lib/editor/editorFlush";
+import { saveLargeDocuments } from "../../lib/editor/largeDocumentSaves";
 import {
+  largeFileKey,
   nextUntitledPath,
   updateWorkspace,
 } from "./internals";
@@ -110,7 +113,10 @@ export async function loadBufferIfMissing(
   if (!workspace || workspace.fileContents[path]) {
     return;
   }
-  const key = `${workspaceId}\n${path}`;
+  const key = largeFileKey(workspaceId, path);
+  if (get().largeFiles[key] !== undefined) {
+    return;
+  }
   if (loadingBuffers.has(key)) {
     return;
   }
@@ -123,6 +129,12 @@ export async function loadBufferIfMissing(
       ),
     }));
   } catch (error) {
+    // Not a failure: the file is shown a window at a time, and its tab stays.
+    if (error instanceof FileTooLargeError) {
+      const sizeBytes = error.sizeBytes;
+      set((state) => ({ largeFiles: { ...state.largeFiles, [key]: sizeBytes } }));
+      return;
+    }
     // A tab whose file is GONE (deleted externally, stale restored tab) must
     // not strand on a forever-blank editor: when the file list agrees the file
     // no longer exists — or the read itself says NotFound, which is
@@ -163,7 +175,7 @@ export async function loadBufferIfMissing(
 export const createFilesSlice = (
   set: WorkspaceStoreSet,
   get: WorkspaceStoreGet,
-): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "deleteFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "updateFileContent" | "dismissConflict"> => ({
+): Pick<WorkspaceState, "activeFileBuffer" | "activeFileEntry" | "selectFile" | "ensureActiveBuffer" | "closeFileTab" | "reorderTab" | "createNote" | "createFolder" | "deleteFolder" | "newNoteDir" | "setNewNoteDir" | "deleteActiveFile" | "deleteFile" | "renameActiveFile" | "reloadActiveFile" | "saveActiveFile" | "saveAllDirtyBuffers" | "updateActiveContent" | "updateFileContent" | "dismissConflict" | "largeFiles"> => ({
   activeFileBuffer: () => {
     const workspace = get().focusedWorkspace();
     if (!workspace || !workspace.activeFilePath) {
@@ -242,6 +254,7 @@ export const createFilesSlice = (
     }));
     persistTabs(get().workspaces, workspace.id);
   },
+  largeFiles: {},
   newNoteDir: "",
   setNewNoteDir: (dir) => set({ newNoteDir: dir }),
   createNote: async (seed) => {
@@ -431,6 +444,9 @@ export const createFilesSlice = (
 
     // The editor's last edits belong to the old path's buffer, which moves.
     flushActiveEditor();
+    // A large file's edits are in the backend, against the old path: they
+    // are written there before the file moves.
+    await saveLargeDocuments();
     try {
       await renameFileIpc(workspace.id, from, trimmed);
       set((state) => ({

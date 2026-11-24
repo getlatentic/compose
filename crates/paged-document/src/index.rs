@@ -43,18 +43,19 @@ impl Index {
         after.checked_sub(1).map_or(START_OF_FILE, |at| self.checkpoints[at])
     }
 
+    /// The last exact start whose whole line is above `offset`: the one
+    /// before the last exact start at or before it. An edit at `offset`
+    /// changes neither that line nor anything above it.
+    pub(crate) fn exact_start_above_the_line_of(&self, offset: u64) -> Checkpoint {
+        let after = self.checkpoints.partition_point(|checkpoint| checkpoint.offset <= offset);
+        let mut exact = self.checkpoints[..after].iter().rev().filter(|checkpoint| checkpoint.exact);
+        exact.nth(1).copied().unwrap_or(START_OF_FILE)
+    }
+
     /// The first start after `offset`, if the index has reached one.
     pub fn start_after(&self, offset: u64) -> Option<Checkpoint> {
         let after = self.checkpoints.partition_point(|checkpoint| checkpoint.offset <= offset);
         self.checkpoints.get(after).copied()
-    }
-
-    /// Takes over what `found` holds beyond its first `known` starts.
-    pub(crate) fn extend(&mut self, found: &Index, known: usize) {
-        self.checkpoints.extend_from_slice(&found.checkpoints[known..]);
-        self.indexed_bytes = found.indexed_bytes;
-        self.lines = found.lines;
-        self.complete = found.complete;
     }
 
     /// The last start at or before line `line`.
@@ -64,7 +65,16 @@ impl Index {
     }
 }
 
-const START_OF_FILE: Checkpoint = Checkpoint { offset: 0, line: 0, exact: true };
+pub(crate) const START_OF_FILE: Checkpoint = Checkpoint { offset: 0, line: 0, exact: true };
+
+/// A line the builder has read to its end.
+pub(crate) struct LineSeen {
+    /// The byte the line starts at, and its number from 0.
+    pub(crate) offset: u64,
+    pub(crate) line: u64,
+    /// A top-level block starts at it with nothing open above.
+    pub(crate) clean: bool,
+}
 
 /// Builds an [`Index`] from the bytes of a file, given in order and in pieces
 /// of any size. It keeps the start of the line it is in and nothing else.
@@ -85,29 +95,72 @@ impl IndexBuilder {
         &self.index
     }
 
-    pub(crate) fn feed(&mut self, mut bytes: &[u8]) {
-        while !bytes.is_empty() {
-            match memchr::memchr(b'\n', bytes) {
-                Some(end) => {
-                    self.line_text(&bytes[..end]);
-                    self.end_line();
-                    bytes = &bytes[end + 1..];
-                }
-                None => {
-                    self.line_text(bytes);
-                    bytes = &[];
-                }
-            }
-        }
+    /// The byte the builder will read next.
+    pub(crate) fn position(&self) -> u64 {
+        self.line_start + self.line_len
     }
 
-    /// The file has ended; a last line without a line break is a line.
-    pub(crate) fn finish(mut self) -> Index {
+    #[cfg(test)]
+    pub(crate) fn feed(&mut self, bytes: &[u8]) {
+        self.feed_lines(bytes, &mut |_| false);
+    }
+
+    /// Reads `bytes`, telling `seen` of each line as it ends. When `seen`
+    /// answers true the builder stops there. Returns the bytes it read.
+    pub(crate) fn feed_lines(&mut self, bytes: &[u8], seen: &mut dyn FnMut(LineSeen) -> bool) -> usize {
+        let mut read = 0;
+        while read < bytes.len() {
+            let Some(end) = memchr::memchr(b'\n', &bytes[read..]) else {
+                self.line_text(&bytes[read..]);
+                return bytes.len();
+            };
+            self.line_text(&bytes[read..read + end]);
+            read += end + 1;
+            let line = self.end_line();
+            if seen(line) {
+                break;
+            }
+        }
+        read
+    }
+
+    /// The text has ended; a last line without a line break is a line.
+    pub(crate) fn end_text(&mut self) {
         if self.line_len > 0 {
             self.end_line_at(self.line_start + self.line_len);
         }
         self.index.complete = true;
+    }
+
+    /// The index of a file read to its end.
+    #[cfg(test)]
+    pub(crate) fn finish(mut self) -> Index {
+        self.end_text();
         self.index
+    }
+
+    /// Forgets the starts after `start` and reads on from it, as from the
+    /// top of a file: a clean start has nothing open above it. Returns the
+    /// starts it forgot.
+    pub(crate) fn restart_at(&mut self, start: Checkpoint) -> Vec<Checkpoint> {
+        let kept = self.index.checkpoints.partition_point(|checkpoint| checkpoint.offset <= start.offset);
+        let forgotten = self.index.checkpoints.split_off(kept);
+        self.scanner = LineScanner::default();
+        self.prefix.clear();
+        self.line_start = start.offset;
+        self.line_len = 0;
+        self.last_start = start.offset;
+        self.index.lines = start.line;
+        self.index.indexed_bytes = start.offset;
+        self.index.complete = false;
+        forgotten
+    }
+
+    /// Adds a start found before, when it is beyond the last one.
+    pub(crate) fn add_start(&mut self, start: Checkpoint) {
+        if start.offset > 0 && self.index.checkpoints.last().is_none_or(|last| last.offset < start.offset) {
+            self.index.checkpoints.push(start);
+        }
     }
 
     /// More text of the line being read. A line longer than the longest gap
@@ -128,11 +181,11 @@ impl IndexBuilder {
         }
     }
 
-    fn end_line(&mut self) {
-        self.end_line_at(self.line_start + self.line_len + 1);
+    fn end_line(&mut self) -> LineSeen {
+        self.end_line_at(self.line_start + self.line_len + 1)
     }
 
-    fn end_line_at(&mut self, next_line: u64) {
+    fn end_line_at(&mut self, next_line: u64) -> LineSeen {
         let whole = self.line_len as usize <= self.prefix.len();
         let clean = self.scanner.line(&self.prefix, whole);
         // A long line may have been cut after its start: then the last
@@ -143,11 +196,13 @@ impl IndexBuilder {
         if self.line_start > 0 && ((clean && far_enough) || too_far) {
             self.start_window(self.line_start, clean);
         }
+        let seen = LineSeen { offset: self.line_start, line: self.index.lines, clean };
         self.index.lines += 1;
         self.index.indexed_bytes = next_line;
         self.line_start = next_line;
         self.line_len = 0;
         self.prefix.clear();
+        seen
     }
 
     fn start_window(&mut self, offset: u64, exact: bool) {
