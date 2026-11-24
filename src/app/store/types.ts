@@ -230,6 +230,9 @@ export interface WorkspaceState {
   /** Remove a chat context item by id (the chip's ✕). */
   removeChatContextItem: (id: string) => void;
   switchWorkspace: (workspaceId: string) => void;
+  /** The files too large to read whole, by {@link largeFileKey}, with their
+   *  size in bytes. They have no buffer: they are shown a window at a time. */
+  largeFiles: Record<string, number>;
   updateActiveContent: (markdown: string, changes?: DocumentTextChange[]) => void;
   /** The editor's text for the file it is SHOWING, which is not always the
    *  active one: the editor hands over its last edits after the active file

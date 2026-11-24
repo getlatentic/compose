@@ -1,0 +1,46 @@
+// A file shown and edited a window at a time (LargeDocument.tsx).
+.large-document__status {
+  margin: 0;
+  padding: 0.5rem 1.5rem;
+  color: var(--cds-text-secondary, #6f6f6f);
+  font-size: 0.8125rem;
+}
+
+.large-document {
+  position: relative;
+}
+
+// Over the page and not above it, so the page does not move when it goes.
+.large-document__status--slow {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  animation: editor-loading-hint-reveal 0.3s ease 0.8s forwards;
+  opacity: 0;
+}
+
+.large-document__status--alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  background: var(--cds-layer-01, #f4f4f4);
+  color: var(--cds-text-primary, #161616);
+}
+
+.large-document__action {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--cds-border-strong-01, #8d8d8d);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.large-document__pages {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+}

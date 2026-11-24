@@ -1147,6 +1147,27 @@ pub fn content_hash_bytes(bytes: &[u8]) -> String {
     hash
 }
 
+/// The same hash as [`content_hash_bytes`] of a file's bytes, read a piece at
+/// a time: a file of any size is hashed without being held.
+pub fn content_hash_file(path: &std::path::Path) -> std::io::Result<String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut piece = vec![0u8; 1024 * 1024];
+    loop {
+        let read = file.read(&mut piece)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&piece[..read]);
+    }
+    let mut hash = String::with_capacity(64);
+    for byte in hasher.finalize() {
+        let _ = write!(&mut hash, "{byte:02x}");
+    }
+    Ok(hash)
+}
+
 pub fn validate_document_transaction(
     base_text: &str,
     resulting_text: &str,
@@ -2077,6 +2098,17 @@ pub(crate) fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_hashed_a_piece_at_a_time_has_the_hash_of_its_bytes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("note.md");
+        // Longer than one piece, and not a whole number of pieces.
+        let bytes: Vec<u8> = (0..2_500_000u32).map(|n| (n % 251) as u8).collect();
+        std::fs::write(&path, &bytes).expect("write");
+        assert_eq!(content_hash_file(&path).expect("hash"), content_hash_bytes(&bytes));
+    }
+
     use tempfile::tempdir;
 
     fn comment(id: &str, file_path: &str) -> WorkspaceCommentThread {

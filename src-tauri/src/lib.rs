@@ -33,6 +33,7 @@ mod launch;
 pub mod logging;
 mod menu;
 mod open_with;
+mod paged;
 mod profile_migration;
 pub mod review;
 mod system;
@@ -141,6 +142,15 @@ pub fn run() {
             files::workspace_delete_folder,
             files::workspace_list_versions,
             files::workspace_read_file,
+            paged::paged_open,
+            paged::paged_window,
+            paged::paged_window_from,
+            paged::paged_window_before,
+            paged::paged_progress,
+            paged::paged_edit,
+            paged::paged_save,
+            paged::paged_changed_on_disk,
+            paged::paged_close,
             files::workspace_rename_file,
             files::workspace_restore_version,
             files::workspace_scan,

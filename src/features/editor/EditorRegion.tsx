@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { PaneTabs, type EditorTab, type TabArea } from "./PaneTabs";
 import { DocumentStatusBar } from "./DocumentStatusBar";
+import { LargeDocument } from "../large-document/LargeDocument";
+import { largeFileKey } from "../../app/store/internals";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_NAME } from "./welcomeNote";
 import { WorkspaceWelcome } from "../workspace/WorkspaceWelcome";
 import { MAC_TRAFFIC_LIGHTS_INSET } from "../workspace/WorkspaceSidebar";
@@ -49,6 +51,12 @@ export function EditorRegion() {
   const activeFileExists = useWorkspaceStore((state) => {
     const workspace = selectFocusedWorkspace(state);
     return workspace ? isActiveFilePresent(workspace) : false;
+  });
+  // A file too large to read whole has no buffer; it is shown a window at a
+  // time by its own screen.
+  const activeFileIsLarge = useWorkspaceStore((state) => {
+    const workspace = selectFocusedWorkspace(state);
+    return Boolean(workspace?.activeFilePath) && state.largeFiles[largeFileKey(workspace!.id, workspace!.activeFilePath)] !== undefined;
   });
   const fileCount = useWorkspaceStore((state) => selectActiveWorkspace(state)?.files.length ?? 0);
   // The first scan hasn't landed yet (idle/loading) — render blank, not the
@@ -182,7 +190,9 @@ export function EditorRegion() {
         />
         </PerfProfiler>
       )}
-      {activeFileExists ? (
+      {activeFileIsLarge ? (
+        <LargeDocument />
+      ) : activeFileExists ? (
         <PerfProfiler id="document">
           <ActiveDocument />
         </PerfProfiler>
@@ -221,7 +231,7 @@ export function EditorRegion() {
           />
         </div>
       )}
-      {activeFileExists ? <DocumentStatusBar /> : null}
+      {activeFileExists && !activeFileIsLarge ? <DocumentStatusBar /> : null}
     </main>
   );
 }

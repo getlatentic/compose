@@ -7,7 +7,7 @@ use tauri::{App, AppHandle, Emitter, Manager, RunEvent, Wry};
 use crate::open_with::PendingOpenUrls;
 use crate::{
     app_group, autocorrect, boot_native_mark, capture, clipboard, data_reset, db, deep_link, external,
-    files, harness, index, logging, login_item, main_window, menu, open_with, profile_migration, review, services,
+    files, harness, index, logging, login_item, main_window, menu, open_with, paged, profile_migration, review, services,
     share_inbox, spotlight, stale_state, user_tool_dirs, workspace,
 };
 #[cfg(target_os = "macos")]
@@ -59,6 +59,7 @@ pub(crate) fn builder() -> tauri::Builder<Wry> {
         .manage(review::ReviewSessionStore::default())
         .manage(index::WorkspaceIndexStore::default())
         .manage(external::ExternalFilesRegistry::default())
+        .manage(paged::PagedDocuments::default())
         .manage(PendingOpenUrls::default())
         .manage(services::PendingServiceText::default())
         .manage(share_inbox::ShareInboxState::default())
@@ -303,6 +304,9 @@ pub(crate) fn handle_run_event(app_handle: &AppHandle, event: RunEvent) {
             app_handle
                 .state::<harness::runner::RunnerState>()
                 .cancel_all();
+            // The window saves its large files as it closes; this is for a
+            // quit that never asked the window.
+            app_handle.state::<paged::PagedDocuments>().save_all();
         }
         // Closing the window while the quick note keeps Compose running leaves
         // an agent's edits with nothing to show or stop them: the same.

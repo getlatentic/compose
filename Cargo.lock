@@ -845,7 +845,7 @@ dependencies = [
 
 [[package]]
 name = "compose"
-version = "0.0.1-alpha.23"
+version = "0.0.1-alpha.24"
 dependencies = [
  "agent-harness",
  "base64 0.22.1",
@@ -864,6 +864,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-uniform-type-identifiers",
  "objc2-web-kit",
+ "paged-document",
  "pulldown-latex",
  "rand 0.8.7",
  "rusqlite",
@@ -3658,6 +3659,15 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "paged-document"
+version = "0.1.0"
+dependencies = [
+ "comrak",
+ "memchr",
+ "tempfile",
 ]
 
 [[package]]

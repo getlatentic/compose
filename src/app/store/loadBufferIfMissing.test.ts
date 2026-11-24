@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FileNotFoundError } from "../../lib/workspace/fileErrors";
+import { FileNotFoundError, FileTooLargeError } from "../../lib/workspace/fileErrors";
 
 const ipc = vi.hoisted(() => ({
   readFile: vi.fn(),
@@ -34,6 +34,7 @@ const LOOSE = "/Users/me/Downloads/gone.md";
 
 function store(over: Record<string, unknown>) {
   let state = {
+    largeFiles: {} as Record<string, number>,
     focusedArea: "loose",
     workspaces: [
       {
@@ -53,7 +54,7 @@ function store(over: Record<string, unknown>) {
     const next = typeof patch === "function" ? (patch as (s: unknown) => object)(state) : patch;
     state = { ...state, ...(next as object) } as typeof state;
   };
-  return { get, set: set as never, workspace: () => state.workspaces[0] };
+  return { get, set: set as never, workspace: () => state.workspaces[0], largeFiles: () => state.largeFiles };
 }
 
 beforeEach(() => {
@@ -97,5 +98,28 @@ describe("a tab whose file cannot be read", () => {
 
     expect(workspace().openFilePaths).toEqual([LOOSE]);
     expect(toast.showErrorToast).toHaveBeenCalledWith("Operation not permitted");
+  });
+});
+
+describe("a file too large to read whole", () => {
+  const LARGE = { id: "ws", kind: "directory", files: [{ relativePath: "big.md" }], openFilePaths: ["big.md"], activeFilePath: "big.md" };
+
+  it("keeps its tab, gets no buffer, and is marked with its size", async () => {
+    // The screen that shows it a window at a time is chosen by this mark.
+    ipc.readFile.mockRejectedValue(new FileTooLargeError(6_000_000));
+    const { get, set, workspace, largeFiles } = store(LARGE);
+    await loadBufferIfMissing(set, get, "ws", "big.md");
+    expect(workspace().openFilePaths).toEqual(["big.md"]);
+    expect(workspace().fileContents).toEqual({});
+    expect(largeFiles()).toEqual({ "ws\nbig.md": 6_000_000 });
+    expect(toast.showErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("is not read again once it is known to be large", async () => {
+    ipc.readFile.mockRejectedValue(new FileTooLargeError(6_000_000));
+    const { get, set } = store(LARGE);
+    await loadBufferIfMissing(set, get, "ws", "big.md");
+    await loadBufferIfMissing(set, get, "ws", "big.md");
+    expect(ipc.readFile).toHaveBeenCalledTimes(1);
   });
 });
