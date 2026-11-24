@@ -7,16 +7,16 @@
  * vite.config.ts). Run: `pnpm test:browser`. Chromium joins when Windows ships.
  */
 
+import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  optimizeDeps: { include: ["@amiceli/vitest-cucumber"] },
   test: {
     include: ["**/*.browser.test.{ts,tsx}"],
     exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/**"],
     browser: {
       enabled: true,
-      provider: "playwright",
+      provider: playwright(),
       headless: true,
       screenshotFailures: false,
       instances: [{ browser: "webkit" }],

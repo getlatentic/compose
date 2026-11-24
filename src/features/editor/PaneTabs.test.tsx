@@ -7,7 +7,7 @@
 // RTL dep), like the other editor / chat tests.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { PaneTabs, type EditorTab } from "./PaneTabs";
@@ -16,7 +16,7 @@ import { PaneTabs, type EditorTab } from "./PaneTabs";
 
 let container: HTMLDivElement;
 let root: Root;
-let scrollIntoView: ReturnType<typeof vi.fn>;
+let scrollIntoView: Mock<Element["scrollIntoView"]>;
 
 function tab(relativePath: string): EditorTab {
   const entry: WorkspaceFileEntry = { lastModifiedMs: 0, relativePath, sizeBytes: 0 };
@@ -48,7 +48,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  scrollIntoView = vi.fn();
+  scrollIntoView = vi.fn<Element["scrollIntoView"]>();
   Element.prototype.scrollIntoView = scrollIntoView;
 });
 

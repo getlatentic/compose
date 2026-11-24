@@ -3,7 +3,7 @@
 // moves no focus on a click at all.
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 
 import "@latentic/live-markdown/styles.css";
