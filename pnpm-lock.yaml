@@ -45,8 +45,8 @@ importers:
         specifier: 5.3.0
         version: 5.3.0
       '@latentic/live-markdown':
-        specifier: ^0.5.0
-        version: 0.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.6.0
+        version: 0.6.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tanstack/react-virtual':
         specifier: ^3.14.3
         version: 3.14.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -885,11 +885,11 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@latentic/live-markdown-core@0.5.0':
-    resolution: {integrity: sha512-JZiZA3JIQXJcVORnC2qkUzocGXWcnRqX2SR+IREAuAYq/OPHsLEuJ13LmMlPsir1+IvHXPaygARL35y/O6ZOvQ==}
+  '@latentic/live-markdown-core@0.6.0':
+    resolution: {integrity: sha512-W2YLkIsGizf/zM9+Yyk0dsMO/A0mHVTqaeyVzPhL/OQxvTO6z8DUTCbGe2mr/r0WhrCRgXAAij83wcAtzl6P5g==}
 
-  '@latentic/live-markdown@0.5.0':
-    resolution: {integrity: sha512-ZDcM/MVO4SiJa11AVNnsprshz7GSHeWNU1TLhVmzWDAXuAUYqEKW20oKaqTnveR4J+/eUyciDbc4zF4oXgjimw==}
+  '@latentic/live-markdown@0.6.0':
+    resolution: {integrity: sha512-9IWtPd8LqeBYarkCaVVSxORstb/dwld3AiyLpywTfZAqPwe4oSRdTTS48rxjg2rZI8tdnuvifWqu76DtT7Lm8g==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -5337,7 +5337,7 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@latentic/live-markdown-core@0.5.0':
+  '@latentic/live-markdown-core@0.6.0':
     dependencies:
       '@codemirror/commands': 6.10.3
       '@codemirror/lang-markdown': 6.5.0
@@ -5354,9 +5354,9 @@ snapshots:
       turndown: 7.2.4
       yaml: 2.9.0
 
-  '@latentic/live-markdown@0.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@latentic/live-markdown@0.6.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@latentic/live-markdown-core': 0.5.0
+      '@latentic/live-markdown-core': 0.6.0
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
