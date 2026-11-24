@@ -19,6 +19,7 @@ agent-harness = { version = "0.6.0-alpha.2", features = [
   "acp",
   "openai-compatible",
 ] }
+paged-document = { path = "../crates/paged-document" }
 workspace-index = { path = "../crates/workspace-index" }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

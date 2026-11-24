@@ -7,7 +7,7 @@ use tauri::{App, AppHandle, Emitter, Manager, RunEvent, Wry};
 use crate::open_with::PendingOpenUrls;
 use crate::{
     app_group, autocorrect, boot_native_mark, capture, clipboard, data_reset, db, deep_link, external,
-    files, harness, index, logging, login_item, main_window, menu, open_with, profile_migration, review, services,
+    files, harness, index, logging, login_item, main_window, menu, open_with, paged, profile_migration, review, services,
     share_inbox, spotlight, stale_state, user_tool_dirs, workspace,
 };
 #[cfg(target_os = "macos")]
@@ -59,6 +59,7 @@ pub(crate) fn builder() -> tauri::Builder<Wry> {
         .manage(review::ReviewSessionStore::default())
         .manage(index::WorkspaceIndexStore::default())
         .manage(external::ExternalFilesRegistry::default())
+        .manage(paged::PagedDocuments::default())
         .manage(PendingOpenUrls::default())
         .manage(services::PendingServiceText::default())
         .manage(share_inbox::ShareInboxState::default())

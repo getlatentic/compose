@@ -1,0 +1,17 @@
+[package]
+name = "paged-document"
+version = "0.1.0"
+edition = "2021"
+description = "A markdown file read a window at a time: an index of places where reading can start, built in the background, so a file of any size opens at once and no more than a window of it is ever in memory. No Tauri."
+# Compose-internal; not part of the published harness family.
+publish = false
+
+[lib]
+name = "paged_document"
+
+[dependencies]
+memchr = "2"
+
+[dev-dependencies]
+comrak = "0.52"
+tempfile = "3"
