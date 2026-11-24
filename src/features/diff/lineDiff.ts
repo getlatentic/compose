@@ -5,9 +5,9 @@
  * changed*, not two full copies of the file to eyeball (the side-by-side
  * this replaced made a one-line edit in a 500-line file invisible).
  *
- * This runs once per file change in a post-run review — never in a
- * per-keystroke loop — so a straightforward LCS is the right tool. The
- * O(n·m) table is bounded two ways: common head/tail lines are trimmed
+ * It runs once per file change in a post-run review, and for the review
+ * margin a beat after the writer stops typing (never per keystroke), so a
+ * straightforward LCS is the right tool. The O(n·m) table is bounded two ways: common head/tail lines are trimmed
  * first (most edits touch a small region, collapsing the LCS to almost
  * nothing), and a hard cell cap falls back to a coarse whole-block
  * replace so a pathological input can't blow memory.
@@ -207,6 +207,15 @@ function segmentHunks(ops: Op[], context: number): DiffHunk[] {
     prevEnd = range.end;
   }
   return hunks;
+}
+
+/**
+ * Every line of both texts in document order, each marked kept, removed or
+ * added. The review margin groups these into change blocks.
+ */
+export function diffLines(before: string, after: string): { lines: DiffLine[]; truncated: boolean } {
+  const { ops, truncated } = computeOps(splitLines(before), splitLines(after));
+  return { lines: ops, truncated };
 }
 
 export function computeUnifiedDiff(

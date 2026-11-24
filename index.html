@@ -11,16 +11,27 @@
        * and the native window both paint before any module runs, so without
        * this a dark-mode user sees a white skeleton flash on every launch, and
        * anyone who has zoomed or dragged a pane sees the layout jump the moment
-       * React takes over. Mirrors `applyTheme` / `applyZoom` and the pane
+       * React takes over. Mirrors `applyAppearance` / `applyZoom` and the pane
        * widths in src/app/store/uiStore.ts; the key is UI_PREFS_KEY in
        * src/lib/prefs/uiPrefs.ts. An absent value deliberately sets nothing, so
        * the defaults below decide.
        */
+      /*
+       * Inside Compose on a Mac the window is transparent over the system's
+       * sidebar material (tauri.conf.json `windowEffects`), so the page must
+       * not paint over it. Mirrors `hasVibrancy` in src/lib/theme/windowChrome.ts.
+       */
+      if (window.__TAURI_INTERNALS__ && /Mac/.test(navigator.platform)) {
+        document.documentElement.setAttribute("data-vibrancy", "");
+      }
       try {
         var prefs = JSON.parse(localStorage.getItem("compose.uiPrefs.v1") || "{}");
         var root = document.documentElement;
         if (prefs.theme === "dark" || prefs.theme === "light") {
           root.setAttribute("data-theme", prefs.theme);
+        }
+        if (typeof prefs.palette === "string") {
+          root.setAttribute("data-palette", prefs.palette);
         }
         if (typeof prefs.zoom === "number" && prefs.zoom > 0) {
           root.style.setProperty("--ui-zoom", String(prefs.zoom));
@@ -56,24 +67,18 @@
       :root {
         color-scheme: light;
         --ui-zoom: 1;
-        --splash-bg: #ffffff;
-        --splash-fg: #161616;
-        --splash-divider: #c6c6c6;
       }
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme="light"]) {
           color-scheme: dark;
-          --splash-bg: #161616;
-          --splash-fg: #f4f4f4;
-          --splash-divider: #525252;
         }
       }
       :root[data-theme="dark"] {
         color-scheme: dark;
-        --splash-bg: #161616;
-        --splash-fg: #f4f4f4;
-        --splash-divider: #525252;
       }
+      /* Each palette's skeleton colours, written in by vite.config.ts from
+         src/lib/theme/palettes.json. */
+      /* @palette-splash */
       html {
         /* Same rule global.scss applies, so the skeleton's rem-based columns
            are already at the user's interface scale. */
@@ -84,11 +89,18 @@
         padding: 0;
         height: 100%;
         background: var(--splash-bg);
-        /* Matches the app's single UI stack ($ui-font in global.scss):
-           IBM Plex isn't bundled, so the chrome uses system-ui everywhere. */
-        font-family: system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", Roboto, sans-serif;
         color: var(--splash-fg);
+      }
+      /* Over the window's material: the page stays clear and only the note
+         and chat panels paint. */
+      :root[data-vibrancy],
+      :root[data-vibrancy] body,
+      :root[data-vibrancy] .app-skeleton,
+      :root[data-vibrancy] .app-skeleton__pane--sidebar {
+        background: transparent;
+      }
+      :root[data-vibrancy] .app-skeleton__pane--sidebar {
+        border-inline-end: 0;
       }
       #root {
         height: 100%;
@@ -122,6 +134,7 @@
       }
       .app-skeleton__pane--sidebar {
         border-inline-end: 1px solid var(--splash-divider);
+        background: var(--splash-sidebar);
       }
       .app-skeleton__pane--chat {
         border-inline-start: 1px solid var(--splash-divider);

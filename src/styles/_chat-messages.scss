@@ -1,0 +1,375 @@
+// The chat pane: its header, the message list and quoted excerpts.
+
+// Shares --titlebar-height with the sidebar title row and the editor tab
+// strip, so the three line up across the window.
+.chat-header {
+  display: flex;
+  flex: 0 0 var(--titlebar-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-inline: 1.25rem 0.75rem;
+  background: var(--color-bg-app);
+}
+
+.chat-header__title {
+  display: flex;
+  min-inline-size: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.chat-header__meta {
+  color: var(--cds-text-helper);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.chat-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+// The open conversation's title — a click-to-rename button (or plain text
+// before the first send). Switching/new conversations live in the sidebar now.
+.chat-header__title-button,
+.chat-header__title-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  color: inherit;
+}
+
+.chat-header__title-button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.125rem 0.25rem;
+  margin-inline: -0.25rem;
+  border-radius: 2px;
+  text-align: start;
+}
+
+// + (new chat) and × (close chat) — square icon buttons matching the
+// row's rhythm. Quiet at rest, faint hover; the ⋮ ConversationActionsMenu
+// (Carbon OverflowMenu) sits between them with its own native styling.
+.chat-header__btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-icon-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chat-header__btn:hover {
+  background: var(--cds-background-hover, rgba(141, 141, 141, 0.12));
+  color: var(--cds-icon-primary);
+}
+
+.chat-header__title-button:hover {
+  background: var(--cds-layer-hover-01);
+}
+
+.mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  border-radius: 3px;
+  background: var(--cds-button-primary);
+  color: var(--cds-text-on-color);
+}
+
+.chat-panel {
+  position: relative;
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  // The page colour, like the note: the chat is a document-like surface.
+  background: var(--color-bg-app);
+}
+
+.chat-messages {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: auto;
+  padding: 0.75rem 1.25rem 1rem;
+}
+
+// Reserves room under the last turn for the floating composer. Sized inline to
+// the composer's live height (a real layout element, so `scrollHeight` includes
+// it deterministically when re-pinning). The message-stack's own row gap keeps
+// the last turn clear of the composer's top edge.
+.chat-messages__composer-spacer {
+  inline-size: 100%;
+}
+
+// The new-conversation empty state: a left-aligned stack (mark, heading,
+// context line, suggested prompts) rather than a centered notice.
+.chat-empty {
+  display: grid;
+  gap: 0.625rem;
+  align-content: start;
+  flex: 1 1 auto;
+  // Let this flex item shrink below its content's intrinsic width, so a long
+  // unbreakable filename in the hint wraps instead of widening the panel.
+  min-inline-size: 0;
+  padding: 1.25rem 1rem;
+  color: var(--cds-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.375rem;
+}
+
+.chat-empty__mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: 6px;
+  background: var(--cds-button-primary);
+  color: var(--cds-text-on-color);
+}
+
+.chat-empty__title {
+  margin: 0;
+  color: var(--cds-text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.chat-empty__hint {
+  margin: 0;
+  max-inline-size: 22rem;
+  min-inline-size: 0;
+  // `anywhere`, not `break-word`: it also shrinks the element's min-content, so a
+  // long unbreakable filename wraps instead of forcing the grid item full-width.
+  overflow-wrap: anywhere;
+}
+
+.chat-empty__suggestions {
+  display: grid;
+  gap: 0.375rem;
+  margin-block-start: 0.25rem;
+}
+
+.chat-empty__suggestion {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 6px;
+  background: var(--cds-layer-02);
+  color: var(--cds-text-primary);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: start;
+  cursor: pointer;
+}
+
+.chat-empty__suggestion:hover {
+  background: var(--cds-layer-hover-01);
+}
+
+.chat-empty__suggestion svg {
+  flex-shrink: 0;
+  color: var(--cds-icon-secondary);
+}
+
+.message-stack {
+  display: grid;
+  // A single column capped at the panel width (minmax(0, 1fr), NOT the implicit
+  // `auto` track which grows to max-content) so a wide code block or table
+  // scrolls inside its bubble instead of forcing the panel — and the editor —
+  // wider.
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+// Single-column chat — every turn is left-aligned, full panel width.
+// No left/right split, no avatar bubbles, no "assistant" label. The eyebrow
+// + colour difference is what tells the two turns apart, in document order.
+.message-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-inline-size: 0;
+  gap: 0.25rem;
+}
+
+.message-activity {
+  padding-inline: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--cds-text-helper);
+}
+
+// A reply whose run was cut short (the app quit/crashed mid-stream). Understated
+// — it's incomplete, not an error — with a one-click re-run of the turn.
+.message-interrupted {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-block-start: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 6px;
+  background: var(--cds-layer-01);
+  font-size: 0.75rem;
+}
+
+.message-interrupted__text {
+  color: var(--cds-text-secondary);
+}
+
+.message-interrupted__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+  border: 0;
+  padding: 0.125rem 0.25rem;
+  background: transparent;
+  color: var(--cds-link-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.message-interrupted__retry:hover,
+.message-interrupted__retry:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+// The turn's prose. No border, no fill, no max-inline-size cap — it spans the
+// panel column and reads like a document, not a chat-app bubble.
+// `min-inline-size: 0` lets a wide child (a code block, a long URL) wrap
+// inside the column instead of forcing the panel wider.
+.message-body {
+  min-inline-size: 0;
+  padding-block: 0.125rem;
+  font-size: 0.875rem;
+  // Unitless so every element (headings included) keeps the same rhythm
+  // relative to its own size.
+  line-height: 1.5;
+  color: var(--cds-text-primary);
+  overflow-wrap: anywhere;
+}
+
+// User turns are a sunken bubble on the right; the assistant's reply stays
+// open prose on the left. Whitespace keeps the newlines the user typed.
+.message-body--user {
+  white-space: pre-wrap;
+  align-self: flex-end;
+  max-inline-size: min(36rem, 88%);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-primary);
+}
+
+// A commented passage sent to chat, rendered as a chip inside the user bubble.
+.excerpt-card {
+  display: grid;
+  gap: 0.5rem;
+  white-space: normal;
+}
+
+.excerpt-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+}
+
+.excerpt-card__file {
+  // Shrink below content width so a long name ellipsizes instead of forcing a
+  // horizontal scroll; the full path stays on hover (title).
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.excerpt-card__loc {
+  flex: 0 0 auto;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 999px;
+  background: var(--cds-layer-accent-01);
+  color: var(--cds-text-secondary);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.excerpt-card__excerpt {
+  font-size: 0.8125rem;
+}
+
+// The commented passage — a blue-barred block that reads as "the text you
+// commented on". Rendered via MarkdownMessage, so the `>` quote is a blockquote
+// inside `.markdown`. The extra `.markdown` in the selector out-specifies the
+// ambient `.markdown blockquote` (gray bar + 0.5rem block margin) so the excerpt
+// keeps its blue bar and the original tight spacing against the header.
+.excerpt-card__excerpt .markdown blockquote {
+  margin: 0;
+  padding: 0.375rem 0.625rem;
+  border-inline-start: 3px solid var(--cds-button-primary);
+  background: var(--cds-highlight);
+  color: var(--cds-text-primary);
+  line-height: 1.25rem;
+}
+
+// Only the EXCERPT clamps — the note stays outside it (below "Show more"), so a
+// long quote never hides the comment that goes with it. Collapses to a few
+// lines behind a fade; "Show more" drops the clamp.
+.excerpt-card__excerpt--clamped {
+  max-block-size: 9rem;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+
+// The user's comment on the excerpt — always shown, never clamped.
+.excerpt-card__note {
+  margin: 0;
+  color: var(--cds-text-primary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.excerpt-card__more {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cds-link-primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.excerpt-card__more:hover {
+  text-decoration: underline;
+}

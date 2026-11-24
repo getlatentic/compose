@@ -14,7 +14,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools", "protocol-asset"] }
+tauri = { version = "2", features = ["devtools", "protocol-asset", "macos-private-api"] }
 agent-harness = { version = "0.6.0-alpha.2", features = [
   "acp",
   "openai-compatible",
@@ -57,7 +57,7 @@ keyring = { version = "3", features = ["linux-native", "sync-secret-service"] }
 [dev-dependencies]
 # The accelerator parser Tauri hands menu shortcut strings to. Pinned to the
 # version Tauri already pulls in, so the test checks the real parser.
-muda = "0.19"
+muda = "0.20"
 tauri = { version = "2", features = ["test"] }
 
 # `orphan_runs::kill` signals a stranded agent process, and is `cfg(unix)` —
@@ -105,6 +105,7 @@ objc2-web-kit = { version = "0.3", features = [
   "WKWebView",
   "WKWebViewConfiguration",
   "WKPDFConfiguration",
+  "WKSnapshotConfiguration",
   "WKNavigation",
   "objc2-app-kit",
   "block2",
@@ -116,6 +117,7 @@ objc2-app-kit = { version = "0.3", features = [
   "NSPasteboardItem",
   "NSBitmapImageRep",
   "NSImageRep",
+  "NSColorSpace",
   "NSPrintInfo",
   "NSPrintOperation",
   "NSResponder",
@@ -123,8 +125,13 @@ objc2-app-kit = { version = "0.3", features = [
   "NSView",
   "NSGraphics",
   "NSButton",
+  "NSFontManager",
+  "NSImage",
+  "NSGraphicsContext",
   "NSControl",
   "NSRunningApplication",
   "NSWorkspace",
+  "NSAccessibility",
   "NSPanel",
+  "NSSharingService",
 ] }

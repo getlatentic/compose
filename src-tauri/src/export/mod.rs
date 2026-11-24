@@ -12,20 +12,28 @@
 //! outside any workspace, through the external-files registry; the destination
 //! is a user-chosen save location outside the vault.
 
+mod card;
+pub mod card_commands;
 mod fonts;
 mod html;
 mod mermaid;
+#[cfg(target_os = "macos")]
+mod offscreen;
 mod paged;
 mod pdf;
 mod print;
+mod share;
+mod snapshot;
+mod typeface;
 
 use crate::document_kind::DocumentKind;
+use typeface::ExportTypefaces;
 use crate::external::ExternalFilesRegistry;
 use crate::workspace::WorkspaceRegistry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, State};
+use tauri::AppHandle;
 
 /// A generated export artifact, returned to the front end.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -41,6 +49,8 @@ pub struct ExportArtifact {
 pub enum ExportFormat {
     Pdf,
     Html,
+    Image,
+    Markdown,
 }
 
 /// Which document to render: one inside a registered workspace, or a file the
@@ -69,13 +79,12 @@ pub fn document_export_pdf(
     content: String,
     destination_path: String,
     mermaid_svgs: HashMap<String, String>,
+    typefaces: Option<ExportTypefaces>,
     app: AppHandle,
-    registry: State<'_, WorkspaceRegistry>,
-    externals: State<'_, ExternalFilesRegistry>,
 ) -> Result<ExportArtifact, String> {
     let destination = check_destination(&destination_path, "PDF")?;
-    let source = resolve_document(&document, &registry, &externals)?;
-    let document_html = document_html(&source, &content, mermaid_svgs);
+    let source = resolve_for(&app, &document)?;
+    let document_html = document_html(&source, &content, mermaid_svgs, &typefaces.unwrap_or_default());
     let pdf_bytes = pdf::html_to_pdf(&app, &document_html)?;
     crate::files::write_file_atomic(destination, &pdf_bytes)
         .map_err(|error| format!("Could not save the PDF: {error}"))?;
@@ -94,17 +103,34 @@ pub fn document_export_html(
     content: String,
     destination_path: String,
     mermaid_svgs: HashMap<String, String>,
-    registry: State<'_, WorkspaceRegistry>,
-    externals: State<'_, ExternalFilesRegistry>,
+    typefaces: Option<ExportTypefaces>,
+    app: AppHandle,
 ) -> Result<ExportArtifact, String> {
     let destination = check_destination(&destination_path, "HTML file")?;
-    let source = resolve_document(&document, &registry, &externals)?;
-    let document_html = document_html(&source, &content, mermaid_svgs);
+    let source = resolve_for(&app, &document)?;
+    let document_html = document_html(&source, &content, mermaid_svgs, &typefaces.unwrap_or_default());
     crate::files::write_file_atomic(destination, document_html.as_bytes())
         .map_err(|error| format!("Could not save the HTML file: {error}"))?;
     Ok(ExportArtifact {
         format: ExportFormat::Html,
         path: destination_path,
+    })
+}
+
+/// Save markdown the user chose a location for: a note's current text or a
+/// conversation turned into markdown. Written as-is, atomically.
+#[tauri::command(async)]
+pub fn document_export_markdown(content: String, destination_path: String) -> Result<ExportArtifact, String> {
+    write_markdown(&content, &destination_path)
+}
+
+fn write_markdown(content: &str, destination_path: &str) -> Result<ExportArtifact, String> {
+    let destination = check_destination(destination_path, "Markdown file")?;
+    crate::files::write_file_atomic(destination, content.as_bytes())
+        .map_err(|error| format!("Could not save the Markdown file: {error}"))?;
+    Ok(ExportArtifact {
+        format: ExportFormat::Markdown,
+        path: destination_path.to_string(),
     })
 }
 
@@ -119,13 +145,18 @@ pub fn document_print(
     document: DocumentRef,
     content: String,
     mermaid_svgs: HashMap<String, String>,
+    typefaces: Option<ExportTypefaces>,
     app: AppHandle,
-    registry: State<'_, WorkspaceRegistry>,
-    externals: State<'_, ExternalFilesRegistry>,
 ) -> Result<bool, String> {
-    let source = resolve_document(&document, &registry, &externals)?;
-    let document_html = document_html(&source, &content, mermaid_svgs);
+    let source = resolve_for(&app, &document)?;
+    let document_html = document_html(&source, &content, mermaid_svgs, &typefaces.unwrap_or_default());
     print::print_html(&app, &document_html)
+}
+
+/// [`resolve_document`] against the app's own registries.
+fn resolve_for(app: &AppHandle, document: &DocumentRef) -> Result<PathBuf, String> {
+    use tauri::Manager;
+    resolve_document(document, &app.state::<WorkspaceRegistry>(), &app.state::<ExternalFilesRegistry>())
 }
 
 fn check_destination<'a>(destination_path: &'a str, what: &str) -> Result<&'a Path, String> {
@@ -171,22 +202,38 @@ fn document_html(
     source: &Path,
     content: &str,
     mermaid_svgs: HashMap<String, String>,
+    typefaces: &ExportTypefaces,
 ) -> String {
     let title = source
         .file_stem()
         .and_then(|stem| stem.to_str())
         .unwrap_or("document");
     if DocumentKind::of(source) == Some(DocumentKind::PlainText) {
-        return html::render_plain_text_to_html(content, title);
+        return html::render_plain_text_to_html(content, title, typefaces);
     }
     let doc_dir = source.parent().unwrap_or_else(|| Path::new("."));
-    html::render_markdown_to_html_with_mermaid(content, title, doc_dir, mermaid_svgs)
+    html::render_markdown_to_html_with_mermaid(content, title, doc_dir, mermaid_svgs, typefaces)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn saves_markdown_exactly_as_given() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("note.md");
+        let text = "# Title\n\n**bold** and `code`\n";
+        let artifact = write_markdown(text, &path.to_string_lossy()).expect("export");
+        assert_eq!(artifact.format, ExportFormat::Markdown);
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), text);
+    }
+
+    #[test]
+    fn refuses_markdown_without_a_destination() {
+        assert!(write_markdown("x", "  ").is_err());
+    }
 
     fn registry_with_workspace() -> (WorkspaceRegistry, String, tempfile::TempDir) {
         let dir = tempdir().expect("tempdir");
@@ -217,6 +264,7 @@ mod tests {
             Path::new("/vault/notes/x.md"),
             "# Hi\n\n**bold**",
             HashMap::new(),
+            &ExportTypefaces::default(),
         );
         assert!(html.contains("<h1"));
         assert!(html.contains("<strong>bold</strong>"));
@@ -226,7 +274,7 @@ mod tests {
 
     #[test]
     fn a_text_file_renders_as_written() {
-        let html = document_html(Path::new("/notes/todo.txt"), "# milk\n**eggs**", HashMap::new());
+        let html = document_html(Path::new("/notes/todo.txt"), "# milk\n**eggs**", HashMap::new(), &ExportTypefaces::default());
         assert!(html.contains("# milk\n**eggs**"), "{html}");
         assert!(!html.contains("<h1") && !html.contains("<strong>"), "{html}");
         assert!(html.contains("<title>todo</title>"));

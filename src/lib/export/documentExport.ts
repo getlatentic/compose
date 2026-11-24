@@ -3,7 +3,7 @@ import { withoutDocumentExtension } from "../documents/documentKind";
 
 /**
  * The shared "save a generated document" flow used by every export format:
- * prompt for a location, run the backend export, then open the result. Each
+ * prompt for a location, then run the backend export. Each
  * format (PDF, HTML, …) supplies only its filename/filter and the command that
  * produces the file.
  */
@@ -20,8 +20,7 @@ export function defaultExportFileName(relativePath: string, extension: string): 
 }
 
 /**
- * Prompt for a save location, run `produce(destinationPath)`, then open the
- * result in the default app. Never throws — returns a discriminated result the
+ * Prompt for a save location, then run `produce(destinationPath)`. Never throws — returns a discriminated result the
  * caller turns into UI feedback.
  */
 export async function saveDocumentExport(options: {
@@ -43,18 +42,44 @@ export async function saveDocumentExport(options: {
       return { status: "cancelled" };
     }
     const artifact = await options.produce(destinationPath);
-    // Opening the result is a nicety — never let it fail the export.
-    try {
-      const { openPath } = await import("@tauri-apps/plugin-opener");
-      await openPath(artifact.path);
-    } catch {
-      /* the file was written; viewer launch is best-effort */
-    }
     return { status: "exported", path: artifact.path };
   } catch (error) {
-    return {
-      status: "error",
-      message: error instanceof Error ? error.message : "Could not export the document.",
-    };
+    // A command's own error arrives as a plain string.
+    const message = error instanceof Error ? error.message : typeof error === "string" ? error : "Could not export the document.";
+    return { status: "error", message };
   }
+}
+
+/** Opens a Finder window with the saved file selected. */
+export async function revealExport(path: string): Promise<void> {
+  const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+  await revealItemInDir(path);
+}
+
+/**
+ * The toast for an export's outcome: where the file went, with a way to find
+ * it, or why it failed. A cancelled Save dialog says nothing.
+ */
+export function reportExportResult(result: FileExportResult, show: (toast: ExportToast) => void): void {
+  if (result.status === "cancelled") return;
+  if (result.status === "error") {
+    show({ kind: "error", title: "Export failed", message: result.message });
+    return;
+  }
+  const name = result.path.split("/").pop() ?? result.path;
+  show({
+    kind: "success",
+    title: "Exported",
+    message: `Saved “${name}”.`,
+    timeoutMs: 10000,
+    action: { label: "Show in Finder", run: () => void revealExport(result.path) },
+  });
+}
+
+export interface ExportToast {
+  kind: "success" | "error";
+  title: string;
+  message: string;
+  timeoutMs?: number;
+  action?: { label: string; run: () => void };
 }

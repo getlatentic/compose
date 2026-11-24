@@ -22,7 +22,10 @@ vi.mock("../../lib/editor/editorFlush", async (importOriginal) => {
 });
 vi.mock("../../lib/runtime/desktopRuntime", () => ({ isTauriRuntime: () => true }));
 
-import { applyFileBuffer, createWorkspaceFromPath, openWorkspaceFile, type Workspace } from "../workspaceModel";
+import { applyFileBuffer } from "../workspace/files";
+import { createWorkspaceFromPath } from "../workspace/workspaces";
+import { openWorkspaceFile } from "../workspace/tabs";
+import type { Workspace } from "../workspace/types";
 import { useWorkspaceStore } from "../workspaceStore";
 
 const ws = () => useWorkspaceStore.getState().workspaces.find((w) => w.id === "ws")!;

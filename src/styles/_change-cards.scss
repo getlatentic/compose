@@ -1,0 +1,306 @@
+// An agent's changes in the chat: proposals, applied changes and their diffs.
+
+.suggestion-list {
+  display: grid;
+  gap: 0.5rem;
+  align-self: stretch;
+  inline-size: 100%;
+}
+
+/* Binary / oversized change — a size-only note in place of a diff. */
+.diff--omitted {
+  padding: 0.5rem;
+  color: var(--cds-text-secondary);
+  background: var(--cds-layer-02);
+  font-size: 0.75rem;
+}
+
+/* Informational "the assistant already changed these files" diffs. The list
+   spans the full message column (same width the assistant prose uses) so diff
+   lines get maximum room before wrapping — the row is `align-items: flex-start`,
+   so without this stretch the grid would shrink to its content. */
+.applied-list {
+  display: grid;
+  gap: 0.5rem;
+  align-self: stretch;
+  inline-size: 100%;
+}
+
+.applied {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid var(--cds-border-subtle-01);
+  padding: 0.625rem;
+  background: var(--cds-layer-01);
+}
+
+.applied__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.applied__badge {
+  flex: none;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.applied__badge--create {
+  color: var(--pill-green-fg, #0e6027);
+  background: var(--pill-green-bg, #defbe6);
+}
+
+.applied__badge--rewrite {
+  color: var(--pill-blue-fg, #0043ce);
+  background: var(--pill-blue-bg, #d0e2ff);
+}
+
+.applied__badge--delete {
+  color: var(--pill-red-fg, #a2191f);
+  background: var(--pill-red-bg, #ffd7d9);
+}
+
+.applied__path {
+  border: 0;
+  background: none;
+  padding: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+  color: var(--cds-link-primary);
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.75rem;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.applied__path:hover {
+  text-decoration: underline;
+}
+
+.suggestion {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid var(--cds-border-subtle-01);
+  padding: 0.625rem;
+  background: var(--cds-layer-01);
+}
+
+.suggestion__header,
+.suggestion__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.suggestion__title {
+  color: var(--cds-text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.125rem;
+}
+
+.suggestion__path {
+  border: 0;
+  padding: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+  color: var(--cds-link-primary);
+  background: transparent;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.suggestion__status {
+  flex: 0 0 auto;
+  padding: 0.125rem 0.375rem;
+  color: var(--cds-text-secondary);
+  background: var(--cds-layer-accent-01);
+  font-size: 0.6875rem;
+  text-transform: capitalize;
+}
+
+.suggestion__status--accepted {
+  color: var(--cds-text-success);
+  background: var(--pill-green-bg, #defbe6);
+}
+
+.suggestion__status--rejected {
+  color: var(--cds-text-secondary);
+  background: var(--pill-gray-bg, #e0e0e0);
+}
+
+.suggestion__status--stale {
+  color: var(--cds-text-warning);
+  background: var(--pill-yellow-bg, #fcf4d6);
+}
+
+.suggestion__status--replaced {
+  color: var(--cds-text-secondary);
+  background: var(--pill-gray-bg, #e0e0e0);
+}
+
+/* Collapsible unified diff (replaces the side-by-side before/after). */
+.diff {
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 0.75rem;
+}
+
+.diff--empty {
+  padding: 0.5rem;
+  color: var(--cds-text-secondary);
+}
+
+.diff__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  inline-size: 100%;
+  padding: 0.375rem 0.5rem;
+  border: 0;
+  background: var(--cds-layer-02);
+  color: var(--cds-text-primary);
+  cursor: pointer;
+}
+
+.diff__chevron {
+  flex: none;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.diff__chevron--open {
+  transform: rotate(90deg);
+}
+
+.diff__summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff__added {
+  color: var(--cds-text-success);
+  font-weight: 600;
+}
+
+.diff__removed {
+  color: var(--cds-support-error);
+  font-weight: 600;
+}
+
+.diff__summary-label {
+  color: var(--cds-text-secondary);
+}
+
+.diff__body {
+  max-block-size: 18rem;
+  overflow: auto;
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+  background: var(--cds-layer-02);
+  font-family: var(--font-jetbrains-mono);
+  line-height: 1.1rem;
+}
+
+.diff__notice {
+  padding: 0.375rem 0.5rem;
+  color: var(--cds-text-secondary);
+  background: var(--cds-layer-01);
+}
+
+.diff__fold {
+  padding: 0.125rem 0.5rem;
+  color: var(--cds-text-secondary);
+  background: var(--cds-layer-01);
+  text-align: center;
+  user-select: none;
+}
+
+.diff__line {
+  // Compact line-number gutters: just wide enough for ~4-digit line numbers
+  // (tabular-nums keeps them aligned) so the code text gets the room. The
+  // marker column is a single glyph; the text takes the rest.
+  display: grid;
+  grid-template-columns: 2ch 2ch 1rem minmax(0, 1fr);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff__gutter {
+  padding-inline: 0.125rem;
+  color: var(--cds-text-placeholder);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  user-select: none;
+}
+
+.diff__sign {
+  text-align: center;
+  user-select: none;
+}
+
+.diff__line--add {
+  background: rgba(25, 128, 56, 0.12);
+  color: var(--cds-text-primary);
+}
+
+.diff__line--add .diff__sign {
+  color: var(--cds-text-success);
+}
+
+.diff__line--remove {
+  background: rgba(218, 30, 40, 0.1);
+  color: var(--cds-text-primary);
+}
+
+.diff__line--remove .diff__sign {
+  color: var(--cds-support-error);
+}
+
+.suggestion__message {
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.suggestion__actions {
+  justify-content: flex-start;
+}
+
+.suggestion__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-block-size: 1.75rem;
+  border: 1px solid var(--cds-border-strong-01);
+  padding-inline: 0.5rem;
+  background: var(--cds-layer-02);
+  color: var(--cds-text-primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.suggestion__action--accept {
+  border-color: var(--cds-button-primary);
+  color: var(--cds-button-primary);
+}
+
+.suggestion__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}

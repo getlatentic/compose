@@ -8,11 +8,14 @@ import {
 } from "../../app/store/activeWorkspace";
 import { useUiStore } from "../../app/store/uiStore";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import { startOllama } from "../../lib/ipc/harnessClient";
+import { startOllama } from "../../lib/ipc/harnessModelsClient";
 import { agentStatus } from "../settings/agentStatus";
-import { missingFileContextPaths, sumChatThreadStats } from "../../app/workspaceModel";
+import { missingFileContextPaths } from "../../app/workspace/chatContext";
+import { sumChatThreadStats } from "../../app/workspace/chatRun";
 import { formatCoins, formatCompact } from "../../lib/format/numbers";
+import { reportExportResult } from "../../lib/export/documentExport";
 import { exportMarkdownFile } from "../../lib/export/markdownExport";
+import { showToast } from "../toast/toastStore";
 import { conversationToMarkdown } from "../../lib/export/conversationMarkdown";
 import { loadConversation } from "../../lib/ipc/conversationsClient";
 import { useConfirm } from "../dialogs/ConfirmProvider";
@@ -246,10 +249,13 @@ function ChatPanelInner() {
       }
       messages = snapshot.messages;
     }
-    exportMarkdownFile({
+    reportExportResult(
+            await exportMarkdownFile({
       filePath: title || "conversation",
       markdown: conversationToMarkdown(title, messages),
-    });
+    }),
+            showToast,
+          );
   };
 
   return (

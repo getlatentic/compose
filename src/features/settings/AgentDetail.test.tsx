@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { HarnessInfo, HarnessReadiness } from "../../lib/ipc/harnessClient";
+import type { HarnessInfo, HarnessReadiness } from "../../lib/ipc/harnessCatalogClient";
 
 // The heavy children are IPC-connected and irrelevant here; each renders a
 // marker so the test can assert which sections the page decided to show.
@@ -20,7 +20,7 @@ vi.mock("./OllamaModelManager", () => ({
 }));
 const setup = { readiness: null as HarnessReadiness | null };
 vi.mock("./useHarnessSetup", () => ({ useHarnessSetup: () => setup }));
-vi.mock("../../lib/ipc/harnessClient", () => ({
+vi.mock("../../lib/ipc/customAgentsClient", () => ({
   harnessRemoveCustom: vi.fn(),
   // The store probes this on mount; the seeded state already says true.
   harnessModelManagement: vi.fn(async () => ({ baseUrl: "http://localhost:11434" })),

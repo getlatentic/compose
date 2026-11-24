@@ -1,11 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  harnessCredentialStatus,
-  harnessReadiness,
-  ollamaInstalled,
-  runHarnessStream,
-  startOllama,
-} from "../lib/ipc/harnessClient";
+import { harnessCredentialStatus } from "../lib/ipc/harnessSetupClient";
+import { harnessReadiness } from "../lib/ipc/harnessCatalogClient";
+import { ollamaInstalled, startOllama } from "../lib/ipc/harnessModelsClient";
+import { runHarnessStream } from "../lib/ipc/harnessRunClient";
 import { recordLlmThread } from "../lib/ipc/llmContextClient";
 import {
   newConversation,
@@ -17,7 +14,7 @@ import { editGuardFor, reviewChangeToDraft, useWorkspaceStore } from "./workspac
 import { useHarnessStore } from "./store/harnessStore";
 import { useUiStore } from "./store/uiStore";
 import { useToastStore } from "../features/toast/toastStore";
-import type { HarnessCapabilities, HarnessInfo, HarnessReadiness } from "../lib/ipc/harnessClient";
+import type { HarnessCapabilities, HarnessInfo, HarnessReadiness } from "../lib/ipc/harnessCatalogClient";
 import {
   deleteFile,
   FileConflictError,
@@ -67,17 +64,23 @@ vi.mock("../lib/ipc/workspaceClient", () => ({
   saveWorkspaceTabs: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock("../lib/ipc/harnessClient", () => ({
+vi.mock("../lib/ipc/harnessRunClient", () => ({
   cancelHarnessRun: vi.fn(),
   runHarnessStream: vi.fn(),
   subscribeHarnessRun: vi.fn(),
+}));
+vi.mock("../lib/ipc/harnessCatalogClient", () => ({
   harnessList: vi.fn(async () => []),
-  harnessListModels: vi.fn(async () => []),
   harnessReadiness: vi.fn(async () => null),
   harnessDiscover: vi.fn(async () => []),
-  harnessCredentialStatus: vi.fn(async () => ({ configured: false })),
+}));
+vi.mock("../lib/ipc/harnessModelsClient", () => ({
+  harnessListModels: vi.fn(async () => []),
   ollamaInstalled: vi.fn(async () => false),
   startOllama: vi.fn(async () => undefined),
+}));
+vi.mock("../lib/ipc/harnessSetupClient", () => ({
+  harnessCredentialStatus: vi.fn(async () => ({ configured: false })),
 }));
 
 describe("workspace store", () => {

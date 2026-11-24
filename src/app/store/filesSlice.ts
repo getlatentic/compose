@@ -15,23 +15,12 @@ import {
   externalReadFile,
   externalWriteFile,
 } from "../../lib/ipc/externalFilesClient";
-import type { Workspace, WorkspaceFileBuffer } from "../workspaceModel";
-import {
-  applyFileBuffer,
-  removeDeletedFile,
-  applyWorkspaceDocumentChanges,
-  closeWorkspaceFileTab,
-  dismissBufferConflict,
-  markBufferConflict,
-  markBufferSaved,
-  moveWorkspaceComments,
-  openWorkspaceFile,
-  removeWorkspaceFolder,
-  renameContextItemPath,
-  reorderOpenTabs,
-  type DocumentTextChange,
-  type WorkspaceFileEntry,
-} from "../workspaceModel";
+import type { Workspace, WorkspaceFileBuffer } from "../workspace/types";
+import { applyFileBuffer, removeDeletedFile, dismissBufferConflict, markBufferConflict, markBufferSaved, removeWorkspaceFolder } from "../workspace/files";
+import { applyWorkspaceDocumentChanges, moveWorkspaceComments } from "../workspace/comments";
+import { closeWorkspaceFileTab, openWorkspaceFile, reorderOpenTabs } from "../workspace/tabs";
+import { renameContextItemPath } from "../workspace/chatContext";
+import type { DocumentTextChange, WorkspaceFileEntry } from "../workspace/types";
 import {
   flushActiveEditor,
 } from "../../lib/editor/editorFlush";

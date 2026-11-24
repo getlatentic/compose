@@ -1,6 +1,6 @@
 import { Checkmark, Close } from "@carbon/react/icons";
 
-import type { WorkspaceDocumentSuggestion } from "../../app/workspaceModel";
+import type { WorkspaceDocumentSuggestion } from "../../app/workspace/types";
 import { ChangePreview } from "../diff/ChangePreview";
 
 /**

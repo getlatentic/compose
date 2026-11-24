@@ -19,6 +19,10 @@
 //! and sends it as [`EditGuard`]; the backend just acts on it. Cloning is
 //! copy-on-write where the platform allows (see [`crate::files::clone`]).
 
+mod overlay;
+
+pub use overlay::{apply_sandbox_overlay, SandboxFile};
+
 use crate::db::{BaselineCandidate, MetadataStore};
 use crate::files::clone::clone_workspace;
 use crate::files::diff::{
@@ -131,6 +135,7 @@ pub fn prepare_edit_guard(
     guard: EditGuard,
     run_id: &str,
     workspace_id: &str,
+    sandbox_files: &[SandboxFile],
     registry: &WorkspaceRegistry,
     metadata: &MetadataStore,
     store: &ReviewSessionStore,
@@ -162,6 +167,7 @@ pub fn prepare_edit_guard(
                 .map_err(|error| format!("could not create review sandbox: {error}"))?;
             let clone_root = sandbox.path().to_path_buf();
             clone_workspace(&real_root, &clone_root).map_err(|error| error.to_string())?;
+            apply_sandbox_overlay(&clone_root, sandbox_files)?;
             store.open(
                 run_id,
                 ReviewSession {
@@ -529,6 +535,7 @@ mod tests {
             EditGuard::Clone,
             "run-1",
             &h.workspace_id,
+            &[],
             &h.registry,
             &h.metadata,
             &h.review,
@@ -556,6 +563,7 @@ mod tests {
             EditGuard::Clone,
             "run-1",
             &h.workspace_id,
+            &[],
             &h.registry,
             &h.metadata,
             &h.review,
@@ -606,6 +614,7 @@ mod tests {
             EditGuard::Clone,
             "run-1",
             &h.workspace_id,
+            &[],
             &h.registry,
             &h.metadata,
             &h.review,
@@ -631,6 +640,7 @@ mod tests {
             EditGuard::Snapshot,
             "run-1",
             &h.workspace_id,
+            &[],
             &h.registry,
             &h.metadata,
             &h.review,
@@ -661,6 +671,7 @@ mod tests {
             EditGuard::Snapshot,
             "run-1",
             &h.workspace_id,
+            &[],
             &h.registry,
             &h.metadata,
             &h.review,
@@ -699,6 +710,7 @@ mod tests {
             EditGuard::Snapshot,
             "run-1",
             &h.workspace_id,
+            &[],
             &h.registry,
             &h.metadata,
             &h.review,
@@ -722,6 +734,7 @@ mod tests {
             EditGuard::Snapshot,
             "run-1",
             &h.workspace_id,
+            &[],
             &h.registry,
             &h.metadata,
             &h.review,
@@ -739,6 +752,7 @@ mod tests {
             EditGuard::Clone,
             "run-1",
             &h.workspace_id,
+            &[],
             &h.registry,
             &h.metadata,
             &h.review,
@@ -761,6 +775,7 @@ mod tests {
             EditGuard::Clone,
             "run-1",
             &h.workspace_id,
+            &[],
             &h.registry,
             &h.metadata,
             &h.review,

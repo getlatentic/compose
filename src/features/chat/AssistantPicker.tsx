@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Checkmark, ChevronDown, Laptop, WarningAltFilled } from "@carbon/react/icons";
 import { groupAgents, isBuiltInProvider, isLocalProvider } from "../settings/agentGroups";
-import type { ProviderInfo } from "../../lib/ipc/harnessClient";
+import type { ProviderInfo } from "../../lib/ipc/harnessCatalogClient";
 
 import { useAnchoredPopover } from "../shared/useAnchoredPopover";
 

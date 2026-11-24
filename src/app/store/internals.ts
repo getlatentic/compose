@@ -1,4 +1,5 @@
-import type { Workspace } from "../workspaceModel";
+import type { EditGuard } from "../../lib/ipc/harnessRunClient";
+import type { Workspace } from "../workspace/types";
 
 /** Replace one workspace in the array via a transform, leaving the rest by
  * reference. The workhorse for every workspace-scoped state update. */
@@ -57,22 +58,30 @@ export function newNoteFolder(workspace: Workspace, chosen: string): string {
 }
 
 /**
- * Prefix the sent prompt with the one piece of context only the app knows: which
- * file the user is currently looking at, as an absolute path. The working
- * directory itself is stated by the harness — in the openai-compatible system
- * prompt's trailing environment section, and by the Claude/Codex CLIs' own
- * environment — so it isn't repeated here. Added to the *sent* prompt only; the
- * user-visible chat message stays clean.
+ * Prefix the sent prompt with the one piece of context only the app knows:
+ * which file the user is currently looking at. The working directory itself
+ * is stated by the harness — in the openai-compatible system prompt's
+ * trailing environment section, and by the Claude/Codex CLIs' own
+ * environment — so it isn't repeated here. Added to the *sent* prompt only;
+ * the user-visible chat message stays clean.
+ *
+ * Normally an absolute path. A `clone` run works on a copy of the notes, so
+ * it gets the path relative to its working directory: given the real file's
+ * absolute path, an agent edits the real file and the review is bypassed.
  */
 export function prefixWorkspaceContext(
   prompt: string,
   workspaceRoot: string | undefined,
   activeFilePath: string | null | undefined,
+  editGuard: EditGuard,
 ): string {
   if (!activeFilePath) {
     return prompt;
   }
   const root = workspaceRoot?.trim().replace(/\/+$/, "");
+  if (editGuard === "clone" && root) {
+    return `The user is currently viewing the file \`${activeFilePath}\` (relative to your working directory).\n\n${prompt}`;
+  }
   const absolutePath = root ? `${root}/${activeFilePath}` : activeFilePath;
   return `The user is currently viewing the file \`${absolutePath}\`.\n\n${prompt}`;
 }

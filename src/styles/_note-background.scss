@@ -1,0 +1,56 @@
+// The writer's own background behind the note (`lib/theme/noteBackground.ts`),
+// inside the note panel only: the window's glass and the chat keep the theme.
+
+@use "appearance-mixins" as appearance;
+
+// A colour: the panel's page colour becomes it, and the ink follows the
+// colour's own lightness so text stays readable whatever the theme.
+// `data-note-ink` comes with every colour; it lifts this rule over the
+// editor's own light/dark palette rules on the same panel.
+:root[data-note-bg="color"][data-note-ink] :is(#{appearance.$editor-panels}) {
+  --color-bg-app: var(--note-bg-color);
+  --color-surface-sunken: color-mix(in srgb, var(--note-bg-color) 92%, var(--note-ink));
+  --color-surface-raised: color-mix(in srgb, var(--note-bg-color) 94%, #fff);
+  --color-doc-text: var(--note-ink);
+  --color-doc-heading: var(--note-ink);
+  --color-doc-code: var(--note-ink);
+  --color-text-primary: var(--note-ink);
+  --color-text-secondary: color-mix(in srgb, var(--note-ink) 72%, var(--note-bg-color));
+  --color-text-tertiary: color-mix(in srgb, var(--note-ink) 55%, var(--note-bg-color));
+  --color-border-subtle: color-mix(in srgb, var(--note-ink) 10%, transparent);
+  --color-border-default: color-mix(in srgb, var(--note-ink) 16%, transparent);
+  --color-rule: color-mix(in srgb, var(--note-ink) 45%, transparent);
+  // The hovers and Carbon's names mix the panel's own ink, not the window's.
+  --state-hover: color-mix(in srgb, var(--note-ink) 6%, transparent);
+  --state-pressed: color-mix(in srgb, var(--note-ink) 10%, transparent);
+  --color-edge: color-mix(in srgb, var(--note-ink) 8%, transparent);
+  @include appearance.palette-aliases;
+}
+
+:root[data-note-ink="dark"] {
+  --note-ink: #1c1b1a;
+}
+
+:root[data-note-ink="light"] {
+  --note-ink: #f2efea;
+}
+
+// An image: under the page colour at the chosen strength, so the theme's ink
+// stays readable on top. The note's page and the editor itself go clear so the
+// image shows through them.
+:root[data-note-bg="image"] {
+  .document-workspace,
+  .editor-preview {
+    background:
+      linear-gradient(
+        color-mix(in srgb, var(--color-bg-app) var(--note-bg-dim), transparent),
+        color-mix(in srgb, var(--color-bg-app) var(--note-bg-dim), transparent)
+      ),
+      var(--note-bg-image) center / var(--note-bg-size) var(--note-bg-repeat);
+  }
+
+  .document-workspace .cm-editor,
+  .document-workspace .cm-scroller {
+    background: transparent;
+  }
+}

@@ -1,0 +1,45 @@
+// The launch skeleton React draws before the app is ready, matching index.html's.
+
+.app-skeleton {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  // The same columns index.html's inline skeleton uses, seeded from the saved
+  // pane widths there — so React taking over is not a layout change.
+  grid-template-columns:
+    var(--splash-sidebar-w, 15rem) minmax(17rem, 1fr) var(--splash-chat-w, 22rem);
+  background: var(--cds-background);
+}
+
+:root[data-splash-focus] .app-skeleton {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:root[data-splash-focus] .app-skeleton__pane--sidebar,
+:root[data-splash-focus] .app-skeleton__pane--chat {
+  display: none;
+}
+
+.app-skeleton__pane {
+  min-inline-size: 0;
+}
+
+.app-skeleton__pane--sidebar {
+  border-inline-end: 1px solid var(--cds-border-subtle-02);
+  background: var(--color-sidebar-bg);
+}
+
+.app-skeleton__pane--chat {
+  border-inline-start: 1px solid var(--cds-border-subtle-02);
+}
+
+@media (max-width: 48rem) {
+  .app-skeleton {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-skeleton__pane--sidebar,
+  .app-skeleton__pane--chat {
+    display: none;
+  }
+}

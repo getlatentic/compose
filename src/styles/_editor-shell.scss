@@ -1,0 +1,108 @@
+// The note pane's frame: the focus title bar, the editor body and host, the file picker.
+
+// Deeper focus: the strip that replaces the tab strip — clears the
+// macOS traffic lights, drags the window, shows nothing.
+.focus-titlebar {
+  flex: none;
+  block-size: 2.5rem;
+}
+
+.editor-body {
+  display: flex;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.document-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-block-size: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: var(--color-bg-app);
+}
+
+.editor-host {
+  min-block-size: 0;
+  flex: 1 1 auto;
+}
+
+// Sizes the editor's mount slot. CM6 owns everything *inside*
+// .cm-editor (font, line-height, heading sizes, colors, focus
+// outline) via `editorBaseTheme` — co-locating those rules with the
+// extension that ships them lets CM6's line-metric measurement see
+// them at the right moment. Don't add `.cm-editor .cm-*` rules
+// here: that's where the click-drift bug came from.
+.cm-editor-host__scroll {
+  padding: 0;
+}
+
+.cm-editor-host .cm-editor {
+  height: 100%;
+}
+
+.tiptap-editor {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: var(--color-bg-app);
+}
+
+.tiptap-editor__scroll {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.file-picker {
+  display: flex;
+  flex-direction: column;
+  max-block-size: 22rem;
+  overflow-y: auto;
+  border: 1px solid var(--cds-border-subtle-01);
+  background: var(--cds-layer-01);
+}
+
+.file-picker__item {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-block-end: 1px solid var(--cds-border-subtle-00);
+  text-align: start;
+  padding: 0.625rem 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  color: var(--cds-text-primary);
+  font: inherit;
+
+  &:last-child { border-block-end: none; }
+  &:hover { background: var(--cds-layer-hover-01); }
+  &:focus-visible {
+    outline: 2px solid var(--cds-focus);
+    outline-offset: -2px;
+  }
+}
+
+.file-picker__item--active {
+  background: var(--cds-layer-selected-01);
+  &:hover { background: var(--cds-layer-selected-hover-01); }
+}
+
+.file-picker__name { font-weight: 600; }
+.file-picker__dir {
+  color: var(--cds-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.file-picker__empty {
+  margin: 0;
+  padding: 1rem;
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+}

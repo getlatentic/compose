@@ -1,17 +1,7 @@
 import type { StoreApi } from "zustand";
 import type { ConversationSummary } from "../../lib/ipc/conversationsClient";
-import type { ReasoningEffort } from "../../lib/ipc/harnessClient";
-import type {
-  Workspace,
-  DocumentTextChange,
-  OnboardingState,
-  SourceRange,
-  WorkspaceCommentThread,
-  WorkspaceFileBuffer,
-  WorkspaceFileEntry,
-  WorkspaceFsEvent,
-  WorkspaceListResult,
-} from "../workspaceModel";
+import type { ReasoningEffort } from "../../lib/ipc/harnessRunClient";
+import type { Workspace, DocumentTextChange, OnboardingState, SourceRange, WorkspaceCommentThread, WorkspaceFileBuffer, WorkspaceFileEntry, WorkspaceFsEvent, WorkspaceListResult } from "../workspace/types";
 
 /**
  * One entry in the unified file+chat navigation history. Either the user was
@@ -99,6 +89,12 @@ export interface WorkspaceState {
   setCommentResolved: (commentId: string, resolved: boolean) => void;
   appendUserChatMessage: (userContent: string, preparedCommand: string | null) => void;
   acceptSuggestedEdit: (suggestionId: string) => void;
+  /**
+   * Record a decision made in the note's review margin on one change block:
+   * `kept` when the change stays in the note, not when it was undone or
+   * rejected. The margin has already edited the note itself.
+   */
+  decideReviewBlock: (reviewId: string, key: string, kept: boolean) => void;
   /**
    * Open the chat panel, push a user message that quotes `selection.text`
    * as context, and stream the reply into the chat thread.

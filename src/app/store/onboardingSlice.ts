@@ -1,7 +1,5 @@
 import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
-import {
-  type OnboardingState,
-} from "../workspaceModel";
+import type { OnboardingState } from "../workspace/types";
 
 export const createOnboardingSlice = (
   set: WorkspaceStoreSet,

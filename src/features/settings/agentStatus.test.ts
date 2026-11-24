@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { agentStatus } from "./agentStatus";
-import type { HarnessCapabilities, HarnessInfo, HarnessReadiness } from "../../lib/ipc/harnessClient";
+import type { HarnessCapabilities, HarnessInfo, HarnessReadiness } from "../../lib/ipc/harnessCatalogClient";
 
 const caps = (over: Partial<HarnessCapabilities> = {}): HarnessCapabilities => ({
   credentialRequired: false,

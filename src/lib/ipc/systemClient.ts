@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
-import type { InstallHint } from "./harnessClient";
+import type { InstallHint } from "./harnessCatalogClient";
 
 /**
  * One optional local-AI dependency's status (mirrors the Rust

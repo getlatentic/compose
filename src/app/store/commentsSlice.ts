@@ -1,11 +1,8 @@
 import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
 import { showErrorToast } from "../../features/toast/toastStore";
 import { useUiStore } from "./uiStore";
-import {
-  addWorkspaceComment,
-  setCommentsChatContext,
-  setWorkspaceCommentStatus,
-} from "../workspaceModel";
+import { addWorkspaceComment, setWorkspaceCommentStatus } from "../workspace/comments";
+import { setCommentsChatContext } from "../workspace/chatContext";
 import {
   persistComments,
 } from "./persistence";

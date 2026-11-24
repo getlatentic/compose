@@ -1,0 +1,63 @@
+// Floating toasts (`features/toast/ToastViewport.tsx`): a raised, translucent
+// card like the app's menus, in the theme's own surface and ink, so they read
+// in every palette and in dark. The kind shows in the stripe and the icon;
+// the card itself stays neutral.
+
+.toast-viewport :is(.cds--toast-notification, .cds--actionable-notification) {
+  --toast-stripe: var(--color-accent-default);
+
+  inline-size: 22rem;
+  margin: 0;
+  border: 0.5px solid var(--color-edge);
+  border-inline-start: 3px solid var(--toast-stripe);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-raised) 90%, transparent);
+  box-shadow: var(--shadow-popover);
+  color: var(--color-text-primary);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+
+  &::before {
+    display: none;
+  }
+
+  :is(.cds--toast-notification__title, .cds--actionable-notification__title) {
+    color: var(--color-text-primary);
+    font-family: var(--font-ui);
+  }
+
+  :is(.cds--toast-notification__subtitle, .cds--actionable-notification__subtitle) {
+    color: var(--color-text-secondary);
+    font-family: var(--font-ui);
+  }
+
+  :is(.cds--toast-notification__close-icon, .cds--actionable-notification__close-icon) {
+    fill: var(--color-text-secondary);
+  }
+
+  .cds--actionable-notification__action-button {
+    color: var(--color-accent-text);
+  }
+}
+
+.toast-viewport :is(.cds--toast-notification--success, .cds--actionable-notification--success) {
+  --toast-stripe: var(--color-success-text);
+
+  .cds--toast-notification__icon,
+  .cds--actionable-notification__icon {
+    fill: var(--color-success-text);
+  }
+}
+
+.toast-viewport :is(.cds--toast-notification--error, .cds--actionable-notification--error) {
+  --toast-stripe: var(--color-danger-text);
+
+  .cds--toast-notification__icon,
+  .cds--actionable-notification__icon {
+    fill: var(--color-danger-text);
+  }
+}
+
+.toast-viewport :is(.cds--toast-notification--info, .cds--actionable-notification--info) :is(.cds--toast-notification__icon, .cds--actionable-notification__icon) {
+  fill: var(--color-accent-text);
+}

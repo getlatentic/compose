@@ -1,4 +1,1 @@
-export type {
-  WorkspaceFileBuffer,
-  WorkspaceFileEntry,
-} from "../../app/workspaceModel";
+export type { WorkspaceFileBuffer, WorkspaceFileEntry } from "../../app/workspace/types";

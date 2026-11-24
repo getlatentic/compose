@@ -7,14 +7,8 @@ import {
   createBatchedRunSetter,
   handleHarnessRunEvent,
 } from "./runEvents";
-import {
-  appendUserChatMessage,
-  finalizeRun,
-  startRun,
-  type ChatExcerptRef,
-  type FinalizeRunOptions,
-  type SourceRange,
-} from "../workspaceModel";
+import { appendUserChatMessage, finalizeRun, startRun, type FinalizeRunOptions } from "../workspace/chatRun";
+import type { ChatExcerptRef, SourceRange } from "../workspace/types";
 import {
   beginAgentEditWindow,
   endAgentEditWindow,
@@ -23,9 +17,12 @@ import {
   byteOffsetToLineColumn,
 } from "../../features/text/positionMapper";
 import { formatExcerptPreamble } from "../../features/chat/excerptPreamble";
+import { reviewFeedbackFor, withReviewFeedback } from "../../features/review/reviewFeedback";
+import { startReviewRun } from "./reviewRun";
 import {
   editGuardFor,
   harnessCapabilitiesOf,
+  harnessDisplayName,
   harnessExtraArgs,
 } from "./harnessConfig";
 import {
@@ -33,21 +30,13 @@ import {
   updateWorkspace,
 } from "./internals";
 import {
-  finishReviewRun,
-} from "./reviewFlow";
-import {
-} from "../../lib/ipc/conversationsClient";
-import {
   persistConversation,
 } from "./persistence";
 import {
   playCompletionChime,
 } from "../../lib/audio/completionChime";
-import {
-  harnessCredentialStatus,
-  runHarnessStream,
-  subscribeHarnessRun,
-} from "../../lib/ipc/harnessClient";
+import { harnessCredentialStatus } from "../../lib/ipc/harnessSetupClient";
+import { runHarnessStream, subscribeHarnessRun } from "../../lib/ipc/harnessRunClient";
 import {
   spillChatInputForPrompt,
 } from "./chatInputSpill";
@@ -176,6 +165,7 @@ export async function runAskAboutSelection(
         appendUserChatMessage(item.chatThread, userMessage, null, null, excerpt),
         runId,
         null,
+        harnessDisplayName(harnessCatalog, harnessId),
       ),
     })),
   }));
@@ -199,6 +189,7 @@ export async function runAskAboutSelection(
   // reads on demand, so it can't blow a small context window. The chat-visible
   // message + excerpt chip stay the full original text.
   const sentUserMessage = await spillChatInputForPrompt(workspaceId, userMessage);
+  const reviewFeedback = reviewFeedbackFor(workspace.chatThread);
 
   try {
     // The note decides intent — the assistant may answer OR edit based on
@@ -211,6 +202,14 @@ export async function runAskAboutSelection(
       useHarnessStore.getState().allowEdits,
       useHarnessStore.getState().reviewEdits,
     );
+    const review = await startReviewRun({
+      set,
+      get,
+      workspace: get().workspaces.find((item) => item.id === workspaceId) ?? workspace,
+      runId,
+      editGuard,
+      feedback: reviewFeedback,
+    });
     const chatMode = capabilities.previewsEdits ? "plan" : useHarnessStore.getState().allowEdits ? "code" : "plan";
 
     // Snapshot mode edits real files mid-run — attribute the watcher's events
@@ -226,7 +225,7 @@ export async function runAskAboutSelection(
         if (!cancelled && useUiStore.getState().soundOnComplete) {
           void playCompletionChime();
         }
-        void finishReviewRun(set, workspaceId, runId, editGuard, cancelled);
+        review.finished(cancelled);
       });
     });
     activeRunSubscriptions.set(runId, releaseSubscription);
@@ -234,7 +233,12 @@ export async function runAskAboutSelection(
     await runHarnessStream({
       approvalMode: "default",
       chatMode,
-      prompt: prefixWorkspaceContext(sentUserMessage, workspace.path, workspace.activeFilePath),
+      prompt: prefixWorkspaceContext(
+        withReviewFeedback(sentUserMessage, reviewFeedback),
+        workspace.path,
+        workspace.activeFilePath,
+        editGuard,
+      ),
       runId,
       workspaceId,
       harnessId,
@@ -242,10 +246,12 @@ export async function runAskAboutSelection(
       effort: tuning.effort,
       maxTurns: tuning.maxTurns,
       editGuard,
+      sandboxFiles: review.sandboxFiles,
       extraArgs: harnessExtraArgs(harnessId, tuning),
       extraInstructions: useHarnessStore.getState().customInstructions || undefined,
       binaryPath: tuning.binaryPath,
     });
+    review.sent();
   } catch (error) {
     const message = formatHarnessError(error);
     const currentThread =

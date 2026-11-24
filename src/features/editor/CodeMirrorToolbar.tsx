@@ -25,13 +25,16 @@ import {
   TextLink,
 } from "@carbon/react/icons";
 import type { ReactNode } from "react";
-import { memo } from "react";
+import { memo, useEffect } from "react";
 import { EditorView } from "@codemirror/view";
+import { Type } from "lucide-react";
 
 import { blockCommands, formatCommands } from "@latentic/live-markdown";
 import { useCaretContext, type CaretContext } from "./caretContext";
 import { useTextPrompt } from "../dialogs/TextPromptProvider";
 import { useLinkPrompt } from "../dialogs/LinkInsertProvider";
+import { useUiStore } from "../../app/store/uiStore";
+import { activeEditorView } from "./editorChrome";
 
 export interface CodeMirrorToolbarProps {
   view: EditorView | null;
@@ -45,6 +48,10 @@ export interface CodeMirrorToolbarProps {
   mode: "wysiwyg" | "source";
 }
 
+function keepEditorSelection(event: { preventDefault: () => void }): void {
+  event.preventDefault();
+}
+
 function CodeMirrorToolbarInner({
   view,
   fileActions,
@@ -52,9 +59,40 @@ function CodeMirrorToolbarInner({
   linkTargets,
   mode,
 }: CodeMirrorToolbarProps) {
+  const collapsed = useUiStore((state) => state.formatBarCollapsed);
+  const toggleFormatBar = useUiStore((state) => state.toggleFormatBar);
+  const formatting = mode === "wysiwyg" && view !== null;
+
+  // The selection's format bar runs commands on this editor; the editor hands
+  // its view only to this slot, so it is published for that bar.
+  useEffect(() => {
+    if (!view) return;
+    activeEditorView.set(view);
+    return () => {
+      if (activeEditorView.get() === view) activeEditorView.set(null);
+    };
+  }, [view]);
+
   return (
-    <div className="tiptap-toolbar" role="toolbar" aria-label="Editor">
-      {mode === "wysiwyg" && view ? (
+    <div
+      className={`tiptap-toolbar${formatting && collapsed ? " tiptap-toolbar--collapsed" : ""}`}
+      role="toolbar"
+      aria-label="Editor"
+    >
+      {formatting ? (
+        <button
+          type="button"
+          className="tiptap-toolbar__button tiptap-toolbar__collapse"
+          aria-label={collapsed ? "Show formatting" : "Hide formatting"}
+          aria-expanded={!collapsed}
+          title={collapsed ? "Show formatting" : "Hide formatting"}
+          onMouseDown={keepEditorSelection}
+          onClick={toggleFormatBar}
+        >
+          <Type size={16} strokeWidth={1.75} aria-hidden />
+        </button>
+      ) : null}
+      {formatting && !collapsed ? (
         <FormattingButtons view={view} onInsertImage={onInsertImage} linkTargets={linkTargets} />
       ) : null}
       <span className="tiptap-toolbar__spacer" aria-hidden="true" />

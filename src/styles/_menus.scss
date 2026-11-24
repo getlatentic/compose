@@ -1,0 +1,143 @@
+// Every menu in the app looks like a macOS menu: a translucent blurred
+// surface, compact rows, the row under the pointer in the system accent with
+// white text, thin inset separators. Carbon's menus (the tree's right-click
+// menu, the Export overflow menu) and our own popovers share it.
+
+@mixin surface {
+  padding: 5px;
+  border: 0.5px solid var(--color-edge);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-raised) 82%, transparent);
+  box-shadow: var(--shadow-popover);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+}
+
+@mixin item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-block-size: 1.5rem;
+  block-size: auto;
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.25rem;
+  text-align: start;
+  outline: none;
+  box-shadow: none;
+  cursor: default;
+}
+
+@mixin item-highlighted {
+  background: var(--system-accent);
+  color: var(--system-accent-text);
+
+  svg {
+    color: inherit;
+    fill: currentColor;
+  }
+}
+
+@mixin separator {
+  block-size: 0;
+  margin: 5px 10px;
+  border: 0;
+  border-block-start: 1px solid var(--color-edge);
+  background: none;
+}
+
+// Carbon Menu: the file tree's right-click menu and the kebab menus.
+.cds--menu {
+  @include surface;
+
+  min-inline-size: 11rem;
+}
+
+.cds--menu-item {
+  @include item;
+
+  &:hover,
+  &:focus-visible {
+    @include item-highlighted;
+  }
+
+  // Carbon focuses the first item when a menu opens; that is not a pointer
+  // over it, so only keyboard focus highlights.
+  &:focus:not(:focus-visible) {
+    background: transparent;
+  }
+}
+
+.cds--menu-item__label {
+  color: inherit;
+}
+
+.cds--menu-item__shortcut {
+  color: inherit;
+  opacity: 0.55;
+}
+
+.cds--menu-item--danger:not(:hover):not(:focus-visible) {
+  color: var(--color-danger-text);
+}
+
+.cds--menu-item-divider {
+  @include separator;
+}
+
+// Carbon OverflowMenu: the Export menu.
+.cds--overflow-menu-options {
+  @include surface;
+
+  &::after {
+    display: none;
+  }
+}
+
+.cds--overflow-menu-options__option {
+  block-size: auto;
+  max-block-size: none;
+  background: transparent;
+}
+
+.cds--overflow-menu-options__btn {
+  @include item;
+
+  inline-size: 100%;
+
+  &:hover,
+  &:focus-visible {
+    @include item-highlighted;
+  }
+
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+.cds--overflow-menu-options__option--danger .cds--overflow-menu-options__btn:not(:hover):not(:focus-visible) {
+  color: var(--color-danger-text);
+}
+
+// Carbon wraps the kebab trigger in an IconButton that pops an "Options"
+// tooltip on hover. The button keeps its accessible name via
+// aria-labelledby, so screen readers are unaffected.
+.cds--overflow-menu__wrapper [role="tooltip"] {
+  display: none;
+}
+
+// Our own menus.
+.new-menu__panel,
+.conv-menu__list,
+.assistant-picker__popover,
+.workspace-switcher__popover {
+  @include surface;
+}
+
+

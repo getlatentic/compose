@@ -22,19 +22,35 @@ describe("uiPrefs", () => {
       soundOnComplete: false,
       analyticsEnabled: false,
       focusMode: true,
+      formatBarCollapsed: true,
       sidebarWidthPx: 320,
       chatWidthPx: 480,
       zoom: 1.25,
       theme: "dark",
+      palette: "paper",
+      readingFont: "chalkboard",
+      readingSize: 20,
+      customFont: "Avenir Next",
+      exportFont: "latex",
+      noteBackground: { kind: "image", file: "/data/backgrounds/a.jpg", fit: "tile", dim: 0.5 },
+      editorScheme: "dark",
     });
     expect(loadUiPrefs()).toEqual({
       soundOnComplete: false,
       analyticsEnabled: false,
       focusMode: true,
+      formatBarCollapsed: true,
       sidebarWidthPx: 320,
       chatWidthPx: 480,
       zoom: 1.25,
       theme: "dark",
+      palette: "paper",
+      readingFont: "chalkboard",
+      readingSize: 20,
+      customFont: "Avenir Next",
+      exportFont: "latex",
+      noteBackground: { kind: "image", file: "/data/backgrounds/a.jpg", fit: "tile", dim: 0.5 },
+      editorScheme: "dark",
     });
   });
 
@@ -44,11 +60,32 @@ describe("uiPrefs", () => {
       soundOnComplete: false,
       analyticsEnabled: true,
       focusMode: false,
+      formatBarCollapsed: false,
       sidebarWidthPx: null,
       chatWidthPx: null,
       zoom: 1,
       theme: "system",
+      palette: "classic",
+      readingFont: "theme",
+      readingSize: 18,
+      customFont: null,
+      exportFont: "note",
+      noteBackground: { kind: "theme" },
+      editorScheme: "app",
     });
+  });
+
+  it("drops a palette, font or size this build does not know", () => {
+    localStorage.setItem(
+      "compose.uiPrefs.v1",
+      JSON.stringify({ palette: "neon", readingFont: "papyrus", readingSize: "huge" }),
+    );
+    expect(loadUiPrefs()).toMatchObject({ palette: "classic", readingFont: "theme", readingSize: 18 });
+  });
+
+  it("reads a size stored by name as its pixel size", () => {
+    localStorage.setItem("compose.uiPrefs.v1", JSON.stringify({ readingSize: "large" }));
+    expect(loadUiPrefs().readingSize).toBe(20);
   });
 
   it("falls back wholesale on a corrupt payload", () => {
@@ -57,10 +94,18 @@ describe("uiPrefs", () => {
       soundOnComplete: true,
       analyticsEnabled: true,
       focusMode: false,
+      formatBarCollapsed: false,
       sidebarWidthPx: null,
       chatWidthPx: null,
       zoom: 1,
       theme: "system",
+      palette: "classic",
+      readingFont: "theme",
+      readingSize: 18,
+      customFont: null,
+      exportFont: "note",
+      noteBackground: { kind: "theme" },
+      editorScheme: "app",
     });
   });
 
