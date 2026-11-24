@@ -1,4 +1,4 @@
-import type { HarnessInfo, ProviderInfo } from "../../lib/ipc/harnessClient";
+import type { HarnessInfo, ProviderInfo } from "../../lib/ipc/harnessCatalogClient";
 
 /**
  * Which agent runs the work, and which endpoint serves the model, are two

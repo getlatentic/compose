@@ -71,8 +71,11 @@ Compose is built with Tauri 2, Rust, React, TypeScript, CodeMirror 6, and `@late
 
 ```sh
 pnpm install
+git config core.hooksPath .githooks   # run CI's checks before each push
 pnpm tauri dev
 ```
+
+Run `pnpm check` for the full set: build, stylesheet lint, tests and clippy.
 
 ## License
 

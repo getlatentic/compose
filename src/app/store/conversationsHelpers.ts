@@ -1,5 +1,5 @@
 import type { ConversationSummary } from "../../lib/ipc/conversationsClient";
-import { resetChatThread } from "../workspaceModel";
+import { resetChatThread } from "../workspace/chatRun";
 import { updateWorkspace } from "./internals";
 import type { WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
 

@@ -1,4 +1,4 @@
-import type { ToolKind } from "../../lib/ipc/harnessClient";
+import type { ToolKind } from "../../lib/ipc/harnessRunClient";
 
 /**
  * Plain-language names for the agent's tools, so a non-technical reader

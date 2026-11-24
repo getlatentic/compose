@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 
-import type { ChatRunState, WorkspaceChatMessage } from "../../app/workspaceModel";
+import type { ChatRunState, WorkspaceChatMessage } from "../../app/workspace/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageRow, type MessageRowCallbacks } from "./MessageRow";
 import { WorkingIndicator } from "./WorkingIndicator";
@@ -44,37 +44,38 @@ export function ChatMessageList({
   const running = runState === "starting" || runState === "streaming";
   const showStartingLoader = running && messages[messages.length - 1]?.role !== "assistant";
 
-  // Whether the reader was at the bottom before this update. Read in a layout
-  // effect — after the DOM has the new content but before paint — because by
-  // the time an ordinary effect runs, `scrollHeight` already includes it and
-  // every position looks scrolled-up.
-  const wasAtBottom = useRef(true);
-  useLayoutEffect(() => {
+  // Whether the reader is following the conversation, as of their last
+  // scroll. Content growing underneath fires no scroll event, so a reply that
+  // lands in one lump cannot read as the reader having scrolled away.
+  const following = useRef(true);
+  const onScroll = useCallback(() => {
     const element = scrollRef.current;
     if (element) {
-      wasAtBottom.current =
-        element.scrollHeight - element.scrollTop - element.clientHeight <= PINNED_SLACK;
+      following.current = element.scrollHeight - element.scrollTop - element.clientHeight <= PINNED_SLACK;
     }
-  });
+  }, []);
 
-  // Follow the conversation only while the reader is following it. Pinning
-  // unconditionally meant scrolling up to re-read something was undone by the
-  // next delta — and since a reasoning model emits its whole answer at once,
-  // that yank was a full message tall.
-  //
-  // Re-pin on `composerHeight` too: the spacer below grows in the same commit,
-  // so reading `scrollHeight` here already includes the reserved space — no
-  // race with the composer's resize observer.
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (!element || !wasAtBottom.current) {
-      return;
+  const lastSeenId = useRef(messages[messages.length - 1]?.id);
+
+  // Follow the conversation only while the reader is following it, so
+  // scrolling up to re-read something is not undone by the next delta. Before
+  // paint, so the new content never shows a frame out of place. Re-pins on
+  // `composerHeight` too: the spacer below grows in the same commit.
+  useLayoutEffect(() => {
+    // The writer just sent a message: show it, wherever they had scrolled.
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.id !== lastSeenId.current) {
+      lastSeenId.current = lastMessage?.id;
+      if (lastMessage?.role === "user") following.current = true;
     }
-    element.scrollTop = element.scrollHeight;
+    const element = scrollRef.current;
+    if (element && following.current) {
+      element.scrollTop = element.scrollHeight;
+    }
   }, [messages, runState, composerHeight]);
 
   return (
-    <div ref={scrollRef} className="chat-messages">
+    <div ref={scrollRef} className="chat-messages" onScroll={onScroll}>
       {messages.length === 0 ? (
         <ChatEmptyState contextFileLabel={contextFileLabel} onUseSuggestion={onUseSuggestion} />
       ) : (

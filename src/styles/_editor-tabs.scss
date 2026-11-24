@@ -1,0 +1,126 @@
+// The editor's tab strip (`features/editor/PaneTabs.tsx`).
+//
+// Window chrome, sized in px: the strip's height is pinned so the macOS
+// traffic lights stay centred in it, and app zoom leaves it alone the way a
+// browser leaves its own toolbar alone. Tabs are cards standing on the strip;
+// the open one takes the page colour and runs into the toolbar below.
+
+.tab-strip {
+  display: flex;
+  flex: 0 0 var(--titlebar-height);
+  align-items: flex-end;
+  min-inline-size: 0;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+  font-size: 13px;
+}
+
+// The collapsed sidebar's stand-in: reuses `.sidebar-titlebar`, so the
+// show-sidebar toggle sits where it does with the sidebar open, and keeps the
+// sidebar's width so the tabs do not shift.
+.tab-strip__lead {
+  flex: 0 0 15rem;
+  align-self: stretch;
+}
+
+// Only the tabs scroll; the lead stays pinned beside the window controls.
+.tab-strip__scroll {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-end;
+  gap: 2px;
+  min-inline-size: 0;
+  block-size: 100%;
+  padding-inline-start: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.tab-strip__scroll::-webkit-scrollbar {
+  height: 3px;
+}
+
+.editor-tab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-inline-size: 104px;
+  max-inline-size: 224px;
+  block-size: 32px;
+  padding: 0 8px 0 16px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--color-text-tertiary);
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.editor-tab:hover {
+  background: color-mix(in srgb, var(--color-bg-app) 55%, transparent);
+  color: var(--color-text-secondary);
+}
+
+.editor-tab--active,
+.editor-tab--active:hover {
+  background: var(--color-bg-app);
+  color: var(--color-text-primary);
+}
+
+// Reorder drop indicator: where the dragged tab will land.
+.editor-tab--drop {
+  box-shadow: inset 2px 0 0 0 var(--color-border-focus);
+}
+
+.tab-button,
+.tab-close {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tab-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  font: inherit;
+  line-height: 20px;
+  text-align: start;
+}
+
+.editor-tab--active .tab-button {
+  font-weight: 600;
+}
+
+// Shown on hover and on the open tab; the space is always kept, so a title
+// never shifts when the button appears.
+.tab-close {
+  display: grid;
+  inline-size: 16px;
+  block-size: 16px;
+  place-items: center;
+  border-radius: var(--radius-xs);
+  color: var(--color-text-tertiary);
+  opacity: 0;
+}
+
+.editor-tab:hover .tab-close,
+.editor-tab--active .tab-close,
+.tab-close:focus-visible {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: var(--state-pressed);
+  color: var(--color-text-primary);
+}
+
+.tab-button:focus-visible,
+.tab-close:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+  border-radius: var(--radius-xs);
+}

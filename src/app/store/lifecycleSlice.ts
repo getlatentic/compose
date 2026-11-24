@@ -1,20 +1,11 @@
 import type { WorkspaceState, WorkspaceStoreGet, WorkspaceStoreSet } from "./types";
 import { showErrorToast } from "../../features/toast/toastStore";
 import { useUiStore } from "./uiStore";
-import {
-  LOOSE_WORKSPACE_ID,
-  applyFileBuffer,
-  applyFileSnapshot,
-  applyScanResult,
-  applyUneditedFileBuffer,
-  createLooseWorkspace,
-  createWorkspaceFromPath,
-  hydrateChatThread,
-  hydrateWorkspaceRecords,
-  openWorkspaceFile,
-  realWorkspaces,
-  type WorkspaceListResult,
-} from "../workspaceModel";
+import { LOOSE_WORKSPACE_ID, createLooseWorkspace, createWorkspaceFromPath, hydrateWorkspaceRecords, realWorkspaces } from "../workspace/workspaces";
+import { applyFileBuffer, applyFileSnapshot, applyScanResult, applyUneditedFileBuffer } from "../workspace/files";
+import { hydrateChatThread } from "../workspace/chatPersistence";
+import { openWorkspaceFile } from "../workspace/tabs";
+import type { WorkspaceListResult } from "../workspace/types";
 import { useIndexStore } from "./indexStore";
 import {
   loadActiveConversation,

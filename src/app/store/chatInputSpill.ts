@@ -1,4 +1,4 @@
-import { spillChatInput } from "../../lib/ipc/harnessClient";
+import { spillChatInput } from "../../lib/ipc/harnessRunClient";
 
 /**
  * Above this many characters (~2000 tokens), a chat message is spilled to a file

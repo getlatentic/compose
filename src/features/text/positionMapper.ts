@@ -130,7 +130,7 @@ export function sliceByByteRange(text: string, range: SourceRange): string {
  * exact string. Build a new mapper on every text mutation. For
  * caller-side caching keyed by an immutable owner (a workspace file
  * buffer, a presentation plan), pair the mapper with the owner in a
- * `WeakMap` — see callers in workspaceModel/canvas renderer.
+ * `WeakMap` — see its callers in `app/workspace`.
  */
 export class PositionMapper {
   readonly text: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { WorkspaceChatMessage, WorkspaceChatThread } from "../workspaceModel";
+import type { WorkspaceChatMessage, WorkspaceChatThread } from "../workspace/types";
 import { handleHarnessRunEvent, persistedRunBody } from "./runEvents";
 
 function thread(messages: WorkspaceChatMessage[] = []): WorkspaceChatThread {

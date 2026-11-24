@@ -1,4 +1,4 @@
-import type { TraceEntry, WorkspaceToolCall } from "../../app/workspaceModel";
+import type { TraceEntry, WorkspaceToolCall } from "../../app/workspace/types";
 import { toolFile } from "./toolLabels";
 
 /**

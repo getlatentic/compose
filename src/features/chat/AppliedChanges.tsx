@@ -1,4 +1,4 @@
-import type { WorkspaceAppliedChange } from "../../app/workspaceModel";
+import type { WorkspaceAppliedChange } from "../../app/workspace/types";
 import { basename } from "../../lib/workspace/displayPath";
 import { ChangePreview } from "../diff/ChangePreview";
 import { computeUnifiedDiff } from "../diff/lineDiff";

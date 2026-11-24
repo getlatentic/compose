@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { requireDesktop } from "../runtime/desktopRuntime";
+
 /** The part of the quick-note window a shortcut opens. */
 export type QuickNoteView = "notes" | "clipboard";
 
@@ -16,11 +18,13 @@ export interface CaptureShortcuts {
 }
 
 export async function captureShortcuts(): Promise<CaptureShortcuts> {
+  requireDesktop("Quick capture");
   return invoke<CaptureShortcuts>("capture_shortcuts");
 }
 
 /** Rejects, keeping the old shortcuts, when the system will not register the
  *  new one or it is the other view's. */
 export async function setCaptureShortcut(view: QuickNoteView, shortcut: string | null): Promise<CaptureShortcuts> {
+  requireDesktop("Quick capture");
   return invoke<CaptureShortcuts>("capture_set_shortcut", { view, shortcut });
 }

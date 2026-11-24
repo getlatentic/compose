@@ -1,15 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { useHarnessStore } from "../../app/store/harnessStore";
-import {
-  harnessCredentialStatus,
-  harnessLogin,
-  harnessReadiness,
-  harnessSetCredential,
-  verifyHarnessRuntime,
-  type HarnessReadiness,
-  type HarnessRuntimeVerification,
-} from "../../lib/ipc/harnessClient";
+import { harnessCredentialStatus, harnessLogin, harnessSetCredential } from "../../lib/ipc/harnessSetupClient";
+import { harnessReadiness, verifyHarnessRuntime, type HarnessReadiness, type HarnessRuntimeVerification } from "../../lib/ipc/harnessCatalogClient";
 import type { InstallLogEntry } from "./agentConfigControls";
 
 /**

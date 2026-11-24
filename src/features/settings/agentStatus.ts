@@ -1,4 +1,4 @@
-import type { HarnessInfo, HarnessReadiness } from "../../lib/ipc/harnessClient";
+import type { HarnessInfo, HarnessReadiness } from "../../lib/ipc/harnessCatalogClient";
 
 export type AgentStatusKind =
   | "ready"

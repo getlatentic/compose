@@ -14,11 +14,9 @@ import {
   loadConversation,
   renameConversation as renameConversationIpc,
 } from "../../lib/ipc/conversationsClient";
-import {
-  hydrateChatThread,
-  resetChatThread,
-  setCurrentTabContext,
-} from "../workspaceModel";
+import { hydrateChatThread } from "../workspace/chatPersistence";
+import { resetChatThread } from "../workspace/chatRun";
+import { setCurrentTabContext } from "../workspace/chatContext";
 import {
   pushNavEntry,
 } from "./navigation";

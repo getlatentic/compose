@@ -4,16 +4,10 @@ import {
   externalAdd,
   externalRemove,
 } from "../../lib/ipc/externalFilesClient";
-import {
-  LOOSE_WORKSPACE_ID,
-  applyExternalFiles,
-  closeWorkspaceFileTab,
-  looseEntries,
-  markBufferSaved,
-  openWorkspaceFile,
-  reorderOpenTabs,
-  type Workspace,
-} from "../workspaceModel";
+import { LOOSE_WORKSPACE_ID } from "../workspace/workspaces";
+import { applyExternalFiles, looseEntries, markBufferSaved } from "../workspace/files";
+import { closeWorkspaceFileTab, openWorkspaceFile, reorderOpenTabs } from "../workspace/tabs";
+import type { Workspace } from "../workspace/types";
 import { flushActiveEditor } from "../../lib/editor/editorFlush";
 import {
   commitOutgoingFile,

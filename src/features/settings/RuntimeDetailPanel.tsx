@@ -3,12 +3,8 @@ import { Button, InlineNotification, SkeletonText, Tag, TextInput } from "@carbo
 import { CheckmarkFilled } from "@carbon/react/icons";
 
 import { useHarnessStore } from "../../app/store/harnessStore";
-import {
-  harnessReadiness,
-  runtimeDetailsOf,
-  startOllama,
-  type HarnessReadiness,
-} from "../../lib/ipc/harnessClient";
+import { harnessReadiness, runtimeDetailsOf, type HarnessReadiness } from "../../lib/ipc/harnessCatalogClient";
+import { startOllama } from "../../lib/ipc/harnessModelsClient";
 import { isTauriRuntime } from "../../lib/runtime/desktopRuntime";
 import { agentStatus, statusTagType } from "./agentStatus";
 import { installKindBadge } from "./installKind";

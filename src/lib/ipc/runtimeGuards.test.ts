@@ -1,13 +1,7 @@
+import { readdirSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 
-/**
- * Modules that deliberately let the call reach `invoke` and reject.
- *
- * Verified rather than assumed: outside Tauri `invoke` returns a *rejected
- * promise*, not a synchronous throw, so an awaiting caller can catch it. That
- * is the whole basis for the exemption — if it ever threw synchronously, a
- * non-awaiting call site would take the view down.
- */
 /**
  * Modules with an export that deliberately reaches `invoke` outside Tauri,
  * with the reason it is safe there.
@@ -30,25 +24,10 @@ const UNGUARDED_BY_DESIGN: Record<string, string> = {
     "never has",
 };
 
-const CLIENTS = [
-  "appClient.ts",
-  "commentsClient.ts",
-  "conversationsClient.ts",
-  "conversationsFallback.ts",
-  "defaultHandlerClient.ts",
-  "exportClient.ts",
-  "externalFilesClient.ts",
-  "fileWatcherClient.ts",
-  "filesClient.ts",
-  "harnessClient.ts",
-  "historyClient.ts",
-  "indexClient.ts",
-  "llmContextClient.ts",
-  "reviewClient.ts",
-  "systemClient.ts",
-  "updater.ts",
-  "workspaceClient.ts",
-];
+/** Every module in this folder: a client added later is checked without anyone listing it. */
+const CLIENTS = readdirSync(new URL("./", import.meta.url)).filter(
+  (name) => name.endsWith(".ts") && !name.endsWith(".test.ts") && !name.endsWith(".d.ts"),
+);
 
 const invoke = vi.fn(() => {
   throw new Error("IPC");
@@ -65,7 +44,7 @@ describe("the desktop-runtime boundary, across every IPC client", () => {
     // remembered to write.
     //
     // One mock for the whole sweep. Resetting the module registry per client
-    // re-imports each dependency graph seventeen times, which pushed this past
+    // re-imports each dependency graph once per client, which pushed this past
     // the 5s default timeout under a loaded parallel run.
     const offenders: string[] = [];
 
@@ -89,7 +68,7 @@ describe("the desktop-runtime boundary, across every IPC client", () => {
       "a client reached IPC with no runtime guard; guard it, or add it to " +
         "UNGUARDED_BY_DESIGN with the reason it is safe",
     ).toEqual(documented);
-    // Seventeen module graphs is real work, and it runs alongside every other
+    // A module graph per client is real work, and it runs alongside every other
     // suite. The 5s default made this fail on a loaded machine while passing
     // alone — a slow test reported as a broken one.
   }, 30_000);

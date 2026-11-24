@@ -1,6 +1,7 @@
 import { readFile } from "../../lib/ipc/filesClient";
 import { externalReadFile } from "../../lib/ipc/externalFilesClient";
-import { FILE_CONTEXT_INLINE_LIMIT, type Workspace } from "../workspaceModel";
+import { FILE_CONTEXT_INLINE_LIMIT } from "../workspace/prompt";
+import type { Workspace } from "../workspace/types";
 
 /**
  * Gather the content of a thread's file-context items, keyed by path, for the

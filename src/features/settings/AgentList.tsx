@@ -3,7 +3,7 @@ import { SkeletonText, Tag } from "@carbon/react";
 import { Add, ChevronRight } from "@carbon/react/icons";
 
 import { useHarnessStore } from "../../app/store/harnessStore";
-import { harnessReadiness, type HarnessReadiness } from "../../lib/ipc/harnessClient";
+import { harnessReadiness, type HarnessReadiness } from "../../lib/ipc/harnessCatalogClient";
 import { agentStatus } from "./agentStatus";
 import { groupAgents, isBuiltInProvider, isLocalProvider } from "./agentGroups";
 

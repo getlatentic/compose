@@ -1,0 +1,119 @@
+// The ⌘K search popover.
+
+// === Search popover (sidebar footer trigger → centered modal) ===
+.search-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popover-raised);
+  background: rgba(22, 22, 22, 0.35);
+  display: grid;
+  place-items: start center;
+  padding-block-start: 6rem;
+}
+
+.search-popover {
+  inline-size: min(36rem, calc(100vw - 2rem));
+  background: var(--cds-background);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.search-popover__field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+  color: var(--cds-icon-secondary);
+}
+
+.search-popover__field input {
+  flex: 1 1 auto;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--cds-text-primary);
+}
+
+.search-popover__results {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-block-size: 24rem;
+  overflow: auto;
+  padding: 0.25rem 0;
+}
+
+.search-popover__message {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  color: var(--cds-text-helper);
+  font-size: 0.8125rem;
+}
+
+.search-popover__message p {
+  margin: 0;
+}
+
+.search-popover__detail {
+  margin-block-start: 0.25rem;
+  color: var(--cds-text-error);
+  font-size: 0.75rem;
+  word-break: break-word;
+}
+
+.search-popover__retry {
+  margin-block-start: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--cds-border-strong-01);
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--cds-text-primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.search-popover__retry:hover,
+.search-popover__retry:focus-visible {
+  background: var(--cds-layer-hover-01);
+  outline: none;
+}
+
+.search-popover__result {
+  display: grid;
+  text-align: start;
+  gap: 0.125rem;
+  padding: 0.5rem 1rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.search-popover__result:hover,
+.search-popover__result:focus-visible {
+  background: var(--cds-layer-hover-01);
+  outline: none;
+}
+
+.search-popover__result-title {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.search-popover__result-path {
+  color: var(--cds-text-helper);
+  font-size: 0.6875rem;
+}
+
+.search-popover__result-snippet {
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

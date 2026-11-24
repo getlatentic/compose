@@ -13,11 +13,13 @@ vi.mock("../lib/ipc/externalFilesClient", () => ({
   externalAdd: vi.fn(),
   externalRemove: vi.fn(),
 }));
-vi.mock("../lib/ipc/harnessClient", () => ({
+vi.mock("../lib/ipc/harnessCatalogClient", () => ({
   harnessList: vi.fn(() => new Promise(() => {})),
+  harnessReadiness: vi.fn(() => new Promise(() => {})),
+}));
+vi.mock("../lib/ipc/harnessModelsClient", () => ({
   harnessListModels: vi.fn(() => new Promise(() => {})),
   harnessModelManagement: vi.fn(() => new Promise(() => {})),
-  harnessReadiness: vi.fn(() => new Promise(() => {})),
   ollamaInstalled: vi.fn(() => new Promise(() => {})),
   startOllama: vi.fn(() => new Promise(() => {})),
 }));

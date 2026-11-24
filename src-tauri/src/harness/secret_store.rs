@@ -302,12 +302,18 @@ fn new_master_key() -> [u8; KEY_LEN] {
 
 /// The keychain service the master key lives under.
 ///
-/// A constant in the app. Under `cfg(test)` there is no route back to it: a
+/// The shipped app's constant. A test copy built under its own bundle id keys
+/// its master key by that id, so saving or clearing a key in it never touches
+/// the installed app's. Under `cfg(test)` there is no route back to it: a
 /// test runs against a throwaway service or it panics. `ai.latentic.compose`
 /// belongs to whoever is running the suite, and `clear` deletes what this
 /// points at — a default of "the real one" costs them every key they had saved.
 #[cfg(not(test))]
 fn keyring_service() -> String {
+    #[cfg(target_os = "macos")]
+    if !crate::app_identity::is_shipped_identity() {
+        return crate::app_identity::running_bundle_id().to_owned();
+    }
     KEYRING_SERVICE.to_owned()
 }
 

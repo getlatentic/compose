@@ -102,7 +102,7 @@ export function useAnchoredPopover<
     reposition();
     window.addEventListener("resize", reposition);
     return () => window.removeEventListener("resize", reposition);
-  }, [open, placement, maxWidth, gap]);
+  }, [open, placement, maxWidth, gap, align]);
 
   // Dismiss on an outside press (the trigger and the portaled popover both count
   // as inside) or Escape — Escape restores focus to the trigger.

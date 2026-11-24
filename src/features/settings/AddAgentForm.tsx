@@ -10,12 +10,8 @@ import {
 import { ArrowLeft } from "@carbon/react/icons";
 
 import { useHarnessStore } from "../../app/store/harnessStore";
-import {
-  harnessAddCustom,
-  harnessSetCredential,
-  type CustomAgentInput,
-  type CustomAgentKind,
-} from "../../lib/ipc/harnessClient";
+import { harnessAddCustom, type CustomAgentInput, type CustomAgentKind } from "../../lib/ipc/customAgentsClient";
+import { harnessSetCredential } from "../../lib/ipc/harnessSetupClient";
 
 type Kind = "openAiCompatible" | "acp";
 

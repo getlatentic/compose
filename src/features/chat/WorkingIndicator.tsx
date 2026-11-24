@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { TraceEntry } from "../../app/workspaceModel";
+import type { TraceEntry } from "../../app/workspace/types";
 import { toolActionLabel } from "./toolLabels";
 
 /** Verbs cycled while the assistant works and there's no more specific step to

@@ -69,3 +69,18 @@ export function zoomLabel(scale: number): string {
 export function applyZoom(scale: number, root: HTMLElement): void {
   root.style.setProperty("--ui-zoom", String(clampZoom(scale)));
 }
+
+/** The browser's own root size where nothing is laid out (tests). */
+const UNMEASURED_ROOT_PX = 16;
+
+/**
+ * One `rem` in pixels at `scale`, for code that must size in pixels: the
+ * system text size, measured from the root and divided by the zoom applied
+ * now, times `scale`. Right even while a new zoom is still being applied.
+ */
+export function remInPx(scale: number, root: HTMLElement = document.documentElement): number {
+  const measured = Number.parseFloat(getComputedStyle(root).fontSize);
+  const applied = clampZoom(Number.parseFloat(root.style.getPropertyValue("--ui-zoom")));
+  const systemPx = Number.isFinite(measured) && measured > 0 ? measured / applied : UNMEASURED_ROOT_PX;
+  return systemPx * clampZoom(scale);
+}

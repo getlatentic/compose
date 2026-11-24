@@ -9,7 +9,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { WorkspaceChatMessage } from "../../app/workspaceModel";
+import type { WorkspaceChatMessage } from "../../app/workspace/types";
 import { ChatMessageList } from "./ChatMessageList";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -78,6 +78,14 @@ describe("ChatMessageList", () => {
     Object.defineProperty(scroller, "clientHeight", { value: clientHeight, configurable: true });
   }
 
+  /** The reader scrolls: jsdom fires no scroll event for a scrollTop write. */
+  function readerScrollsTo(scroller: HTMLElement, top: number) {
+    act(() => {
+      scroller.scrollTop = top;
+      scroller.dispatchEvent(new Event("scroll"));
+    });
+  }
+
   it("pins the transcript to the bottom after the composer height changes", () => {
     const messages = [message("u1", "user", "hi"), message("a1", "assistant", "hello")];
     render({ composerHeight: 100, messages });
@@ -86,7 +94,7 @@ describe("ChatMessageList", () => {
     // At the bottom → following, so a composer resize must re-pin (regression:
     // scroll fired before the reserved space updated, leaving the last turn
     // under the composer).
-    scroller.scrollTop = 500;
+    readerScrollsTo(scroller, 500);
     render({ composerHeight: 260, messages });
     expect(scroller.scrollTop).toBe(900);
   });
@@ -99,7 +107,7 @@ describe("ChatMessageList", () => {
     render({ composerHeight: 100, messages });
     const scroller = container.querySelector<HTMLElement>(".chat-messages")!;
     geometry(scroller, 900, 400);
-    scroller.scrollTop = 0; // scrolled right up to read the start
+    readerScrollsTo(scroller, 0); // scrolled right up to read the start
 
     render({
       composerHeight: 100,
@@ -115,16 +123,44 @@ describe("ChatMessageList", () => {
     const scroller = container.querySelector<HTMLElement>(".chat-messages")!;
     geometry(scroller, 900, 400);
 
-    scroller.scrollTop = 0;
+    readerScrollsTo(scroller, 0);
     render({ composerHeight: 100, messages: [...messages, message("a1", "assistant", "one")] });
     expect(scroller.scrollTop).toBe(0);
 
     // Back to the bottom — following again.
-    scroller.scrollTop = 500;
+    readerScrollsTo(scroller, 500);
     render({
       composerHeight: 100,
       messages: [...messages, message("a1", "assistant", "one"), message("a2", "assistant", "two")],
     });
     expect(scroller.scrollTop).toBe(900);
+  });
+
+  it("keeps following when a reply taller than the slack lands in one piece", () => {
+    // The live bug: the reply arrived whole, the content grew by far more
+    // than the slack, and the transcript stopped at the writer's question.
+    const messages = [message("u1", "user", "Tighten the first sentence.")];
+    render({ composerHeight: 100, messages });
+    const scroller = container.querySelector<HTMLElement>(".chat-messages")!;
+    geometry(scroller, 900, 400);
+    readerScrollsTo(scroller, 500);
+
+    geometry(scroller, 1400, 400);
+    render({ composerHeight: 100, messages: [...messages, message("a1", "assistant", "A long reply.")] });
+
+    expect(scroller.scrollTop).toBe(1400);
+  });
+
+  it("shows the writer's own new message even when they had scrolled up", () => {
+    const messages = [message("u1", "user", "hi"), message("a1", "assistant", "hello")];
+    render({ composerHeight: 100, messages });
+    const scroller = container.querySelector<HTMLElement>(".chat-messages")!;
+    geometry(scroller, 900, 400);
+    readerScrollsTo(scroller, 0);
+
+    geometry(scroller, 1000, 400);
+    render({ composerHeight: 100, messages: [...messages, message("u2", "user", "One more thing")] });
+
+    expect(scroller.scrollTop).toBe(1000);
   });
 });

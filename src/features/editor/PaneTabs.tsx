@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState, type DragEvent } from "react";
-import { Close, Document } from "@carbon/react/icons";
+import { Close } from "@carbon/react/icons";
 import { PanelLeft } from "lucide-react";
 import type { WorkspaceFileEntry } from "../file-tree/fileTreeTypes";
 import { useWorkspaceStore } from "../../app/workspaceStore";
@@ -145,7 +145,6 @@ const EditorTabItem = memo(function EditorTabItem({
         data-tauri-drag-region="false"
         onClick={onSelectClick}
       >
-        <Document size={14} />
         <span className="truncate">{fileName}</span>
         <TabDirtyDot path={path} area={area} />
       </button>
@@ -157,7 +156,7 @@ const EditorTabItem = memo(function EditorTabItem({
         data-tauri-drag-region="false"
         onClick={onCloseClick}
       >
-        <Close size={14} />
+        <Close size={16} />
       </button>
     </div>
   );

@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, InlineNotification, Tag, Toggle } from "@carbon/react";
 import { useHarnessStore } from "../../app/store/harnessStore";
-import {
-  harnessDiscover,
-  harnessList,
-  harnessLogin,
-  type HarnessInfo,
-  type HarnessReadiness,
-} from "../../lib/ipc/harnessClient";
+import { harnessDiscover, harnessList, type HarnessInfo, type HarnessReadiness } from "../../lib/ipc/harnessCatalogClient";
+import { harnessLogin } from "../../lib/ipc/harnessSetupClient";
 import { agentStatus, statusTagType } from "./agentStatus";
 import { groupAgents, isBuiltInProvider, isLocalProvider } from "./agentGroups";
 import { InstallHintInline } from "./InstallHint";

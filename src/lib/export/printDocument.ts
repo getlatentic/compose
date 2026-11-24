@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../runtime/desktopRuntime";
 import { collectMermaidSvgs } from "./mermaidSvgs";
-import type { DocumentRef } from "../../app/workspaceModel";
+import type { DocumentRef } from "../../app/workspace/documents";
+import type { ExportTypefaces } from "../theme/exportTypefaces";
 
 /**
  * Open the system print panel for a document. The Rust side renders the same
@@ -13,6 +14,8 @@ import type { DocumentRef } from "../../app/workspaceModel";
 export async function printDocument(args: {
   document: DocumentRef;
   content: string;
+  /** The note's fonts; omitted for Latin Modern, the LaTeX look. */
+  typefaces?: ExportTypefaces;
 }): Promise<boolean> {
   if (!isTauriRuntime()) {
     return false;
@@ -21,5 +24,6 @@ export async function printDocument(args: {
     document: args.document,
     content: args.content,
     mermaidSvgs: await collectMermaidSvgs(args.content),
+    typefaces: args.typefaces ?? null,
   });
 }

@@ -2,11 +2,9 @@ import { saveWorkspaceComments } from "../../lib/ipc/commentsClient";
 import { saveConversation } from "../../lib/ipc/conversationsClient";
 import { externalSaveTabs } from "../../lib/ipc/externalFilesClient";
 import { saveWorkspaceTabs } from "../../lib/ipc/workspaceClient";
-import {
-  chatThreadContextFileLabels,
-  serializeChatMessages,
-  type Workspace,
-} from "../workspaceModel";
+import { chatThreadContextFileLabels } from "../workspace/chatContext";
+import { serializeChatMessages } from "../workspace/chatPersistence";
+import type { Workspace } from "../workspace/types";
 import { errorMessage } from "./internals";
 import { showErrorToast } from "../../features/toast/toastStore";
 import type { WorkspaceStoreGet } from "./types";

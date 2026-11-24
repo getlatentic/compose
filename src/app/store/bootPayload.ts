@@ -15,14 +15,9 @@
 import type { ExternalFilesList } from "../../lib/ipc/externalFilesClient";
 import type { WorkspaceFileEntry } from "../../lib/ipc/filesClient";
 import type { WorkspaceListResult } from "../../lib/ipc/workspaceClient";
-import {
-  applyExternalFiles,
-  applyFileBuffer,
-  applyFileSnapshot,
-  createLooseWorkspace,
-  hydrateWorkspaceRecords,
-  type Workspace,
-} from "../workspaceModel";
+import { applyExternalFiles, applyFileBuffer, applyFileSnapshot } from "../workspace/files";
+import { createLooseWorkspace, hydrateWorkspaceRecords } from "../workspace/workspaces";
+import type { Workspace } from "../workspace/types";
 import type { WorkspaceState } from "./types";
 
 interface BootActiveFile {
