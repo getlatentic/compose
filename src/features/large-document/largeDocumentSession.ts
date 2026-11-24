@@ -30,6 +30,11 @@ interface Shown {
   unregister(): void;
 }
 
+/** Where each large file was last scrolled to, as the byte at the top of
+ *  its page: a tab opened again shows the place it was left at. Kept while
+ *  the app runs. */
+const lastPlace = new Map<string, number>();
+
 const messageOf = (error: unknown, fallback: string): string => (error instanceof Error ? error.message : fallback);
 
 /**
@@ -46,8 +51,7 @@ export function openLargeDocument(
 ): LargeDocumentSession {
   let shown: Shown | null = null;
   let disposed = false;
-  /** The byte of the file at the top of the page, kept across a reload. */
-  let top = 0;
+  const place = `${workspaceId}\n${relativePath}`;
   /** Each open and each close waits for the one before: the backend is
    *  never asked to open a file it is still closing. */
   let work: Promise<void> = Promise.resolve();
@@ -64,13 +68,13 @@ export function openLargeDocument(
     const saver = createPagedSaver({ sent: () => view.sent(), save: file.save, delayMs: autosaveDelayMs(file.source.size), onState: report });
     const view = createPagedMarkdownView(parent, file.source, {
       ...viewOptions,
-      onMove: (byte) => (top = byte),
+      startAt: lastPlace.get(place),
+      onMove: (byte) => void lastPlace.set(place, byte),
       onEdit: saver.edited,
       onEditFailed: (error) => report({ status: "failed", message: messageOf(error, "An edit could not be made") }),
     });
     shown = { file, view, saver, unregister: registerLargeDocumentSave(saver.saveNow) };
     report({ status: "saved" });
-    if (top > 0) await view.jumpTo(top);
   }
 
   /** Takes the file off the screen. Its edits are saved first, unless they

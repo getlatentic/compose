@@ -65,7 +65,9 @@ export function LargeDocument() {
 function LargeDocumentStatus({ state, onKeepMine, onReload }: { state: LargeDocumentState; onKeepMine: () => void; onReload: () => void }) {
   switch (state.status) {
     case "opening":
-      return <p className="large-document__status">Opening…</p>;
+      // Shown only when the open runs long, as a file still coming down
+      // from iCloud does: a file on disk opens before it would appear.
+      return <p className="large-document__status large-document__status--slow">Opening…</p>;
     case "failed":
       return (
         <p className="large-document__status" role="alert">

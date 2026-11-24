@@ -8,7 +8,7 @@ import { openLargeDocument, type LargeDocumentState } from "./largeDocumentSessi
 /** What happened, in order: the calls on the file and on the view. */
 let log: string[] = [];
 let changedOnDisk = false;
-let views: { onEdit?: () => void }[] = [];
+let views: { onEdit?: () => void; onMove?: (byte: number) => void; startAt?: number }[] = [];
 
 vi.mock("../../lib/ipc/pagedClient", () => ({
   openPagedFile: async (): Promise<OpenedPagedFile> => {
@@ -23,7 +23,7 @@ vi.mock("../../lib/ipc/pagedClient", () => ({
 }));
 
 vi.mock("@latentic/live-markdown", () => ({
-  createPagedMarkdownView: (_parent: HTMLElement, _source: unknown, options: { onEdit?: () => void }) => {
+  createPagedMarkdownView: (_parent: HTMLElement, _source: unknown, options: (typeof views)[number]) => {
     views.push(options);
     return { sent: async () => void log.push("sent"), destroy: () => void log.push("destroy"), jumpTo: async () => {} };
   },
@@ -31,9 +31,9 @@ vi.mock("@latentic/live-markdown", () => ({
 
 const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-function opened() {
+function opened(path = "Big.md") {
   const states: LargeDocumentState[] = [];
-  const session = openLargeDocument(document.createElement("div"), "workspace", "Big.md", {}, (state) => states.push(state));
+  const session = openLargeDocument(document.createElement("div"), "workspace", path, {}, (state) => states.push(state));
   const last = (): string => {
     const state = states[states.length - 1];
     return state.status === "open" ? state.save.status : state.status;
@@ -119,5 +119,18 @@ describe("a large file on screen", () => {
     await settled();
     expect(log).toEqual(["open", "destroy", "close, dropping edits", "open"]);
     expect(last()).toBe("saved");
+  });
+
+  it("opens again at the place it was left at, and another file at its own", async () => {
+    const first = opened("Scrolled.md");
+    await settled();
+    expect(views[0].startAt).toBeUndefined();
+    views[0].onMove?.(123_456);
+    first.session.dispose();
+    await settled();
+    opened("Scrolled.md");
+    opened("Other.md");
+    await settled();
+    expect(views.slice(1).map((view) => view.startAt)).toEqual([123_456, undefined]);
   });
 });

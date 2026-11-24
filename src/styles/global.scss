@@ -6841,6 +6841,19 @@ $theme-dark-line: #525252;
   font-size: 0.8125rem;
 }
 
+.large-document {
+  position: relative;
+}
+
+// Over the page and not above it, so the page does not move when it goes.
+.large-document__status--slow {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  animation: editor-loading-hint-reveal 0.3s ease 0.8s forwards;
+  opacity: 0;
+}
+
 .large-document__status--alert {
   display: flex;
   flex-wrap: wrap;
