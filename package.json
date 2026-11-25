@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "clean": "rm -rf target dist",
+    "large-note": "node scripts/make-large-note.mjs",
     "setup:dev-signing": "bash scripts/setup-dev-signing.sh",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "lint:css": "stylelint \"src/**/*.{scss,css}\"",
